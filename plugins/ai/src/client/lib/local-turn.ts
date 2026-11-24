@@ -14,8 +14,12 @@ export async function runLocalTurn(
     return await client.local(api.run.turn, { ...input, replyToken });
   } catch (error) {
     if (!isLocalReloadTimeout(error)) throw error;
-    if (!(await client.mutation(api.liveness.releaseReloaded, { messageId: input.messageId, replyToken })))
-      throw error;
+    const released = await client.mutation(api.liveness.releaseReloaded, {
+      messageId: input.messageId,
+      replyToken,
+    });
+    if (released === "ended") return undefined;
+    if (!released) throw error;
     return { state: "interrupted" as const, ended: RELOADED };
   }
 }

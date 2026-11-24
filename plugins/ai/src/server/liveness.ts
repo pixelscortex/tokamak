@@ -92,8 +92,8 @@ export const releaseReloaded = mutation({
       .query("turns")
       .withIndex("by_messageId", (q) => q.eq("messageId", messageId))
       .first();
-    if (!turn || !isActive(turn) || turn.replyToken !== replyToken || !isSendersDevice(turn, ctx.auth))
-      return false;
+    if (!turn || turn.replyToken !== replyToken || !isSendersDevice(turn, ctx.auth)) return false;
+    if (!isActive(turn)) return "ended" as const;
     await interrupt(ctx, turn, Date.now(), RELOADED);
     return true;
   },

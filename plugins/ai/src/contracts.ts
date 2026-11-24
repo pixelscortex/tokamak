@@ -69,7 +69,8 @@ export interface Agent {
    * the paths' outlines are drawn. Without one, a neutral mark stands in.
    */
   readonly icon?: string;
-  info(): Promise<Info>;
+  /** Bypass discovery caches when a turn fails to start. */
+  info(options?: { fresh?: boolean }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }

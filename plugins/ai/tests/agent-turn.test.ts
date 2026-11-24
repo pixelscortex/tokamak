@@ -61,6 +61,7 @@ function linkedTurn(turnId: string) {
     text,
     ask,
     control,
+    finishAgent: () => finish({ sessionId: "replay" }),
     message: (method: string, args: JsonValue & object) =>
       receive(method, { threadId: input.threadId, turnId, ...args }),
     async end() {
@@ -70,6 +71,21 @@ function linkedTurn(turnId: string) {
     },
   };
 }
+
+test("Force stop reaches the agent's programs after the result, during after work", async () => {
+  const turn = linkedTurn("settled-agent");
+  try {
+    // Deliver the result without closing the outer turn invocation.
+    turn.finishAgent();
+    await turn.running;
+    turn.control.finish();
+    await expect(turn.control.forceStop()).resolves.toBeNull();
+    expect(turn.stopPrograms).toHaveBeenCalledOnce();
+    expect(turn.send).not.toHaveBeenCalled();
+  } finally {
+    turn.control.close();
+  }
+});
 
 test("an ended turn cannot report or ask in the next turn on its thread", async () => {
   const previous = linkedTurn("first");

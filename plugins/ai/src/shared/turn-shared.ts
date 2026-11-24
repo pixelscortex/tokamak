@@ -4,6 +4,16 @@ export const ACTIVE = ["running", "waiting"] as const;
 export const ENDED = ["done", "failed", "stopped", "interrupted"] as const;
 
 import type { AuthContext } from "@tokamak/sdk";
+import type { Info } from "../contracts";
+
+export function setupReason(agent: string, info: Info, withCommand = true): string | undefined {
+  if (info.installed && info.signedIn) return;
+  const reason = info.installed
+    ? `${agent} is signed out. Sign in, then come back.`
+    : (info.updateRequired ?? `${agent} isn't installed.`);
+  const command = info.installed ? info.signIn : info.install;
+  return withCommand && command ? `${reason} Run \`${command}\`.` : reason;
+}
 
 export function isSendersDevice(
   turn: { sender: { id: string; device: string } },

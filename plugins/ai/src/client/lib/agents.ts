@@ -1,6 +1,7 @@
 import type { TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Info } from "../../contracts";
+import { setupReason } from "../../shared/turn-shared";
 import { api } from "../../server/_generated/api";
 
 export { api };
@@ -78,9 +79,7 @@ export function reasonLine(reason: Reason, agent: string, updateRequired?: strin
 
 /** Why Send cannot reach `agent` now, in the row's words; undefined when it can. */
 export function unavailable(agent: AgentEntry): string | undefined {
-  if (!agent.info.installed) return reasonLine("NotInstalled", agent.name, agent.info.updateRequired);
-  if (!agent.info.signedIn) return reasonLine("SignedOut", agent.name);
-  return undefined;
+  return setupReason(agent.name, agent.info, false);
 }
 
 /**

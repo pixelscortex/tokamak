@@ -34,6 +34,7 @@ export function turnControl(
   let stopReady = false;
   let stopSent = false;
   let agentClosed = false;
+  let closed = false;
   let forceKill: (() => Promise<void>) | undefined;
   let forcing: Promise<void> | undefined;
   let resolveForced!: () => void;
@@ -158,14 +159,18 @@ export function turnControl(
       }
     },
     async forceStop() {
-      if (agentClosed || !forceKill) return noRunningTurn(turnId);
+      if (closed || !forceKill) return noRunningTurn(turnId);
       forcing ??= forceKill().then(resolveForced);
       await forcing;
       return null;
     },
-    close() {
+    finish() {
       agentClosed = true;
       releaseSteers();
+    },
+    close() {
+      control.finish();
+      closed = true;
       running.delete(turnId);
     },
   };

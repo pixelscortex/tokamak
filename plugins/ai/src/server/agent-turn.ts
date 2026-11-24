@@ -126,18 +126,19 @@ export function startAgent(
     () => result,
     async () => {
       forcing = true;
-      await questions.cancel();
-      if (ended) return;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        // A responsive provider seals and flushes its reports before the native kill.
-        await Promise.race([
-          channel.send("forceStop", { ...address }).catch(() => {}),
-          new Promise<void>((resolve) => {
-            timeout = setTimeout(resolve, FORCE_DRAIN_MS);
-          }),
-        ]);
-        if (!ended) await channel.stopPrograms();
+        if (!ended) {
+          await questions.cancel();
+          // A responsive provider seals and flushes its reports before the native kill.
+          await Promise.race([
+            channel.send("forceStop", { ...address }).catch(() => {}),
+            new Promise<void>((resolve) => {
+              timeout = setTimeout(resolve, FORCE_DRAIN_MS);
+            }),
+          ]);
+        }
+        await channel.stopPrograms();
       } catch (error) {
         if (!ended && !channelEnded(error)) throw error;
       } finally {

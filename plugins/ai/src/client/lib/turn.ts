@@ -29,6 +29,7 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
       agentId: resolved.agent.id,
       ...settings,
     });
+    if (result === undefined) return;
     // The row was a moment out of date, or the thread is busy: say what the local part found.
     if (isFailure(result))
       notice.set(

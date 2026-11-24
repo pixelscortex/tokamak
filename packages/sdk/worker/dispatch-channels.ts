@@ -55,7 +55,7 @@ export function dispatchChannels(
               if (outbound.has(channel)) await callHost(direct, "local.contract.close", { channel });
             },
             async stopPrograms() {
-              if (outbound.has(channel)) await callHost(direct, "local.contract.stopPrograms", { channel });
+              await callHost(direct, "local.contract.stopPrograms", { channel });
             },
           };
         },

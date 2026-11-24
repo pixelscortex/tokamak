@@ -1,7 +1,7 @@
 // Drives the installed Claude provider through a real Tokamak server. CI plays
 // sanitized recordings; --live opts into the official CLI on this computer.
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { permissionCases } from "./permissions.mjs";
@@ -62,6 +62,19 @@ try {
     assert.deepEqual(readyState(await aboutClaude(signedOut)), [true, false]);
   } else {
     await discovery(client);
+    const keychain = join(h.home, "claude-replay-signed-out");
+    await writeFile(keychain, "");
+    try {
+      const failed = await run("signed-out", hello, { state: "failed" });
+      assert.equal(
+        failed.row.error,
+        "Claude is signed out. Sign in, then come back. Run `claude auth login`.",
+      );
+      assert.deepEqual(readyState(await info()), [true, false]);
+    } finally {
+      await unlink(keychain);
+    }
+    assert.deepEqual(readyState(await info()), [true, true]);
   }
   passed("signed-in and signed-out discovery");
   await resume(turns, run);

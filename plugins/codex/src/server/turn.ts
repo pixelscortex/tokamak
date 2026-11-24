@@ -39,7 +39,7 @@ export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult
     return await waitForTurn(app, run, sessionId, turn, resumed, early, controls);
   } finally {
     controls.close();
-    app.close();
+    await app.close();
   }
 }
 

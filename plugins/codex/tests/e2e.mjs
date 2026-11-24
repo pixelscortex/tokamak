@@ -121,6 +121,7 @@ try {
   const parity = turnParity(h, "codex");
   const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
   if (greeting) {
+    assert.equal(await readFile(join(greeting.folder, "session-flushed"), "utf8"), "flushed");
     assert.equal(greeting.text, "Hello from Codex.");
     assert.equal(greeting.row.sessionId, "codex-session");
     assert.deepEqual(greeting.reply.usage, { inputTokens: 18208, cachedInputTokens: 0, outputTokens: 54 });
@@ -409,7 +410,14 @@ case "$1" in
     else
       tape="\${PWD##*/}"
     fi
-    exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    if [ "$tape" = hello ]; then
+      trap '' TERM
+      ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+      /bin/sleep 0.4
+      printf flushed > session-flushed
+    else
+      exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    fi
     ;;
   *) exit 2 ;;
 esac

@@ -62,6 +62,7 @@ async function launchQueued(client: TokamakClient, head: TurnView, isClosed: () 
     folder,
     agentId: head.agent.id,
   });
+  if (result === undefined) return;
   if (isFailure(result)) {
     // Busy: another turn holds the thread; this head starts when it ends.
     if (result.kind !== "Busy") await settle(client, head, reasonLine(result.kind, head.agent.name));

@@ -48,9 +48,11 @@ export const list = local({
 
 const turnInfo = new WeakMap<object, { info: Info; until: number }>();
 
-export function invalidateInfo(provider: Agent) {
+export async function infoAfterStartFailure(provider: Agent): Promise<Info | undefined> {
   const key = localProviderIdentity(provider);
   if (key) turnInfo.delete(key);
+  // A failed probe must not turn an unrelated start error into "not installed".
+  return readInfo(provider, true).catch(() => undefined);
 }
 
 /** The picker probes for account changes; turns reuse only an opted-in, fresh answer for this build. */
@@ -58,7 +60,15 @@ export async function infoOf(provider: Agent, forTurn = false): Promise<Info> {
   const key = localProviderIdentity(provider);
   const cached = key && turnInfo.get(key);
   if (forTurn && cached && cached.until > Date.now()) return cached.info;
-  const { cacheUntil, ...answer } = await provider.info().catch(() => UNKNOWN);
+  return readInfo(provider).catch(() => {
+    if (key) turnInfo.delete(key);
+    return UNKNOWN;
+  });
+}
+
+async function readInfo(provider: Agent, fresh = false): Promise<Info> {
+  const key = localProviderIdentity(provider);
+  const { cacheUntil, ...answer } = await (fresh ? provider.info({ fresh }) : provider.info());
   const info = { ...answer, speeds: answer.speeds ?? [], modes: answer.modes ?? [] };
   if (key) {
     const now = Date.now();

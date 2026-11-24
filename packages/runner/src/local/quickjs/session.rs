@@ -4,7 +4,7 @@ use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -41,7 +41,13 @@ struct Channel {
     closed: CancellationToken,
 }
 
-type Channels = Mutex<HashMap<u64, Arc<Channel>>>;
+#[derive(Default)]
+struct ChannelCalls {
+    open: HashMap<u64, Arc<Channel>>,
+    reaping: VecDeque<(u64, Peer)>,
+}
+
+type Channels = Mutex<ChannelCalls>;
 
 // The forwarding capability exists only while the original routed call is
 // active. It holds neither a new identity nor a route to another build.
@@ -54,7 +60,22 @@ struct OpenChannel<'a> {
 impl Drop for OpenChannel<'_> {
     fn drop(&mut self) {
         self.channel.closed.cancel();
-        lock(self.channels).remove(&self.id);
+        lock(self.channels).open.remove(&self.id);
+    }
+}
+
+impl OpenChannel<'_> {
+    fn keep_program_control(&self) {
+        let Some(peer) = self.channel.provider.borrow().clone() else {
+            return;
+        };
+        // The result ends messaging. Keep only a bounded native stop target
+        // in the owning invocation while its provider's programs are reaped.
+        let mut calls = lock(self.channels);
+        if calls.reaping.len() == WORKER_CAPACITY {
+            calls.reaping.pop_front();
+        }
+        calls.reaping.push_back((self.id, peer));
     }
 }
 
@@ -329,7 +350,7 @@ fn open_channel<'a>(channels: &'a Channels, id: u64, frame: &Value) -> Option<Op
         provider: watch::channel(None).0,
         closed: CancellationToken::new(),
     });
-    lock(channels).insert(id, channel.clone());
+    lock(channels).open.insert(id, channel.clone());
     Some(OpenChannel {
         channels,
         id,
@@ -474,27 +495,48 @@ async fn peer_operation(
         return origin.request(payload).await;
     }
     let id = frame_id(&remote)?;
-    let channel = lock(channels)
-        .get(&id)
-        .cloned()
-        .ok_or("Local contract channel ended")?;
+    let (channel, reaping) = {
+        let calls = lock(channels);
+        let reaping = stop
+            .then(|| calls.reaping.iter().find(|(call, _)| *call == id))
+            .flatten()
+            .map(|(_, peer)| peer.clone());
+        (calls.open.get(&id).cloned(), reaping)
+    };
+    if let Some(peer) = reaping {
+        peer.host.stop_programs(peer.call).await?;
+        return Ok(json!({"value":null}));
+    }
+    let Some(channel) = channel else {
+        return if stop {
+            Ok(json!({"value":null}))
+        } else {
+            Err("Local contract channel ended".into())
+        };
+    };
     if close {
         channel.closed.cancel();
         return Ok(json!({"value":null}));
     }
     let mut provider = channel.provider.subscribe();
+    if stop {
+        let peer = tokio::select! {
+            biased;
+            result = provider.wait_for(Option::is_some) => result.ok().and_then(|peer| peer.clone()),
+            () = channel.closed.cancelled() => None,
+        };
+        if let Some(peer) = peer {
+            peer.host.stop_programs(peer.call).await?;
+        }
+        return Ok(json!({"value":null}));
+    }
     tokio::select! {
         () = channel.closed.cancelled() => Err("Local contract channel ended".into()),
         response = async {
             let peer = provider.wait_for(Option::is_some).await
                 .map_err(|_| "Local contract channel ended")?.clone()
                 .ok_or("Local contract channel ended")?;
-            if stop {
-                peer.host.stop_programs(peer.call).await?;
-                Ok(json!({"value":null}))
-            } else {
-                peer.request(payload).await
-            }
+            peer.request(payload).await
         } => response,
     }
 }
@@ -586,14 +628,18 @@ impl CallRoute<'_> {
                 channel: Some(open.id),
                 ..here.clone()
             };
-            tokio::select! {
+            let response = tokio::select! {
                 biased;
                 () = open.channel.closed.cancelled() => return Err("Local contract channel closed".into()),
                 response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, Invocation::Linked {
                     origin,
                     channel: &open.channel,
                 })) => response,
+            };
+            if response.is_ok() {
+                open.keep_program_control();
             }
+            response
         } else {
             Box::pin(run(
                 pool,

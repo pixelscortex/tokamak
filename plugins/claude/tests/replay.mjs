@@ -10,11 +10,13 @@ const status = await readFile(
   join(process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME, ".claude"), ".credentials.json"),
   "utf8",
 ).catch(() => "");
+// Simulate a Keychain-only logout without touching the watched credential file.
+const keychainSignedOut = await Bun.file(join(process.env.HOME, "claude-replay-signed-out")).exists();
 if (args[0] === "--version") {
   console.log(status === "old" ? "Claude Code v2.1.329 (test build)" : "2.1.330 (Claude Code)");
 } else if (args[0] === "auth") {
   assert.equal(args[1], "status");
-  const loggedIn = status !== "signed-out";
+  const loggedIn = status !== "signed-out" && !keychainSignedOut;
   const expirations = {
     "expired-iso": "2000-01-01T00:00:00Z",
     "expired-ms": 946684800000,
@@ -31,6 +33,7 @@ if (args[0] === "--version") {
   );
   process.exitCode = loggedIn ? 0 : 1;
 } else {
+  if (keychainSignedOut) process.exit(1);
   const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
   assert.ok(args.includes("-p"));
   assert.equal(flag("--input-format"), "stream-json");

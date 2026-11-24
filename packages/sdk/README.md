@@ -207,10 +207,20 @@ one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
 a signal. The invocation stays alive until the handler settles. To cancel
 from the window, pass `{ signal }` to `client.local`; the worker stops programs
 still running for that invocation. Use `node:fs/promises` for local files.
+
+**Await the programs you need finished before returning.** On QuickJS, any
+call (including a routed contract method) can return while its unawaited
+programs are still being reaped. These programs still count toward the host's
+256-program limit. Normal cleanup sends TERM and gives a live process group
+up to two seconds before sending KILL. The Bun fallback uses a 250 ms grace
+on macOS and Linux and waits for cleanup before returning the call result.
+
 Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
 started through `scoped.proc` and providers selected with `scoped`. Calling
 `forceStop()` ends those process groups without cancelling the invocation
-or its other programs. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
+or its other programs. On QuickJS, `withPrograms` can return while the scope
+is still being reaped. Force stop sends KILL immediately, including to groups
+already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
 local functions and server actions so the lookup follows the caller across awaits.
 Queries and mutations still use `contract.list()` and `contract.get(id)`.
 
@@ -677,7 +687,10 @@ runtimes. On QuickJS, the provider SDK builds the `Run` in the agent's host.
 `run.text` and other reports are batched, `run.ask` waits for the sender's
 answer, and `run.onSteer` and `run.onStop` register handlers in that host.
 CLI programs opened by the agent's `ctx.proc` belong to the turn and are
-reaped on force stop or when its manager's call is cancelled. Agent authors
+reaped on force stop or when its manager's call is cancelled. While the
+manager settles a turn, Force stop can also kill groups left by a completed
+`start`. Await the CLI's exit before returning from `start` if the next turn
+needs a session file the CLI is still writing. Agent authors
 do not implement the message transport.
 
 The adapter in `packages/sdk/worker/contracts.ts` special-cases

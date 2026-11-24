@@ -3,11 +3,11 @@ import { randomBytes } from "node:crypto";
 import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type Run, type Usage } from "../contracts";
-import { errorText } from "../shared/turn-shared";
+import { errorText, setupReason } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
-import { infoOf, invalidateInfo } from "./agents";
+import { infoAfterStartFailure, infoOf } from "./agents";
 import { runAgent } from "./agent-turn";
 import {
   append,
@@ -160,14 +160,17 @@ export const turn = local({
             ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
             : { state: "stopped" };
         } catch (cause) {
-          invalidateInfo(provider);
-          ending = { state: "failed", error: errorText(cause) };
+          const current = lost === undefined ? await infoAfterStartFailure(provider) : undefined;
+          ending = {
+            state: "failed",
+            error: (current && setupReason(provider.name, current)) ?? errorText(cause),
+          };
         }
       }
       if (lost !== undefined) ending = { ...ending, state: "interrupted", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
-      control.close();
+      control.finish();
       finishing.add(turnId);
       await writer.settled();
       const broken = writer.close();
@@ -237,7 +240,7 @@ export const stop = local({
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
     // The agent has settled and only after hooks remain: nothing is left to stop.
-    if (!control)
+    if (!control || !control.active)
       return finishing.has(turnId) ? fail("NotRunning", { turnId, finishing: true }) : noRunningTurn(turnId);
     return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
       ? null

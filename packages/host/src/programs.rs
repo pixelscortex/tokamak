@@ -47,9 +47,14 @@ impl Programs {
         }
     }
 
-    pub fn kill_call(&self, call: u64) {
+    pub fn kill_call(&self, call: u64, active: bool) {
         let mut registry = self.0.lock().expect("program registry");
-        registry.sealed.insert(call);
+        // Only a live invocation can still spawn. Its groups, however,
+        // remain addressable by call ID until they are reaped.
+        if active {
+            registry.sealed.insert(call);
+        }
+        registry.live.retain(|owned| !owned.program.finished());
         for owned in registry.live.iter().filter(|owned| owned.call == call) {
             owned.program.stop(true);
         }

@@ -61,9 +61,13 @@ Local functions can start up to 256 live programs per host with `proc` and
 guardian in each group watches a private pipe held by the host. Closing it
 sends TERM to the group. The guardian exits as soon as no live programs remain.
 Groups that are still running get up to two seconds to shut down before KILL.
-The pipe closes even when the host is killed with SIGKILL. Force stop sends KILL
-immediately. A routed call can return its result while its program scope reaps
-the remaining programs. The launcher holds a separate liveness pipe for its guardian
+The pipe closes even when the host is killed with SIGKILL. Force stop sends
+KILL immediately, even after the call has returned a result if its groups
+are still being reaped. On QuickJS, every call and `withPrograms` can return
+before their remaining programs are gone. Those groups still count toward the
+256-program limit until reaped. Await programs that must finish before the
+handler returns. The Bun fallback on macOS and Linux uses a 250 ms grace
+period and waits for cleanup before returning. The launcher holds a separate liveness pipe for its guardian
 in the host group, so abrupt launcher exit also stops the host and its
 programs.
 

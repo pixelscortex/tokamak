@@ -29,7 +29,7 @@ export async function codexInfo(ctx: LocalContext): Promise<Info> {
     const [{ models, speeds }, modes] = await Promise.all([listModels(app), listModes(app)]);
     return { ...available, signedIn: true, models, modes, speeds };
   } finally {
-    app.close();
+    await app.close();
   }
 }
 

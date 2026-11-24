@@ -244,7 +244,19 @@ export async function reloadManagerTimeout({ h, runner, desk, project, start }) 
     assert.equal(row.question, undefined);
     await until("the window closed the stuck retired host", () => !alive(old.pid));
     await h.gate(folder, "go");
-    assert.equal((await thread.run(await thread.post(), "edit")).state, "done");
+    const messageId = await thread.post();
+    const replyToken = crypto.randomUUID();
+    const next = await desk.local(ai.run.turn, {
+      threadId: thread.threadId,
+      messageId,
+      replyToken,
+      folder,
+      agentId: "fake-agent",
+      model: "edit",
+    });
+    assert.equal(next.state, "done");
+    assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
+    assert.equal((await thread.reply(next.turnId)).state, "done");
     console.log("code snapshots: the window saved the reload reason when old AI could not finish");
   } finally {
     for (const close of cleanup.reverse()) await close();

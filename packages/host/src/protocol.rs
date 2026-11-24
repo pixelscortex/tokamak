@@ -255,9 +255,7 @@ fn native_control(socket: UnixDatagram, state: &Shared, programs: &Programs) -> 
         let call = u64::from_le_bytes(bytes);
         {
             let state = state.lock().expect("protocol state");
-            if state.calls.contains_key(&call) {
-                programs.kill_call(call);
-            }
+            programs.kill_call(call, state.calls.contains_key(&call));
         }
         socket.send(&bytes)?;
     }

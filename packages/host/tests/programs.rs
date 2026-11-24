@@ -9,6 +9,7 @@ use support::{Host, fixture};
 use tokamak_worker::{LocalRuntime, Process};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
+    net::UnixDatagram,
     process::Command,
     time::{Instant, sleep, timeout},
 };
@@ -98,6 +99,53 @@ async fn routed_result_arrives_before_a_lingering_program_is_reaped() {
     let pid = frame["value"].as_i64().expect("program PID") as i32;
     assert!(pid > 1 && unsafe { libc::kill(pid, 0) } == 0, "{frame}");
     assert_gone(&[pid]).await;
+}
+
+#[tokio::test]
+async fn native_force_stop_reaps_a_lingering_program_after_the_result() {
+    reap_orphans_on_linux();
+    let bundle = fixture();
+    let (mut host, control) = Process::launch_plugin(
+        "fixture",
+        &bundle,
+        bundle.parent().unwrap(),
+        &BTreeMap::new(),
+    )
+    .unwrap();
+    let control = UnixDatagram::from_std(control).unwrap();
+    let (mut input, stdout, _stderr) = host.pipes().unwrap();
+    let mut output = BufReader::new(stdout).lines();
+    support::send(
+        &mut input,
+        json!({
+            "type":"invoke", "id":1, "fn":"", "args":[], "routed":true,
+            "contract":{
+                "plugin":"fixture", "owner":"fixture", "name":"programs",
+                "registration":"programFixture", "method":"linger"
+            }
+        }),
+    )
+    .await;
+    let auth = support::receive(&mut output).await;
+    assert_eq!(auth["name"], "auth.current");
+    support::send(
+        &mut input,
+        json!({ "type":"opResult", "id":auth["id"], "value":{} }),
+    )
+    .await;
+    let frame = support::receive(&mut output).await;
+    let pid = frame["value"].as_i64().expect("program PID") as i32;
+    assert!(pid > 1 && unsafe { libc::kill(pid, 0) } == 0, "{frame}");
+    timeout(Duration::from_millis(750), async {
+        let call = 1_u64.to_le_bytes();
+        control.send(&call).await.unwrap();
+        let mut answer = [0; 8];
+        assert_eq!(control.recv(&mut answer).await.unwrap(), answer.len());
+        assert_eq!(answer, call);
+        assert_gone(&[pid]).await;
+    })
+    .await
+    .expect("Force stop must not wait for the remaining TERM grace");
 }
 
 #[tokio::test]
