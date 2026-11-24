@@ -1,0 +1,20 @@
+packages/server/tests/schema_indexes.rs
+  s_1f323405e885d4::t_1944f9a85d61ec 295-298
+  s_1f323405e885d4::t_3e2ec29f00ee20 299-300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32681d2db6a441d1b395a9201c43a529340d21b4",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
