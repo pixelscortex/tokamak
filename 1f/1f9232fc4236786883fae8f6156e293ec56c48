@@ -1,0 +1,127 @@
+plugins/ai/src/server/run.ts
+  s_8acfe89c8adcd3::t_ef3c55997aedf8 10,124-131
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 12-23
+  s_8acfe89c8adcd3::t_f106c996aafc54 4,11,24,378-379,384-385
+  s_8acfe89c8adcd3::t_99b9feb9434e44 101
+  s_8acfe89c8adcd3::t_5c8379c79d21e0 114-123
+GLOSSARY.md
+  s_8acfe89c8adcd3::t_fbd883930b4dbf 124
+plugins/code/contracts/ai.ts
+  s_8acfe89c8adcd3::t_f106c996aafc54 4,17,86
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 5-15
+  s_8acfe89c8adcd3::t_846dfb5b32a071 76-77
+  s_8acfe89c8adcd3::t_2f7eea964c69e2 3,16
+packages/runner/src/local/quickjs.rs
+  s_8acfe89c8adcd3::t_c1d57fc674f74f 22,489,665-667,672-677,688-694,696-712,755-764
+  s_8acfe89c8adcd3::t_d1e4e5586343b5 695,784
+  s_8acfe89c8adcd3::t_fae7812d888da3 66-67,488,571-573,627-630,639-641,660-664,668-671,776-783
+  s_8acfe89c8adcd3::t_e00c7910b74a7e 765
+packages/sdk/src/agent-turn.ts
+  s_8acfe89c8adcd3::t_f106c996aafc54 1-189
+  s_8acfe89c8adcd3::t_f7c2066b3dcd8d 190-192
+packages/runner/src/local/quickjs/session.rs
+  s_8acfe89c8adcd3::t_0fb72fef584f42 320-322
+  s_8acfe89c8adcd3::t_0dcd2d3446c4b9 352,506-508
+  s_8acfe89c8adcd3::t_f92a3547bee4b6 15,22,25-28,30-38,41-43,45-48,50,52-55,57-63,65-66,237,334-340,342-343,361,397,422,428-433,441-443,452-463,466-469,471-473,490,492,494-499,509-534,541,550,577,585,606
+  s_8acfe89c8adcd3::t_c68f61d74803f3 500-505
+  s_8acfe89c8adcd3::t_989051865ded27 23-24,29,39-40,44,49,51,56,64,341,434-439,464-465,470,491,535-540,542-549,551,553,557,564,576,578-584,586-591,602-605,618-642
+.ci/check.sh
+  s_8acfe89c8adcd3::t_72eaf53472c3a5 29
+packages/runner/tests/agent-routing.mjs
+  s_8acfe89c8adcd3::t_b505368bcc5b4b 2,13-17,24-25,29-31,36,45,49,55,61-64,69,78-88,90-104,106-109,112-119,123-136,141-144,149-159,161,164-167,171-196,201-205,207-210,214-218,223,225-226,228-229,234,236,238,242,252
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 26-28,53-54,120-122,137-140,145-146,162-163,168-169,198,211-213,220-221,230-231,247-249
+  s_8acfe89c8adcd3::t_febccae865c0c5 105,148,235
+packages/sdk/src/agent-reports.ts
+  s_8acfe89c8adcd3::t_f106c996aafc54 1-140
+packages/sdk/src/host.ts
+  s_8acfe89c8adcd3::t_b73d05f797349d 89-93,127-131,139-143
+  s_e11e967c664e36::t_f75fcb8e8870f3 144-145
+plugins/ai/src/server/agent-turn.ts
+  s_8acfe89c8adcd3::t_ef3c55997aedf8 1-14,24-75,79,122-157
+  s_8acfe89c8adcd3::t_c57208fa2adfd5 99
+  s_8acfe89c8adcd3::t_e826f1156333a6 20-23,112,118-120
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 15-18
+  s_8acfe89c8adcd3::t_7637372df92774 111,113-115
+  s_8acfe89c8adcd3::t_45e4b09e92ecd1 19,76-78,80-98,100-110,116-117,121
+packages/runner/tests/support/agents.mjs
+  s_8acfe89c8adcd3::t_b505368bcc5b4b 36-42
+packages/sdk/worker/wire-data.ts
+  s_8acfe89c8adcd3::t_9399fcd05d62d9 1-14
+plugins/ai/src/contracts.ts
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 5-15
+  s_8acfe89c8adcd3::t_846dfb5b32a071 76-77
+  s_8acfe89c8adcd3::t_f106c996aafc54 4,17,86
+  s_8acfe89c8adcd3::t_0920dea14e8b33 3,16
+plugins/ai/tests/agent-turn.test.ts
+  s_8acfe89c8adcd3::t_fbd883930b4dbf 28-32,57-58,76,88,90-91,95,107-122
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 15-20,38-56,59-61
+  s_8acfe89c8adcd3::t_56bf6a64c9eb95 1-14,21-27,33-37,62-75,77-87,89,92-94,96-106
+packages/host/README.md
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 34-45
+packages/runner/README.md
+  s_8acfe89c8adcd3::t_79ada06867ec06 11-16
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 37-45,115-116
+packages/sdk/README.md
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 659-666
+packages/sdk/worker/agent-turn.ts
+  s_8acfe89c8adcd3::t_f38d3dfccad668 50,136,194,211-212
+  s_8acfe89c8adcd3::t_ef3c55997aedf8 97-119,135,162,191
+  s_8acfe89c8adcd3::t_846154f5034b0c 1-11,22-49,51-96,120-128,131-134,137-140,142-146,154-161,164-180,182-190,192-193,195-198,205-210,213-229,233,235-239
+  s_8acfe89c8adcd3::t_06f4965f84c7bf 141,147-153,181,230-232,234
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 12-21,129-130,199-204
+  s_8acfe89c8adcd3::t_3bd6e277cc0af9 163
+packages/runner/tests/lifecycle.rs
+  s_8acfe89c8adcd3::t_b505368bcc5b4b 945
+plugins/ai/src/server/questions.ts
+  s_8acfe89c8adcd3::t_a3536120014bce 78,87,135-139
+packages/sdk/worker/contracts.ts
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 2-7,148-149
+  s_8acfe89c8adcd3::t_9399fcd05d62d9 10,14,153
+  s_8acfe89c8adcd3::t_7a3e9c4abe654e 9,11-12,23,72-83,146-147,150-152,154-156
+packages/sdk/src/internal/contracts.ts
+  s_8acfe89c8adcd3::t_4a9d211f4a3d18 2,11-19,23-24
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 20-22
+e2e/fake-agent/replays/codex/linked-hello.jsonl
+  s_8acfe89c8adcd3::t_b505368bcc5b4b 1-13
+packages/sdk/worker/invocation-host.ts
+  s_8acfe89c8adcd3::t_dd731b383a6108 16,26
+packages/server/PLUGINS.md
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 291-306
+packages/host/src/protocol.rs
+  s_8acfe89c8adcd3::t_be71a059fb3b96 77-79,143
+packages/sdk/worker/dispatch.ts
+  s_8acfe89c8adcd3::t_eea4b9b6223bc9 3,50,54,66-75,84-105,108,111-112,118-121,128-133,139,167-172,175-176,178-182,187-188,210
+  s_8acfe89c8adcd3::t_9399fcd05d62d9 7,177
+  s_8acfe89c8adcd3::t_74eaa661ffe8b2 113-117
+  s_8acfe89c8adcd3::t_e9f0fe5c7ddaca 12-18,39-47,77-83,122-127,134-138,173-174
+packages/sdk/package.json
+  s_8acfe89c8adcd3::t_0d1aea4dd0c166 14
+plugins/ai/src/server/limits.ts
+  s_8acfe89c8adcd3::t_f495ae74688d3d 1
+plugins/claude/tests/permissions.mjs
+  s_8acfe89c8adcd3::t_70d1473b7c382f 39-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f1f9232fc4236786883fae8f6156e293ec56c48",
+  "prompts": {},
+  "sessions": {
+    "s_8acfe89c8adcd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aea-bad5-7ee3-94d2-2e80c9527074",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_e11e967c664e36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aeb-0c88-7f10-9840-67eabb856bcf",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
