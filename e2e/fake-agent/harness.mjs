@@ -382,6 +382,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
     },
 
     selection,
+    runner: (address) => runners.get(address),
     scratch,
     home,
     /** Where each fake agent's command sits on the local part's PATH: unlink one to "uninstall" it. */

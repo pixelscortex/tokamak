@@ -621,6 +621,7 @@ impl Host {
         calls.next += 1;
         let id = calls.next;
         frame["id"] = json!(id);
+        frame["routed"] = json!(true);
         calls.active.insert(id, send);
         if let Err(error) = self.send(&frame) {
             calls.active.remove(&id);
@@ -643,7 +644,7 @@ impl Host {
                 tokamak_worker::log(format!("Plugin {} [{level}]: {text}", self.id));
                 return Ok(());
             }
-            Some("op") => calls.active.get(&frame_id(&frame["call"])?).cloned(),
+            Some("op" | "opCancel") => calls.active.get(&frame_id(&frame["call"])?).cloned(),
             Some("result") => calls.active.remove(&frame_id(&frame["id"])?),
             _ => return Err("invalid plugin host message".into()),
         };

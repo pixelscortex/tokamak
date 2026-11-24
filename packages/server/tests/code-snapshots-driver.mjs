@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { separateProcesses, stopIsolation } from "./code-snapshot-process-cases.mjs";
 import { snapshotReviewCases } from "./code-snapshot-review-cases.mjs";
 import { agentHarness, build, copySource, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 
@@ -28,20 +29,42 @@ try {
   await cp(join(source, "dist"), join(h.plugins, "code"), { recursive: true });
   const { api: code } = await import(join(source, "src/server/_generated/api.ts"));
   const address = await h.serve("snapshots");
-  const desk = await h.connect(address, { local: true });
+  const runner = h.runner(address);
+  const routed = runner && h.selection.runtime === "quickjs";
+  const hookCalls = new Set();
+  const desk = await h.connect(address, {
+    local: true,
+    ...(routed && {
+      observe(plugin, frame, direction) {
+        if (
+          direction === "fromWorker" &&
+          frame.name === "local.contract.call" &&
+          frame.payload.plugin === "code"
+        ) {
+          hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
+        }
+      },
+    }),
+  });
   await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
   await prunesWhenReopened(address, desk, code);
-  await withoutDataFolder(address);
+  if (!runner) await withoutDataFolder(address);
+  const fixture = { h, runner, desk, code, project, start, refs, turnRef };
+  if (routed) {
+    await separateProcesses(fixture);
+    assert.deepEqual([...hookCalls].sort(), [
+      "ai/turnHooks/after",
+      "ai/turnHooks/before",
+      "chat/threadDeletedLocal/after",
+    ]);
+  }
   await snapshotReviewCases({
-    desk,
-    code,
-    project,
-    start,
-    refs,
-    turnRef,
+    ...fixture,
     gate: h.gate,
     removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+    routed,
+    stopIsolation: () => stopIsolation(fixture),
   });
   await gitAppearsMidTurn(desk);
   await stoppedTurn(desk);

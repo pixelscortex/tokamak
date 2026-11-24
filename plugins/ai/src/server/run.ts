@@ -1,6 +1,16 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
-import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
+import {
+  fail,
+  isFailure,
+  local,
+  routesLocalContracts,
+  v,
+  type ArgsOf,
+  type Id,
+  type Infer,
+  type LocalContext,
+} from "@tokamak/sdk";
 import { agent, type Helper, type Run, type Task, type Tool, type Usage } from "../contracts";
 import { errorText } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
@@ -78,12 +88,13 @@ export const turn = local({
       carried: sessionId,
     });
     // Stop answers a waiting question "cancel" first: an agent may wait for the answer before it stops.
-    const control = turnControl(turnId, ctx.auth, questions.cancel);
+    const control = turnControl(turnId, ctx.auth, questions.cancel, hooks.stop);
     // From here until the turn is settled, the server hears from this computer (liveness.ts), and
     // quitting the app asks first (working.ts). Both are released however the turn ends.
     let lost: string | undefined;
     const alive = keepAlive(ctx, turnId, (reason) => {
       lost = reason;
+      hooks.stop();
       void control.forceStop();
     });
     const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
@@ -128,7 +139,8 @@ export const turn = local({
       if (lost !== undefined) ending = { ...ending, state: "failed", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
-      control.close();
+      if (routesLocalContracts(ctx)) control.closeAgent();
+      else control.close();
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
@@ -151,6 +163,7 @@ export const turn = local({
       }
       return { turnId, state, ...(hookNotice !== undefined && { hookNotice }) };
     } finally {
+      hooks.close();
       control.close();
       alive.stop();
       unregister();

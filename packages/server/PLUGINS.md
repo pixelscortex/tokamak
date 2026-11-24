@@ -288,8 +288,9 @@ against the owner's. The declaring plugin can mark a local contract with
 For those methods, the window authorizes the provider and method using the
 catalog, and the QuickJS Runner routes the JSON arguments and result between
 the two plugin processes. The provider handles the call with the caller's
-signed-in member and device. Live methods, including turn start and turn
-hooks, run in the caller's realm and can pass objects with callbacks. Bun
+signed-in member and device. Turn hooks and thread deletion hooks use this
+route. Live methods such as turn start still run in the caller's realm and
+can pass objects with callbacks. Bun
 continues to use the caller's worker for all local contract methods.
 
 The QuickJS Runner reuses one verified snapshot of each live provider per
@@ -302,7 +303,7 @@ providers keeps the existing process.
 “Always allow this session” grants live in `ai`'s module state. They still apply
 to turns in the old realm, but new turns in a replacement realm ask again,
 even when they resume the same agent session. This limitation goes away when
-turns and turn hooks move across processes (TKM-247 and TKM-248).
+agent turns move across processes (TKM-247).
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

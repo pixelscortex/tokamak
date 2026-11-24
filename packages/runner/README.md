@@ -15,6 +15,9 @@ use the active turn's workspace and turn ID to find its original realm; host
 operations still use the window that made each control call. The quit controls
 include turns in draining realms.
 
+Turn and thread deletion hooks are plain-data calls. Changing a hook provider
+does not drain the caller's realm.
+
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
 on a two-second timer once the last window and call release them, with at least

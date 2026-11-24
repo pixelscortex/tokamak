@@ -29,14 +29,17 @@ provider registration, method and JSON argument array. The window checks the
 live catalog, and the Runner sends an `invoke` with a `contract` target to the
 provider and returns its `result` as an `opResult`. The provider's host
 operations use the original window's workspace and identity. Cancelling an
-invocation cancels its child calls.
+invocation cancels its child calls. The caller can also cancel one pending
+operation with `opCancel`; the Runner drops that route and sends `cancel`
+to the provider invocation.
 
 For live methods the host still imports the verified provider bundle in the
 same realm. The agent contract mixes both kinds: `info` runs in the provider's
 process, and `start` still receives the live turn in `ai`'s process. The bundle
-is available there for provider discovery and live calls. Turn hooks also
-stay in that realm. The Runner reuses the same verified snapshot in that
-realm across windows. When its live providers change, new calls use a fresh
+is available there for provider discovery and live calls. Turn hooks and
+thread deletion hooks use plain data and run in their providers' processes.
+The Runner reuses the same verified live snapshot in the caller's realm
+across windows. When its live providers change, new calls use a fresh
 process. The old realm keeps its original provider snapshots and finishes
 admitted calls before stopping. Turn controls still reach that realm by turn
 ID. Imports from other paths are refused.

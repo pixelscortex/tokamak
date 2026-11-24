@@ -123,7 +123,7 @@ export interface HostBridge {
     run: (forceStop: () => Promise<void>, host: HostBridge) => Promise<T>,
   ) => Promise<T>;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
-  op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
+  op(name: HostOperation, payload: JsonValue, signal?: ActionSignal): JsonValue | Promise<JsonValue>;
 }
 
 /** Keep operation call sites tied to the contract even though the bridge is erased. */
@@ -131,9 +131,10 @@ export async function callHost<K extends HostOperation>(
   host: HostBridge,
   name: K,
   payload: HostOperations[K]["args"],
+  signal?: ActionSignal,
 ): Promise<HostOperations[K]["result"]> {
   assertJson(payload, `${name} payload`);
-  const result = await host.op(name, payload);
+  const result = await host.op(name, payload, signal);
   assertJson(result, `${name} result`);
   return result as HostOperations[K]["result"];
 }

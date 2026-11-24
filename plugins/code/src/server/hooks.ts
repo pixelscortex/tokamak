@@ -1,4 +1,13 @@
-import { fail, local, provide, type Id, type LocalContext } from "@tokamak/sdk";
+import { randomBytes } from "node:crypto";
+import {
+  fail,
+  local,
+  localHook,
+  provide,
+  routesLocalContracts,
+  type Id,
+  type LocalContext,
+} from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
@@ -6,45 +15,66 @@ import { pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
 import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot, type Repository } from "../local/git";
 
-// Git added during an agent run takes effect on the next turn: only a turn
-// with a saved before snapshot can save an after snapshot.
-const active = new WeakMap<ai.TurnInfo, { repo: Repository; before: string }>();
+type Saved = { repo: Repository; before: string };
+// Only Bun shares the same live turn object across phases.
+const liveBefore = new WeakMap<ai.TurnInfo, Saved>();
+let processKey: string | undefined;
+
+function savedBefore(turn: ai.TurnInfo): Saved | undefined {
+  const value = turn.before;
+  if (value === undefined) return;
+  if (!Array.isArray(value)) throw new Error("Invalid snapshot state");
+  const [key, threadId, turnId, root, prefix, before] = value;
+  // A replacement process must not silently claim that it saved the snapshot.
+  if (
+    processKey === undefined ||
+    key !== processKey ||
+    threadId !== turn.threadId ||
+    turnId !== turn.turnId ||
+    typeof root !== "string" ||
+    typeof prefix !== "string" ||
+    typeof before !== "string"
+  )
+    throw new Error("The before snapshot belongs to a different turn or plugin process");
+  return { repo: { root, prefix }, before };
+}
 
 export const snapshotHooks = provide(ai.turnHooks, {
-  before: local({
-    handler: async (ctx, turn: ai.TurnInfo) => {
-      try {
-        const repo = await repository(ctx, turn.folder, turn.signal);
-        if (!repo) return;
-        const target = { ...repo, ...turn };
-        await trackSnapshots(ctx, target);
-        const before = await snapshot(ctx, target, "before");
-        if (await cleanedIfDeleted(ctx, target)) {
-          return fail("ThreadDeleted", { reason: "The thread was deleted before the agent could start." });
-        }
-        active.set(turn, { repo, before });
-      } catch (cause) {
-        // A turn reason is stored by ai. Keep repository paths and Git output local.
-        const step = cause instanceof Error && /^Git could not ([a-z-]+):/.exec(cause.message)?.[1];
-        return fail("NotSaved", {
-          reason: step ? `${BEFORE_NOT_SAVED} (git ${step} failed).` : `${BEFORE_NOT_SAVED}.`,
-        });
+  before: localHook(async (ctx, turn: ai.TurnInfo) => {
+    try {
+      const repo = await repository(ctx, turn.folder, turn.signal);
+      if (!repo) return;
+      const target = { ...repo, ...turn };
+      await trackSnapshots(ctx, target);
+      const before = await snapshot(ctx, target, "before");
+      if (await cleanedIfDeleted(ctx, target)) {
+        return fail("ThreadDeleted", { reason: "The thread was deleted before the agent could start." });
       }
-    },
+      if (routesLocalContracts(ctx)) {
+        processKey ??= randomBytes(16).toString("hex");
+        return { state: [processKey, turn.threadId, turn.turnId, repo.root, repo.prefix, before] };
+      }
+      liveBefore.set(turn, { repo, before });
+    } catch (cause) {
+      // A turn reason is stored by ai. Keep repository paths and Git output local.
+      const step = cause instanceof Error && /^Git could not ([a-z-]+):/.exec(cause.message)?.[1];
+      return fail("NotSaved", {
+        reason: step ? `${BEFORE_NOT_SAVED} (git ${step} failed).` : `${BEFORE_NOT_SAVED}.`,
+      });
+    }
   }),
-  after: local({
-    handler: async (ctx, turn: ai.TurnInfo) => {
-      const saved = active.get(turn);
+  after: localHook(async (ctx, turn: ai.TurnInfo) => {
+    try {
+      const saved = routesLocalContracts(ctx) ? savedBefore(turn) : liveBefore.get(turn);
+      // Git added during an agent run takes effect on the next turn.
       if (!saved) return;
-      active.delete(turn);
-      try {
-        const target = { ...saved.repo, ...turn };
-        await snapshot(ctx, target, "after", saved.before);
-        await cleanedIfDeleted(ctx, target);
-      } catch (cause) {
-        throw new Error(AFTER_SNAPSHOT_WARNING, { cause });
-      }
-    },
+      liveBefore.delete(turn);
+      const target = { ...saved.repo, ...turn };
+      await snapshot(ctx, target, "after", saved.before);
+      await cleanedIfDeleted(ctx, target);
+    } catch (cause) {
+      throw new Error(AFTER_SNAPSHOT_WARNING, { cause });
+    }
   }),
 });
 

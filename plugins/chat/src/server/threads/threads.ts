@@ -1,4 +1,4 @@
-import { local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
+import { local, routesLocalContracts, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
 import { threadDeletedLocal, threadDeletedServer } from "../../contracts";
 import { api } from "../_generated/api";
 import { folder } from "../folders/folder";
@@ -144,7 +144,8 @@ export const removeLocal = local({
     const cleaned = await threadDeletedLocal
       .list(ctx)
       .then(async (hooks) => {
-        const event = { threadId, folder: current.folder?.path };
+        const folder = current.folder?.path;
+        const event = routesLocalContracts(ctx) && folder === undefined ? { threadId } : { threadId, folder };
         const results = await Promise.allSettled(hooks.map(async (hook) => hook.after(event)));
         return results.every((result) => result.status === "fulfilled");
       })

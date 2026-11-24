@@ -65,6 +65,15 @@ impl Output {
                     return Ok(());
                 }
             }
+            Some("opCancel") => {
+                let call = id(&frame["call"])?;
+                // Each cancel belongs to an already enqueued operation. It must
+                // get through even if the operation filled the output queue.
+                if state.calls.get(&call) == Some(&false) {
+                    self.write(&mut state, line)?;
+                }
+                return Ok(());
+            }
             Some("result") => {
                 let call = id(&frame["id"])?;
                 if state.calls.get(&call) != Some(&false) {

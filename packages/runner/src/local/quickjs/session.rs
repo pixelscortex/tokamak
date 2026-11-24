@@ -1,7 +1,11 @@
 use super::{Build, Host, Lease, Leases, Pool, frame_id, lock};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
-use futures_util::{StreamExt, future::try_join_all, stream::FuturesUnordered};
+use futures_util::{
+    StreamExt,
+    future::{AbortHandle, Abortable, try_join_all},
+    stream::FuturesUnordered,
+};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -372,6 +376,7 @@ async fn run(
         Err(error) => return Err(host.call_error(error).await),
     };
     let mut operations = FuturesUnordered::new();
+    let mut pending = HashMap::<u64, AbortHandle>::new();
     loop {
         tokio::select! {
             frame = call.next() => {
@@ -379,10 +384,25 @@ async fn run(
                 if frame["type"] == "result" {
                     return Ok(frame);
                 }
+                let id = frame_id(&frame["id"])?;
+                if frame["type"] == "opCancel" {
+                    if let Some(handle) = pending.get(&id) {
+                        handle.abort();
+                    }
+                    continue;
+                }
+                let (handle, registration) = AbortHandle::new_pair();
+                if pending.insert(id, handle).is_some() {
+                    return Err("Duplicate local host operation".into());
+                }
                 // A crashed or cancelled caller drops its nested work.
-                operations.push(operation(pool, bridge, root, ancestors, host, frame, turn));
+                let work = operation(pool, bridge, root, ancestors, host, frame, turn);
+                operations.push(async move { (id, Abortable::new(work, registration).await) });
             }
             Some((id, response)) = operations.next() => {
+                pending.remove(&id);
+                // Dropping a routed invocation sends cancel to the provider.
+                let Ok(response) = response else { continue };
                 let mut reply = match response {
                     Ok(reply) => reply,
                     Err(error) => json!({"error":error}),
@@ -405,60 +425,55 @@ async fn operation(
     host: &Arc<Host>,
     mut frame: Value,
     turn: Option<&Turn<'_>>,
-) -> (u64, Result<Value, String>) {
-    let id = frame["id"].as_u64().unwrap_or_default();
-    let result = async {
-        host.authorize(&frame["plugin"])?;
-        if frame["plugin"].is_null() && ancestors.len() > 1 {
-            frame["plugin"] = json!(host.id);
-        }
-        frame["host"] = json!(host.id);
-        let reply = bridge.request(frame.clone(), root).await?;
-        let lease = match reply {
-            Reply::Route(lease) => lease,
-            Reply::Result(mut value) => {
-                if frame["name"] == "local.contracts" && value["error"].is_null() {
-                    host.prepare_providers(&mut value)?;
-                }
-                if let Some(turn) = turn
-                    && frame["name"] == "local.runMutation"
-                    && frame["payload"]["name"] == "ai/turns:begin"
-                    && frame["plugin"].is_null()
-                    && value["error"].is_null()
-                    && let Some(id) = value["value"]["turnId"].as_str()
-                {
-                    turn.bind(id, host);
-                }
-                return Ok(value);
-            }
-        };
-        let mut target = frame["payload"].take();
-        let args = if frame["name"] == "local.contract.call" {
-            target
-                .as_object_mut()
-                .and_then(|payload| payload.remove("args"))
-                .filter(Value::is_array)
-                .ok_or("Local contract arguments must be plain data in an array")?
-        } else {
-            Value::Null
-        };
-        let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
-        let artifact = &lease.build.artifact;
-        if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
-            return Err(format!(
-                "Local contract call cycle or depth limit at plugin {}",
-                artifact.id
-            ));
-        }
-        let mut ancestors = ancestors.to_vec();
-        ancestors.push(artifact.id.clone());
-        let other = pool.host(&lease.build, &lease.slot, true).await?;
-        let response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await?;
-        if let Some(error) = response["error"].as_str() {
-            return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
-        }
-        Ok(json!({"value":response["value"]}))
+) -> Result<Value, String> {
+    host.authorize(&frame["plugin"])?;
+    if frame["plugin"].is_null() && ancestors.len() > 1 {
+        frame["plugin"] = json!(host.id);
     }
-    .await;
-    (id, result)
+    frame["host"] = json!(host.id);
+    let reply = bridge.request(frame.clone(), root).await?;
+    let lease = match reply {
+        Reply::Route(lease) => lease,
+        Reply::Result(mut value) => {
+            if frame["name"] == "local.contracts" && value["error"].is_null() {
+                host.prepare_providers(&mut value)?;
+            }
+            if let Some(turn) = turn
+                && frame["name"] == "local.runMutation"
+                && frame["payload"]["name"] == "ai/turns:begin"
+                && frame["plugin"].is_null()
+                && value["error"].is_null()
+                && let Some(id) = value["value"]["turnId"].as_str()
+            {
+                turn.bind(id, host);
+            }
+            return Ok(value);
+        }
+    };
+    let mut target = frame["payload"].take();
+    let args = if frame["name"] == "local.contract.call" {
+        target
+            .as_object_mut()
+            .and_then(|payload| payload.remove("args"))
+            .filter(Value::is_array)
+            .ok_or("Local contract arguments must be plain data in an array")?
+    } else {
+        Value::Null
+    };
+    let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
+    let artifact = &lease.build.artifact;
+    if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
+        return Err(format!(
+            "Local contract call cycle or depth limit at plugin {}",
+            artifact.id
+        ));
+    }
+    let mut ancestors = ancestors.to_vec();
+    ancestors.push(artifact.id.clone());
+    let other = pool.host(&lease.build, &lease.slot, true).await?;
+    let response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await?;
+    if let Some(error) = response["error"].as_str() {
+        return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
+    }
+    Ok(json!({"value":response["value"]}))
 }

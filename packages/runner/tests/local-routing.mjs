@@ -40,6 +40,8 @@ async function plugin(id, source, contract = "") {
 await plugin(
   owner,
   `
+  /// <reference types="node" />
+  import { readFile } from "node:fs/promises";
   import { local, v } from "@tokamak/sdk";
   import { probe } from "../contracts";
   export const identify = local({
@@ -47,11 +49,26 @@ await plugin(
     handler: (ctx, { id }) => probe.get(id, ctx).identify(),
   });
   export const hold = local({
-    args: { id: v.string(), path: v.string() },
-    handler: (ctx, { id, path }) => probe.get(id, ctx).hold(path),
+    args: { id: v.string(), path: v.string(), cancelCall: v.optional(v.boolean()) },
+    handler: async (ctx, { id, path, cancelCall }) => {
+      if (!cancelCall) return probe.get(id, ctx).hold({ path });
+      const controller = new AbortController();
+      const timer = setInterval(() => {
+        void readFile(path + ".stop").then(() => controller.abort(), () => {});
+      }, 20);
+      try {
+        await probe.get(id, ctx, { signal: controller.signal }).hold({ path });
+        throw new Error("Expected the routed call to be cancelled");
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== "Local contract call cancelled") throw error;
+        return await probe.get(id, ctx).identify();
+      } finally {
+        clearInterval(timer);
+      }
+    },
   });
   export const badArgs = local({
-    handler: (ctx) => probe.get("custom-alpha", ctx).hold((() => {}) as unknown as string),
+    handler: (ctx) => probe.get("custom-alpha", ctx).hold({ path: (() => {}) as unknown as string }),
   });
   const nested = () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown);
   export const badResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).badResult() });
@@ -68,7 +85,7 @@ await plugin(
   export const probe = contract<{
     id?: string;
     identify(): Promise<AuthContext>;
-    hold(path: string): Promise<string>;
+    hold(input: { path: string }): Promise<string>;
     badResult(): Promise<string>;
     echo(value: unknown): Promise<unknown>;
     deepResult(): Promise<unknown>;
@@ -82,23 +99,21 @@ function provider(id) {
   return `
     /// <reference types="node" />
     import { readFile, writeFile } from "node:fs/promises";
-    import { local, provide } from "@tokamak/sdk";
+    import { local, localHook, provide, type ActionSignal } from "@tokamak/sdk";
     import { probe } from "plugin:${owner}/contracts";
     const identify = local({ handler: async (ctx) => ctx.auth });
-    const hold = local({
-      async handler(ctx, path: string) {
+    const hold = localHook(async (_ctx, { path, signal }: { path: string; signal: ActionSignal }) => {
         await new Promise<void>((resolve) => {
           const timer = setInterval(() => {
             void readFile(path + ".release").then(() => { clearInterval(timer); resolve(); }, () => {});
           }, 20);
-          ctx.signal.addEventListener("abort", () => {
+          signal.addEventListener("abort", () => {
             clearInterval(timer);
             void writeFile(path + ".cancelled", "cancelled").then(() => resolve());
           }, { once: true });
           void writeFile(path + ".started", "started");
         });
         return "${id}";
-      },
     });
     export default provide(probe, {
       id: "custom-alpha", identify, hold,
@@ -169,9 +184,13 @@ try {
   await assert.rejects(client.local(api.thrown, {}), /Plugin routed-alpha: original provider exception/);
   assert.deepEqual(pids(), initial, "data boundary failures must not kill any warmed host");
 
-  const begin = async (id, name, signal) => {
+  const begin = async (id, name, signal, cancelCall = false) => {
     const path = join(scratch, name);
-    const result = client.local(api.hold, { id: `custom-${id.slice("routed-".length)}`, path }, { signal });
+    const result = client.local(
+      api.hold,
+      { id: `custom-${id.slice("routed-".length)}`, path, cancelCall },
+      { signal },
+    );
     void result.catch(() => {});
     await until(name + " started", () => Bun.file(path + ".started").exists());
     return { path, result };
@@ -181,6 +200,12 @@ try {
   cancel.abort();
   await assert.rejects(cancelled.result, /cancelled/);
   await until("provider observed cancellation", () => Bun.file(cancelled.path + ".cancelled").exists());
+  const leaf = await begin(alpha, "cancel-routed-call", undefined, true);
+  await writeFile(leaf.path + ".stop", "");
+  assert.deepEqual(await leaf.result, auth, "the caller can still make another call");
+  await until("the provider's reconstructed signal aborted", () =>
+    Bun.file(leaf.path + ".cancelled").exists(),
+  );
   console.log(
     "Non-plain arguments and results named their method; cancelling the caller aborted the provider",
   );

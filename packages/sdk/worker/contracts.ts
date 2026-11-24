@@ -84,6 +84,7 @@ export function dataContracts(root: ProviderModule) {
 export function workerContracts(
   root: ProviderModule,
   load: (path: string) => Promise<ProviderModule> = (path) => import(pathToFileURL(path).href),
+  routed = false,
 ) {
   // A plain provider's static metadata is scoped to its build. Once discovered,
   // looking up a different provider doesn't depend on this process being up.
@@ -91,13 +92,17 @@ export function workerContracts(
   const descriptions = new Map<string, { build?: string; value: Description }>();
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
-      async list(key, selected) {
+      routed,
+      async list(key, selected, options) {
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
-        const candidates = await callHost(bridge, "local.contracts", {
-          name: key.name,
-          ...(key.owner === undefined ? {} : { owner: key.owner }),
-        });
-        const auth = await callHost(bridge, "auth.current", {});
+        const signal = routed ? options?.signal : undefined;
+        const candidates = await callHost(
+          bridge,
+          "local.contracts",
+          { name: key.name, ...(key.owner === undefined ? {} : { owner: key.owner }) },
+          signal,
+        );
+        const auth = await callHost(bridge, "auth.current", {}, signal);
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
         const unavailable: { plugin: string; lastId: JsonValue | undefined; error: unknown }[] = [];
@@ -114,14 +119,19 @@ export function workerContracts(
           const remote =
             (method: string) =>
             (...args: unknown[]) =>
-              callHost(bridge, "local.contract.call", {
-                ...target,
-                method,
-                args: wireData(
-                  args,
-                  `Local contract ${owner}/${key.name}.${method} arguments`,
-                ) as JsonValue[],
-              });
+              callHost(
+                bridge,
+                "local.contract.call",
+                {
+                  ...target,
+                  method,
+                  args: wireData(
+                    args,
+                    `Local contract ${owner}/${key.name}.${method} arguments`,
+                  ) as JsonValue[],
+                },
+                signal,
+              );
           let implementation: Readonly<Record<string, unknown>>;
           if (!own && dataMethods === true) {
             const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
@@ -130,13 +140,14 @@ export function workerContracts(
               const value =
                 cached && cached.build === build
                   ? cached.value
-                  : await callHost(bridge, "local.contract.describe", target);
+                  : await callHost(bridge, "local.contract.describe", target, signal);
               descriptions.set(cacheKey, { build, value });
               implementation = Object.freeze({
                 ...value.data,
                 ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
               });
             } catch (error) {
+              if (signal?.aborted) throw error;
               unavailable.push({ plugin, lastId: cached?.value.data.id, error });
               return;
             }

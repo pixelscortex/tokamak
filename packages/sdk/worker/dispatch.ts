@@ -6,7 +6,14 @@ import { WORKER_CAPACITY } from "../src/worker-limits";
 import type { ContractInvocation } from "./contracts";
 
 export type WorkerMessage =
-  | { type: "invoke"; id: number; fn: string; args: JsonValue; contract?: ContractInvocation }
+  | {
+      type: "invoke";
+      id: number;
+      fn: string;
+      args: JsonValue;
+      contract?: ContractInvocation;
+      routed?: boolean;
+    }
   | { type: "opResult"; id: number; value: JsonValue; error?: string }
   | { type: "cancel"; id: number };
 
@@ -26,12 +33,13 @@ export function workerDispatch(
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
+    routedContracts?: Parameters<typeof invocationHost>[3];
   },
 ) {
   const calls = new Map<number, { controller: AbortController; close(): Promise<void> }>();
   const pending = new Map<
     number,
-    { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
+    { call: number; resolve(value: JsonValue): void; reject(error: unknown): void }
   >();
 
   function retire(id: number) {
@@ -42,7 +50,13 @@ export function workerDispatch(
         op.reject(new Error("stale invocation: host operation refused"));
       }
   }
-  async function invoke(id: number, name: string, args: JsonValue, target?: ContractInvocation) {
+  async function invoke(
+    id: number,
+    name: string,
+    args: JsonValue,
+    target?: ContractInvocation,
+    routed?: boolean,
+  ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
@@ -50,13 +64,35 @@ export function workerDispatch(
     calls.set(id, call);
     const invocation = invocationHost(
       controller.signal,
-      (plugin) => (name, payload) => {
+      (plugin) => (name, payload, signal) => {
         if (calls.get(id) !== call || controller.signal.aborted)
           throw new Error("stale invocation: host operation refused");
+        if (signal?.aborted) throw new Error("Local contract call cancelled");
         if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
         return new Promise<JsonValue>((resolve, reject) => {
           const op = allocateOp();
-          pending.set(op, { call: id, resolve, reject });
+          const cancel = () => {
+            if (!pending.delete(op)) return;
+            try {
+              send({ type: "opCancel", id: op, call: id });
+            } finally {
+              rejected(new Error("Local contract call cancelled"));
+            }
+          };
+          const cleanup = () => signal?.removeEventListener("abort", cancel);
+          const rejected = (error: unknown) => {
+            cleanup();
+            reject(error);
+          };
+          pending.set(op, {
+            call: id,
+            resolve: (value) => {
+              cleanup();
+              resolve(value);
+            },
+            reject: rejected,
+          });
+          signal?.addEventListener("abort", cancel, { once: true });
           try {
             send({
               type: "op",
@@ -68,12 +104,12 @@ export function workerDispatch(
             });
           } catch (error) {
             pending.delete(op);
-            reject(error);
+            rejected(error);
           }
         });
       },
       createPrograms && (() => createPrograms(controller.signal, id)),
-      contracts,
+      routed ? (options?.routedContracts ?? contracts) : contracts,
     );
     try {
       if (!(target && options?.contract) && functions[name]?.kind !== kind)
@@ -103,7 +139,7 @@ export function workerDispatch(
   }
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
-      const invocation = invoke(message.id, message.fn, message.args, message.contract);
+      const invocation = invoke(message.id, message.fn, message.args, message.contract, message.routed);
       if (options?.observeInvocation) return invocation;
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);

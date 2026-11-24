@@ -16,13 +16,18 @@ export function controlFor(turnId: string, auth: AuthContext) {
 }
 
 /** Bridges separate local calls into the provider's running invocation, on its original device. */
-export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: () => Promise<void>) {
+export function turnControl(
+  turnId: string,
+  auth: AuthContext,
+  cancelQuestion?: () => Promise<void>,
+  cancelHook?: () => void,
+) {
   let steer: Steer | undefined;
   let stop: Stop | undefined;
   let stopRequested = false;
   let stopReady = false;
   let stopSent = false;
-  let closed = false;
+  let agentClosed = false;
   let forceKill: (() => Promise<void>) | undefined;
   let forcing: Promise<void> | undefined;
   let resolveForced!: () => void;
@@ -40,7 +45,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
   }
 
   function sendStop() {
-    if (closed || !stop || stopSent) return;
+    if (agentClosed || !stop || stopSent) return;
     stopSent = true;
     void Promise.resolve()
       .then(stop)
@@ -59,11 +64,11 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
     },
     steer(text: string, record: () => Promise<unknown>) {
       const delivery = steerLine.then(async () => {
-        if (!steer && !closed && !stopRequested) {
+        if (!steer && !agentClosed && !stopRequested) {
           registrationTimer ??= setTimeout(releaseSteers, STEER_REGISTRATION_MS);
           await earlySteers;
         }
-        if (closed || stopRequested) return noRunningTurn(turnId);
+        if (agentClosed || stopRequested) return noRunningTurn(turnId);
         const deliver = steer;
         if (!deliver) return fail("NoSteerHandler", { turnId });
         await record();
@@ -80,6 +85,7 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
     },
     /** Cancel a pending run.ask before interrupting; some providers wait for the answer to proceed. */
     async requestStop() {
+      cancelHook?.();
       if (stopRequested) return;
       stopRequested = true;
       releaseSteers();
@@ -101,14 +107,17 @@ export function turnControl(turnId: string, auth: AuthContext, cancelQuestion?: 
       }
     },
     async forceStop() {
-      if (closed || !forceKill) return noRunningTurn(turnId);
+      if (agentClosed || !forceKill) return noRunningTurn(turnId);
       forcing ??= forceKill().then(resolveForced);
       await forcing;
       return null;
     },
-    close() {
-      closed = true;
+    closeAgent() {
+      agentClosed = true;
       releaseSteers();
+    },
+    close() {
+      this.closeAgent();
       running.delete(turnId);
     },
   };

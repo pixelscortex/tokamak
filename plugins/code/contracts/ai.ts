@@ -239,21 +239,27 @@ export interface Agent {
  */
 export const agent = contract<Agent>("agent", { place: "local", dataMethods: ["info"] });
 
-/** The same local object is passed to both phases of a turn. */
-export interface TurnInfo {
+/** Plain data sent to a provider for both phases of a turn. */
+export interface TurnDetails {
   readonly threadId: Id<"threads">;
   readonly turnId: string;
   readonly folder: string;
-  /** Aborted when a hook misses its deadline; providers can use it to stop their work. */
+  /** Only after receives the state returned by this provider's before hook. */
+  readonly before?: JsonValue;
+}
+
+/** Use SDK `localHook` to receive the invocation signal in the provider. */
+export interface TurnInfo extends TurnDetails {
+  /** Aborted when this hook is cancelled; use it to stop work. */
   readonly signal: LocalContext["signal"];
 }
 
 export interface TurnHooks {
   /** Runs before the agent starts. A failure, exception or timeout prevents the agent from starting. */
-  before?(turn: TurnInfo): Promise<void | Failure<string, JsonValue>>;
+  before?(turn: TurnDetails): Promise<void | Failure<string, JsonValue> | { state: JsonValue }>;
   /** Runs after the agent settles. Errors and timeouts are notices; they never change its outcome. */
-  after?(turn: TurnInfo): Promise<void>;
+  after?(turn: TurnDetails): Promise<void>;
 }
 
 /** Local hooks around a turn, called with a 60-second limit before the thread is freed. */
-export const turnHooks = contract<TurnHooks>("turnHooks", { place: "local" });
+export const turnHooks = contract<TurnHooks>("turnHooks", { place: "local", dataMethods: true });

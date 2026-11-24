@@ -25,12 +25,17 @@ export interface Contract<T extends object, P extends ContractPlace = ContractPl
   get(id: string, ...context: LookupContext<P>): ProviderSelection<BoundProvider<T, P>>;
 }
 
+interface LocalLookupOptions {
+  /** Cancel provider discovery and calls made through the returned list. */
+  readonly signal?: NonNullable<HostBridge["signal"]>;
+}
+
 export interface ContractContext {
   readonly [contractScope]: ContractScope;
 }
 
 type LookupContext<P extends ContractPlace> = P extends "local"
-  ? [context: ContractContext]
+  ? [context: ContractContext, options?: LocalLookupOptions]
   : [context?: ContractContext];
 
 type BoundProvider<T, P extends ContractPlace> = {
@@ -132,24 +137,30 @@ export function contractReference<T extends object, P extends ContractPlace>(
       ? {}
       : { dataMethods: dataMethods === true ? (true as const) : Object.freeze([...dataMethods]) }),
   });
-  const resolve = async (context?: ContractContext, id?: string): Promise<readonly ContractEntry[]> => {
+  const resolve = async (
+    context?: ContractContext,
+    id?: string,
+    options?: LocalLookupOptions,
+  ): Promise<readonly ContractEntry[]> => {
     const scoped = context?.[contractScope] ?? (place === "server" ? serverScope : undefined);
     if (!scoped)
       throw new Error(
         "Contract lookup requires a plugin function; pass ctx in local functions and server actions",
       );
-    return scoped.list(key, id);
+    return scoped.list(key, id, options);
   };
   return Object.freeze({
     ...key,
     [contractBrand]: (shape: T) => shape,
-    list: async (context?: ContractContext) =>
-      (await resolve(context)).map(({ implementation }) => implementation as BoundProvider<T, P>),
-    get: (id: string, context?: ContractContext) =>
+    list: async (context?: ContractContext, options?: LocalLookupOptions) =>
+      (await resolve(context, undefined, options)).map(
+        ({ implementation }) => implementation as BoundProvider<T, P>,
+      ),
+    get: (id: string, context?: ContractContext, options?: LocalLookupOptions) =>
       select(
         id,
         async () =>
-          (await resolve(context, id)).find((provider) => provider.id === id)?.implementation as
+          (await resolve(context, id, options)).find((provider) => provider.id === id)?.implementation as
             | BoundProvider<T, P>
             | undefined,
       ),
@@ -174,7 +185,13 @@ export interface ContractEntry {
 }
 
 export interface ContractScope {
-  list(key: ContractKey, id?: string): Promise<readonly ContractEntry[]>;
+  readonly routed?: boolean;
+  list(key: ContractKey, id?: string, options?: LocalLookupOptions): Promise<readonly ContractEntry[]>;
+}
+
+/** Whether cross-plugin local data methods use the provider's own process. */
+export function routesLocalContracts(ctx: ContractContext): boolean {
+  return ctx[contractScope]?.routed === true;
 }
 
 let serverScope: ContractScope | undefined;

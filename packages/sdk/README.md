@@ -639,16 +639,21 @@ process restarts. A value that JSON would change or lose fails with the
 contract and method name. Arguments and results also have size and nesting
 limits. A void result becomes `null` across processes.
 
+Pass `{ signal }` to a local contract lookup to cancel its pending routed
+calls without ending the caller's invocation. In the provider,
+`localHook((ctx, input) => …)` exposes that invocation's signal as
+`input.signal`. Send only the input's data fields across the contract.
+
 Methods that take live objects stay in the caller's realm. For a mixed
 contract the provider module is also evaluated in that realm, even though its
 plain-data methods run in the provider's separate process. That shared
-evaluation remains until turn and hook calls move (TKM-247 and TKM-248).
+evaluation remains for agent turns until TKM-247.
 A reload restarts the provider process only when its local bytes change. If
 the caller's live providers change, new calls use a new realm and admitted
 calls finish in the old one. “Always allow this session” grants in `ai`'s
 module state do not carry to the replacement realm: new turns ask again
 even when resuming the same agent session. This limitation goes away when
-turns and turn hooks move across processes (TKM-247 and TKM-248).
+agent turns move across processes (TKM-247).
 
 Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.

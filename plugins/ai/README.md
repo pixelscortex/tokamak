@@ -182,15 +182,25 @@ never sent to windows. A queued row has no reply until it starts.
 ### The `turnHooks` contract
 
 Plugins use `provide(ai.turnHooks, { before, after })` with either or both
-members. Wrap a member in `local({ handler })` to use `ctx.proc` or other local
-capabilities. Both receive the same `ai.TurnInfo` (`threadId`, `turnId`, `folder`,
-and a cancellation `signal`).
+members. On the QuickJS Runner, each receives plain data in the provider's
+process: `threadId`, `turnId`, and `folder`. Use
+`localHook((ctx, turn: ai.TurnInfo) => …)` to get local capabilities and
+`turn.signal`. The SDK supplies the signal in the provider. Bun keeps passing
+the same live object to both phases.
+
+A QuickJS `before` hook may return `{ state }` with JSON data. The same
+provider's `after` receives it as `turn.before`. State belongs to one turn
+and is discarded when that turn ends, even if `after` is skipped. Use
+`turnId` to match any saved state to a turn.
 
 - A `before` failure or timeout ends the turn with a reason and skips the agent
   and all `after` hooks.
 - After the agent ends, `after` hooks run together before the thread is freed.
   Errors or timeouts appear as a local notice and leave the outcome in place.
-- Each hook has 60 seconds. Listen to `turn.signal` to stop work on timeout.
+- Each before hook has 60 seconds; all after hooks share one 60-second
+  deadline. Listen to `turn.signal` to stop work. On QuickJS, a deadline or
+  Stop cancels the pending call in its provider. Force stop only kills the
+  agent's programs.
 
 ## Tests
 

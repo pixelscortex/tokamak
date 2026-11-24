@@ -42,6 +42,7 @@ export async function initialize(
     (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     workerContracts(root, loadLocalModule),
     {
+      routedContracts: workerContracts(root, loadLocalModule, true),
       contract: dataContracts(root),
       abort(controller) {
         try {

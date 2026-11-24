@@ -4,6 +4,10 @@ Code saves the Git worktree before and after each agent turn on the client that 
 Install it alongside Chat; AI is optional. A turn that starts outside a Git worktree
 gets no snapshots, even if the agent runs `git init` during that turn.
 
+- On the QuickJS Runner, Code saves both snapshots in its own process.
+  The before hook returns the Git commit and repository for that thread and
+  turn. The after hook verifies the turn ID and the process that saved it.
+  A lost Code process leaves the before snapshot and the usual warning.
 - Each turn with Git gets commits at
   `refs/tokamak/threads/<thread key>/turns/<turn key>/before` and `…/after`.
   The keys are the parts of the thread and turn IDs after the colon.
@@ -42,6 +46,6 @@ These read Git through the local functions `changes:forTurn`, `changes:diff` and
 The local `notices:forTurn({ threadId, turnId })` reads omissions and the warning
 from Git. `src/local/git.ts` has the matching `turnRefs(threadId, turnId)` helper.
 
-Run `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test code_snapshots --test code_changes` for
+Run `TOKAMAK_TEST_RUNNER=1 cargo test --locked -p server --test code_snapshots --test code_changes` for
 snapshots and change reads with the real server and a fake agent. Run
 `proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.
