@@ -43,12 +43,12 @@ Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
 or Linux. The Runner and full host use `target`; the Server and actions-only
 host use `target/cloud`. The test matrix is:
 
-| Build and runtime | Suites |
-| --- | --- |
-| Runner / Bun | Claude and Codex replays, local functions, workers, Bun supervisor units and graceful Runner shutdown |
-| Runner / QuickJS | Runner and worker tests, full host protocol and program tests, AI and agent replays, Chat and Code, local functions |
-| Both QuickJS builds | Server units and CLI, actions, identity and sign-in, plugins, routing, service and workers |
-| Cloud Server / QuickJS | Actions-only host, data, cancellation, indexes, schemas and SDK transport |
+| Build and runtime      | Suites                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Runner / Bun           | Claude and Codex replays, local functions, workers, Bun supervisor units and graceful Runner shutdown               |
+| Runner / QuickJS       | Runner and worker tests, full host protocol and program tests, AI and agent replays, Chat and Code, local functions |
+| Both QuickJS builds    | Server units and CLI, actions, identity and sign-in, plugins, routing, service and workers                          |
+| Cloud Server / QuickJS | Actions-only host, data, cancellation, indexes, schemas and SDK transport                                           |
 
 The routing test uses a separate Runner for the machine's local functions and
 runs the shared workspace against both `tokamak-server` builds. To run just
