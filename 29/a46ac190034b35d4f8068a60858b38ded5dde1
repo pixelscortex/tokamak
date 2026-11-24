@@ -1,0 +1,36 @@
+packages/runner/tests/support/agent-channel.mjs
+  s_d72ccb6f50b933::t_7091340943df62 68,285
+packages/sdk/worker/agent-turn.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 6-7,11,14-15,238,262-263,266-267
+  s_d72ccb6f50b933::t_d388b62ac2d188 239-261
+plugins/ai/src/server/agent-turn.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 4,11,17,19,21,26
+  s_d72ccb6f50b933::t_2227675ba86286 51-62
+packages/sdk/src/agent-turn.ts
+  s_d72ccb6f50b933::t_d0c2bc83fa3d43 40-55,200
+plugins/ai/src/server/questions.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 9,75,131
+  s_d72ccb6f50b933::t_d0c2bc83fa3d43 8,16,41,65,70-74,77-79,83,106,109,112,116-117,121,128
+plugins/claude/src/server/events.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 43,54,56,139
+plugins/claude/src/server/permissions.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 1-2,68,103-106,121,132
+plugins/claude/src/server/turn.ts
+  s_d72ccb6f50b933::t_8a86f849cc98b0 110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29a46ac190034b35d4f8068a60858b38ded5dde1",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
