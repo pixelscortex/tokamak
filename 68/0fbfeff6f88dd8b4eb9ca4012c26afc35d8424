@@ -1,0 +1,90 @@
+e2e/fake-agent/start-runner.ts
+  s_d72ccb6f50b933::t_10fba5dea8bd98 14,20,63
+packages/sdk/src/agent-turn.ts
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 254
+plugins/claude/src/server/agent.ts
+  s_d72ccb6f50b933::t_67860e5edab4ff 14-15,17,28,40-41,50-53,131
+  s_d72ccb6f50b933::t_918a65e8d8cee7 18-22,24-25,27,30-39,42-49
+packages/host/tests/programs.rs
+  s_d72ccb6f50b933::t_10fba5dea8bd98 185,198,203,214,225-226
+  s_d72ccb6f50b933::t_79be15a6925767 210,248,250
+  s_d72ccb6f50b933::t_f858b0c473d186 236-239,244-247
+plugins/codex/src/server/info.ts
+  s_d72ccb6f50b933::t_c9e3f8051457e6 2,4,19-25,30,32-38,42,91-100
+  s_d72ccb6f50b933::t_98575df27a8432 26
+plugins/ai/src/server/agents.ts
+  s_d72ccb6f50b933::t_f8226ced7a7640 58-59,65,67
+  s_d72ccb6f50b933::t_0ec776c603f2e1 60-64,66
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 2,50,55-57,75,81,83
+plugins/claude/tests/turns.mjs
+  s_d72ccb6f50b933::t_25a8831c7e67b4 87
+  s_d72ccb6f50b933::t_aea7ecb19ad7b8 78-86,88-90
+  s_d72ccb6f50b933::t_918a65e8d8cee7 189-193
+plugins/codex/src/server/turn.ts
+  s_d72ccb6f50b933::t_c9e3f8051457e6 32-33,35,38,48,52,125,172-175
+  s_d72ccb6f50b933::t_aac0943e4d9835 22,31,34,51
+  s_d72ccb6f50b933::t_ed7c09300943fb 29-30
+plugins/claude/src/server/wire.ts
+  s_d72ccb6f50b933::t_67860e5edab4ff 2,132-137,144-146,148-152,154
+packages/server/src/websocket.rs
+  s_d72ccb6f50b933::t_9d4e17c7157c83 760-763
+packages/sdk/src/agent-command.ts
+  s_d72ccb6f50b933::t_0d9fda693c34b8 13,16-17,20,23,31,45
+  s_d72ccb6f50b933::t_9d4e17c7157c83 1-2
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 3-12,14-15,18-19,21-22,24-30,32-44,46-47
+packages/sdk/src/agent-info-cache.ts
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 13
+plugins/codex/src/server/rpc.ts
+  s_d72ccb6f50b933::t_c9e3f8051457e6 44,85-86
+  s_d72ccb6f50b933::t_918a65e8d8cee7 45-52
+  s_d72ccb6f50b933::t_1b3d28e1875fd2 87-88
+packages/runner/tests/local-routing.mjs
+  s_d72ccb6f50b933::t_025db39a39562f 195-199,202,216,293
+  s_d72ccb6f50b933::t_4646f9c00961c0 339-347
+  s_d72ccb6f50b933::t_ecf84a92850462 182-190,633
+  s_d72ccb6f50b933::t_663cb7764b2735 200-201
+plugins/code/contracts/ai.ts
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 73
+  s_d72ccb6f50b933::t_f0715739de31ae 72
+plugins/codex/src/server/agent.ts
+  s_d72ccb6f50b933::t_c9e3f8051457e6 21-24
+packages/server/tests/fixtures/worker/src/server/actions.ts
+  s_d72ccb6f50b933::t_dc46c8acaa7a4d 48-49,51-53
+  s_d72ccb6f50b933::t_ed1ecac50a6a69 50
+plugins/codex/tests/e2e.mjs
+  s_d72ccb6f50b933::t_b941399af14994 383
+  s_d72ccb6f50b933::t_c26e6a54270321 386-390
+plugins/ai/src/contracts.ts
+  s_d72ccb6f50b933::t_f0715739de31ae 72
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 73
+packages/runtime/js/runner.ts
+  s_d72ccb6f50b933::t_3629a2c2e80caa 110
+  s_d72ccb6f50b933::t_10fba5dea8bd98 24-27,39,66
+packages/host/README.md
+  s_d72ccb6f50b933::t_cfc6afbfb2976b 70-72
+packages/server/src/host/worker/tests.rs
+  s_d72ccb6f50b933::t_dc46c8acaa7a4d 63-68,73,84,88-89,91,96-105,107-108
+plugins/claude/tests/replay.mjs
+  s_d72ccb6f50b933::t_fabd83c4c46992 52-55
+  s_d72ccb6f50b933::t_3771cee1ba04b9 21-25,60-61
+  s_d72ccb6f50b933::t_918a65e8d8cee7 57-59,62
+  s_d72ccb6f50b933::t_aea7ecb19ad7b8 15,20,51,56,63
+packages/runtime/js/local.ts
+  s_d72ccb6f50b933::t_4c935d49943916 80,275-281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "680fbfeff6f88dd8b4eb9ca4012c26afc35d8424",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}
