@@ -1,0 +1,21 @@
+packages/server/tests/schema_indexes.rs
+  s_1f323405e885d4::t_1944f9a85d61ec 297-298
+  s_1f323405e885d4::t_3e2ec29f00ee20 299-300
+  s_1f323405e885d4::t_ac879bb7a35d8f 295-296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3b7ad906813590c50c5a3fa54826b8473f512d05",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}
