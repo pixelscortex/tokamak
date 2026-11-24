@@ -5,21 +5,19 @@
 // part holds the token that lets `turns:answer` clear it.
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Id, LocalContext } from "@tokamak/sdk";
-import type { Access, Answer, Question } from "../contracts";
+import type { TurnAnswer } from "@tokamak/sdk/agent-turn";
+import type { Access, Question } from "../contracts";
 import { api } from "./_generated/api";
 
 interface Pending {
   readonly questionId: string;
   /** The secret `turns:answer` asks for: no other window, even on this device, can answer. */
   readonly token: string;
-  resolve(answer: Answer): void;
+  resolve(answer: TurnAnswer): void;
 }
 
 /** The question each turn waits on, by turn id. */
 const waiting = new Map<string, Pending>();
-
-/** Turns whose questions are cancelled (Stop, or the turn's call aborted): every ask answers "cancel". */
-const cancelled = new Set<string>();
 
 /**
  * Kinds of question answered "Always allow this session", for the agent
@@ -40,23 +38,11 @@ export function pendingQuestion(turnId: string, questionId: string): Pending | u
 }
 
 /** Hands `answer` to the agent, once: false when the question was answered or cancelled meanwhile. */
-export function settle(turnId: string, pending: Pending, answer: Answer): boolean {
+export function settle(turnId: string, pending: Pending, answer: TurnAnswer): boolean {
   if (waiting.get(turnId) !== pending) return false;
   waiting.delete(turnId);
   pending.resolve(answer);
   return true;
-}
-
-/**
- * Cancels the turn's questions in memory: the one waiting now and any it
- * asks later resolve "cancel". Used when the turn's call is aborted, where
- * the server can no longer be reached on its behalf; Stop uses `cancel`
- * from `asking`, which also clears the question on the row.
- */
-function cancelQuestions(turnId: string): void {
-  cancelled.add(turnId);
-  const pending = waiting.get(turnId);
-  if (pending) settle(turnId, pending, "cancel");
 }
 
 /**
@@ -76,19 +62,25 @@ export function asking(
   allowed.set(session, allows);
   let current = carried;
   let expired = false;
+  let stopping = false;
   function sessionChanged(sessionId: string | undefined) {
     if (current !== undefined && current !== sessionId) allows.kinds.clear();
     current = sessionId;
   }
-  const onAbort = () => cancelQuestions(turnId);
-  ctx.signal.addEventListener("abort", onAbort, { once: true });
+  function expire() {
+    expired = true;
+    const pending = waiting.get(turnId);
+    if (pending) settle(turnId, pending, "cancel");
+  }
+  ctx.signal.addEventListener("abort", expire, { once: true });
 
-  async function askNow(question: Question): Promise<Answer> {
-    if (expired || ctx.signal.aborted || cancelled.has(turnId)) return "cancel";
+  async function askNow(question: Question): Promise<TurnAnswer> {
+    if (expired || ctx.signal.aborted) return "cancel";
+    if (stopping) return "stopping";
     if (access === "full" || allows.kinds.has(question.kind)) return "approve";
     const id = randomUUID();
     const token = randomBytes(32).toString("hex");
-    const answered = new Promise<Answer>((resolve) =>
+    const answered = new Promise<TurnAnswer>((resolve) =>
       waiting.set(turnId, { questionId: id, token, resolve }),
     );
     try {
@@ -111,36 +103,32 @@ export function asking(
     /**
      * Stop's hook (`turnControl` calls it before the agent's `onStop`): the
      * waiting question is cleared on the row the way an answer clears it and
-     * resolves "cancel"; every later ask resolves "cancel" at once.
+     * resolves "stopping"; every later ask resolves "stopping" at once.
      */
     async cancel(): Promise<void> {
-      cancelled.add(turnId);
+      stopping = true;
       const pending = waiting.get(turnId);
       if (!pending) return;
-      // The row may already be past the question (answered meanwhile); the agent gets "cancel" either way.
+      // If someone answered in the meantime, settle leaves their answer in place.
       await ctx
         .runMutation(api.turns.answer, { turnId, questionId: pending.questionId, token: pending.token })
         .catch(() => {});
-      settle(turnId, pending, "cancel");
-      // Let the agent act on "cancel" (its `ask` resumes in microtasks) before Stop calls its
+      settle(turnId, pending, "stopping");
+      // Let the agent act on the answer (its `ask` resumes in microtasks) before Stop calls its
       // `onStop`: a program reading its input in order must get the answer before the interrupt.
       await new Promise<void>((resolve) => setImmediate(resolve));
     },
-    ask(question: Question): Promise<Answer> {
+    ask(question: Question): Promise<TurnAnswer> {
       const next = queue.then(() => askNow(question));
       queue = next.catch(() => {});
       return next;
     },
     sessionChanged,
     /** The linked provider ended; no question can outlive its channel. */
-    expire() {
-      expired = true;
-      cancelQuestions(turnId);
-    },
+    expire,
     /** The turn ended: its allows belong to the session the agent returned, or to none. */
     end(sessionId: string | undefined): void {
-      ctx.signal.removeEventListener("abort", onAbort);
-      cancelled.delete(turnId);
+      ctx.signal.removeEventListener("abort", expire);
       waiting.delete(turnId);
       sessionChanged(sessionId);
       if (sessionId === undefined) allowed.delete(session);

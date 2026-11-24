@@ -23,6 +23,8 @@ export type {
 export interface Info {
   readonly installed: boolean;
   readonly signedIn: boolean;
+  /** A successful probe may be reused for turns until this wall clock time. */
+  readonly cacheUntil?: number;
   /** A user-facing reason when the installed program needs an update. */
   readonly updateRequired?: string;
   /** The command that installs the agent's program; kept for a later one-click install. */
@@ -67,7 +69,8 @@ export interface Agent {
    * the paths' outlines are drawn. Without one, a neutral mark stands in.
    */
   readonly icon?: string;
-  info(): Promise<Info>;
+  /** With a setup deadline (Unix milliseconds), check install and login only. Throw if unknown. */
+  info(options: { setupDeadline?: number }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }

@@ -5,7 +5,7 @@ import { within } from "../../../e2e/fake-agent/harness.mjs";
 import { FORCE_STOP_MS } from "../../ai/src/shared/turn-timing.ts";
 
 function alive(pid) {
-  const stat = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+  const stat = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)])
     .stdout.toString()
     .trim();
   return !!stat && !stat.startsWith("Z");

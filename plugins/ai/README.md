@@ -76,7 +76,7 @@ const start = local({
 export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 ```
 
-- The contract lives in the local part (`{ place: "local" }`): `info` and
+- The contract lives in the local part (`{ place: "local", dataMethods: true }`): `info` and
   `start` run in the sender's own local part, with `ctx.proc`.
 - `run.prompt` is the message exactly as stored; `run.text(delta)` adds to the
   reply. The agent never writes rows; `ai` does.

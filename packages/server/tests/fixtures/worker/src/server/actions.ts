@@ -45,7 +45,12 @@ export const stale = action({
   },
 });
 export const crash = action({ handler: () => process.exit(7) });
-export const stuck = action({ handler: () => new Promise(() => {}) });
+export const stuck = action({
+  handler: () => {
+    if (typeof process !== "undefined") fixtureWriteFile("stuck-started", "");
+    return new Promise(() => {});
+  },
+});
 export const cpu = action({
   handler: () => {
     if (typeof process !== "undefined") fixtureWriteFile("cpu-started", "");

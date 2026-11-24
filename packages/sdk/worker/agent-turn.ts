@@ -3,12 +3,16 @@ import {
   type AgentTurnEvent,
   type AgentTurnReport,
   AGENT_TURN_PROTOCOL,
+  ASK_FOR_TURN,
+  permissionAnswer,
   TURN_ENDED,
   type AgentTurnOpen,
   type AgentTurnSteer,
-  type Answer,
+  type Question,
   type Run,
   type TurnAddress,
+  type TurnAnswer,
+  type TurnRun,
 } from "../src/agent-turn";
 import {
   append,
@@ -231,32 +235,36 @@ export function agentTurn<T>(
           throw new Error(`Unknown agent turn control: ${method}`);
       }
     });
-    const run: Run = {
+    function ask(question: Question) {
+      const request: AgentTurnAsk = { ...address, question };
+      const answer = questionLine.then(async (): Promise<TurnAnswer> => {
+        try {
+          await reports.flush();
+          if (closed) return "cancel";
+          if (stopRequested || forceRequested) return "stopping";
+          const reply = await channel.send("ask", request as unknown as JsonValue);
+          if (
+            reply === "approve" ||
+            reply === "approveSession" ||
+            reply === "decline" ||
+            reply === "cancel" ||
+            reply === "stopping"
+          )
+            return reply;
+          throw new Error("Invalid agent question answer");
+        } catch (error) {
+          if (closed || scoped.signal?.aborted) return "cancel";
+          throw error;
+        }
+      });
+      questionLine = answer.catch(() => {});
+      return answer;
+    }
+    const run: TurnRun = {
       ...input,
       ...reportMethods(reports),
-      ask(question) {
-        const request: AgentTurnAsk = { ...address, question };
-        const answer = questionLine.then(async (): Promise<Answer> => {
-          try {
-            await reports.flush();
-            if (closed || stopRequested || forceRequested) return "cancel";
-            const reply = await channel.send("ask", request as unknown as JsonValue);
-            if (
-              reply === "approve" ||
-              reply === "approveSession" ||
-              reply === "decline" ||
-              reply === "cancel"
-            )
-              return reply;
-            throw new Error("Invalid agent question answer");
-          } catch (error) {
-            if (closed || scoped.signal?.aborted) return "cancel";
-            throw error;
-          }
-        });
-        questionLine = answer.catch(() => {});
-        return answer;
-      },
+      [ASK_FOR_TURN]: ask,
+      ask: async (question) => permissionAnswer(await ask(question)),
       onSteer(handler) {
         if (!steer) reports.push({ kind: "steerReady" });
         steer = handler;

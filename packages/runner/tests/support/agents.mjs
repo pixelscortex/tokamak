@@ -1,18 +1,21 @@
-import { cp, mkdir, writeFile } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { chmod, cp, mkdir, writeFile } from "node:fs/promises";
+import { delimiter, dirname, join } from "node:path";
 import { build, bunPath, workspace } from "../../../../e2e/fake-agent/harness.mjs";
 
 const quoted = (text) => "'" + text.replaceAll("'", "'\\''") + "'";
 
 /** Production agent bundles and deterministic stand-ins for the two CLIs. */
-export async function prepareReplayAgents(scratch) {
+export async function prepareReplayAgents(
+  scratch,
+  { code = false, artifacts = process.env.TOKAMAK_AGENT_FIXTURES } = {},
+) {
   const plugins = join(scratch, "plugins");
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
-  await Promise.all([mkdir(home), mkdir(bin), mkdir(plugins)]);
-  for (const id of ["chat", "ai", "claude", "codex"]) {
+  await Promise.all([mkdir(home), mkdir(bin, { mode: 0o755 }), mkdir(plugins)]);
+  for (const id of ["chat", "ai", "claude", "codex", ...(code ? ["code"] : [])]) {
     const source = join(workspace, "plugins", id);
-    const cached = process.env.TOKAMAK_AGENT_FIXTURES && join(process.env.TOKAMAK_AGENT_FIXTURES, id);
+    const cached = artifacts && join(artifacts, id);
     if (cached && (await Bun.file(join(cached, "manifest.json")).exists())) {
       await cp(cached, join(plugins, id), { recursive: true });
     } else {
@@ -34,7 +37,7 @@ exec ${bun} ${quoted(join(workspace, "plugins/claude/tests/replay.mjs"))} "$@"
 case "$1" in
   --version) echo 'codex-cli 0.170.0' ;;
   app-server)
-    if [ "$PWD/home" = "$HOME" ]; then tape=info; else
+    if [ "$PWD" -ef "$HOME" ] || [ "$PWD/home" -ef "$HOME" ]; then tape=info; else
       tape="\${PWD##*/}"
       printf '%s' "$$" > codex.pid
     fi
@@ -45,8 +48,15 @@ esac
 `,
     { mode: 0o755 },
   );
+  // The Runner refuses to execute a writable shim or a shim in a writable
+  // directory; explicitly make fixtures executable even with a strict umask.
+  await Promise.all([chmod(join(bin, "claude"), 0o755), chmod(join(bin, "codex"), 0o755)]);
   return {
     plugins,
-    env: { HOME: home, PATH: [bin, "/usr/bin", "/bin"].join(delimiter), TOKAMAK_PLUGIN_RUNTIME: "quickjs" },
+    env: {
+      HOME: home,
+      PATH: [bin, dirname(bunPath()), "/usr/bin", "/bin"].join(delimiter),
+      TOKAMAK_PLUGIN_RUNTIME: "quickjs",
+    },
   };
 }

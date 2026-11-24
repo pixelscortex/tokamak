@@ -3,11 +3,11 @@ import { randomBytes } from "node:crypto";
 import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type Run, type Usage } from "../contracts";
-import { errorText } from "../shared/turn-shared";
+import { errorText, setupReason } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
-import { infoOf } from "./agents";
+import { infoAfterStartFailure, infoOf } from "./agents";
 import { runAgent } from "./agent-turn";
 import {
   append,
@@ -29,7 +29,7 @@ import { keepAlive } from "./keep-alive";
 import { hooksFor } from "./turn-hooks";
 import { workingOn } from "./working";
 
-const RELOADED = "AI was reloaded while the turn was running.";
+import { RELOADED } from "../shared/turn-timing";
 
 /**
  * One turn, run on the sender's own computer: begin it (one writer per
@@ -43,6 +43,7 @@ export const turn = local({
   args: {
     threadId: v.string(),
     messageId: v.string(),
+    replyToken: v.optional(v.string()),
     /** The thread's folder on this computer, from chat's `onSent`. */
     folder: v.string(),
     agentId: v.string(),
@@ -57,13 +58,13 @@ export const turn = local({
     /** Every thread starts on Full access. */
     access: v.optional(access),
   },
-  handler: async (ctx, { threadId, messageId, folder, agentId, access, ...picked }) => {
+  handler: async (ctx, { threadId, messageId, replyToken, folder, agentId, access, ...picked }) => {
     // The labels `turns:begin` records are checked here, against what the provider offers.
     const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
     agentId = queued?.agent.id ?? agentId;
     const provider = await agent.get(agentId, ctx);
     if (!provider) return fail("NoAgent", { agentId });
-    const info = await infoOf(provider);
+    const info = await infoOf(provider, true);
     if (!info.installed)
       return fail("NotInstalled", {
         agent: provider.name,
@@ -81,7 +82,7 @@ export const turn = local({
       agent: { id: provider.id, name: provider.name },
       ...settings,
       ...(model !== undefined && { modelName: model.name }),
-      replyToken: randomBytes(32).toString("hex"),
+      replyToken: replyToken ?? randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
     if ("state" in begun) {
@@ -159,13 +160,17 @@ export const turn = local({
             ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
             : { state: "stopped" };
         } catch (cause) {
-          ending = { state: "failed", error: errorText(cause) };
+          const current = lost === undefined ? await infoAfterStartFailure(provider) : undefined;
+          ending = {
+            state: "failed",
+            error: (current && setupReason(provider.name, current)) ?? errorText(cause),
+          };
         }
       }
       if (lost !== undefined) ending = { ...ending, state: "interrupted", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
-      control.close();
+      control.finish();
       finishing.add(turnId);
       await writer.settled();
       const broken = writer.close();
@@ -235,7 +240,7 @@ export const stop = local({
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
     // The agent has settled and only after hooks remain: nothing is left to stop.
-    if (!control)
+    if (!control || !control.active)
       return finishing.has(turnId) ? fail("NotRunning", { turnId, finishing: true }) : noRunningTurn(turnId);
     return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
       ? null

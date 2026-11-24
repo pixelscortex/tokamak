@@ -15,6 +15,14 @@ const agentRow = (page: Page) => page.getByRole("group", { name: "Agent" });
 const threads = (page: Page) => page.getByRole("listbox", { name: "Threads" }).getByRole("option");
 const replyOf = (page: Page) => conversation(page).getByRole("article", { name: /^Fake agent at / });
 
+// The test calls public server functions without importing the plugins' implementations.
+const ai = createApi<{
+  turns: {
+    active: FunctionReference<"query", { threadId: string }, TurnView | null>;
+    list: FunctionReference<"query", { threadId: string }, TurnView[]>;
+  };
+}>("ai", ["turns:active", "turns:list"]);
+
 /** Picks the fake agent and one of its replays (each replay is a model) in the agent row. */
 async function pickReplay(page: Page, replay: string) {
   await agentRow(page).getByRole("button").first().click();
@@ -33,14 +41,6 @@ async function chooseFolder(page: Page, home: string) {
   await page.getByRole("button", { name: "Use folder" }).click();
   return folder;
 }
-
-// These fixture calls drive the real server; the browser test does not load plugin server code.
-const ai = createApi<{
-  turns: {
-    active: FunctionReference<"query", { threadId: string }, TurnView | null>;
-    list: FunctionReference<"query", { threadId: string }, TurnView[]>;
-  };
-}>("ai", ["turns:active", "turns:list"]);
 
 test("without an agent the row is empty and the empty thread says Start a conversation", async ({ page }) => {
   await page.goto("/");
@@ -170,36 +170,39 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
   test.skip(browserName !== "chromium", "runs once");
   test.setTimeout(300_000);
   const context = await browser.newContext();
-  const { home } = await asDesktop(context);
-  const page = await context.newPage();
-  await page.goto("/");
-  await pickReplay(page, "quick");
-  await chooseFolder(page, home);
-  const working = conversation(page).getByRole("button", { name: /Working|Running/ });
-  const send = async (text: string) => {
-    await composer(page).fill(text);
-    await composer(page).press("Enter");
-    await expect(conversation(page).getByText(`Done: ${text}`, { exact: true })).toBeVisible();
-    // The turn has ended: the next Send would otherwise find the thread busy.
-    await expect(working).toHaveCount(0);
-  };
-  for (let n = 1; n <= 150; n += 1) await send(`Message ${n}`);
+  try {
+    const { home } = await asDesktop(context);
+    const page = await context.newPage();
+    await page.goto("/");
+    await pickReplay(page, "quick");
+    await chooseFolder(page, home);
+    const working = conversation(page).getByRole("button", { name: /Working|Running/ });
+    const send = async (text: string) => {
+      await composer(page).fill(text);
+      await composer(page).press("Enter");
+      await expect(conversation(page).getByText(`Done: ${text}`, { exact: true })).toBeVisible();
+      // The turn has ended: the next Send would otherwise find the thread busy.
+      await expect(working).toHaveCount(0);
+    };
+    for (let n = 1; n <= 150; n += 1) await send(`Message ${n}`);
 
-  // Reopened in a second window: every reply chat shows (its latest 200 messages) draws its turn.
-  const second = await context.newPage();
-  await second.goto("/");
-  await threads(second).filter({ hasText: "Message 1" }).first().click();
-  const replies = replyOf(second);
-  await expect(replies).toHaveCount(100);
-  await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
-  await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
-  await expect(replies.last()).toContainText("Done: Message 150");
+    // Reopened in a second window: every reply chat shows (its latest 200 messages) draws its turn.
+    const second = await context.newPage();
+    await second.goto("/");
+    await threads(second).filter({ hasText: "Message 1" }).first().click();
+    const replies = replyOf(second);
+    await expect(replies).toHaveCount(100);
+    await expect(replies.first().getByRole("group", { name: "Reply from" })).toHaveText(/^\s*quick\s*$/);
+    await expect(replies.first().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
+    await expect(replies.last()).toContainText("Done: Message 150");
 
-  // And it keeps updating: a new turn in the first window shows up in the second, drawn.
-  await send("Message 151");
-  await expect(replies.last()).toContainText("Done: Message 151");
-  await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
-  await context.close();
+    // And it keeps updating: a new turn in the first window shows up in the second, drawn.
+    await send("Message 151");
+    await expect(replies.last()).toContainText("Done: Message 151");
+    await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ browser }) => {
@@ -211,6 +214,8 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
     const selectReplay = async (name: string) => {
       await agentRow(page).getByRole("button").nth(1).click();
       await page.getByRole("menuitem", { name, exact: true }).click();
+      // The next Send and Queue read the stored choice from the server.
+      await expect(agentRow(page).getByRole("button", { name: `Model: ${name}`, exact: true })).toBeVisible();
     };
     const send = async (text: string, key = "Enter") => {
       await composer(page).fill(text);

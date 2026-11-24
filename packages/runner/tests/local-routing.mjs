@@ -42,8 +42,13 @@ await plugin(
   `
   /// <reference types="node" />
   import { readFile } from "node:fs/promises";
-  import { local, v } from "@tokamak/sdk";
-  import { probe } from "../contracts";
+  import { local, provide, v } from "@tokamak/sdk";
+  import { probe, ownProbe } from "../contracts";
+  export const selfProvider = provide(ownProbe, { echo: async (value) => value });
+  export const selfCall = local({
+    args: { invalid: v.boolean() },
+    handler: (ctx, { invalid }) => ownProbe.get("${owner}", ctx).echo(invalid ? new Date() : { ok: true }),
+  });
   export const identify = local({
     args: { id: v.string() },
     handler: (ctx, { id }) => probe.get(id, ctx).identify(),
@@ -96,6 +101,13 @@ await plugin(
     },
   });
   export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
+  export const unavailable = local({
+    handler: async (ctx) => {
+      const failed: { plugin: string; message: string }[] = [];
+      const ready = await probe.list(ctx, { onUnavailable: ({ plugin, message }) => failed.push({ plugin, message }) });
+      return { ready: ready.map(({ id }) => id).sort(), failed };
+    },
+  });
 `,
   `
   import { contract, type ActionSignal, type AuthContext } from "@tokamak/sdk";
@@ -109,6 +121,9 @@ await plugin(
     largeResult(): Promise<string>;
     thrown(): Promise<void>;
   }>("probe", { place: "local", dataMethods: true });
+  export const ownProbe = contract<{ echo(value: unknown): Promise<unknown> }>("ownProbe", {
+    place: "local", dataMethods: true,
+  });
 `,
 );
 
@@ -164,11 +179,27 @@ await cloneProvider(beta);
 await cloneProvider(crash);
 await editBundle(distFor(crash), 'throw new Error("startup fixture crash");');
 
-const runner = await startRunner({ binary, plugins, directory, env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" } });
+// The Rust harness includes stderr on failure, alongside the Runner's stderr.
+const onClosedFrame = (frame) => console.error("Runner local worker:", JSON.stringify(frame));
+const runner = await startRunner({
+  binary,
+  plugins,
+  directory,
+  env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" },
+  onClosedFrame,
+});
 const cleanup = [];
 
 try {
   const { ws, token } = runner.endpoint;
+  const connectWindow = () =>
+    connect(ws, {
+      token,
+      launch: runner.launch,
+      cleanup,
+      onClose: ({ code, reason }) =>
+        console.error("Runner workspace socket:", JSON.stringify({ code, reason })),
+    });
   const hosts = await inspectHosts(runner);
   const pids = () =>
     Object.fromEntries(
@@ -182,7 +213,7 @@ try {
       .trim();
     return state && !state.startsWith("Z");
   };
-  const client = await connect(ws, { token, launch: runner.launch, cleanup });
+  const client = await connectWindow();
   const api = createApi(owner).probe;
   const auth = await client.query(authCaller, {});
   assert.deepEqual(await client.local(api.identify, { id: "custom-alpha" }), auth);
@@ -190,6 +221,12 @@ try {
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);
+  assert.deepEqual(await client.local(api.selfCall, { invalid: false }), { ok: true });
+  await assert.rejects(
+    client.local(api.selfCall, { invalid: true }),
+    /routed-owner\/ownProbe\.echo arguments/,
+  );
+  assert.deepEqual(pids(), initial, "a self route reuses the original host");
   console.log("Three distinct local process PIDs; provider received the signed-in member and device");
 
   await assert.rejects(client.local(api.badArgs, {}), /routed-owner\/probe\.hold arguments/);
@@ -253,7 +290,7 @@ try {
 
   // Disconnect one window and attach a new one without losing the idle processes.
   for (const close of cleanup.splice(0).reverse()) await close();
-  const next = await connect(ws, { token, launch: runner.launch, cleanup });
+  const next = await connectWindow();
   assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
   assert.deepEqual(pids(), afterCrash);
 
@@ -281,6 +318,42 @@ try {
   assert.ok(performance.now() - start < 1_500, "lookup waited for the 4 s provider back-off");
   console.log("Unavailable custom ID preserves the provider error; listings skip its back-off");
 
+  const legacyProvider = "routed-legacy";
+  await cloneProvider(legacyProvider);
+  await editBundle(
+    distFor(legacyProvider),
+    `
+const legacyRegistration = Object.keys(contractProviders)[0];
+const legacyProvider = contractProviders[legacyRegistration];
+contractProviders[legacyRegistration] = {
+  ...legacyProvider,
+  contract: { ...legacyProvider.contract, dataMethods: ["identify"] },
+};
+`,
+  );
+  const legacyManifest = join(distFor(legacyProvider), "manifest.json");
+  const legacySpec = await Bun.file(legacyManifest).json();
+  legacySpec.contractProviders[0].dataMethods = ["identify"];
+  await writeFile(legacyManifest, JSON.stringify(legacySpec));
+  await reload(runner, directory, legacyProvider);
+  // The reload control reply and the window's catalog event travel on different sockets.
+  const catalog = Promise.withResolvers();
+  await until("window sees the reloaded legacy provider", async () => {
+    const value = await next.local(api.unavailable, {});
+    if (!value.failed.some(({ plugin }) => plugin === legacyProvider)) return false;
+    catalog.resolve(value);
+    return true;
+  });
+  const unavailable = await catalog.promise;
+  assert.deepEqual(unavailable.ready, ["custom-alpha", "custom-beta"]);
+  assert.match(
+    unavailable.failed.find(({ plugin }) => plugin === legacyProvider)?.message ?? "",
+    /routed-owner\/probe is not all plain data.*Rebuild or update this plugin/,
+  );
+  assert.ok(!hosts().some(({ id }) => id === legacyProvider));
+  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
+  console.log("Legacy mixed provider listed unavailable with a rebuild message without starting a host");
+
   await checkRoutesAndBuilds(runner, hosts);
   assert.equal(await within(runner.stop(), "Runner stop"), 0);
   await until("every host reaped", () => Object.values(afterReload).every((pid) => !alive(pid)));
@@ -296,13 +369,19 @@ async function checkRoutesAndBuilds(runner, hosts) {
     export const functions = {
       ping: { kind: "local", args: { kind: "any" }, invoke: () => ${version} },
       hold: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.hold", {}) },
+      stuck: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.stuck", {}) },
     };
   `;
   const old = await installLocal(join(plugins, id), id, code(1));
   const replacement = await installLocal(join(plugins, id + "-alternate"), id, code(2));
   const holding = Promise.withResolvers();
   const release = Promise.withResolvers();
-  const handle = async (_frame, _worker, respond) => {
+  const stuck = Promise.withResolvers();
+  const handle = async (frame, _worker, respond) => {
+    if (frame.name === "test.stuck") {
+      stuck.resolve(); // The window never answers this operation.
+      return;
+    }
     holding.resolve();
     await release.promise;
     await respond("old build completed");
@@ -322,15 +401,21 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await within(holding.promise, "old build hold");
     assert.equal(await latest.invoke("ping", null), 2);
     assert.equal(oldHosts().length, 2, "different local hashes must start a second build");
-    await first.retire(id);
+    await first.retire();
+    await second.retire({ id }); // Malformed retirement must not close the busy window.
     release.resolve();
     assert.equal(await busy, "old build completed");
     assert.equal(await second.invoke("ping", null), 1);
+    const stuckCall = assert.rejects(second.invoke("stuck", null), /closed|stopped/i);
+    void stuckCall.catch(() => {});
+    await within(stuck.promise, "stuck invocation admitted");
+    await second.retire();
     await second.close();
+    await stuckCall;
     await until("unused retired build stopped", () => !oldHosts().some((host) => host.pid === pid));
     assert.equal(await latest.invoke("ping", null), 2);
     console.log(
-      "Two windows share one build, a different build coexists, and retirement waits for the last window",
+      "Two windows share one build, a different build coexists, and closing the last window cancels a stuck retired invocation",
     );
   } finally {
     await Promise.all([first.close(), second.close(), latest.close()]);
@@ -341,7 +426,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
   const remote = "wss://test.invalid/shared";
   const remoteId = "shared-version";
   const v1 = await installLocal(join(plugins, remoteId), remoteId, code(1));
-  const firstRemote = await rawWindow(runner, v1, handle, [], remote);
+  const firstRemote = await rawWindow(runner, v1, handle, remote);
   let oldRemotePid;
   try {
     assert.equal(await firstRemote.invoke("ping", null), 1);
@@ -350,12 +435,12 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await firstRemote.close();
   }
   // Historic use by a different workspace does not pin an unused process.
-  const previousVisitor = await rawWindow(runner, v1, handle, [], "wss://other.test.invalid/ws");
+  const previousVisitor = await rawWindow(runner, v1, handle, "wss://other.test.invalid/ws");
   assert.equal(await previousVisitor.invoke("ping", null), 1);
   await previousVisitor.close();
   assert.ok(hosts().some(({ pid }) => pid === oldRemotePid));
   const v2 = await installLocal(join(plugins, remoteId), remoteId, code(2));
-  const secondRemote = await rawWindow(runner, v2, handle, [], remote);
+  const secondRemote = await rawWindow(runner, v2, handle, remote);
   try {
     assert.equal(await secondRemote.invoke("ping", null), 2);
     await until("disconnected shared workspace's old process stopped", () =>
@@ -366,6 +451,71 @@ async function checkRoutesAndBuilds(runner, hosts) {
     await secondRemote.close();
   }
 
+  const legacyId = "legacy-local";
+  const legacyDir = join(plugins, legacyId);
+  const legacy = await installLocal(legacyDir, legacyId, code(1));
+  const manifestFile = join(legacyDir, "manifest.json");
+  const manifest = await Bun.file(manifestFile).json();
+  manifest.contracts = [{ name: "mixed", place: "local", dataMethods: ["read"] }];
+  await writeFile(manifestFile, JSON.stringify(manifest));
+  const legacyWindow = await rawWindow(runner, legacy, handle);
+  try {
+    await assert.rejects(legacyWindow.invoke("ping", null), /legacy-local\/mixed is not all plain data/);
+    assert.ok(!hosts().some(({ id }) => id === legacyId));
+  } finally {
+    await legacyWindow.close();
+  }
+
+  const pair = await Promise.all(
+    ["isolation-first", "isolation-second"].map((id, index) => {
+      const marker = join(scratch, id + ".evaluated");
+      const peer = index === 0 ? "isolation-second" : "isolation-first";
+      return installLocal(
+        join(plugins, id),
+        id,
+        `
+      import { writeFile } from "node:fs/promises";
+      await writeFile(${JSON.stringify(marker)}, process.pid + "\\n", { flag: "a" });
+      export const functions = {
+        askPeer: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) =>
+          ctx.op("local.contract.call", {
+            plugin: "${peer}", owner: "${id}", name: "probe",
+            registration: "provider", method: "pid", args: [],
+          }) },
+      };
+      export const contractProviders = {
+        provider: {
+          contract: { owner: "${peer}", name: "probe", place: "local", dataMethods: true },
+          implementation: { pid: () => process.pid },
+        },
+      };
+    `,
+      );
+    }),
+  );
+  const windows = await Promise.all(
+    pair.map((artifact, i) =>
+      rawWindow(runner, artifact, (frame, worker) => worker.route(frame.id, pair[1 - i])),
+    ),
+  );
+  try {
+    const results = await Promise.all(windows.map((window) => window.invoke("askPeer", null)));
+    for (const [index, artifact] of pair.entries()) {
+      const own = hosts().filter(({ id }) => id === artifact.id);
+      assert.equal(own.length, 1);
+      const [{ pid }] = own;
+      assert.equal(results[1 - index], pid, "the routed method ran in its provider's host");
+      assert.equal(
+        await readFile(join(scratch, artifact.id + ".evaluated"), "utf8"),
+        pid + "\n",
+        "the local bundle was evaluated exactly once, in its own host",
+      );
+    }
+    console.log("Calls in both directions evaluated each bundle exactly once in its own process");
+  } finally {
+    await Promise.all(windows.map((window) => window.close()));
+  }
+
   const chainCode = `
     const call = (plugins, op) => {
       const [plugin, ...rest] = plugins;
@@ -374,11 +524,12 @@ async function checkRoutesAndBuilds(runner, hosts) {
       }) : "end";
     };
     export const functions = {
+      ping: { kind: "local", args: { kind: "any" }, invoke: () => "pong" },
       walk: { kind: "local", args: { kind: "any" }, invoke: (args, ctx) => call(args, ctx.op) },
     };
     export const contractProviders = {
       next: {
-        contract: { name: "probe", owner: "chain", place: "local", dataMethods: ["next"] },
+        contract: { name: "probe", owner: "chain", place: "local", dataMethods: true },
         implementation: { next: { kind: "local", invokeLocal: (args, bridge) => call(args, bridge.op) } },
       },
     };
@@ -389,16 +540,31 @@ async function checkRoutesAndBuilds(runner, hosts) {
       return installLocal(join(plugins, id), id, chainCode);
     }),
   );
-  let invalid = true;
+  let malformed = "missing";
+  const missing = Promise.withResolvers();
   const driver = await rawWindow(runner, chain[0], (frame, worker) => {
     const target = chain.find(({ id }) => id === frame.payload.plugin);
     assert.ok(target);
-    const profile = invalid ? [target] : [];
-    invalid = false;
-    return worker.route(frame.id, target, profile);
+    const kind = malformed;
+    if (kind === "missing") {
+      missing.resolve({ id: frame.id, worker, target });
+      return worker.route(undefined, target);
+    }
+    if (kind === "string") return worker.route(String(frame.id), target);
+    return worker.route(frame.id, kind === "artifact" ? { id: target.id } : target);
   });
   try {
-    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local plugin live profile/);
+    const pending = driver.invoke("walk", ["chain-1"]);
+    const { id, target, worker } = await within(missing.promise, "route without an operation ID");
+    assert.equal(await driver.invoke("ping", null), "pong");
+    await worker.route(id, target);
+    assert.equal(await pending, "end");
+    malformed = "string";
+    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local contract route operation ID/);
+    assert.equal(await driver.invoke("ping", null), "pong");
+    malformed = "artifact";
+    await assert.rejects(driver.invoke("walk", ["chain-1"]), /Invalid local contract route/);
+    malformed = undefined;
     assert.equal(
       await driver.invoke(
         "walk",
@@ -464,6 +630,7 @@ const simulated = await startRunner({
   plugins: simulatedPlugins,
   directory: join(scratch, "impersonation"),
   env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs", TOKAMAK_PLUGIN_HOST: fakeHost },
+  onClosedFrame,
 });
 try {
   const artifact = await installLocal(join(simulatedPlugins, alpha), alpha, "export const functions = {};");
@@ -488,7 +655,7 @@ try {
       ctx.op("local.contract.call", {plugin: "diagnostic-provider", owner: "diagnostic-caller",
         name: "probe", registration: "provider", method: "info", args: []}) }};`,
   );
-  const routed = await rawWindow(simulated, caller, (frame, worker) => worker.route(frame.id, provider, []));
+  const routed = await rawWindow(simulated, caller, (frame, worker) => worker.route(frame.id, provider));
   try {
     await assert.rejects(routed.invoke("call", null), (error) => {
       assert.match(error.message, /Plugin diagnostic-provider.*(?:closed|exited)/);

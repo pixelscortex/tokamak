@@ -19,12 +19,16 @@ function input(text: string) {
 export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult> {
   const app = new AppServer(ctx, run.folder);
   const controls = registerTurnControls(app, run);
+  let mustFlushSession = false;
   try {
     await app.initialize();
     const early: Event[] = [];
     app.listen((event) => early.push(event));
     const { thread, resumed } = await openThread(app, run);
     const sessionId = thread.thread.id;
+    // Injected history can be buffered in the session file. A failed
+    // handshake with no recorded work only needs a stop.
+    mustFlushSession = !resumed && run.history.length > 0;
     run.sessionChanged(sessionId);
     app.listen((event) => {
       // A deployed app-server may notify turn/started before it answers turn/start.
@@ -34,12 +38,16 @@ export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult
       }
       early.push(event);
     });
+    // Once the turn is submitted Codex may record it before any event
+    // arrives, so a failure from here on waits for the app-server to exit.
+    mustFlushSession = true;
     const { turn } = await app.call<{ turn: Turn }>("turn/start", turnSettings(run, thread));
     controls.bind({ sessionId, turnId: turn.id });
     return await waitForTurn(app, run, sessionId, turn, resumed, early, controls);
   } finally {
     controls.close();
-    app.close();
+    if (mustFlushSession) await app.close();
+    else app.stop();
   }
 }
 

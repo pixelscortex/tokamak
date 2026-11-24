@@ -17,9 +17,14 @@ fn dispatch(script: &str, use_runner: bool) {
     let mut bun = Command::new("proto");
     bun.args(["run", "bun", "--"]);
     let runtime = local_runtime::selected();
-    let output = local_runtime::driver_for(bun, script, &runtime, use_runner)
-        .output()
-        .expect("run the local acceptance driver");
+    let mut command = local_runtime::driver_for(bun, script, &runtime, use_runner);
+    if !use_runner
+        && runtime == tokamak_worker::LocalRuntime::QuickJs
+        && !script.ends_with("chat-threads-driver.mjs")
+    {
+        command.env("TOKAMAK_TEST_RUNNER_BIN", local_runtime::runner());
+    }
+    let output = command.output().expect("run the local acceptance driver");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(

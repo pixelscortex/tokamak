@@ -27,7 +27,7 @@ interface MixedContract {
   info?(): Promise<string>;
   start(report: (text: string) => void): Promise<void>;
 }
-export const mixed = contract<MixedContract>('mixed', { place: 'local', dataMethods: ['info'] });
+export const mixed = contract<MixedContract>('mixed', { place: 'local', dataMethods: true });
 // @ts-expect-error A data field is not a method.
 contract<MixedContract>('field', { place: 'local', dataMethods: ['id'] });
 // @ts-expect-error A list of plain-data methods cannot be empty.

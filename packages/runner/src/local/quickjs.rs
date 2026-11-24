@@ -4,14 +4,12 @@ mod session;
 
 pub(super) use session::connection;
 
-use super::{
-    Artifact, TIMEOUT, artifact, artifact_folder, client_env, snapshot, stderr_tail, write,
-};
+use super::{Artifact, TIMEOUT, client_env, quickjs_bundle, stderr_tail, write};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry as HashEntry},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex, MutexGuard, OnceLock},
     time::Duration,
 };
@@ -29,39 +27,6 @@ use tokio_util::{
     task::{AbortOnDropHandle, TaskTracker},
 };
 
-// Different installations of a plugin can coexist on one Runner. The live
-// profile additionally separates realms that may import different builds.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(super) struct Build {
-    artifact: Artifact,
-    live: Vec<Artifact>,
-}
-
-impl Build {
-    pub(super) fn new(artifact: Artifact, mut live: Vec<Artifact>) -> Result<Self, String> {
-        live.sort_unstable();
-        if live.len() >= WORKER_CAPACITY
-            || live.iter().any(|provider| provider.id == artifact.id)
-            || live.windows(2).any(|pair| pair[0].id == pair[1].id)
-        {
-            return Err("Invalid local plugin live profile".into());
-        }
-        Ok(Self { artifact, live })
-    }
-
-    fn retirement(&self, changed: &str) -> String {
-        if self.artifact.id == changed {
-            "local plugin build retired".into()
-        } else {
-            format!("live provider {changed} changed; local realm retired")
-        }
-    }
-
-    fn includes(&self, artifact: &Artifact) -> bool {
-        &self.artifact == artifact || self.live.contains(artifact)
-    }
-}
-
 const IDLE_GRACE: Duration = Duration::from_secs(2);
 const RESTARTING: &str = "restarting after a crash; try again later";
 // The manager needs a second half for short calls (controls and discovery).
@@ -73,7 +38,7 @@ fn too_many_turns(limit: usize) -> String {
     format!("Too many turns are running on this machine ({limit}). Wait for one to finish.")
 }
 
-type Slots = HashMap<Build, Entry>;
+type Slots = HashMap<Artifact, Entry>;
 
 #[derive(Clone)]
 pub(super) struct Pool {
@@ -112,12 +77,12 @@ struct SlotState {
 struct Leases {
     pool: Pool,
     workspace: Arc<str>,
-    used: Mutex<HashMap<Build, Arc<Lease>>>,
+    used: Mutex<HashMap<Artifact, Arc<Lease>>>,
 }
 
 struct Lease {
     slots: Arc<Mutex<Slots>>,
-    build: Build,
+    build: Artifact,
     slot: Arc<Slot>,
 }
 
@@ -147,14 +112,14 @@ impl Leases {
         }
     }
 
-    fn get(&self, build: &Build) -> Result<Arc<Lease>, String> {
+    fn get(&self, build: &Artifact) -> Result<Arc<Lease>, String> {
         let mut used = lock(&self.used);
         if let Some(lease) = used.get(build) {
             return Ok(lease.clone());
         }
         let mut slots = lock(&self.pool.slots);
         slots.retain(|other, entry| {
-            if other == build || other.artifact.id != build.artifact.id {
+            if other == build || other.id != build.id {
                 return true;
             }
             entry.supersede(&self.workspace, || {
@@ -168,7 +133,7 @@ impl Leases {
         });
         if !slots.contains_key(build) {
             evict_idle(&mut slots, WORKER_CAPACITY)
-                .map_err(|reason| format!("Plugin {} process: {reason}", build.artifact.id))?;
+                .map_err(|reason| format!("Plugin {} process: {reason}", build.id))?;
         }
         let entry = slots.entry(build.clone()).or_insert_with(|| Entry {
             slot: Arc::default(),
@@ -189,9 +154,9 @@ impl Leases {
         Ok(lease)
     }
 
-    fn retire(&self, build: &Build, changed: &str) {
+    fn retire(&self, build: &Artifact) {
         if let Some(entry) = lock(&self.pool.slots).get_mut(build) {
-            entry.supersede(&self.workspace, || build.retirement(changed));
+            entry.supersede(&self.workspace, || "local plugin build retired".into());
         }
         // Drop outside the registry lock: this may release the last lease.
         lock(&self.used).remove(build);
@@ -320,12 +285,10 @@ impl Pool {
     }
 
     fn retire_private(&self, old: &Artifact, workspace: &str) {
-        for (build, entry) in lock(&self.slots).iter_mut() {
-            if build.includes(old) {
-                entry.supersede(workspace, || build.retirement(&old.id));
-                // Older protocol clients did not send a workspace.
-                entry.supersede("", || build.retirement(&old.id));
-            }
+        if let Some(entry) = lock(&self.slots).get_mut(old) {
+            entry.supersede(workspace, || "local plugin build retired".into());
+            // Older protocol clients did not send a workspace.
+            entry.supersede("", || "local plugin build retired".into());
         }
     }
 
@@ -344,18 +307,18 @@ impl Pool {
 
     async fn host(
         &self,
-        build: &Build,
+        build: &Artifact,
         slot: &Arc<Slot>,
         routed: bool,
     ) -> Result<Arc<Host>, String> {
         self.start_or_reuse(build, slot, routed)
             .await
-            .map_err(|reason| format!("Plugin {} process: {reason}", build.artifact.id))
+            .map_err(|reason| format!("Plugin {} process: {reason}", build.id))
     }
 
     async fn start_or_reuse(
         &self,
-        build: &Build,
+        build: &Artifact,
         slot: &Arc<Slot>,
         routed: bool,
     ) -> Result<Arc<Host>, String> {
@@ -389,21 +352,9 @@ impl Pool {
                 }
             }
             let root = self.plugins.clone();
-            let request = build.artifact.clone();
-            let live = build.live.clone();
-            let verified = tokio::task::spawn_blocking(move || {
-                let (_, code) =
-                    artifact(&root, &request.id, &request.entry_hash, &request.code_hash)?;
-                let providers = live
-                    .into_iter()
-                    .map(|artifact| {
-                        let code = live_snapshot(&root, &artifact);
-                        (artifact.id, code)
-                    })
-                    .collect();
-                Ok::<_, String>((code, providers))
-            });
-            let (code, providers) = tokio::time::timeout(TIMEOUT, verified)
+            let request = build.clone();
+            let verified = tokio::task::spawn_blocking(move || quickjs_bundle(&root, &request));
+            let code = tokio::time::timeout(TIMEOUT, verified)
                 .await
                 .map_err(|_| "local artifact verification stalled")?
                 .map_err(|error| error.to_string())??;
@@ -420,7 +371,7 @@ impl Pool {
                 () = slot.retired.cancelled() => return Err(slot.retirement().into()),
                 permit = self.processes.clone().acquire_owned() => permit.map_err(|_| "Runner stopped")?,
             };
-            match Host::start(build, slot, code, providers, permit, self) {
+            match Host::start(build, slot, code, permit, self) {
                 Ok(host) => {
                     state.current = Some(host.clone());
                     return Ok(host);
@@ -449,16 +400,6 @@ async fn local_catalog(server: &server::Server) -> Option<HashSet<Artifact>> {
             })
             .collect(),
     )
-}
-
-fn live_snapshot(root: &Path, artifact: &Artifact) -> Result<TempPath, String> {
-    let folder = artifact_folder(
-        root,
-        &artifact.id,
-        &artifact.entry_hash,
-        &artifact.code_hash,
-    )?;
-    snapshot(&folder, "local.js", &artifact.code_hash)
 }
 
 impl Slot {
@@ -512,11 +453,8 @@ impl Inbox {
 }
 
 struct Host {
-    id: String,
+    build: Artifact,
     calls: Mutex<Calls>,
-    live: Vec<Artifact>,
-    providers: HashMap<String, Result<TempPath, String>>,
-    loaded: Mutex<HashSet<String>>,
     writes: mpsc::Sender<Vec<u8>>,
     native: AsyncMutex<UnixDatagram>,
     stopping: CancellationToken,
@@ -528,24 +466,20 @@ struct Host {
 
 impl Host {
     fn start(
-        build: &Build,
+        build: &Artifact,
         slot: &Arc<Slot>,
         code: TempPath,
-        providers: HashMap<String, Result<TempPath, String>>,
         permit: OwnedSemaphorePermit,
         pool: &Pool,
     ) -> Result<Arc<Self>, String> {
-        let id = &build.artifact.id;
+        let id = &build.id;
         let cwd = pool.plugins.parent().unwrap_or(&pool.plugins);
         let (mut process, native) = Process::launch_plugin(id, &code, cwd, &pool.env)?;
         let native = UnixDatagram::from_std(native).map_err(|error| error.to_string())?;
         let (input, output, stderr) = process.pipes()?;
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
-            id: id.clone(),
-            live: build.live.clone(),
-            providers,
-            loaded: Mutex::default(),
+            build: build.clone(),
             calls: Mutex::default(),
             writes,
             native: AsyncMutex::new(native),
@@ -601,40 +535,8 @@ impl Host {
         Ok(host)
     }
 
-    fn prepare_providers(&self, frame: &mut Value) -> Result<(), String> {
-        let Some(candidates) = frame["value"].as_array_mut() else {
-            return Ok(());
-        };
-        for candidate in candidates {
-            let entry = candidate
-                .as_object_mut()
-                .ok_or("Invalid local contract candidate")?;
-            // Only Runner snapshots may be passed to the QuickJS loader.
-            entry.remove("path");
-            let Some(value) = entry.remove("artifact") else {
-                continue;
-            };
-            let artifact: Artifact =
-                serde_json::from_value(value).map_err(|error| error.to_string())?;
-            if candidate["plugin"] != artifact.id || !self.live.contains(&artifact) {
-                return Err(self.label("live provider does not match the realm profile"));
-            }
-            let path = self.providers[&artifact.id]
-                .as_ref()
-                .map_err(Clone::clone)?;
-            let path = path.to_str().ok_or("Local provider path is not UTF-8")?;
-            lock(&self.loaded).insert(artifact.id);
-            candidate["path"] = json!(path);
-        }
-        Ok(())
-    }
-
     fn authorize(&self, claimed: &Value) -> Result<(), String> {
-        if claimed.is_null()
-            || claimed
-                .as_str()
-                .is_some_and(|id| id == self.id || lock(&self.loaded).contains(id))
-        {
+        if claimed.is_null() || claimed.as_str().is_some_and(|id| id == self.build.id) {
             return Ok(());
         }
         Err(self.label(&format!("cannot claim plugin identity {claimed}")))
@@ -656,7 +558,7 @@ impl Host {
         if linked && calls.linked.len() >= PROVIDER_TURN_CAPACITY {
             return Err(format!(
                 "Too many {} turns are running ({PROVIDER_TURN_CAPACITY}). Wait for one to finish.",
-                self.id
+                self.build.id
             ));
         }
         calls.next += 1;
@@ -690,7 +592,7 @@ impl Host {
             Some("log") => {
                 let level = frame["level"].as_str().unwrap_or("info");
                 let text = frame["text"].as_str().unwrap_or("");
-                tokamak_worker::log(format!("Plugin {} [{level}]: {text}", self.id));
+                tokamak_worker::log(format!("Plugin {} [{level}]: {text}", self.build.id));
                 return Ok(());
             }
             Some("op" | "opCancel") => calls.active.get(&frame_id(&frame["call"])?).cloned(),
@@ -800,7 +702,7 @@ impl Host {
     }
 
     fn label(&self, reason: &str) -> String {
-        format!("Plugin {} process: {reason}", self.id)
+        format!("Plugin {} process: {reason}", self.build.id)
     }
 }
 
@@ -905,13 +807,10 @@ mod tests {
         let now = Instant::now();
         let mut slots = Slots::new();
         let mut build = |id: &str, users, seconds_ago| {
-            let build = Build {
-                artifact: Artifact {
-                    id: id.into(),
-                    entry_hash: String::new(),
-                    code_hash: String::new(),
-                },
-                live: Vec::new(),
+            let build = Artifact {
+                id: id.into(),
+                entry_hash: String::new(),
+                code_hash: String::new(),
             };
             let slot: Arc<Slot> = Arc::default();
             slots.insert(

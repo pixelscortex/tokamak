@@ -50,20 +50,14 @@ function provider(id, value) {
       import { internalAction, internalQuery, local, query, v } from "@tokamak/sdk";
       import { provide } from "@tokamak/sdk";
       import * as ai from "plugin:${owner}/contracts";
-      import { type Run, type TurnCtx } from "plugin:${owner}/contracts";
+      import { type TurnCtx } from "plugin:${owner}/contracts";
 
       export const status = query({ handler: () => "${value}" });
       export const localStatus = local({ handler: () => "${value}" });
       const id = "${id}";
       const name = "${value}";
       const info = local({ handler: (ctx) => ctx.auth.user.id });
-      const start = local({
-          handler: async (ctx, run${value === "alpha" ? "" : ": Run"}) => {
-            await run.report("${value}:" + ctx.auth.user.id);
-            return "${value}";
-          },
-      });
-      export const localProvider = provide(ai.agent, { id, name, info, start });
+      export const localProvider = provide(ai.agent, { id, name, info });
       export const hooks = provide(ai.turnHooks, {
         before: local({ handler: async (ctx, t: TurnCtx) => {
           const process = ctx.proc(["git", "--version"], { cwd: t.folder });
@@ -85,10 +79,9 @@ async function checkReloads() {
   await build(owner, "", {
     "contracts.ts": `
       import { contract } from "@tokamak/sdk";
-      export type Run = { report(text: string): Promise<void> };
       export type TurnCtx = { folder: string };
-      export const agent = contract<{ id: string; name: string; start: (run: Run) => Promise<string>; info: () => string }>("agent", { place: "local" });
-      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { place: "local" });
+      export const agent = contract<{ id: string; name: string; info: () => Promise<string> }>("agent", { place: "local", dataMethods: true });
+      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { place: "local", dataMethods: true });
       export const service = contract<{ id: string; name: string; inspect: () => string; call: (a: { text: string }) => Promise<string> }>("service");
     `,
     "main.ts": `
@@ -99,15 +92,8 @@ async function checkReloads() {
         args: { id: v.string() },
         handler: async (ctx, { id }) => {
           const all = await agent.list(ctx);
-          const reports: string[] = [];
           const selected = await agent.get(id, ctx);
-          const assertIdentity = () => {
-            if (selected?.info() !== "local") throw new Error("Provider lost its caller");
-          };
-          const result = selected && await agent.get(id, ctx).start({
-            report: async (text) => { reports.push(text); assertIdentity(); },
-          });
-          return { ids: all.map((provider) => provider.id), result: result ?? null, reports, calls: ++counter };
+          return { ids: all.map((provider) => provider.id), result: (await selected?.info()) ?? null, calls: ++counter };
         },
       });
       export const hooks = local({
@@ -246,8 +232,7 @@ async function checkReloads() {
   await assert.rejects(client.action(api.main.withoutContext, {}), /pass ctx/);
   assert.deepEqual(await client.local(api.main.localCall, { id: "one" }), {
     ids: ["one"],
-    result: "alpha",
-    reports: ["alpha:local"],
+    result: "local",
     calls: 1,
   });
 
@@ -260,8 +245,7 @@ async function checkReloads() {
   assert.equal(await client.action(api.main.invoke, { id: "two" }), "beta:hello:local");
   assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
     ids: ["one", "two"],
-    result: "beta",
-    reports: ["beta:local"],
+    result: "local",
     calls: 2,
   });
   const manifest = JSON.parse(await readFile(join(installs, providers[1], "manifest.json"), "utf8"));
@@ -276,7 +260,6 @@ async function checkReloads() {
   assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
     ids: ["one"],
     result: null,
-    reports: [],
     calls: 1,
   });
   assert.equal(ownerStarts, 2, "retire the worker that loaded the removed provider");

@@ -42,9 +42,12 @@ async function waitForFile(path) {
   throw new Error(`Program did not create ${path}`);
 }
 
-async function expectHeartbeatStopped(path) {
+async function expectHeartbeatStopped(path, timeout = 750) {
   let last = await waitForFile(path);
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // The fixture ignores TERM. Leave room for the QuickJS guardian's two-second
+  // grace period before requiring the heartbeat to stop.
+  const deadline = performance.now() + timeout;
+  while (performance.now() < deadline) {
     await Bun.sleep(150);
     const current = await readFile(path, "utf8");
     if (current === last) {
@@ -53,7 +56,7 @@ async function expectHeartbeatStopped(path) {
     }
     last = current;
   }
-  assert.fail("grandchild still running");
+  assert.fail(`grandchild still running: ${path}`);
 }
 await mkdir(src, { recursive: true });
 acceptance: try {
@@ -425,14 +428,14 @@ acceptance: try {
     const before = await readFile(survivor.heartbeat, "utf8");
     controller.abort();
     await assert.rejects(cancelled.running, /cancel/i);
-    await expectHeartbeatStopped(cancelled.heartbeat);
+    await expectHeartbeatStopped(cancelled.heartbeat, 4_000);
     assert.notEqual(await readFile(survivor.heartbeat, "utf8"), before, "other call stopped");
     // This call is still active; close the worker to exercise retirement below.
     // Windows uses the desktop job object rather than the POSIX watchdog.
     if (process.platform !== "win32") {
       await local.close();
       await assert.rejects(survivor.running, /retired/i);
-      await expectHeartbeatStopped(survivor.heartbeat);
+      await expectHeartbeatStopped(survivor.heartbeat, 4_000);
     }
     console.log(
       "read two live rows and verified process-tree cleanup on stop, cancellation, and worker retirement",

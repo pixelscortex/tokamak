@@ -9,6 +9,7 @@ use support::{Host, fixture};
 use tokamak_worker::{LocalRuntime, Process};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
+    net::UnixDatagram,
     process::Command,
     time::{Instant, sleep, timeout},
 };
@@ -79,6 +80,75 @@ async fn stop_lets_the_program_handle_term() {
 }
 
 #[tokio::test]
+async fn routed_result_arrives_before_a_lingering_program_is_reaped() {
+    reap_orphans_on_linux();
+    let mut host = Host::start();
+    host.send(json!({
+        "type":"invoke", "id":1, "fn":"", "args":[], "routed":true,
+        "contract":{
+            "plugin":"fixture", "owner":"fixture", "name":"programs",
+            "registration":"programFixture", "method":"linger"
+        }
+    }))
+    .await;
+    let auth = host.receive().await;
+    assert_eq!(auth["name"], "auth.current");
+    host.send(json!({ "type":"opResult", "id":auth["id"], "value":{} }))
+        .await;
+    let frame = host.receive().await;
+    let pid = frame["value"].as_i64().expect("program PID") as i32;
+    assert!(pid > 1 && unsafe { libc::kill(pid, 0) } == 0, "{frame}");
+    assert_gone(&[pid]).await;
+}
+
+#[tokio::test]
+async fn native_force_stop_reaps_a_lingering_program_after_the_result() {
+    reap_orphans_on_linux();
+    let bundle = fixture();
+    let (mut host, control) = Process::launch_plugin(
+        "fixture",
+        &bundle,
+        bundle.parent().unwrap(),
+        &BTreeMap::new(),
+    )
+    .unwrap();
+    let control = UnixDatagram::from_std(control).unwrap();
+    let (mut input, stdout, _stderr) = host.pipes().unwrap();
+    let mut output = BufReader::new(stdout).lines();
+    support::send(
+        &mut input,
+        json!({
+            "type":"invoke", "id":1, "fn":"", "args":[], "routed":true,
+            "contract":{
+                "plugin":"fixture", "owner":"fixture", "name":"programs",
+                "registration":"programFixture", "method":"linger"
+            }
+        }),
+    )
+    .await;
+    let auth = support::receive(&mut output).await;
+    assert_eq!(auth["name"], "auth.current");
+    support::send(
+        &mut input,
+        json!({ "type":"opResult", "id":auth["id"], "value":{} }),
+    )
+    .await;
+    let frame = support::receive(&mut output).await;
+    let pid = frame["value"].as_i64().expect("program PID") as i32;
+    assert!(pid > 1 && unsafe { libc::kill(pid, 0) } == 0, "{frame}");
+    timeout(Duration::from_millis(750), async {
+        let call = 1_u64.to_le_bytes();
+        control.send(&call).await.unwrap();
+        let mut answer = [0; 8];
+        assert_eq!(control.recv(&mut answer).await.unwrap(), answer.len());
+        assert_eq!(answer, call);
+        assert_gone(&[pid]).await;
+    })
+    .await
+    .expect("Force stop must not wait for the remaining TERM grace");
+}
+
+#[tokio::test]
 async fn force_stop_kills_the_whole_scope_tree_and_leaves_the_outer_program() {
     reap_orphans_on_linux();
     let mut host = Host::start();
@@ -112,6 +182,7 @@ async fn sigkill_of_the_host_kills_its_program_tree() {
 #[tokio::test]
 async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
     reap_orphans_on_linux();
+    let started = Instant::now();
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "parent_fixture", "--ignored", "--nocapture"])
         .env("TOKAMAK_PROGRAM_PARENT_FIXTURE", "1")
@@ -124,20 +195,23 @@ async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
         .kill_on_drop(true)
         .spawn()
         .unwrap();
+    eprintln!("Launcher fixture spawned at {:?}", started.elapsed());
     let mut output = BufReader::new(parent.stdout.take().unwrap()).lines();
     let pids = timeout(Duration::from_secs(12), async {
         while let Some(line) = output.next_line().await.unwrap() {
             if let Some(payload) = line.strip_prefix("PROGRAM_TREE ") {
+                eprintln!("PROGRAM_TREE received at {:?}", started.elapsed());
                 return pids(serde_json::from_str(payload).unwrap());
             }
         }
         panic!("launcher exited before the program tree was ready");
     })
     .await
-    .unwrap();
+    .expect("launcher fixture did not report PROGRAM_TREE");
 
     parent.kill().await.unwrap();
     assert_gone(&pids).await;
+    eprintln!("Launcher fixture tree reaped at {:?}", started.elapsed());
 }
 
 // Run in a separate process so the test can SIGKILL the real launcher.
@@ -148,6 +222,8 @@ async fn parent_fixture() {
         return;
     }
 
+    let started = Instant::now();
+    eprintln!("Launcher child entered");
     let bundle = fixture();
     let (mut worker, runtime) = Process::launch_local(
         &bundle,
@@ -157,12 +233,21 @@ async fn parent_fixture() {
         &[],
     )
     .unwrap();
+    eprintln!(
+        "Launcher child spawned plugin host at {:?}",
+        started.elapsed()
+    );
     assert_eq!(runtime, LocalRuntime::QuickJs);
     let (mut input, stdout, _stderr) = worker.pipes().unwrap();
     let mut output = BufReader::new(stdout).lines();
     support::invoke(&mut input, &mut output, 1, "parkTree", json!(tree_path())).await;
+    eprintln!(
+        "Launcher child authorized parkTree at {:?}",
+        started.elapsed()
+    );
+    // Serial libtest prints the test name without a trailing newline.
     println!(
-        "PROGRAM_TREE {}",
+        "\nPROGRAM_TREE {}",
         json!(logged_tree(support::receive(&mut output).await))
     );
     pending::<()>().await;

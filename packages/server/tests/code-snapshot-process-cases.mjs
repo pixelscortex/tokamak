@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { editBundle, inspectHosts, reload, until } from "../../runner/tests/support/routing.mjs";
-import { FORCE_STOP_MS } from "../../../plugins/ai/src/shared/turn-timing.ts";
+import { runLocalTurn } from "../../../plugins/ai/src/client/lib/local-turn.ts";
+import { connect, within } from "../../../e2e/fake-agent/harness.mjs";
+import { FORCE_STOP_MS, RELOADED } from "../../../plugins/ai/src/shared/turn-timing.ts";
 import { alive, gitPids, stall } from "./code-snapshot-review-cases.mjs";
 
 export async function separateProcesses({ h, runner, desk, code, project, start, refs, turnRef }) {
@@ -180,6 +182,87 @@ export async function reloadManager({ h, runner, desk, project, start }) {
   );
 }
 
+export async function reloadManagerTimeout({ h, runner, desk, project, start }) {
+  const { ai } = h.api;
+  const { folder } = await project("reload-timeout");
+  const thread = await start(desk, folder);
+  const cleanup = [];
+  const blocked = Promise.withResolvers();
+  const hosts = await inspectHosts(runner);
+  const window = await connect(runner.endpoint.ws, {
+    token: runner.endpoint.token,
+    cleanup,
+    launch(artifact, receive, close, workspace) {
+      return runner.launch(
+        artifact,
+        (frame) => {
+          if (
+            artifact.id === "ai" &&
+            frame.name === "local.runMutation" &&
+            frame.payload.name === "ai/turns:finish"
+          ) {
+            blocked.resolve(); // The old build cannot save its own interruption.
+            return;
+          }
+          receive(frame);
+        },
+        close,
+        workspace,
+      );
+    },
+  });
+  try {
+    const running = runLocalTurn(window, {
+      threadId: thread.threadId,
+      messageId: thread.messageId,
+      folder,
+      agentId: "fake-agent",
+      model: "ask-once",
+      access: "ask",
+    });
+    void running.catch(() => {});
+    const [turn] = await thread.turns.until(
+      "the agent asks permission",
+      (rows) => rows[0]?.state === "waiting",
+    );
+    const old = hosts().find(({ id }) => id === "ai");
+    assert.ok(old);
+    assert.equal(
+      await desk.mutation(ai.liveness.releaseReloaded, {
+        messageId: thread.messageId,
+        replyToken: "another invocation",
+      }),
+      false,
+    );
+    await editBundle(join(h.plugins, "ai"), "/* replaced while finish cannot settle */");
+    await reload(runner, join(h.scratch, "snapshots"), "ai");
+    await within(blocked.promise, "old AI version attempts finish");
+    assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
+    const row = await thread.reply(turn._id);
+    assert.equal(row.state, "interrupted");
+    assert.equal(row.error, RELOADED);
+    assert.equal(row.question, undefined);
+    await until("the window closed the stuck retired host", () => !alive(old.pid));
+    await h.gate(folder, "go");
+    const messageId = await thread.post();
+    const replyToken = "01".repeat(32);
+    const next = await desk.local(ai.run.turn, {
+      threadId: thread.threadId,
+      messageId,
+      replyToken,
+      folder,
+      agentId: "fake-agent",
+      model: "edit",
+    });
+    assert.equal(next.state, "done");
+    assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
+    assert.equal((await thread.reply(next.turnId)).state, "done");
+    console.log("code snapshots: the window saved the reload reason when old AI could not finish");
+  } finally {
+    for (const close of cleanup.reverse()) await close();
+  }
+}
+
 export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }) {
   const { ai } = h.api;
   const final = await project("stop-after");
@@ -223,6 +306,13 @@ export async function unavailableProviders({ h, runner, desk, code, project, sta
     state: "done",
     hookNotice: "Couldn't save this turn's code",
   });
+  const { ai } = h.api;
+  const [{ replyId }] = await desk.query(ai.turns.list, { threadId: cached.threadId });
+  const reply = (await desk.query(chat.messages.list, { threadId: cached.threadId })).find(
+    ({ _id }) => _id === replyId,
+  );
+  assert.equal(reply.status, "complete");
+  assert.equal(reply.parts[0]?.text, "I edited agent.txt.");
   assert.deepEqual(refs(git), []);
   await until("crashed Code's Git group exited", () => pids.every((pid) => !alive(pid)));
 
@@ -339,7 +429,8 @@ cat >/dev/null
   console.log("code snapshots: cancellation lets Git release its packed refs lock");
 }
 
-export async function managerCrash({ h, runner, desk, project, start }) {
+export async function managerCrash({ h, runner, desk, code: codeApi, project, start, refs, turnRef }) {
+  const { ai } = h.api;
   const hosts = await inspectHosts(runner);
   const agent = await project("manager-crash-agent");
   const agentThread = await start(desk, agent.folder);
@@ -351,6 +442,9 @@ export async function managerCrash({ h, runner, desk, project, start }) {
   await h.waitFor(agent.folder, "process-tree.json");
   const agentPids = await Bun.file(join(agent.folder, "process-tree.json")).json();
   assert.ok(agentPids.length > 1 && agentPids.every(alive));
+  const [running] = await agentThread.turns.until("agent turn is running", (rows) => rows.length === 1);
+  const abandoned = turnRef(agentThread.threadId, running._id);
+  assert.deepEqual(refs(agent.git), [`${abandoned}/before`]);
 
   const hook = await project("manager-crash-hook");
   await stall(hook);
@@ -369,5 +463,27 @@ export async function managerCrash({ h, runner, desk, project, start }) {
     [...agentPids, ...hookPids].every((pid) => !alive(pid)),
   );
   assert.ok(alive(code.pid), "cancellation leaves Code's host up");
-  console.log("code snapshots: ai crash reaped the linked agent and the in-flight hook Git group");
+  assert.deepEqual(refs(agent.git), [`${abandoned}/before`]);
+  // Reopen recovery waits until the old invocation has missed a heartbeat.
+  await until(
+    "the restarted local part can recover its orphaned turn",
+    async () => (await desk.mutation(ai.liveness.release, { running: [] })) === 0,
+    25_000,
+  );
+  const notice = () =>
+    desk.local(codeApi.notices.forTurn, {
+      threadId: agentThread.threadId,
+      turnId: running._id,
+    });
+  const interruptedSnapshot = { omitted: [], warning: "Couldn't save this turn's code" };
+  assert.deepEqual(await notice(), interruptedSnapshot);
+  await h.gate(agent.folder, "go");
+  const next = await agentThread.run(await agentThread.post(), "edit");
+  assert.equal(next.state, "done");
+  const saved = turnRef(agentThread.threadId, next.turnId);
+  assert.deepEqual(refs(agent.git), [`${abandoned}/before`, `${saved}/after`, `${saved}/before`].sort());
+  assert.deepEqual(await notice(), interruptedSnapshot);
+  console.log(
+    "code snapshots: ai crash reaped the agent and hook; the interrupted snapshot and warning survived the next turn",
+  );
 }

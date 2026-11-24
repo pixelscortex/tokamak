@@ -15,11 +15,36 @@ pub(super) fn artifact(
     entry_hash: &str,
     code_hash: &str,
 ) -> Result<(TempPath, TempPath), String> {
-    let folder = artifact_folder(root, plugin, entry_hash, code_hash)?;
+    let (folder, _) = artifact_folder(root, plugin, entry_hash, code_hash)?;
     Ok((
         snapshot(&folder, "local-entry.js", entry_hash)?,
         snapshot(&folder, "local.js", code_hash)?,
     ))
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) fn quickjs_bundle(
+    root: &Path,
+    request: &crate::local::Artifact,
+) -> Result<TempPath, String> {
+    let (folder, manifest) =
+        artifact_folder(root, &request.id, &request.entry_hash, &request.code_hash)?;
+    for contract in ["contracts", "contractProviders"]
+        .into_iter()
+        .flat_map(|field| manifest[field].as_array().into_iter().flatten())
+    {
+        if contract["place"] == "local" && contract["dataMethods"] != true {
+            let name = contract["name"].as_str().unwrap_or("<unnamed>");
+            let owner = contract["owner"].as_str().unwrap_or(&request.id);
+            return Err(format!(
+                "Local contract {owner}/{name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin."
+            ));
+        }
+    }
+    // Verify both assets as part of the build identity, even though QuickJS
+    // only evaluates the local bundle.
+    let _entry = snapshot(&folder, "local-entry.js", &request.entry_hash)?;
+    snapshot(&folder, "local.js", &request.code_hash)
 }
 
 pub(super) fn artifact_folder(
@@ -27,7 +52,7 @@ pub(super) fn artifact_folder(
     plugin: &str,
     entry_hash: &str,
     code_hash: &str,
-) -> Result<std::path::PathBuf, String> {
+) -> Result<(std::path::PathBuf, Value), String> {
     if plugin.is_empty()
         || matches!(plugin, "." | "..")
         || plugin.len() > 128
@@ -45,10 +70,10 @@ pub(super) fn artifact_folder(
             && json["entries"]["local"]["code"] == "local.js"
             && json["hashes"]["local-entry.js"] == entry_hash
             && json["hashes"]["local.js"] == code_hash)
-            .then(|| path.to_owned())
+            .then(|| (path.to_owned(), json))
     };
     // Prefer the usual id-named path, but dev installs may use other folder names.
-    let folder = [root.to_owned(), root.join(plugin)]
+    let (folder, manifest) = [root.to_owned(), root.join(plugin)]
         .into_iter()
         .flat_map(|dir| [dir.join("dist"), dir])
         .find_map(|dir| matches(&dir))
@@ -70,7 +95,7 @@ pub(super) fn artifact_folder(
     if !folder.starts_with(root) {
         return Err("Local plugin path escapes its install directory".into());
     }
-    Ok(folder)
+    Ok((folder, manifest))
 }
 
 pub(super) fn snapshot(folder: &Path, file: &str, hash: &str) -> Result<TempPath, String> {

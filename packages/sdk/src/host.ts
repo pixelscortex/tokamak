@@ -66,9 +66,8 @@ export interface HostOperations {
           plugin: string;
           registration: string;
           own: boolean;
-          path: string;
+          path?: string;
           owner: string;
-          dataMethods?: true | string[];
           build?: string;
           unavailable?: string;
           incompatible?: never;

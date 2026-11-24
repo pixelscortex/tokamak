@@ -8,6 +8,13 @@ export const MEMBER_HOOK_RUN = "run";
 const contractBrand: unique symbol = Symbol.for("tokamak.contract");
 const providerBrand: unique symbol = Symbol.for("tokamak.contract.provider");
 export const contractScope = Symbol.for("tokamak.contract.scope");
+export const providerIdentity = Symbol.for("tokamak.contract.buildIdentity");
+
+/** A stable cache key for this registration in this local build. */
+export function localProviderIdentity(provider: object): object | undefined {
+  return (provider as { [providerIdentity]?: object })[providerIdentity];
+}
+
 export const openChannel = Symbol.for("tokamak.contract.channel");
 
 export function hasLocalChannel(provider: object): boolean {
@@ -32,8 +39,8 @@ export interface ContractKey {
   readonly name: string;
   readonly owner?: string;
   readonly place: ContractPlace;
-  /** True routes every method; a list routes only the named methods. */
-  readonly dataMethods?: true | readonly string[];
+  /** Route every method across local QuickJS processes. */
+  readonly dataMethods?: true;
 }
 
 export interface Contract<T extends object, P extends ContractPlace = ContractPlace> extends ContractKey {
@@ -115,20 +122,11 @@ export interface Provider<P extends ContractPlace> {
   readonly implementation: Readonly<Record<string, unknown>>;
 }
 
-type MethodKey<T> = {
-  [K in keyof T]-?: [NonNullable<T[K]>] extends [never]
-    ? never
-    : NonNullable<T[K]> extends (...args: never[]) => unknown
-      ? K
-      : never;
-}[keyof T] &
-  string;
-
 export function contract<T extends object>(
   name: string,
   options: {
     place: "local";
-    dataMethods?: true | readonly [MethodKey<T>, ...MethodKey<T>[]];
+    dataMethods: true;
   },
 ): Contract<T, "local">;
 export function contract<T extends object>(
@@ -137,7 +135,7 @@ export function contract<T extends object>(
 ): Contract<T, "server">;
 export function contract<T extends object>(
   name: string,
-  options?: { place: ContractPlace; dataMethods?: true | readonly string[] },
+  options?: { place: ContractPlace; dataMethods?: true },
 ): Contract<T, "local"> | Contract<T, "server"> {
   return options?.place === "local"
     ? contractReference<T, "local">(name, "local", undefined, options.dataMethods)
@@ -149,16 +147,14 @@ export function contractReference<T extends object, P extends ContractPlace>(
   name: string,
   place: P,
   owner?: string,
-  dataMethods?: true | readonly string[],
+  dataMethods?: true,
 ): Contract<T, P> {
   if (!contractName.test(name)) throw new Error(`Invalid contract name: ${name}`);
   const key = Object.freeze({
     name,
     place,
     ...(owner === undefined ? {} : { owner }),
-    ...(dataMethods === undefined
-      ? {}
-      : { dataMethods: dataMethods === true ? (true as const) : Object.freeze([...dataMethods]) }),
+    ...(dataMethods === undefined ? {} : { dataMethods }),
   });
   const resolve = async (
     context?: ContractContext,

@@ -37,6 +37,22 @@ export interface Question {
 /** The four answers to a question. Each agent plugin translates them for its own program. */
 export type Answer = "approve" | "approveSession" | "decline" | "cancel";
 
+/** The turn transport distinguishes Stop from a person answering Cancel on the card. */
+export type TurnAnswer = Answer | "stopping";
+export const ASK_FOR_TURN = Symbol.for("tokamak.agentTurn.ask");
+
+export type TurnRun = Run & {
+  [ASK_FOR_TURN](question: Question): Promise<TurnAnswer>;
+};
+
+export function askForTurn(run: Run, question: Question): Promise<TurnAnswer> {
+  return (run as Partial<TurnRun>)[ASK_FOR_TURN]?.(question) ?? run.ask(question);
+}
+
+export function permissionAnswer(answer: TurnAnswer): Answer {
+  return answer === "stopping" ? "cancel" : answer;
+}
+
 /** Where a step or a helper agent is. `ai` closes any still running when the turn ends. */
 export type StepState = "running" | "done" | "failed";
 
@@ -181,7 +197,7 @@ export type AgentTurnStart = TurnAddress &
   Pick<Run, "folder" | "prompt" | "history" | "sessionId" | "model" | "effort" | "speed" | "mode" | "access">;
 
 /** Bump on incompatible changes to the messages understood by the embedded local host. */
-export const AGENT_TURN_PROTOCOL = 1;
+export const AGENT_TURN_PROTOCOL = 2;
 export const TURN_ENDED = "This turn has ended";
 export type AgentTurnOpen = AgentTurnStart & { version: number };
 
@@ -234,4 +250,11 @@ export type AgentTurnAsk = TurnAddress & { question: Question };
 export type AgentTurnSteer = TurnAddress & { text: string };
 
 export * from "./agent-reports";
-export { hasLocalChannel, localProviders, openLocalChannel } from "./internal/contracts";
+export { AGENT_INFO_MAX_AGE_MS, agentInfoCache } from "./agent-info-cache";
+export { agentCommand } from "./agent-command";
+export {
+  hasLocalChannel,
+  localProviderIdentity,
+  localProviders,
+  openLocalChannel,
+} from "./internal/contracts";

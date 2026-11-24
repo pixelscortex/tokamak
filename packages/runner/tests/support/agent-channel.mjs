@@ -65,7 +65,7 @@ async function channelGate(path) {
       return code
         .replace(
           version + " }, async",
-          `version: request.prompt === "${skew}" ? 8 : AGENT_TURN_PROTOCOL }, async`,
+          `version: request.prompt === "${skew}" ? 1 : AGENT_TURN_PROTOCOL }, async`,
         )
         .replace(
           open,
@@ -110,11 +110,11 @@ async function turnGate(path) {
 const fixtureRegistration = Object.keys(contractProviders)[0];
 const fixtureProvider = contractProviders[fixtureRegistration];
 const realAgent = fixtureProvider.implementation;
-let discovery;
+let fixtureDiscovery;
 let releaseBurst;
 contractProviders[fixtureRegistration] = { ...fixtureProvider, implementation: {
   ...realAgent,
-  info: { ...realAgent.info, invokeLocal: (...args) => discovery ??= realAgent.info.invokeLocal(...args) },
+  info: { ...realAgent.info, invokeLocal: (...args) => fixtureDiscovery ??= realAgent.info.invokeLocal(...args) },
   start: { ...realAgent.start, async invokeLocal(run, bridge, auth) {
     const sessionId = ${JSON.stringify(id + "-fixture")};
     const last = () => ({ sessionId });
@@ -222,8 +222,10 @@ export function checkSkew(agents) {
     old.info.updateRequired,
     "old-agent was built for a different version of ai's agent contract; rebuild or update it.",
   );
-  for (const id of ["claude", "codex"])
-    assert.equal(agents.find((agent) => agent.id === id)?.info.installed, true);
+  for (const id of ["claude", "codex"]) {
+    const info = agents.find((agent) => agent.id === id)?.info;
+    assert.equal(info?.installed, true, `${id}: ${JSON.stringify(info)}`);
+  }
 }
 
 export async function bunSkew(scratch, plugins, env, ai) {
@@ -280,7 +282,7 @@ export async function exerciseChannels({
 
 async function checkVersionAndSize({ client, ai, chat, folder, claudeTurns }) {
   const skewed = await claudeTurns.run(await folder("skew"), skew, { state: "failed" });
-  assert.match(skewed.row.error, /ai uses version 8; the plugin host uses version 1/);
+  assert.match(skewed.row.error, /ai uses version 1; the plugin host uses version 2/);
   const invalid = await claudeTurns.run(await folder("unknown"), unknown, { state: "failed" });
   assert.match(invalid.row.error, /Unknown agent turn report event: futureEvent/);
   assert.equal(invalid.text, "", "the valid prefix of an invalid batch was not saved");

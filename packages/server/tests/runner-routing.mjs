@@ -112,7 +112,7 @@ try {
   const window = await connect(shared, {
     token,
     cleanup,
-    launch: (artifact, receive, closed, live, workspace) =>
+    launch: (artifact, receive, closed, workspace) =>
       local.launch(
         artifact,
         (frame) => {
@@ -120,7 +120,6 @@ try {
           receive(frame);
         },
         closed,
-        live,
         workspace,
       ),
   });

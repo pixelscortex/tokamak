@@ -19,6 +19,34 @@ export function importedContractEntry(root, id) {
   return existsSync(source) ? source : resolve(root, "contracts", id + ".ts");
 }
 
+function nonDataMethods(entry, exported, data, file) {
+  const declared = new Set(
+    data && ts.isArrayLiteralExpression(data)
+      ? data.elements.filter(ts.isStringLiteralLike).map((name) => name.text)
+      : [],
+  );
+  // The normal path needs only the syntax tree. Resolve the contract's type to
+  // report method names only when rejecting an old or incomplete declaration.
+  const program = ts.createProgram([entry], { noEmit: true, skipLibCheck: true });
+  const source = program.getSourceFile(entry);
+  const checker = program.getTypeChecker();
+  const call = source?.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((declaration) => declaration.name.getText(source) === exported)?.initializer;
+  const node = call && ts.isCallExpression(call) && call.typeArguments?.[0];
+  const names = node
+    ? checker
+        .getTypeFromTypeNode(node)
+        .getProperties()
+        .flatMap((property) => {
+          const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, node));
+          return type.getCallSignatures().length && !declared.has(property.name) ? [property.name] : [];
+        })
+    : [];
+  return names.length ? names.join(", ") : (data?.getText(file) ?? "all methods");
+}
+
 /** A public contract module describes types and keys, and is never loaded by its providers. */
 export function contractDeclarations(entry) {
   if (!existsSync(entry)) return [];
@@ -67,25 +95,19 @@ export function contractDeclarations(entry) {
                 ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "dataMethods",
             )?.initializer
           : undefined;
-      let dataMethods;
-      if (data) {
-        if (place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
-        if (data.kind === ts.SyntaxKind.TrueKeyword) dataMethods = true;
-        else if (
-          ts.isArrayLiteralExpression(data) &&
-          data.elements.length > 0 &&
-          data.elements.every((name) => ts.isStringLiteralLike(name) && contractName.test(name.text))
-        )
-          dataMethods = data.elements.map((name) => name.text);
-        else
-          throw new Error(`${entry}: dataMethods must be true or a nonempty array of literal method names`);
+      if (place?.text === "local" && data?.kind !== ts.SyntaxKind.TrueKeyword) {
+        const missing = nonDataMethods(entry, name.text, data, file);
+        throw new Error(
+          `${entry}: local contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
+        );
       }
+      if (data && place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
       contracts.push({
         exported: name.text,
         name: key.text,
         place: place?.text ?? "server",
         declarationHash,
-        dataMethods,
+        dataMethods: data ? true : undefined,
         memberHook: call.typeArguments?.[0]?.getText(file) === "MemberHook",
       });
     }
@@ -168,7 +190,7 @@ export function discoverProviders(root, files, program, checker) {
           const info = definitionTypeInfo(checker, actual, value);
           if (info?.kind === "local")
             throw new Error(
-              `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local" }`,
+              `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
             );
           if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, field });
         }
@@ -208,6 +230,7 @@ export function contractManifest(root, namespace, providers = []) {
       name: p.name,
       declarationHash: p.declarationHash,
       place: p.place,
+      dataMethods: p.dataMethods,
       registration: p.registration,
       unavailable: p.unavailable,
       methods: Object.fromEntries(p.methods.map((method) => [method.member, contractTarget(p, method)])),

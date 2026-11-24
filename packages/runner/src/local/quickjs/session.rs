@@ -1,10 +1,10 @@
-use super::{Build, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
+use super::{Artifact, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -41,7 +41,13 @@ struct Channel {
     closed: CancellationToken,
 }
 
-type Channels = Mutex<HashMap<u64, Arc<Channel>>>;
+#[derive(Default)]
+struct ChannelCalls {
+    open: HashMap<u64, Arc<Channel>>,
+    reaping: VecDeque<(u64, Peer)>,
+}
+
+type Channels = Mutex<ChannelCalls>;
 
 // The forwarding capability exists only while the original routed call is
 // active. It holds neither a new identity nor a route to another build.
@@ -54,7 +60,22 @@ struct OpenChannel<'a> {
 impl Drop for OpenChannel<'_> {
     fn drop(&mut self) {
         self.channel.closed.cancel();
-        lock(self.channels).remove(&self.id);
+        lock(self.channels).open.remove(&self.id);
+    }
+}
+
+impl OpenChannel<'_> {
+    fn keep_program_control(&self) {
+        let Some(peer) = self.channel.provider.borrow().clone() else {
+            return;
+        };
+        // The result ends messaging. Keep only a bounded native stop target
+        // in the owning invocation while its provider's programs are reaped.
+        let mut calls = lock(self.channels);
+        if calls.reaping.len() == WORKER_CAPACITY {
+            calls.reaping.pop_front();
+        }
+        calls.reaping.push_back((self.id, peer));
     }
 }
 
@@ -67,10 +88,16 @@ enum Invocation<'a> {
 enum Reply {
     Result(Value),
     Route(Arc<Lease>),
+    Here,
+}
+
+enum Target {
+    Own(Artifact),
+    Other(String),
 }
 
 struct Pending {
-    target: Option<String>,
+    target: Option<Target>,
     answer: oneshot::Sender<Reply>,
 }
 
@@ -84,15 +111,19 @@ struct Bridge {
 }
 
 impl Bridge {
-    async fn request(&self, mut frame: Value, root: u64) -> Result<Reply, String> {
+    async fn request(&self, mut frame: Value, root: u64, here: &Artifact) -> Result<Reply, String> {
         let (answer, receive) = oneshot::channel();
         let target = match frame["name"].as_str() {
-            Some("local.contract.call" | "local.contract.describe") => Some(
-                frame["payload"]["plugin"]
+            Some("local.contract.call" | "local.contract.describe") => {
+                let id = frame["payload"]["plugin"]
                     .as_str()
-                    .ok_or("Missing local contract provider")?
-                    .to_owned(),
-            ),
+                    .ok_or("Missing local contract provider")?;
+                Some(if id == here.id {
+                    Target::Own(here.clone())
+                } else {
+                    Target::Other(id.to_owned())
+                })
+            }
             _ => None,
         };
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
@@ -120,33 +151,54 @@ impl Bridge {
         }
     }
 
-    fn route(&self, id: u64, build: Result<Build, String>) {
+    fn route(&self, id: &Value, artifact: Value) {
+        let Ok(id) = frame_id(id).and_then(|id| {
+            (id != 0)
+                .then_some(id)
+                .ok_or_else(|| "zero operation id".into())
+        }) else {
+            let recovered = id
+                .as_str()
+                .and_then(|text| text.parse::<u64>().ok())
+                .filter(|&id| id > 0 && id < (1 << 53));
+            eprintln!("Invalid local contract route frame: expected a numeric operation ID");
+            if let Some(id) = recovered {
+                self.answer(
+                    id,
+                    Reply::Result(json!({"error":"Invalid local contract route operation ID"})),
+                );
+            }
+            return;
+        };
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.
         };
-        let reply = match build {
-            Ok(build) if pending.target.as_deref() == Some(&build.artifact.id) => {
+        let reply = match (serde_json::from_value::<Artifact>(artifact), pending.target) {
+            (Ok(build), Some(Target::Own(current))) if build == current => Reply::Here,
+            (Ok(build), Some(Target::Other(target))) if build.id == target => {
                 self.leases.get(&build).map_or_else(
                     |error| Reply::Result(json!({"error":error, "unavailable":true})),
                     Reply::Route,
                 )
             }
-            Ok(_) => Reply::Result(
+            (Ok(_), _) => Reply::Result(
                 json!({"error":"Local contract route does not match its host operation"}),
             ),
-            Err(error) => Reply::Result(json!({"error":error})),
+            (Err(error), _) => {
+                Reply::Result(json!({"error":format!("Invalid local contract route: {error}")}))
+            }
         };
         let _ = pending.answer.send(reply);
     }
 
-    fn retire(&self, current: &Build, retired: Result<Build, String>, changed: &str) {
-        let Ok(retired) = retired else {
-            return; // A malformed profile has no effect.
+    fn retire(&self, current: &Artifact, artifact: Value) {
+        let Ok(retired) = serde_json::from_value::<Artifact>(artifact) else {
+            return; // Invalid retirement frames cannot affect admitted calls.
         };
-        if &retired == current && changed == current.artifact.id {
+        if &retired == current {
             self.retiring.cancel();
         }
-        self.leases.retire(&retired, changed);
+        self.leases.retire(&retired);
     }
 }
 
@@ -164,7 +216,7 @@ impl Drop for Operation<'_> {
 pub(in crate::local) async fn connection(
     socket: &mut WebSocket,
     pool: &Pool,
-    build: Build,
+    build: Artifact,
     workspace: String,
 ) -> Result<(), String> {
     let (output, mut outgoing) = mpsc::channel(WORKER_CAPACITY);
@@ -221,11 +273,9 @@ pub(in crate::local) async fn connection(
                         _ => return Err("Invalid local worker request".into()),
                     }
                 }
-                Some(Request::Route { id, artifact, live }) => bridge.route(id, Build::new(artifact, live)),
-                Some(Request::Retire { artifact, live, changed }) => {
-                    bridge.retire(&build, Build::new(artifact, live), &changed);
-                }
-                Some(Request::Load { .. }) => return Err("QuickJS loads providers through local.contracts".into()),
+                Some(Request::Route { id, artifact }) => bridge.route(&id, artifact),
+                Some(Request::Retire { artifact }) => bridge.retire(&build, artifact),
+                Some(Request::Load { .. }) => return Err("QuickJS does not load other plugins".into()),
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
             },
@@ -254,10 +304,7 @@ async fn root_call(
     frame: Value,
     cancel: CancellationToken,
 ) -> (u64, Result<Value, String>) {
-    let label = format!(
-        "Plugin {} local function cancelled",
-        lease.build.artifact.id
-    );
+    let label = format!("Plugin {} local function cancelled", lease.build.id);
     let response = tokio::select! {
         biased;
         () = cancel.cancelled() => Err(label),
@@ -277,7 +324,7 @@ async fn invoke_root(
     lease: &Arc<Lease>,
     frame: Value,
 ) -> Result<Value, String> {
-    let id = &lease.build.artifact.id;
+    let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
     run(
@@ -303,7 +350,7 @@ fn open_channel<'a>(channels: &'a Channels, id: u64, frame: &Value) -> Option<Op
         provider: watch::channel(None).0,
         closed: CancellationToken::new(),
     });
-    lock(channels).insert(id, channel.clone());
+    lock(channels).open.insert(id, channel.clone());
     Some(OpenChannel {
         channels,
         id,
@@ -426,9 +473,6 @@ async fn peer_operation(
     invocation: &Invocation<'_>,
     mut frame: Value,
 ) -> Result<Value, String> {
-    if !frame["plugin"].is_null() {
-        return Err("A live provider cannot use the host's local contract channel".into());
-    }
     let method = frame["name"].as_str();
     let close = method == Some("local.contract.close");
     let stop = method == Some("local.contract.stopPrograms");
@@ -451,27 +495,48 @@ async fn peer_operation(
         return origin.request(payload).await;
     }
     let id = frame_id(&remote)?;
-    let channel = lock(channels)
-        .get(&id)
-        .cloned()
-        .ok_or("Local contract channel ended")?;
+    let (channel, reaping) = {
+        let calls = lock(channels);
+        let reaping = stop
+            .then(|| calls.reaping.iter().find(|(call, _)| *call == id))
+            .flatten()
+            .map(|(_, peer)| peer.clone());
+        (calls.open.get(&id).cloned(), reaping)
+    };
+    if let Some(peer) = reaping {
+        peer.host.stop_programs(peer.call).await?;
+        return Ok(json!({"value":null}));
+    }
+    let Some(channel) = channel else {
+        return if stop {
+            Ok(json!({"value":null}))
+        } else {
+            Err("Local contract channel ended".into())
+        };
+    };
     if close {
         channel.closed.cancel();
         return Ok(json!({"value":null}));
     }
     let mut provider = channel.provider.subscribe();
+    if stop {
+        let peer = tokio::select! {
+            biased;
+            result = provider.wait_for(Option::is_some) => result.ok().and_then(|peer| peer.clone()),
+            () = channel.closed.cancelled() => None,
+        };
+        if let Some(peer) = peer {
+            peer.host.stop_programs(peer.call).await?;
+        }
+        return Ok(json!({"value":null}));
+    }
     tokio::select! {
         () = channel.closed.cancelled() => Err("Local contract channel ended".into()),
         response = async {
             let peer = provider.wait_for(Option::is_some).await
                 .map_err(|_| "Local contract channel ended")?.clone()
                 .ok_or("Local contract channel ended")?;
-            if stop {
-                peer.host.stop_programs(peer.call).await?;
-                Ok(json!({"value":null}))
-            } else {
-                peer.request(payload).await
-            }
+            peer.request(payload).await
         } => response,
     }
 }
@@ -493,25 +558,25 @@ impl CallRoute<'_> {
         let host = &here.host;
         host.authorize(&frame["plugin"])?;
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
-            frame["plugin"] = json!(host.id);
+            frame["plugin"] = json!(host.build.id);
         }
-        frame["host"] = json!(host.id);
-        let reply = self.bridge.request(frame.clone(), self.root).await?;
+        let reply = self
+            .bridge
+            .request(frame.clone(), self.root, &host.build)
+            .await?;
         let lease = match reply {
-            Reply::Route(lease) => lease,
-            Reply::Result(mut value) => {
-                if frame["name"] == "local.contracts" && value["error"].is_null() {
-                    host.prepare_providers(&mut value)?;
-                }
-                return Ok(value);
-            }
+            Reply::Route(lease) => Some(lease),
+            // An admitted call can use its own build while that build drains.
+            // Reuse the running host without starting or leasing it again.
+            Reply::Here => None,
+            Reply::Result(value) => return Ok(value),
         };
-        self.invoke(&lease, here, frame, opening).await
+        self.invoke(lease.as_deref(), here, frame, opening).await
     }
 
     async fn invoke(
         &self,
-        lease: &Lease,
+        lease: Option<&Lease>,
         here: &Peer,
         mut frame: Value,
         opening: Option<OpenChannel<'_>>,
@@ -538,8 +603,8 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
-        let artifact = &lease.build.artifact;
-        if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
+        let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
+        if ancestors.len() == MAX_DEPTH || (lease.is_some() && ancestors.contains(&artifact.id)) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
                 artifact.id
@@ -547,9 +612,12 @@ impl CallRoute<'_> {
         }
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
-        let other = match pool.host(&lease.build, &lease.slot, true).await {
-            Ok(other) => other,
-            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+        let other = match lease {
+            None => here.host.clone(),
+            Some(lease) => match pool.host(&lease.build, &lease.slot, true).await {
+                Ok(other) => other,
+                Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+            },
         };
         let response = if let Some(open) = &opening {
             let _slot = pool
@@ -560,14 +628,18 @@ impl CallRoute<'_> {
                 channel: Some(open.id),
                 ..here.clone()
             };
-            tokio::select! {
+            let response = tokio::select! {
                 biased;
                 () = open.channel.closed.cancelled() => return Err("Local contract channel closed".into()),
                 response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, Invocation::Linked {
                     origin,
                     channel: &open.channel,
                 })) => response,
+            };
+            if response.is_ok() {
+                open.keep_program_control();
             }
+            response
         } else {
             Box::pin(run(
                 pool,
@@ -580,35 +652,36 @@ impl CallRoute<'_> {
             ))
             .await
         };
-        let response = match response {
-            Ok(response) => response,
-            Err(error) => return Ok(json!({"error":error, "unavailable":true})),
-        };
-        if let Some(error) = response["error"].as_str() {
-            return Ok(json!({
-                "error":format!("Plugin {}: {error}", artifact.id),
-                "providerError":true,
-            }));
-        }
-        Ok(json!({"value":response["value"]}))
+        Ok(provider_result(response, &artifact.id, opening.is_some()))
     }
+}
+
+fn provider_result(response: Result<Value, String>, plugin: &str, linked: bool) -> Value {
+    let response = match response {
+        Ok(response) => response,
+        Err(error) => return json!({"error":error, "unavailable":true}),
+    };
+    if let Some(error) = response["error"].as_str() {
+        // An agent's error becomes the persisted turn reason, as on Bun.
+        let error = if linked {
+            error.to_owned()
+        } else {
+            format!("Plugin {plugin}: {error}")
+        };
+        return json!({"error":error, "providerError":true});
+    }
+    json!({"value":response["value"]})
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::local::Artifact;
-
-    fn build(id: String) -> Build {
-        Build::new(
-            Artifact {
-                id,
-                entry_hash: String::new(),
-                code_hash: String::new(),
-            },
-            Vec::new(),
-        )
-        .unwrap()
+    fn build(id: String) -> Artifact {
+        Artifact {
+            id,
+            entry_hash: String::new(),
+            code_hash: String::new(),
+        }
     }
 
     #[tokio::test]
@@ -634,11 +707,14 @@ mod tests {
         lock(&bridge.pending).insert(
             1,
             Pending {
-                target: Some("hook".into()),
+                target: Some(Target::Other("hook".into())),
                 answer,
             },
         );
-        bridge.route(1, Ok(build("hook".into())));
+        bridge.route(
+            &json!(1),
+            json!({"id":"hook", "entryHash":"", "codeHash":""}),
+        );
         let Reply::Result(value) = response.await.unwrap() else {
             panic!("a full pool cannot lease a hook provider");
         };

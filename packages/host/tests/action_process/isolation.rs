@@ -78,7 +78,7 @@ async fn returned_call_cannot_keep_allocating() {
 
 fn rss_kib(child: &Child) -> u64 {
     let output = std::process::Command::new("ps")
-        .args(["-o", "rss=", "-p", &child.id().unwrap().to_string()])
+        .args(["-ww", "-o", "rss=", "-p", &child.id().unwrap().to_string()])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -266,7 +266,7 @@ fn thread_count(pid: u32) -> usize {
 #[cfg(target_os = "macos")]
 fn thread_count(pid: u32) -> usize {
     let output = std::process::Command::new("ps")
-        .args(["-M", "-p", &pid.to_string()])
+        .args(["-ww", "-M", "-p", &pid.to_string()])
         .output()
         .unwrap();
     assert!(output.status.success());

@@ -1,4 +1,5 @@
 import type { LocalContext, RunningProcess } from "@tokamak/sdk";
+import { agentCommand } from "@tokamak/sdk/agent-turn";
 
 export const minimumVersion = "2.1.330";
 export const speeds = { standard: "Standard", fast: "Fast" } as const;
@@ -128,22 +129,26 @@ export function open(ctx: LocalContext, args: string[], cwd?: string) {
   return { proc, exited, send, control, close };
 }
 
-export async function usableVersion(ctx: LocalContext): Promise<"missing" | "old" | "ready"> {
-  const answer = await smallCommand(ctx, ["--version"]);
-  const version = answer?.match(/(?:^|[^\w])v?(\d+\.\d+\.\d+)\b/i)?.[1];
-  if (!version) return "missing";
+export async function usableVersion(ctx: LocalContext, timeout = 5_000) {
+  const answer = await agentCommand(ctx, ["claude", "--version"], timeout);
+  if (answer === "missing") return answer;
+  if (answer?.code !== 0) return;
+  const version = answer.stdout.match(/(?:^|[^\w])v?(\d+\.\d+\.\d+)\b/i)?.[1];
+  if (!version) return;
   const actual = version.split(".").map(Number);
   const minimum = minimumVersion.split(".").map(Number);
   const diff = actual.findIndex((part, index) => part !== minimum[index]);
   return diff === -1 || actual[diff] > minimum[diff] ? "ready" : "old";
 }
 
-export async function signedIn(ctx: LocalContext): Promise<boolean> {
-  const answer = await smallCommand(ctx, ["auth", "status"]);
+export async function signedIn(ctx: LocalContext, timeout = 5_000): Promise<boolean | undefined> {
+  const answer = await agentCommand(ctx, ["claude", "auth", "status"], timeout);
+  if (!answer || answer === "missing") return;
   try {
-    if (!answer) return false;
-    const { loggedIn, loginExpiresAt } = JSON.parse(answer);
-    if (loggedIn !== true) return false;
+    const { loggedIn, loginExpiresAt } = JSON.parse(answer.stdout);
+    // Claude reports an explicit logout with exit 1.
+    if (loggedIn === false && (answer.code === 0 || answer.code === 1)) return false;
+    if (loggedIn !== true || answer.code !== 0) return;
     // Current Unix seconds fit in ten digits; even a millisecond deadline
     // from the year 2000 is longer than that.
     const timestamp =
@@ -156,23 +161,6 @@ export async function signedIn(ctx: LocalContext): Promise<boolean> {
           : NaN;
     return !Number.isFinite(timestamp) || timestamp > Date.now();
   } catch {
-    return false;
-  }
-}
-
-async function smallCommand(ctx: LocalContext, args: string[]) {
-  try {
-    const wire = open(ctx, args);
-    wire.proc.closeInput();
-    const cancelKill = killAfter(wire.proc, 5_000);
-    try {
-      let output = "";
-      for await (const line of wire.proc.stdout) output += line + "\n";
-      return (await wire.exited) === 0 ? output.trim() : undefined;
-    } finally {
-      cancelKill();
-    }
-  } catch {
-    return undefined;
+    // Unrecognized or absent output says nothing about the login.
   }
 }

@@ -637,7 +637,7 @@ async function stopTurns() {
     if (model === "ignore-stop") {
       const pids = JSON.parse(await readFile(join(folder, "process-tree.json"), "utf8"));
       const alive = (pid) => {
-        const ps = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)]);
+        const ps = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)]);
         const stat = ps.stdout.toString().trim();
         return stat !== "" && !stat.startsWith("Z");
       };
@@ -923,7 +923,7 @@ async function memberSignsInAndRuns(address) {
   assert.equal((await within(closed, "revoked member socket closes")).code, 4001);
   await within(lost, "revoked member local call cancelled");
   const alive = (pid) => {
-    const state = spawnSync("ps", ["-o", "stat=", "-p", String(pid)])
+    const state = spawnSync("ps", ["-ww", "-o", "stat=", "-p", String(pid)])
       .stdout.toString()
       .trim();
     return state && !state.startsWith("Z");

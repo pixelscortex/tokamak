@@ -6,14 +6,7 @@ import { cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promis
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
-import {
-  agentHarness,
-  build,
-  bunPath,
-  connect,
-  localLauncher,
-  workspace,
-} from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -24,8 +17,8 @@ await scanReplays("codex");
 const h = await agentHarness({ binary: process.argv[2], name: "codex" });
 const cleanup = [];
 const path = join(h.scratch, "bin");
-const status = join(h.home, "codex-status");
 const codexHome = join(h.home, ".codex");
+const status = join(codexHome, "auth.json");
 const inherited = {
   HOME: h.home,
   PATH: `${path}${delimiter}/usr/bin${delimiter}/bin`,
@@ -48,11 +41,7 @@ try {
   const runner = binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
   const address = runner ? undefined : await h.serve("server");
   const connectClient = async (env) => {
-    if (address)
-      return connect(address, {
-        cleanup,
-        launch: localLauncher(h.selection, (id) => join(h.plugins, id), env),
-      });
+    if (address) return h.connect(address, { local: true, env });
     const dir = await h.folder("runners");
     const instance = await startRunner({
       binary,
@@ -94,12 +83,17 @@ try {
     assert.equal(infoOut.installed, true);
     assert.equal(infoOut.signedIn, false);
   } else {
+    await mkdir(codexHome);
     await writeFile(status, "old\n");
     assert.equal((await info(replayClient)).installed, false);
     await writeFile(status, "signed-out\n");
     assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "prerelease\n");
     assert.equal((await info(replayClient)).signedIn, true);
+    // A positive discovery answer was just cached. Changing the credential
+    // file must make the same provider notice that the account signed out.
+    await writeFile(status, "signed-out\n");
+    assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "signed-in\n");
   }
 
@@ -127,6 +121,7 @@ try {
   const parity = turnParity(h, "codex");
   const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
   if (greeting) {
+    assert.equal(await readFile(join(greeting.folder, "session-flushed"), "utf8"), "flushed");
     assert.equal(greeting.text, "Hello from Codex.");
     assert.equal(greeting.row.sessionId, "codex-session");
     assert.deepEqual(greeting.reply.usage, { inputTokens: 18208, cachedInputTokens: 0, outputTokens: 54 });
@@ -385,10 +380,14 @@ async function missingCodexPath() {
   const bin = await h.folder("missing-codex-bin");
   if (h.selection.runtime === "bun") await symlink(bunPath(), join(bin, "bun"));
   // The temporary home hides user installs. If the machine also has a
-  // system-wide Codex, mask it with the exit status of a missing executable
+  // system-wide Codex, reproduce an exec failure in an empty search path
   // so the offline test never calls the real program.
   if (["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].some(existsSync)) {
-    await writeFile(join(bin, "codex"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+    await writeFile(
+      join(bin, "codex"),
+      "#!/bin/sh\nPATH=/dev/null exec /bin/sh -c 'exec codex' tokamak-program\n",
+      { mode: 0o755 },
+    );
   }
   return bin;
 }
@@ -398,7 +397,7 @@ async function replayExecutable() {
   await writeFile(
     join(path, "codex"),
     `#!/bin/sh
-status=$(cat "$HOME/codex-status")
+status=$(cat "$CODEX_HOME/auth.json")
 case "$1" in
   --version)
     case "$status" in
@@ -410,12 +409,19 @@ case "$1" in
   app-server)
     # Discovery runs from HOME with the direct launcher and from the plugin
     # root's parent with Runner. A turn has its own explicit working folder.
-    if [ "$PWD" = "$HOME" ] || [ "$PWD/home" = "$HOME" ]; then
+    if [ "$PWD" -ef "$HOME" ] || [ "$PWD/home" -ef "$HOME" ]; then
       if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
     else
       tape="\${PWD##*/}"
     fi
-    exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    if [ "$tape" = hello ]; then
+      trap '' TERM
+      ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+      /bin/sleep 0.4
+      printf flushed > session-flushed
+    else
+      exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    fi
     ;;
   *) exit 2 ;;
 esac

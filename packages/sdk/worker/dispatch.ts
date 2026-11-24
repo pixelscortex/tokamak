@@ -55,9 +55,9 @@ export function workerDispatch(
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
-    routedContracts?: Parameters<typeof invocationHost>[3];
     attachChannel?: AttachChannel;
     sendWaiting?(message: object): void | Promise<void>;
+    reapAfterResult?: boolean;
   },
 ) {
   const calls = new Map<
@@ -203,10 +203,18 @@ export function workerDispatch(
       (plugin) => (name, payload, signal) =>
         operation(allocateOp(), name, payload, plugin, undefined, signal),
       createPrograms && (() => createPrograms(controller.signal, id)),
-      routed ? (options?.routedContracts ?? contracts) : contracts,
+      contracts,
       channel?.bridge,
       retiring?.signal,
+      options?.reapAfterResult,
     );
+    function close() {
+      // Stop accepting programs immediately; native ownership keeps reaping
+      // them even after the Runner has received the result.
+      const reaping = invocation.close();
+      if (options?.reapAfterResult) void reaping.catch(() => {});
+      else return reaping;
+    }
     try {
       if (!(target && options?.contract) && functions[name]?.kind !== kind)
         throw new Error(`Unknown worker ${kind} function: ${name}`);
@@ -214,13 +222,15 @@ export function workerDispatch(
         target && options?.contract
           ? await options.contract(target, args, invocation.host())
           : await invokeFunction(functions, { name, args }, invocation.host());
-      await invocation.close();
+      const closing = close();
+      if (closing) await closing;
       if (calls.get(id) === call) {
         const sending = transmit({ type: "result", id, value });
         if (sending) await sending;
       }
     } catch (error) {
-      await invocation.close();
+      const closing = close();
+      if (closing) await closing;
       const message =
         options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
       if (calls.get(id) === call) {

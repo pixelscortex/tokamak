@@ -16,7 +16,7 @@ async function fixture(run) {
       `
       import { contract } from "@tokamak/sdk";
       export const service = contract<{ read: (input: { text: string }) => string }>("service");
-      export const line = contract<{ id: string; read: (input: string) => string }>("line", { place: "local" });
+      export const line = contract<{ id: string; read: (input: string) => string }>("line", { place: "local", dataMethods: true });
     `,
     );
     const implementation = join(provider, "src/line.ts");
@@ -81,6 +81,21 @@ test("a provider must declare its contract owner as a dependency", async () => {
   });
 }, 30_000);
 
+test("a local contract must declare every method as plain data", async () => {
+  await fixture(async (owner, provider) => {
+    const path = join(owner, "src/contracts.ts");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8"))
+        .replace("read: (input: string) => string", "read: (input: string) => string; live: () => void")
+        .replace("dataMethods: true", 'dataMethods: ["read"]'),
+    );
+    const result = build(provider);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /local contract "line".*non-data methods: live/);
+  });
+}, 30_000);
+
 function serverProviderSource(read) {
   return `
     import { internalQuery, local, provide, v } from "@tokamak/sdk";
@@ -127,7 +142,10 @@ test("a local provider of a server contract gets the local placement fix", async
     );
     const result = build(provider);
     assert.notEqual(result.status, 0);
-    assert.match(result.stdout + result.stderr, /contract "service" is server-side.*\{ place: "local" \}/);
+    assert.match(
+      result.stdout + result.stderr,
+      /contract "service" is server-side.*\{ place: "local", dataMethods: true \}/,
+    );
   });
 }, 30_000);
 

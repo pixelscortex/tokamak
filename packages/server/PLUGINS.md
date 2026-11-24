@@ -283,14 +283,15 @@ which defined the contract may list or invoke those registrations. A reload
 rebuilds the active registrations; an optional provider stays installed when
 its contract owner is absent. The client catalog only carries registrations
 needed by the local part. The catalog verifies the provider's declaration hash
-against the owner's. The declaring plugin can mark a local contract with
-`dataMethods: true` or a nonempty list such as `dataMethods: ["info"]`.
-For those methods, the window authorizes the provider and method using the
-catalog, and the QuickJS Runner routes the JSON arguments and result between
-the two plugin processes. The provider handles the call with the caller's
-signed-in member and device. Turn hooks and thread deletion hooks use this
-route. Bun continues to use the caller's worker for all local contract
-methods.
+against the owner's. A local contract must declare `dataMethods: true`. The
+build records this on both the declaration and provider registrations. QuickJS
+rejects legacy local registrations without that marker before starting a host;
+rebuild the provider to update its manifest.
+The window authorizes the route using the catalog, and the QuickJS Runner
+routes JSON arguments and results between plugin processes. The provider
+handles the call with the caller's signed-in member and device. Turn hooks and
+thread deletion hooks use this route. Bun still binds provider functions in
+the caller's worker.
 
 On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
 author's live `Run` to plain-data messages over the link established by the
@@ -306,10 +307,9 @@ the turn is lost. Code pairs its snapshots using the before ref, which
 survives a provider restart. Reloading Code, like reloading an agent, does
 not replace ai's process or clear its session grants.
 
-Contracts with live methods remain supported. The QuickJS Runner verifies
-the provider bundle before the caller imports it. If a live provider
-changes, new calls use a different realm, and the original realm retains
-its admitted calls and provider files until those calls end.
+The build rejects local contracts that declare live methods. QuickJS also
+refuses an already built plugin with a live local contract; rebuild or update
+it to run on QuickJS.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

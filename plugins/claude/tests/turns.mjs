@@ -1,7 +1,7 @@
 // Drives the installed Claude provider through a real Tokamak server. CI plays
 // sanitized recordings; --live opts into the official CLI on this computer.
 import assert from "node:assert/strict";
-import { chmod, cp, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { permissionCases } from "./permissions.mjs";
@@ -11,7 +11,7 @@ import { turnWire } from "./turn-wire.mjs";
 import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
-import { agentHarness, build, bunPath, connect, localLauncher } from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -62,6 +62,32 @@ try {
     assert.deepEqual(readyState(await aboutClaude(signedOut)), [true, false]);
   } else {
     await discovery(client);
+    const keychain = join(h.home, "claude-replay-signed-out");
+    await writeFile(keychain, "");
+    try {
+      const failed = await run("signed-out", hello, { state: "failed" });
+      assert.equal(
+        failed.row.error,
+        "Claude is signed out. Sign in, then come back. Run `claude auth login`.",
+      );
+      assert.deepEqual(readyState(await info()), [true, false]);
+    } finally {
+      await unlink(keychain);
+    }
+    assert.deepEqual(readyState(await info()), [true, true]);
+    for (const probe of ["healthy", "invalid", "timeout"]) {
+      const started = performance.now();
+      try {
+        const failed = await run(`rate-limit-${probe}`, hello, { state: "failed" });
+        assert.equal(failed.row.error, "Rate limit reached", `${probe} setup probe`);
+        assert.equal(await Bun.file(join(h.home, "claude-replay-unexpected-models")).exists(), false);
+        if (probe === "timeout")
+          assert.ok(performance.now() - started < 4_500, "A timed-out setup probe must not hold the turn");
+      } finally {
+        await unlink(join(h.home, "claude-replay-start-failed")).catch(() => {});
+      }
+      assert.deepEqual(readyState(await info()), [true, true]);
+    }
   }
   passed("signed-in and signed-out discovery");
   await resume(turns, run);
@@ -127,7 +153,7 @@ async function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
       token: instance.endpoint.token,
     });
   }
-  return connect(address, { cleanup, launch: localLauncher(h.selection, (id) => join(h.plugins, id), env) });
+  return h.connect(address, { local: true, env });
 }
 
 async function installReplay() {
@@ -153,7 +179,9 @@ async function discovery(client) {
     ],
   );
   assert.deepEqual(ready.speeds, []);
-  const marker = join(h.home, "claude-status");
+  const profile = join(h.home, ".claude");
+  await mkdir(profile);
+  const marker = join(profile, ".credentials.json");
   await writeFile(marker, "signed-out");
   assert.deepEqual(readyState(await info()), [true, false]);
   for (const fixture of ["expired-iso", "expired-ms", "expired-seconds"]) {

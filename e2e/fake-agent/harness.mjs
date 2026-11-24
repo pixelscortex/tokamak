@@ -192,7 +192,7 @@ export async function connect(
 /** Observe or hold the same worker frames regardless of the wire transport. */
 function observeWorker(launch, observe) {
   if (!observe) return launch;
-  return async (artifact, receive, close, live, workspace) => {
+  return async (artifact, receive, close, workspace) => {
     const worker = await launch(
       artifact,
       (frame) => {
@@ -200,13 +200,12 @@ function observeWorker(launch, observe) {
         receive(frame);
       },
       close,
-      live,
       workspace,
     );
     return {
       routed: worker.routed,
-      route: (id, provider, live) => worker.route(id, provider, live),
-      retire: (provider, live, changed) => worker.retire(provider, live, changed),
+      route: (id, provider) => worker.route(id, provider),
+      retire: (provider) => worker.retire(provider),
       load: (provider) => worker.load(provider),
       close: () => worker.close(),
       async send(frame) {
@@ -451,20 +450,34 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       const own = [];
       try {
         const runner = runners.get(address);
-        const launch =
-          local && runner
-            ? observeWorker(runner.launch, observe)
-            : local
-              ? localLauncher(
-                  selection,
-                  (id) => join(pluginsDir, id),
-                  Object.fromEntries(
-                    Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
-                  ),
-                  observe,
-                )
-              : undefined;
-        if (runner && local && env) throw new Error("Runner environment must be set when it starts");
+        let launch;
+        if (local) {
+          if (runner) {
+            if (env) throw new Error("Runner environment must be set when it starts");
+            launch = runner.launch;
+          } else if (selection.runtime === "quickjs") {
+            // A window on a standalone Server gets its own desktop Runner.
+            // Keep that Runner separate so stopping the Server tests a lost
+            // connection while the local agent is still alive.
+            const desktop = await startRunner({
+              binary: process.env.TOKAMAK_TEST_RUNNER_BIN ?? join(dirname(binary), "tokamak-runner"),
+              plugins: pluginsDir,
+              directory: join(scratch, "window-" + crypto.randomUUID()),
+              env: { ...localEnv, ...env },
+            });
+            own.push(desktop.stop);
+            launch = desktop.launch;
+          } else {
+            launch = localLauncher(
+              selection,
+              (id) => join(pluginsDir, id),
+              Object.fromEntries(
+                Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
+              ),
+            );
+          }
+          launch = observeWorker(launch, observe);
+        }
         const client = await connect(address, {
           token: token ?? runner?.endpoint.token,
           onClose,

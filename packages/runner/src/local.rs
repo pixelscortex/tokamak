@@ -4,6 +4,8 @@
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod quickjs;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::artifact::quickjs_bundle;
 use crate::artifact::{artifact, artifact_folder, client_env, snapshot};
 use axum::{
     extract::{
@@ -48,12 +50,12 @@ pub(super) struct Local {
     pool: quickjs::Pool,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-struct Artifact {
-    id: String,
-    entry_hash: String,
-    code_hash: String,
+pub(super) struct Artifact {
+    pub(super) id: String,
+    pub(super) entry_hash: String,
+    pub(super) code_hash: String,
 }
 
 #[derive(Deserialize)]
@@ -61,8 +63,6 @@ struct Artifact {
 enum Request {
     Start {
         artifact: Artifact,
-        #[serde(default)]
-        live: Vec<Artifact>,
         #[serde(default)]
         workspace: String,
     },
@@ -74,15 +74,14 @@ enum Request {
         artifact: Artifact,
     },
     Route {
-        id: u64,
-        artifact: Artifact,
         #[serde(default)]
-        live: Vec<Artifact>,
+        id: Value,
+        #[serde(default)]
+        artifact: Value,
     },
     Retire {
-        artifact: Artifact,
-        live: Vec<Artifact>,
-        changed: String,
+        #[serde(default)]
+        artifact: Value,
     },
     Close,
 }
@@ -159,29 +158,22 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
     let started = async {
         let Some(Request::Start {
             artifact,
-            live,
             workspace,
         }) = receive(socket).await?
         else {
             return Err("Expected a local worker artifact".into());
         };
-        Ok::<_, String>((artifact, live, workspace))
+        Ok::<_, String>((artifact, workspace))
     };
-    let (requested, live, workspace) = tokio::select! {
+    let (requested, workspace) = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if LocalRuntime::selected()? == LocalRuntime::QuickJs {
-        return quickjs::connection(
-            socket,
-            &local.pool,
-            quickjs::Build::new(requested, live)?,
-            workspace,
-        )
-        .await;
+        return quickjs::connection(socket, &local.pool, requested, workspace).await;
     }
-    drop((live, workspace));
+    drop(workspace);
     let Artifact {
         id: plugin,
         entry_hash,
@@ -289,12 +281,12 @@ async fn relay(
                 }
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
-                Some(Request::Route { id, artifact, live }) => {
-                    drop((id, artifact, live));
+                Some(Request::Route { id, artifact }) => {
+                    drop((id, artifact));
                     return Err("Bun does not route local contract calls".into());
                 }
-                Some(Request::Retire { artifact, live, changed }) => {
-                    drop((artifact, live, changed));
+                Some(Request::Retire { artifact }) => {
+                    drop(artifact);
                     return Err("Bun local workers belong to their socket".into());
                 }
             },
@@ -315,7 +307,7 @@ async fn relay(
 
 async fn provider(plugins: PathBuf, artifact: Artifact) -> Result<TempPath, String> {
     tokio::task::spawn_blocking(move || {
-        let folder = artifact_folder(
+        let (folder, _) = artifact_folder(
             &plugins,
             &artifact.id,
             &artifact.entry_hash,

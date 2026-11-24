@@ -4,6 +4,8 @@ use std::{
     os::unix::process::ExitStatusExt,
     process::Stdio,
     sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
 };
 
 use tokio::{
@@ -13,6 +15,8 @@ use tokio::{
 };
 
 const INPUT_QUEUE_BYTES: u32 = 64 * 1024 * 1024;
+const PROGRAM_TERM_GRACE: Duration = Duration::from_secs(2);
+const GROUP_CHECK_INTERVAL: Duration = Duration::from_millis(25);
 
 pub type Exit = Result<i32, String>;
 type Input = (Vec<u8>, OwnedSemaphorePermit);
@@ -228,23 +232,16 @@ fn spawn_child(
 fn spawn_guardian() -> io::Result<Child> {
     // The guardian leads the group before the executable starts. Its
     // private stdin is the liveness pipe; the executable never inherits it.
-    let mut guardian = Command::new("/bin/sh");
+    let mut guardian = Command::new(std::env::current_exe()?);
     guardian
         .process_group(0)
-        .args([
-            "-c",
-            r#"while IFS= read -r line; do :; done
-kill -TERM "-$$" 2>/dev/null
-/bin/sleep 0.25
-kill -KILL "-$$" 2>/dev/null"#,
-            "program-guardian",
-        ])
+        .arg("--program-guardian")
         .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     // SAFETY: Only an async-signal-safe syscall runs before exec. The
-    // guardian must ignore TERM even before its shell begins executing.
+    // guardian must ignore TERM even before it begins executing.
     unsafe {
         guardian.pre_exec(|| {
             if libc::signal(libc::SIGTERM, libc::SIG_IGN) == libc::SIG_ERR {
@@ -255,6 +252,98 @@ kill -KILL "-$$" 2>/dev/null"#,
     }
     tokamak_worker::inherit_only(guardian.as_std_mut(), None)?;
     guardian.spawn()
+}
+
+/// Runs independently of the host, which may have been killed before closing the pipe.
+pub(crate) fn guard() -> io::Result<()> {
+    let pid = std::process::id() as libc::pid_t;
+    // SAFETY: getpgrp requires no arguments. Only signal the group we lead.
+    if unsafe { libc::getpgrp() } != pid {
+        return Err(io::Error::other("Program guardian must lead its group"));
+    }
+    let _ = io::copy(&mut io::stdin().lock(), &mut io::sink());
+    // SAFETY: This is our dedicated group; the guardian ignores TERM.
+    unsafe { libc::kill(-pid, libc::SIGTERM) };
+    let deadline = Instant::now() + PROGRAM_TERM_GRACE;
+    loop {
+        if !group_has_programs(pid).unwrap_or(true) {
+            return Ok(());
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            // SAFETY: The guardian is still alive and owns this group.
+            unsafe { libc::kill(-pid, libc::SIGKILL) };
+            return Ok(());
+        }
+        thread::sleep(remaining.min(GROUP_CHECK_INTERVAL));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn group_has_programs(group: libc::pid_t) -> io::Result<bool> {
+    for entry in std::fs::read_dir("/proc")? {
+        let entry = entry?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        // SAFETY: getpgid looks up a PID; a process that exited no longer matches.
+        if pid == group || unsafe { libc::getpgid(pid) } != group {
+            continue;
+        }
+        // Zombies have already stopped. Anything we can't read might still be live.
+        match std::fs::read_to_string(entry.path().join("stat")) {
+            Ok(stat)
+                if stat.rsplit_once(") ").is_some_and(|(_, fields)| {
+                    matches!(fields.as_bytes().first(), Some(b'Z' | b'X'))
+                }) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            _ => return Ok(true),
+        }
+    }
+    Ok(false)
+}
+
+#[cfg(target_os = "macos")]
+fn group_has_programs(group: libc::pid_t) -> io::Result<bool> {
+    let mut pids = [0; 64];
+    // SAFETY: libproc writes at most the supplied buffer size.
+    let listed = unsafe {
+        libc::proc_listpgrppids(group, pids.as_mut_ptr().cast(), size_of_val(&pids) as i32)
+    };
+    if listed <= 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // A full buffer may have omitted live members.
+    if pids.last().is_some_and(|&pid| pid > 0) {
+        return Ok(true);
+    }
+    for pid in pids.into_iter().filter(|&pid| pid > 0 && pid != group) {
+        let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::uninit();
+        let size = size_of::<libc::proc_bsdinfo>() as i32;
+        // SAFETY: info is a buffer of the exact size requested by PROC_PIDTBSDINFO.
+        if unsafe {
+            libc::proc_pidinfo(
+                pid,
+                libc::PROC_PIDTBSDINFO,
+                0,
+                info.as_mut_ptr().cast(),
+                size,
+            )
+        } == size
+        {
+            // SAFETY: libproc reported that it filled the entire structure.
+            if unsafe { info.assume_init() }.pbi_status != libc::SZOMB {
+                return Ok(true);
+            }
+        } else if unsafe { libc::getpgid(pid) } == group {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 async fn drive(
