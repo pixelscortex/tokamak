@@ -1,0 +1,20 @@
+packages/worker/src/windows.rs
+  s_1f323405e885d4::t_2c53283787fbc2 53,158,168-169,179-183
+  s_1f323405e885d4::t_87f7a92ef7a0b9 184-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e37e58aa167fada52e0eafa04d1fb371a1b97170",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
