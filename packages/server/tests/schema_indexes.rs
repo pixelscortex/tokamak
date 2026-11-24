@@ -292,6 +292,12 @@ const BUNDLE_SCHEMA: &str = "var schema = schemaMetadata(schema_default);";
 // ---------------------------------------------------------------------------
 
 fn run<F: std::future::Future<Output = ()>>(scenario: F) {
+    // Each case opens its own database and QuickJS pool. Wait for those to close
+    // before another case can compete for CPU and disk within the call budget.
+    static CASE: Mutex<()> = Mutex::new(());
+    let _case = CASE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
