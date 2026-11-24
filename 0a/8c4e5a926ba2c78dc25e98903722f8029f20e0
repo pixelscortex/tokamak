@@ -1,0 +1,172 @@
+packages/runner/src/local.rs
+  s_d72ccb6f50b933::t_58c7f09a5ea5fb 7-8,80,83-84,166,168,176,284,287
+  s_d72ccb6f50b933::t_2b83136aa58adb 55-58,78-79,174,308
+  s_d72ccb6f50b933::t_76e317e43a47b1 53
+packages/runner/tests/support/agent-channel.mjs
+  s_d72ccb6f50b933::t_c15ac9aaa1b78b 225-228
+packages/host/src/modules.rs
+  s_d72ccb6f50b933::t_2b83136aa58adb 17,19,27,31,39,74
+  s_d72ccb6f50b933::t_76e317e43a47b1 1,34-35
+packages/host/src/protocol.rs
+  s_d72ccb6f50b933::t_2b83136aa58adb 16,109,190,329,356
+packages/sdk/worker/quickjs.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 59
+packages/server/src/plugin-skill.md
+  s_d72ccb6f50b933::t_d8d2a2ec454100 46
+packages/sdk/tools/contracts.mjs
+  s_d72ccb6f50b933::t_459b14a8d51031 22-49,98-102,104,110,193
+packages/runner/tests/support/routing.mjs
+  s_d72ccb6f50b933::t_459b14a8d51031 71
+  s_d72ccb6f50b933::t_e743a1ca34ae50 97
+packages/runtime/js/local.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 34,56-57,74,180,185,189,197-198,209,218-219,221,225,239,241,256,261,265,326,332,354,398,419,472,477,487,490,494-495,516,519,521,525,528-530,533-534,540-541,544,546,570,575
+  s_d72ccb6f50b933::t_2b1ede7d4e7f74 220
+plugins/code/contracts/ai.ts
+  s_d72ccb6f50b933::t_474d692846ed90 93-94
+packages/build/tests/contracts.test.mjs
+  s_d72ccb6f50b933::t_459b14a8d51031 19,145-146,148
+  s_d72ccb6f50b933::t_0e65a0db0dd58a 84-89,92-98
+  s_d72ccb6f50b933::t_116e0ce8a23225 90-91,147
+packages/host/tests/fixture.js
+  s_d72ccb6f50b933::t_459b14a8d51031 89
+plugins/ai/src/contracts.ts
+  s_d72ccb6f50b933::t_474d692846ed90 93-94
+.ci/check.sh
+  s_d72ccb6f50b933::t_03042c6d72792b 137,139
+packages/server/tests/contracts-driver.mjs
+  s_d72ccb6f50b933::t_0e65a0db0dd58a 53,60,83-84,96,235,248
+packages/runner/tests/agent-routing.mjs
+  s_d72ccb6f50b933::t_7a19c7a196cc93 237,247,278-282
+  s_d72ccb6f50b933::t_c316ecc5c4f2e7 277
+plugins/code/src/server/hooks.ts
+  s_d72ccb6f50b933::t_474d692846ed90 22-30
+  s_d72ccb6f50b933::t_39fbfad38011bb 7-13
+plugins/codex/tests/e2e.mjs
+  s_d72ccb6f50b933::t_bd1dc0db0e2470 402
+  s_d72ccb6f50b933::t_e68308b842086e 9,44
+packages/host/tests/provider.js
+  s_d72ccb6f50b933::t_76e317e43a47b1 1
+  s_d72ccb6f50b933::t_459b14a8d51031 2
+packages/runner/src/artifact.rs
+  s_d72ccb6f50b933::t_2b83136aa58adb 18,25-46,52,70,73,95
+GLOSSARY.md
+  s_d72ccb6f50b933::t_d8d2a2ec454100 128
+packages/sdk/src/internal/contracts.ts
+  s_d72ccb6f50b933::t_459b14a8d51031 36,122,131,143,150
+packages/runner/tests/support/agents.mjs
+  s_d72ccb6f50b933::t_c15ac9aaa1b78b 1,12,48-50
+  s_d72ccb6f50b933::t_7da7cb1a075bf6 2,53-57
+  s_d72ccb6f50b933::t_bd1dc0db0e2470 37
+packages/runner/README.md
+  s_d72ccb6f50b933::t_d8d2a2ec454100 7-9,35-38
+packages/sdk/README.md
+  s_d72ccb6f50b933::t_49e1573c44741b 637-643,656-659
+packages/runner/src/local/quickjs.rs
+  s_d72ccb6f50b933::t_d8d2a2ec454100 288-291
+  s_d72ccb6f50b933::t_2b83136aa58adb 12,539,810-813
+  s_d72ccb6f50b933::t_58c7f09a5ea5fb 7,41,80,85,115,122,136,157,159,310,316,321,355-357,374,469,475
+packages/host/README.md
+  s_d72ccb6f50b933::t_d8d2a2ec454100 49-52,57
+e2e/starter.mjs
+  s_d72ccb6f50b933::t_474d692846ed90 10-11,93-97,99-100
+plugins/code/README.md
+  s_d72ccb6f50b933::t_474d692846ed90 26-27
+  s_d72ccb6f50b933::t_ded04c8ec8ac1b 28
+packages/server/PLUGINS.md
+  s_d72ccb6f50b933::t_49e1573c44741b 286-291,307-309
+packages/sdk/tests/fixtures/types/positive.ts.txt
+  s_d72ccb6f50b933::t_459b14a8d51031 30
+packages/server/tests/support/local_driver.rs
+  s_d72ccb6f50b933::t_7a19c7a196cc93 20-27
+packages/runner/tests/measure-first-text.mjs
+  s_d72ccb6f50b933::t_1069de494a2dfc 1-6,8-47,50-83,89-109,112-115
+  s_d72ccb6f50b933::t_7da7cb1a075bf6 7,84-88
+  s_d72ccb6f50b933::t_04279d4fb7d13f 48-49,110-111
+packages/server/tests/ai-turns-driver.mjs
+  s_d72ccb6f50b933::t_c15ac9aaa1b78b 926
+  s_d72ccb6f50b933::t_ddb9d5d6a0f2b4 640
+packages/sdk/worker/entry.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 27-28
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_d72ccb6f50b933::t_7a19c7a196cc93 226-232,350,389
+  s_d72ccb6f50b933::t_18d142f596db5e 349,362-364,383-388,390-395
+plugins/ai/README.md
+  s_d72ccb6f50b933::t_d8d2a2ec454100 79
+packages/runner/src/local/quickjs/session.rs
+  s_d72ccb6f50b933::t_2b83136aa58adb 140-142,260,598-603
+  s_d72ccb6f50b933::t_a6f1721cc2c43a 574-588,590,592
+  s_d72ccb6f50b933::t_7da7cb1a075bf6 123-126,147-149,151,154,229-230,633-635
+  s_d72ccb6f50b933::t_58c7f09a5ea5fb 1,130-131,172,231,280,498,532
+  s_d72ccb6f50b933::t_0efcf43f832adc 636
+plugins/ai/src/server/turns.ts
+  s_d72ccb6f50b933::t_474d692846ed90 332-333
+packages/host/src/runtime.rs
+  s_d72ccb6f50b933::t_2b83136aa58adb 16,42,48,52-55
+e2e/browser/ai.spec.ts
+  s_d72ccb6f50b933::t_e017a0d931b093 4,7,175-201,211-229,231-236
+  s_d72ccb6f50b933::t_d1949cd924a9ec 202-210
+plugins/ai/src/server/run.ts
+  s_d72ccb6f50b933::t_474d692846ed90 92-98
+packages/server/tests/code-snapshots-driver.mjs
+  s_d72ccb6f50b933::t_4c7bc466ab3cd9 337
+  s_d72ccb6f50b933::t_687d47446d1497 62,271
+e2e/fake-agent/harness.mjs
+  s_d72ccb6f50b933::t_459b14a8d51031 195,207-208
+  s_d72ccb6f50b933::t_7a19c7a196cc93 453-474,476-480
+  s_d72ccb6f50b933::t_0a7c821f3075c8 475
+packages/host/tests/protocol.rs
+  s_d72ccb6f50b933::t_459b14a8d51031 292,301,308-309,311-312,315-318,320
+packages/runner/tests/local-routing.mjs
+  s_d72ccb6f50b933::t_76e317e43a47b1 299,306-311,336-339,341,345
+  s_d72ccb6f50b933::t_459b14a8d51031 331,356,365,370,408,423,425,428,518
+  s_d72ccb6f50b933::t_0e65a0db0dd58a 381-395
+  s_d72ccb6f50b933::t_5180b1c3db5f9e 332
+e2e/browser/quit.spec.ts
+  s_d72ccb6f50b933::t_c15ac9aaa1b78b 24
+packages/sdk/worker/dispatch.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 205
+packages/server/tests/runner-routing.mjs
+  s_d72ccb6f50b933::t_0e65a0db0dd58a 115
+packages/runtime/js/runner.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 25,65,134-135,138-139
+plugins/code/src/local/git.ts
+  s_d72ccb6f50b933::t_474d692846ed90 369-380
+  s_d72ccb6f50b933::t_4dfb902c467f44 381-383
+wiki/content/docs/api/contracts.mdx
+  s_d72ccb6f50b933::t_49e1573c44741b 8-10
+packages/runner/tests/lifecycle.rs
+  s_d72ccb6f50b933::t_7da7cb1a075bf6 930
+packages/sdk/worker/contracts.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 79,120-121,220-221,253-257,262
+  s_d72ccb6f50b933::t_d8d2a2ec454100 54-60,62-63,68
+  s_d72ccb6f50b933::t_f1657d017d932f 288
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_d72ccb6f50b933::t_4a622ac30f7830 157
+  s_d72ccb6f50b933::t_687d47446d1497 211
+packages/host/tests/action_process/isolation.rs
+  s_d72ccb6f50b933::t_7da7cb1a075bf6 81,269
+packages/sdk/src/host.ts
+  s_d72ccb6f50b933::t_485df8e5b2d8c9 69
+e2e/fake-agent/replays/claude-after-crash.jsonl
+  s_d72ccb6f50b933::t_29577a98ba236e 1-12
+plugins/claude/tests/overlap.mjs
+  s_d72ccb6f50b933::t_449ef0777a9313 8
+plugins/claude/tests/turns.mjs
+  s_d72ccb6f50b933::t_e755fe67784f7b 14,130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a8c4e5a926ba2c78dc25e98903722f8029f20e0",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
