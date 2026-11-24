@@ -1,0 +1,19 @@
+packages/server/tests/README.md
+  s_6573ca2d7bcce4::t_a5ab0ebfc5c7dd 46-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f284c8206a80619f4d2529e3de674c5f23732e73",
+  "prompts": {},
+  "sessions": {
+    "s_6573ca2d7bcce4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b36-dd70-7ac3-8e90-d121f8252052",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
