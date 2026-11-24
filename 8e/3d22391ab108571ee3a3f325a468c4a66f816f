@@ -1,0 +1,19 @@
+packages/runner/tests/support/agent-channel.mjs
+  s_d72ccb6f50b933::t_ae09d54b5d92a8 113,117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e3d22391ab108571ee3a3f325a468c4a66f816f",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
