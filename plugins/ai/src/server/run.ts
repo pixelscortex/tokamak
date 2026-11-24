@@ -1,13 +1,28 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
 import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
-import { agent, type Helper, type Run, type Task, type Tool, type Usage } from "../contracts";
+import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
+import { agent, type Run, type Usage } from "../contracts";
 import { errorText } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
 import { infoOf } from "./agents";
-import { append, fit, jsonBytes, line, PLAN_BYTES, TASKS_MAX, TEXT_BYTES, WRITE_BYTES } from "./limits";
+import { runAgent } from "./agent-turn";
+import {
+  append,
+  check,
+  checkedHelper,
+  checkedTasks,
+  checkedText,
+  checkedTool,
+  checkedUsage,
+  fit,
+  jsonBytes,
+  PLAN_BYTES,
+  TEXT_BYTES,
+  WRITE_BYTES,
+} from "./limits";
 import { asking, pendingQuestion, sessionKey, settle } from "./questions";
 import { access, answer as answerValue, type stepReport } from "./schema";
 import { keepAlive } from "./keep-alive";
@@ -60,12 +75,18 @@ export const turn = local({
     const begun = await ctx.runMutation(api.turns.begin, {
       threadId,
       messageId,
+      ...(hasLocalChannel(provider) && { folder }),
       agent: { id: provider.id, name: provider.name },
       ...settings,
       ...(model !== undefined && { modelName: model.name }),
       replyToken: randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
+    if ("state" in begun) {
+      const failed: { turnId: typeof begun.turnId; state: "failed"; hookNotice?: string; ended?: string } =
+        begun;
+      return failed;
+    }
     const { turnId, prompt, history, sessionId } = begun;
     const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
     const writer = turnWriter(ctx, turnId);
@@ -84,7 +105,7 @@ export const turn = local({
     let lost: string | undefined;
     const alive = keepAlive(ctx, turnId, (reason) => {
       lost = reason;
-      void control.forceStop();
+      void control.forceStop().catch(() => {});
     });
     const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
     try {
@@ -97,27 +118,24 @@ export const turn = local({
         ending = { state: "failed", error: lost };
       } else {
         try {
-          const result = await ctx.withPrograms((kill, scoped) => {
-            // A write the server refused twice: stop the agent's programs now, as Force stop does.
-            void writer.broke.then(() => control.forceStop());
-            return control.run(
-              () =>
-                // Selected again with `scoped`, so the agent's programs belong to this scope and Force stop ends them.
-                agent.get(agentId, scoped).start({
-                  folder,
-                  prompt,
-                  ...settings,
-                  history,
-                  ...(sessionId === undefined ? {} : { sessionId }),
-                  ...writer.reports,
-                  ask: questions.ask,
-                  sessionChanged: questions.sessionChanged,
-                  onSteer: control.onSteer,
-                  onStop: control.onStop,
-                }),
-              kill,
-            );
-          });
+          // A write the server refused twice: stop the agent's programs now, as Force stop does.
+          void writer.broke.then(() => control.forceStop()).catch(() => {});
+          const input = {
+            folder,
+            prompt,
+            ...settings,
+            history,
+            ...(sessionId === undefined ? {} : { sessionId }),
+          };
+          const reports = { ...writer.reports, sessionChanged: questions.sessionChanged };
+          const result = await runAgent(
+            ctx,
+            provider,
+            { threadId, turnId, ...input },
+            reports,
+            questions,
+            control,
+          );
           ending = result
             ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
             : { state: "stopped" };
@@ -138,7 +156,13 @@ export const turn = local({
       if (hookNotice === undefined) hookNotice = await hooks.after();
       let state;
       try {
-        state = await ctx.runMutation(api.turns.finish, { turnId, ...ending, finishedAt: Date.now() });
+        const acknowledgedSteer = control.acknowledgedSteer();
+        state = await ctx.runMutation(api.turns.finish, {
+          turnId,
+          ...ending,
+          finishedAt: Date.now(),
+          ...(acknowledgedSteer === undefined ? {} : { acknowledgedSteer }),
+        });
       } catch {
         // The server cannot be reached or already ended the turn; the interrupt rule frees the thread.
         // `ended` says why in the person's words when this computer had to stop the agent.
@@ -166,7 +190,9 @@ export const steer = local({
     if (!control) return noRunningTurn(turnId);
     const steerText = text.trim();
     if (!steerText) return fail("EmptySteer", { turnId });
-    return control.steer(steerText, () => ctx.runMutation(api.turns.steer, { turnId, text: steerText }));
+    return control.steer(steerText, (text, delivery) =>
+      ctx.runMutation(api.turns.steer, { turnId, text, ...(delivery && { delivery }) }),
+    );
   },
 });
 
@@ -227,24 +253,6 @@ type StepReport = Infer<typeof stepReport>;
 type WriteArgs = ArgsOf<typeof api.turns.write>;
 /** The report methods of a `Run`: what the agent calls while it works. */
 type Reports = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;
-
-const KINDS: readonly string[] = [
-  "command",
-  "read",
-  "edit",
-  "search",
-  "web",
-  "other",
-] satisfies Tool["kind"][];
-const STATES: readonly string[] = ["running", "done", "failed"] satisfies Tool["state"][];
-const TASK_STATES: readonly string[] = ["pending", "running", "done"];
-
-/** Refuses a malformed report back to the agent that made it, before anything is stored. */
-function check(ok: unknown, what: string): asserts ok {
-  if (!ok) throw new TypeError(`ai: ${what}`);
-}
-const isText = (value: unknown): value is string => typeof value === "string";
-const isCount = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 /** The reports that replace what is stored: the to-do list, the plan, usage. */
 type Latest = { tasks?: WriteArgs["tasks"]; plan?: string; usage?: Usage };
@@ -382,12 +390,14 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
     },
     tool(tool) {
       open();
-      unsent.step(checkedTool(tool));
+      const { id: key, ...step } = checkedTool(tool);
+      unsent.step({ key, type: "tool", ...step });
       pump();
     },
     helper(helper) {
       open();
-      unsent.step(checkedHelper(helper));
+      const { id: key, ...step } = checkedHelper(helper);
+      unsent.step({ key, type: "helper", ...step });
       pump();
     },
     tasks(list) {
@@ -416,63 +426,5 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
       closed = true;
       return broken;
     },
-  };
-}
-
-function checkedText(value: unknown, what: string): string {
-  check(isText(value), `${what} takes a string`);
-  return value;
-}
-
-function checkedTool(tool: Tool): Omit<StepReport, "startedAt" | "finishedAt"> {
-  check(isText(tool?.id) && tool.id !== "", "a tool needs an id");
-  check(KINDS.includes(tool.kind), `a tool's kind is one of ${KINDS.join(", ")}`);
-  check(isText(tool.title), "a tool needs a title");
-  check(tool.detail === undefined || isText(tool.detail), "a tool's detail is a string");
-  check(STATES.includes(tool.state), `a tool's state is one of ${STATES.join(", ")}`);
-  const { id, kind, title, detail, state } = tool;
-  return {
-    key: id,
-    type: "tool",
-    kind,
-    title: line(title),
-    ...(detail !== undefined && { detail: line(detail) }),
-    state,
-  };
-}
-
-function checkedHelper(helper: Helper): Omit<StepReport, "startedAt" | "finishedAt"> {
-  check(isText(helper?.id) && helper.id !== "", "a helper needs an id");
-  check(isText(helper.name) && isText(helper.title), "a helper needs a name and a title");
-  check(helper.text === undefined || isText(helper.text), "a helper's text is a string");
-  check(STATES.includes(helper.state), `a helper's state is one of ${STATES.join(", ")}`);
-  const { id, name, title, state, text } = helper;
-  return {
-    key: id,
-    type: "helper",
-    name: line(name),
-    title: line(title),
-    ...(text !== undefined && { text: append("", text, TEXT_BYTES) }),
-    state,
-  };
-}
-
-function checkedTasks(list: readonly Task[]): NonNullable<WriteArgs["tasks"]> {
-  check(Array.isArray(list), "tasks(list) takes an array");
-  for (const item of list)
-    check(isText(item?.text) && TASK_STATES.includes(item.state), "a task is { text, state }");
-  return list.slice(0, TASKS_MAX).map(({ text, state }) => ({ text: line(text), state }));
-}
-
-function checkedUsage(usage: Usage): Usage {
-  const { inputTokens, outputTokens, cachedInputTokens, costUsd } = usage ?? ({} as Usage);
-  check(isCount(inputTokens) && isCount(outputTokens), "usage needs inputTokens and outputTokens (counts)");
-  check(cachedInputTokens === undefined || isCount(cachedInputTokens), "cachedInputTokens is a count");
-  check(costUsd === undefined || isCount(costUsd), "costUsd is a non-negative number");
-  return {
-    inputTokens,
-    outputTokens,
-    ...(cachedInputTokens !== undefined && { cachedInputTokens }),
-    ...(costUsd !== undefined && { costUsd }),
   };
 }

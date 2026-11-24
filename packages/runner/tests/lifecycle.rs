@@ -877,7 +877,7 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Vec<Socke
         .iter()
         .filter(|(pid, cmd)| {
             if quickjs {
-                host(cmd) && cmd.ends_with(".mjs")
+                host(cmd) && cmd.split_whitespace().any(|part| part == "--local-plugin")
             } else {
                 cmd.ends_with(".mjs") && !before_local.iter().any(|(before, _)| before == pid)
             }
@@ -943,7 +943,7 @@ fn plain_contracts_route_between_persistent_plugin_processes() {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
-fn production_agent_info_uses_dedicated_hosts_and_reuses_live_imports() {
+fn production_agent_turns_use_dedicated_hosts_and_survive_other_agent_changes() {
     routing_test("agent-routing.mjs");
 }
 

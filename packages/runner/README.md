@@ -8,12 +8,12 @@ plugin's ID and its two local bundle hashes. It also separates realms that
 need different builds of live providers. Windows that use the same build and
 live profile share a process. The window reports its workspace address
 without credentials so the Runner can tell which installation superseded a
-build. A live provider change or addition sends new calls to a fresh realm.
-The original realm retains the admitted calls and their verified provider
-files until those calls finish. Stop, force stop, steer and permission answers
-use the active turn's workspace and turn ID to find its original realm; host
-operations still use the window that made each control call. The quit controls
-include turns in draining realms.
+build. A live provider change sends new calls to a fresh realm. The original
+realm retains its admitted calls and verified provider files. For ai this
+now applies only to live turn hooks. Until hooks also move across processes
+(TKM-248), turn controls use the active turn's workspace and turn ID to find
+its original realm. Quit controls also include turns in draining realms.
+An agent build change does not change ai's realm.
 
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
@@ -33,6 +33,39 @@ ID for which that process received a verified live snapshot. The provider
 checks its registration and re-checks that the requested method is declared
 for plain data. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
+
+An agent turn opens one linked plain-data call from ai to its agent. It pins
+the two invocations that already know the window's identity. Reports and
+questions return to that exact ai invocation; steer, stop and force stop
+reach the agent invocation that owns the CLI, even while its build drains.
+One Runner admits up to 64 concurrent turns, with at most 32 on any one
+agent host. Of the 128 invocation slots on a host, this leaves at least 64
+on the manager and 96 on an agent for short calls. Peer messages don't use
+invocation slots. Reports and questions wait for space in the bounded pipes
+and operation queues; each turn can have one report and one question in
+flight. If a turn can't start because a limit is reached, the thread asks
+the user to wait for a turn to finish, naming the agent when only its host
+is full. The SDK coalesces pending reports and accounts for at most 768 KiB
+per turn (24 MiB for 32 turns); exceeding that bound fails only the noisy turn.
+
+On Force stop, the agent SDK seals and drains its reports. The manager
+allows up to 750 ms for the drain, then asks the host's Rust control thread
+to kill only that invocation's program groups and closes the channel. This
+works even while provider JavaScript is stuck. If the JavaScript watchdog
+later resets the stuck realm, other invocations in that same host also fail;
+other plugin hosts keep running.
+On macOS, the Runner serializes creation of the control socket pair with
+child launches, including worker guardians and device name lookup, until
+both descriptors have close-on-exec set. Linux sets it atomically. Only the
+intended host receives its end, and it restores close-on-exec before it can
+start any programs.
+
+When ai's host exits, the Runner drops and cancels the linked starts and any
+open questions. A window that stays connected waits for the Server's
+liveness sweep (45 seconds without a heartbeat, checked every 5 seconds).
+A relaunched window can release an orphan earlier via its startup recovery.
+When an agent host exits, only starts on that host fail,
+with the host's name.
 
 Install the Runner on desktops, real machines and sandboxes. For Docker or a
 cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
@@ -103,7 +136,7 @@ maps. The marginal figure subtracts the one-host PSS from the 100-host PSS and
 divides by 99.
 
 A separate run starts the real `ai`, `claude` and `codex` bundles using replay
-executables on PATH. It opens the agent row so `ai` imports both live provider
-modules and the two provider processes each answer `info`. The script waits
+executables on PATH. It opens the agent row so the two provider processes
+each describe their provider and answer `info`. The script waits
 400 ms after the row returns and reports each host's PSS separately. Neither
 measurement includes the Runner or the agent executables.

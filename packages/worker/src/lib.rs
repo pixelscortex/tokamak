@@ -6,6 +6,8 @@ mod restart;
 #[cfg(feature = "local-runtime")]
 pub mod runner;
 mod runtime;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod spawn;
 #[cfg(all(windows, feature = "local-runtime"))]
 mod windows;
 
@@ -16,6 +18,8 @@ pub use restart::{HEALTHY_UPTIME, RestartBackoff};
 pub use runtime::configured_action_heap_bytes;
 #[cfg(feature = "local-runtime")]
 pub use runtime::{LocalRuntime, configured_heap_bytes};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use spawn::inherit_only;
 #[cfg(any(feature = "local-runtime", not(windows)))]
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -36,6 +40,15 @@ type Containment = Group;
 pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
+
+#[cfg(not(windows))]
+fn spawn_child(command: &mut tokio::process::Command, keep: Option<i32>) -> std::io::Result<Child> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    inherit_only(command.as_std_mut(), keep)?;
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let _ = keep;
+    command.spawn()
+}
 
 #[cfg(any(feature = "local-runtime", not(windows)))]
 #[derive(Clone, Copy)]
@@ -78,7 +91,7 @@ impl Process {
         let (child, containment, guardian) = {
             let mut command = tokio::process::Command::new(path);
             command.args(args);
-            spawn_group(command)?
+            spawn_group(command, None)?
         };
         Ok(Self::contained(child, containment, guardian))
     }
@@ -127,14 +140,22 @@ impl Process {
         code: &Path,
         cwd: &Path,
         env: &BTreeMap<String, String>,
-    ) -> Result<Self, String> {
+    ) -> Result<(Self, std::os::unix::net::UnixDatagram), String> {
+        use std::os::{fd::AsRawFd, unix::net::UnixDatagram};
+
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         let host = LocalRuntime::host_path(&executable)?;
+        let (control, native) = UnixDatagram::pair().map_err(|error| error.to_string())?;
+        control
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let fd = native.as_raw_fd();
         let mut command = tokio::process::Command::new(host);
         let (lane_key, lane_value) = Lane::Local.env();
         command
             .args(["--local-plugin", plugin])
             .arg(code)
+            .arg(fd.to_string())
             .env_clear()
             .envs(env)
             .env(lane_key, lane_value)
@@ -142,8 +163,9 @@ impl Process {
         if let Some(heap) = std::env::var_os("TOKAMAK_PLUGIN_HOST_HEAP_MIB") {
             command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
         }
-        let (child, containment, guardian) = spawn_group(command)?;
-        Ok(Self::contained(child, containment, guardian))
+        // Native remains open through spawn. Only this child keeps it across exec.
+        let (child, containment, guardian) = spawn_group(command, Some(fd))?;
+        Ok((Self::contained(child, containment, guardian), control))
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -316,8 +338,8 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+        spawn_child(&mut command, None)
             .map(Some)
             .map_err(|e| format!("Worker guardian could not start: {e}"))
     }
@@ -346,22 +368,22 @@ fn launch(
         command.env(key, value);
     }
     command.current_dir(cwd);
-    spawn_group(command)
+    spawn_group(command, None)
 }
 
 #[cfg(not(windows))]
 fn spawn_group(
     mut command: tokio::process::Command,
+    keep: Option<i32>,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
     #[cfg(unix)]
     command.process_group(0);
-    let child = command
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        .kill_on_drop(true);
+    let child = spawn_child(&mut command, keep).map_err(|e| e.to_string())?;
     let group = Group(child.id().ok_or("Worker has no pid")?);
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
