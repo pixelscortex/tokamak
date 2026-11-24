@@ -119,7 +119,8 @@ class RunnerWorker {
 
   private write(frame: object) {
     if (this.ended || this.socket.readyState !== WebSocket.OPEN) throw new Error("Plugin process closed");
-    if (this.socket.bufferedAmount > 4 * WORKER_FRAME_BYTES) throw new Error("Plugin process input queue full");
+    if (this.socket.bufferedAmount > 4 * WORKER_FRAME_BYTES)
+      throw new Error("Plugin process input queue full");
     this.socket.send(JSON.stringify(frame));
   }
 
