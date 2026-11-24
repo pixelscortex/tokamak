@@ -1,0 +1,104 @@
+packages/runner/tests/local-routing.mjs
+  s_e11e967c664e36::t_42fd40072d23f9 43-44,52-68,71,88,110,187,203-205
+  s_e11e967c664e36::t_22aa12003193bd 102,105,189-193,206-208
+packages/runner/src/local/quickjs.rs
+  s_e11e967c664e36::t_3571bfea01f057 624
+  s_e11e967c664e36::t_3e9dd11bd2499b 647
+plugins/chat/src/contracts.ts
+  s_e11e967c664e36::t_512aaa5d974eb4 16,27-30
+plugins/code/README.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 7-10,49
+packages/host/src/protocol.rs
+  s_e11e967c664e36::t_764355c2d009f2 68-75
+  s_e11e967c664e36::t_5564d0cccfb29f 76
+GLOSSARY.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 124
+e2e/fake-agent/harness.mjs
+  s_e11e967c664e36::t_44911edd12f7a5 385
+packages/sdk/worker/quickjs.ts
+  s_e11e967c664e36::t_3571bfea01f057 45
+plugins/code/src/server/hooks.ts
+  s_e11e967c664e36::t_512aaa5d974eb4 1-8,10,18-40,43-51,53-64,66-69,71,75
+  s_e11e967c664e36::t_eafbd4e482e1ac 9,72-74,76-77
+plugins/ai/src/contracts.ts
+  s_e11e967c664e36::t_b2d8d90885112a 242-243,247-253,259,261,265
+plugins/ai/README.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 185-194,200-203
+packages/sdk/src/functions.ts
+  s_e11e967c664e36::t_6996adbe5a9fe5 379-390,392-395
+  s_e11e967c664e36::t_d5163c1f4a0a04 19
+  s_e11e967c664e36::t_fe2728a75c4f98 391
+packages/sdk/worker/contracts.ts
+  s_e11e967c664e36::t_d5163c1f4a0a04 87,95-96,98-105,122-132,134,143,150
+  s_e11e967c664e36::t_041c365e8b7d9c 133
+packages/server/PLUGINS.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 291-293,306
+packages/runner/README.md
+  s_e11e967c664e36::t_c09af6b2b21b6c 18-20
+packages/sdk/worker/dispatch.ts
+  s_e11e967c664e36::t_3571bfea01f057 36,53-59,142
+  s_e11e967c664e36::t_3938d3193d421c 9-16,112
+  s_e11e967c664e36::t_d5163c1f4a0a04 42,67,70,74-95,107
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_e11e967c664e36::t_c09af6b2b21b6c 211
+  s_e11e967c664e36::t_6db9139c5f4339 146-151
+  s_e11e967c664e36::t_44911edd12f7a5 4,11,128,134-137,141-142,144-145,152-157,166-169,173-174,180-181,185
+  s_e11e967c664e36::t_3938d3193d421c 129-133,138-140,170-172,182-184
+plugins/ai/src/server/run.ts
+  s_e11e967c664e36::t_b2d8d90885112a 3-11,13,91,97,142-143,166
+  s_e11e967c664e36::t_a0afd473138910 12
+plugins/ai/tests/turn-hooks.test.ts
+  s_e11e967c664e36::t_6db9139c5f4339 1-35
+packages/sdk/src/internal/contracts.ts
+  s_e11e967c664e36::t_d5163c1f4a0a04 159,163
+  s_e11e967c664e36::t_6996adbe5a9fe5 28-32,38,140-144,150,155-158,188-194
+packages/server/tests/code_snapshots.rs
+  s_e11e967c664e36::t_3571bfea01f057 6
+plugins/code/contracts/ai.ts
+  s_e11e967c664e36::t_de197e336baf3b 242-243,247-253,259,261,265
+packages/sdk/src/host.ts
+  s_e11e967c664e36::t_6996adbe5a9fe5 126,134,137
+plugins/ai/src/server/turn-hooks.ts
+  s_e11e967c664e36::t_b2d8d90885112a 2-3,9-11,13,15-16,23-24,26-27,33,40-41,43,46-50,65-69,71,73,77,79,82-88
+  s_e11e967c664e36::t_3bb775810a4457 42,70,72
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_e11e967c664e36::t_c09af6b2b21b6c 54-55,111-127
+  s_e11e967c664e36::t_daa4a15dfd4551 1-53,56-110,128
+packages/runner/src/local/quickjs/session.rs
+  s_e11e967c664e36::t_3615f44f5a20f5 429-439,441-450,452-476,478
+  s_e11e967c664e36::t_3e9dd11bd2499b 4-8,379,387-397,399-400,403-405,428
+plugins/ai/src/server/controls.ts
+  s_e11e967c664e36::t_b2d8d90885112a 19-24,30,48,67,71,88,110,115-116,118-120
+packages/sdk/src/index.ts
+  s_e11e967c664e36::t_d5163c1f4a0a04 4,31
+packages/server/tests/code_changes.rs
+  s_e11e967c664e36::t_3571bfea01f057 6
+packages/sdk/README.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 642-646,650,656
+packages/host/README.md
+  s_e11e967c664e36::t_e7a2b7a411d11e 32-34,39-42
+plugins/chat/src/server/threads/threads.ts
+  s_e11e967c664e36::t_c09af6b2b21b6c 1,148
+  s_e11e967c664e36::t_512aaa5d974eb4 147
+packages/server/tests/code-snapshots-driver.mjs
+  s_e11e967c664e36::t_6db9139c5f4339 34-38,44-48,54,56-61
+  s_e11e967c664e36::t_3938d3193d421c 39-43
+  s_e11e967c664e36::t_44911edd12f7a5 32-33,52,66
+  s_e11e967c664e36::t_ac049be1fcd21a 17,53,55,63,67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb92338079f60659305b77cfaa61bc635f1a03ab",
+  "prompts": {},
+  "sessions": {
+    "s_e11e967c664e36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aeb-0c88-7f10-9840-67eabb856bcf",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
