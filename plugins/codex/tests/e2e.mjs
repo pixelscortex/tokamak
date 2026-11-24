@@ -1,8 +1,7 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
-import { turnParity } from "../../../e2e/fake-agent/turn-parity.mjs";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
@@ -118,14 +117,13 @@ try {
     timeout: real ? 120_000 : undefined,
   });
   const run = async (tape, prompt, options) => turns.run(await h.folder(tape), prompt, options);
-  const parity = turnParity(h, "codex");
+
   const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
   if (greeting) {
     assert.equal(await readFile(join(greeting.folder, "session-flushed"), "utf8"), "flushed");
     assert.equal(greeting.text, "Hello from Codex.");
     assert.equal(greeting.row.sessionId, "codex-session");
     assert.deepEqual(greeting.reply.usage, { inputTokens: 18208, cachedInputTokens: 0, outputTokens: 54 });
-    await parity.capture("codex-hello", greeting);
   }
 
   const recorded = await run(
@@ -224,9 +222,6 @@ try {
   if (!real) {
     assert.equal(steered.text, "1. TheSTEERED");
     assert.equal(steered.row.sessionId, greeting.row.sessionId);
-    await parity.capture("codex-resume", steered);
-    await parity.capture("codex-plan", planned);
-    await parity.verify();
   }
   passed("steer while streaming");
   const stopped = await follow("stop", longPrompt, {
@@ -378,7 +373,6 @@ function shellQuote(value) {
 
 async function missingCodexPath() {
   const bin = await h.folder("missing-codex-bin");
-  if (h.selection.runtime === "bun") await symlink(bunPath(), join(bin, "bun"));
   // The temporary home hides user installs. If the machine also has a
   // system-wide Codex, reproduce an exec failure in an empty search path
   // so the offline test never calls the real program.

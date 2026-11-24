@@ -184,7 +184,7 @@ never sent to windows. A queued row has no reply until it starts.
 Plugins use `provide(ai.turnHooks, { before, after })` with either or both
 members. On the QuickJS Runner, each receives plain data in the provider's
 process: `threadId`, `turnId`, and `folder`. Use
-`local({ handler: (ctx, turn: ai.TurnInfo) => … })` on both runtimes. The
+`local({ handler: (ctx, turn: ai.TurnInfo) => … })`. The
 SDK supplies `turn.signal` in the provider on QuickJS; Bun passes the live
 signal. Use `turnId` to find anything saved for the turn.
 

@@ -39,7 +39,7 @@ export async function agentCommand(
     const [code, stdout, missing] = result;
     return code === 127 && missing ? "missing" : { code, stdout };
   } catch (error) {
-    // The Bun fallback on Windows spawns the executable directly.
+    // Windows uses the executable directly.
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return "missing";
   } finally {
     program?.stop(finished ? undefined : "SIGKILL");

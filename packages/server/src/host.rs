@@ -1,6 +1,6 @@
 //! One invocation's SDK capabilities, including its explicit caller identity.
 //! No SQL or client reaches JavaScript. Futures are boxed at the database boundary to keep the
-//! embedded engine's large debug futures off the QuickJS worker's native stack.
+//! embedded engine's large debug futures off the QuickJS runtime's native stack.
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
 use crate::protocol::failure_kind;
@@ -309,9 +309,6 @@ use database_operations::{field, text};
 mod database_queries;
 
 mod process_frames;
-
-#[cfg(feature = "local-runtime")]
-pub(crate) mod worker;
 
 async fn finish_transaction(
     tx: Transaction,

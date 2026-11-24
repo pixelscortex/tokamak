@@ -8,7 +8,7 @@ export async function snapshotReviewCases(fixture) {
   await snapshotsDuringMerge(fixture);
   await scopesSnapshotsToFolder(fixture);
   await skipsRepositoryHooks(fixture);
-  await Promise.all([snapshotDeadlines(fixture), fixture.routed && fixture.stopIsolation()]);
+  await Promise.all([snapshotDeadlines(fixture), fixture.stopIsolation()]);
 }
 
 async function skipsRepositoryHooks({ desk, project, start, removeThread, refs, turnRef }) {

@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildWorkerBundles, workerSources } from "./worker.mjs";
+import { buildLocalBundle, transactionSources } from "./worker.mjs";
 import { bunPluginBoundary, checkPluginImports, featurePluginRoot } from "./plugin-boundary.mjs";
 import ts from "typescript";
 import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plugin-compiler.mjs";
@@ -161,12 +161,7 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(
-  folder,
-  namespace,
-  worker = false,
-  splitActions = namespace !== undefined,
-) {
+export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
@@ -201,45 +196,27 @@ export async function bundleFeature(
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
-    let source = registrySource({
+    const source = registrySource({
       root,
       modules: split ? server : files.map((file, i) => [join(root, file), modules[i]]),
       hasSchema,
       providers,
       header,
     });
-    let workerPlugins = [];
-    if (worker) {
-      const result = await workerSources({
-        root,
-        files,
-        modules,
-        hasSchema,
-        sdkRoot,
-        header,
-        pluginRoot,
-        placement: split ? placement : undefined,
-      });
-      source = result.source;
-      workerPlugins = result.plugins;
-    } else {
-      workerPlugins = [
-        ...(placement ? [placementTransform(placement, lanes.server)] : []),
-        serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
-      ];
-    }
     await Bun.write(entry, source);
 
     const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
     if (hasLocal) {
-      await buildWorkerBundles({
+      await buildLocalBundle({
         root,
         sdkRoot,
         pluginRoot,
-        name: "local",
         source: registrySource({ root, modules: local, providers, lane: lanes.local, worker: true, header }),
         plugins: [placementTransform(placement, lanes.local)],
       });
+      // Preserve the installed-artifact and socket entryHash contract. No
+      // executable entry is needed: the plugin process loads local.js.
+      await Bun.write(join(root, "dist/local-entry.js"), "");
     }
     async function buildServer(naming, contents, plugins) {
       const built = await Bun.build({
@@ -283,23 +260,24 @@ export async function bundleFeature(
       if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
       return built;
     }
-    const built = await buildServer("bundle.js", source, workerPlugins);
-    if (splitActions && !worker) {
-      const descriptor = await workerSources({
+    const built = await buildServer("bundle.js", source, [
+      ...(placement ? [placementTransform(placement, lanes.server)] : []),
+      serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
+    ]);
+    if (splitActions) {
+      const descriptor = transactionSources({
         root,
         files,
         modules,
         hasSchema,
-        sdkRoot,
         header,
         pluginRoot,
         placement: split ? placement : undefined,
-        emitAction: false,
       });
       await buildServer("transactions.js", descriptor.source, descriptor.plugins);
     }
     // Report unsupported imports before TypeScript reports missing Node declarations.
-    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
+    await checkFeature(root, temporary, generated, files, entry, hasLocal, providers);
     if (namespace !== undefined)
       await Bun.write(
         join(root, "dist/contracts.json"),
@@ -325,14 +303,7 @@ export async function bundleFeature(
 }
 
 if (import.meta.main) {
-  if (
-    process.argv.length !== 3 &&
-    !(
-      [5, 6].includes(process.argv.length) &&
-      process.argv[3] === "--plugin" &&
-      (process.argv.length === 5 || process.argv[5] === "--worker")
-    )
-  ) {
+  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
@@ -340,7 +311,7 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker", true);
+  await bundleFeature(feature, process.argv[4], true);
 }
 
 async function scanFiles(root) {
@@ -361,7 +332,7 @@ async function scanFiles(root) {
   return files;
 }
 
-async function checkFeature(root, temporary, generated, files, entry, worker, providers) {
+async function checkFeature(root, temporary, generated, files, entry, hasLocal, providers) {
   const config = join(temporary, "tsconfig.json");
   // Inherit resolution options unchanged, including paths relative to the
   // config that declared them. A build-only SDK alias or TS-extension opt-in
@@ -380,8 +351,8 @@ async function checkFeature(root, temporary, generated, files, entry, worker, pr
     JSON.stringify({
       extends: parentConfig,
       compilerOptions: {
-        lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
-        types: worker ? ["node"] : [],
+        lib: hasLocal ? ["ES2022", "DOM"] : ["ES2022"],
+        types: hasLocal ? ["node"] : [],
         paths,
         noEmit: true,
         strict: true,

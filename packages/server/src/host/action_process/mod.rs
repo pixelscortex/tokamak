@@ -87,6 +87,9 @@ impl Source {
     }
 
     pub(crate) async fn inspect(&self) -> Result<(), crate::Error> {
+        if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
+            return Ok(());
+        }
         inspection::inspect_action(self.path(), self.worker_entry)
             .await
             .map_err(crate::Error::Invalid)

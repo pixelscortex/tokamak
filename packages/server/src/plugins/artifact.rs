@@ -5,13 +5,12 @@ pub(super) const TRANSACTIONS_MAP: &str = "transactions.js.map";
 
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
-        Self::read_reusing(directory, None, false)
+        Self::read_reusing(directory, None)
     }
 
     pub(super) fn read_reusing(
         directory: &Path,
         previous: Option<&Artifact>,
-        quickjs: bool,
     ) -> Result<Self, Error> {
         let root = directory
             .canonicalize()
@@ -21,9 +20,8 @@ impl Artifact {
 
         let names = manifest.validate()?;
         let transactions = [TRANSACTIONS, TRANSACTIONS_MAP];
-        if quickjs
-            && (manifest.hashes.contains_key(TRANSACTIONS)
-                != manifest.hashes.contains_key(TRANSACTIONS_MAP))
+        if manifest.hashes.contains_key(TRANSACTIONS)
+            != manifest.hashes.contains_key(TRANSACTIONS_MAP)
         {
             let missing = if manifest.hashes.contains_key(TRANSACTIONS) {
                 TRANSACTIONS_MAP
@@ -54,7 +52,7 @@ impl Artifact {
             );
         }
 
-        if quickjs && manifest.hashes.contains_key(TRANSACTIONS) {
+        if manifest.hashes.contains_key(TRANSACTIONS) {
             for name in transactions {
                 assets.insert(
                     name.to_owned(),
@@ -109,7 +107,8 @@ impl Artifact {
             .map(|bundle| Some(Arc::new(bundle)))
             .map_err(|error| invalid(error.to_string()));
         }
-        if let Some(entry) = self.manifest.entries.server.as_ref()
+        if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_ok()
+            && let Some(entry) = self.manifest.entries.server.as_ref()
             && self.manifest.entries.worker.is_none()
             && crate::host::action_process::inspect_legacy(self.assets[&entry.code].path())
                 .await

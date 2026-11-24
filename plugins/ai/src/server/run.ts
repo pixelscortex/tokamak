@@ -8,7 +8,7 @@ import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
 import { infoAfterStartFailure, infoOf } from "./agents";
-import { runAgent } from "./agent-turn";
+import { startAgent } from "./agent-turn";
 import {
   append,
   check,
@@ -148,8 +148,7 @@ export const turn = local({
             ...(sessionId === undefined ? {} : { sessionId }),
           };
           const reports = { ...writer.reports, sessionChanged: questions.sessionChanged };
-          const result = await runAgent(
-            ctx,
+          const result = await startAgent(
             provider,
             { threadId, turnId, ...input },
             reports,

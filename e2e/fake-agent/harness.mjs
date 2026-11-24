@@ -22,17 +22,9 @@ import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
 import { LocalFunctions } from "../../packages/runtime/js/local.ts";
-import {
-  agentsFolder,
-  bunPath,
-  fakeAgents,
-  installFakeAgent,
-  localLauncher,
-  selectedRuntime,
-  startRunner,
-} from "./local.mjs";
+import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner } from "./local.mjs";
 
-export { bunPath, fakeAgents, installFakeAgent, localLauncher, selectedRuntime };
+export { bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner };
 
 export const workspace = fileURLToPath(new URL("../../", import.meta.url));
 const TIMEOUT_MS = 20_000;
@@ -203,10 +195,8 @@ function observeWorker(launch, observe) {
       workspace,
     );
     return {
-      routed: worker.routed,
       route: (id, provider) => worker.route(id, provider),
       retire: (provider) => worker.retire(provider),
-      load: (provider) => worker.load(provider),
       close: () => worker.close(),
       async send(frame) {
         await observe(artifact.id, frame, "toWorker");
@@ -302,7 +292,6 @@ export async function signInMember(address, ownerKey, username) {
  */
 export async function agentHarness({ binary, name, ownerToken = "agent-harness-owner-token-for-tests" }) {
   assert.ok(binary, "Expected the path to the tokamak-server binary");
-  const selection = selectedRuntime(binary);
   const target = join(workspace, "packages/server/target");
   await mkdir(target, { recursive: true });
   const scratch = await mkdtemp(join(target, `${name}-`));
@@ -345,7 +334,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       await writeFile(join(folder, "local.js"), code);
 
       const hash = (content) => createHash("sha256").update(content).digest("hex");
-      const launch = localLauncher(selection, () => folder, localEnv);
+      const launch = localLauncher(binary, () => folder, localEnv);
       let worker;
       const result = new Promise((resolve, reject) => {
         const receive = (frame) => {
@@ -368,19 +357,13 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       });
 
       try {
-        const { runtime } = selection;
-        const frame = await within(result, `${runtime} local runtime probe`);
-        assert.equal(
-          frame.value,
-          runtime === "quickjs" ? "undefined" : "object",
-          `${runtime} local call returned ${JSON.stringify(frame)}`,
-        );
+        const frame = await within(result, "QuickJS local runtime probe");
+        assert.equal(frame.value, "undefined", `Local call returned ${JSON.stringify(frame)}`);
       } finally {
         await worker?.close();
       }
     },
 
-    selection,
     runner: (address) => runners.get(address),
     scratch,
     home,
@@ -455,7 +438,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
           if (runner) {
             if (env) throw new Error("Runner environment must be set when it starts");
             launch = runner.launch;
-          } else if (selection.runtime === "quickjs") {
+          } else {
             // A window on a standalone Server gets its own desktop Runner.
             // Keep that Runner separate so stopping the Server tests a lost
             // connection while the local agent is still alive.
@@ -467,14 +450,6 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
             });
             own.push(desktop.stop);
             launch = desktop.launch;
-          } else {
-            launch = localLauncher(
-              selection,
-              (id) => join(pluginsDir, id),
-              Object.fromEntries(
-                Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
-              ),
-            );
           }
           launch = observeWorker(launch, observe);
         }

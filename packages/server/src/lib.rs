@@ -23,18 +23,6 @@ pub mod websocket;
 pub use backend::{Backend, BackendConfig};
 pub use service::{Error, Event, Server, Session, SessionSender};
 
-/// Selects server action execution. Only the Runner build has a Bun fallback.
-pub fn action_runtime() -> Result<&'static str, String> {
-    #[cfg(feature = "local-runtime")]
-    {
-        tokamak_worker::LocalRuntime::selected().map(|runtime| runtime.name())
-    }
-    #[cfg(not(feature = "local-runtime"))]
-    {
-        Ok("quickjs")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #[test]

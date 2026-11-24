@@ -1,48 +1,31 @@
+#![cfg(any(target_os = "macos", target_os = "linux"))]
+
 use std::{
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
-use tokamak_worker::LocalRuntime;
-
 #[path = "support/local_runtime.rs"]
 mod local_runtime;
 
 #[test]
-fn local_functions_reach_the_live_server_on_the_configured_runtime() {
-    run(local_runtime::selected(), None, false);
+fn local_functions_reach_the_live_server() {
+    run(false);
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
-fn local_functions_reach_the_live_server_on_the_other_runtime() {
-    let other = match LocalRuntime::selected().expect("valid local function runtime") {
-        LocalRuntime::Bun => LocalRuntime::QuickJs,
-        LocalRuntime::QuickJs => LocalRuntime::Bun,
-    };
-    let setting = other.name();
-    run(other, Some(setting), false);
+fn local_functions_and_actions_run_with_an_empty_path() {
+    run(true);
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-#[test]
-fn default_runtime_runs_local_functions_and_actions_without_bun() {
-    run(LocalRuntime::QuickJs, None, true);
-}
-
-fn run(runtime: LocalRuntime, setting: Option<&str>, without_bun: bool) {
+fn run(without_bun: bool) {
     let mut command = local_runtime::driver(
         Command::new("bun"),
         "packages/server/tests/local-functions-driver.mjs",
-        &runtime,
     );
     if without_bun {
-        command
-            .env_remove("TOKAMAK_PLUGIN_RUNTIME")
-            .arg("--without-bun");
-    } else if let Some(setting) = setting {
-        command.env("TOKAMAK_PLUGIN_RUNTIME", setting);
+        command.arg("--without-bun");
     }
 
     #[cfg(unix)]

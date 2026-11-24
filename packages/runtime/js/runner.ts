@@ -1,11 +1,10 @@
 import type { JsonValue } from "@tokamak/sdk";
-import { WORKER_CAPACITY, WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits";
+import { WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits";
 import type { LaunchLocalWorker, LocalArtifact } from "./local";
 
 type WorkerEvent =
   | { type: "started"; routed?: boolean }
   | { type: "message"; message: JsonValue }
-  | { type: "loaded"; id: number; path?: string; error?: string }
   | { type: "closed"; reason: string };
 
 type RunnerEndpoint = { ws: string; token: string | null };
@@ -46,14 +45,11 @@ export function runnerLauncher(
 class RunnerWorker {
   private readonly startup = deferred<void>();
   private readonly exited = deferred<void>();
-  private readonly loads = new Map<number, ReturnType<typeof deferred<string>>>();
   private readonly deadline = setTimeout(
     () => this.finish("The Runner did not start the local worker"),
     10_000,
   );
-  private next = 0;
   private started = false;
-  routed = false;
   private ended = false;
   private closing?: Promise<void>;
 
@@ -91,20 +87,16 @@ class RunnerWorker {
     switch (event.type) {
       case "started":
         this.started = true;
-        this.routed = event.routed === true;
+        if (event.routed !== true) {
+          this.finish("The Runner does not support plugin process routing");
+          break;
+        }
         clearTimeout(this.deadline);
         this.startup.resolve();
         break;
       case "message":
         this.receive(event.message);
         break;
-      case "loaded": {
-        const pending = this.loads.get(event.id);
-        this.loads.delete(event.id);
-        if (event.path) pending?.resolve(event.path);
-        else pending?.reject(new Error(event.error ?? "Could not load the local provider"));
-        break;
-      }
       case "closed":
         this.finish(event.reason);
         this.onClosedFrame?.(event);
@@ -120,8 +112,6 @@ class RunnerWorker {
     clearTimeout(this.deadline);
     const error = new Error(reason);
     this.startup.reject(error);
-    for (const pending of this.loads.values()) pending.reject(error);
-    this.loads.clear();
     this.socket.close();
     this.exited.resolve();
     if (this.started) this.closed(reason);
@@ -142,16 +132,7 @@ class RunnerWorker {
   }
 
   async retire(artifact: LocalArtifact) {
-    if (this.routed) this.write({ type: "retire", artifact });
-  }
-
-  async load(artifact: LocalArtifact) {
-    if (this.loads.size >= WORKER_CAPACITY) throw new Error("Local provider queue full");
-    const id = ++this.next;
-    this.write({ type: "load", id, artifact });
-    const pending = deferred<string>();
-    this.loads.set(id, pending);
-    return pending.promise;
+    this.write({ type: "retire", artifact });
   }
 
   close() {

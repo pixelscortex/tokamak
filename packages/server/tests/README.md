@@ -30,43 +30,17 @@ Disk scenarios use unique directories under
 ignored `packages/server/target/tkm5-databases` and remove them after awaited shutdown.
 There are no added dependencies or enlarged native stacks.
 
-## Agent turns on both local runtimes
+## QuickJS test matrix
 
-The Claude, Codex, AI, chat and code acceptance tests use a real server and
-database. The test launcher uses the Rust runtime selector: unset means
-QuickJS on macOS and Linux, where an empty value is an error. Windows ignores
-`TOKAMAK_PLUGIN_RUNTIME` and uses Bun. On macOS and Linux, set the variable to
-`bun` to exercise the temporary fallback. See the
-[plugin runtime guide](../../sdk/README.md#plugin-runtimes) for the differences.
+`bash .ci/check.sh rust` runs the Runner's lifecycle and local plugin suites
+with the full plugin host. Agent replays exercise the real Runner, workspace
+server and database. Standalone Server fixtures that need local calls use a
+separate Runner for those calls.
 
-Run the Linux Rust CI sequence locally with `bash .ci/check.sh rust` on macOS
-or Linux. The Runner and full host use `target`; the Server and actions-only
-host use `target/cloud`. The test matrix is:
-
-| Build and runtime      | Suites                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Runner / Bun           | Claude and Codex replays, Code snapshot and change tests, workers, Bun supervisor units and graceful Runner shutdown                 |
-| Runner / QuickJS       | Runner and worker tests, full host protocol and program tests, AI and agent replays, Chat and Code; local functions on both runtimes |
-| Both QuickJS builds    | Server units and CLI, actions, plugins, routing, service and workers                                                                 |
-| Cloud Server / QuickJS | Actions-only host, identity and sign-in, data, cancellation, indexes, schemas and SDK transport                                      |
-
-The routing test uses a separate Runner for the machine's local functions and
-runs the shared workspace against both `tokamak-server` builds. To run just
-the cloud case, first build both binary pairs:
-
-```sh
-cargo build --locked -p tokamak-runner -p tokamak-plugin-host
-cargo build --locked --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
-TOKAMAK_TEST_RUNNER_HOST="$PWD/target/debug/tokamak-plugin-host" \
-  TOKAMAK_TEST_RUNNER_BIN="$PWD/target/debug/tokamak-runner" \
-  cargo test --locked --no-default-features -p server --target-dir target/cloud --test runner_routing
-```
-
-Bun writes the Claude and Codex reference files to a shared temporary directory.
-QuickJS requires those files and compares the final text, thinking, usage,
-session, state, tasks, plan and ordered reports. The local functions suite also
-runs a server, a local function and an action with the setting unset and an
-empty PATH.
+The cloud build runs the server and action suites once with the actions-only
+host. Shared-server routing tests confirm the cloud Server can serve a window
+whose local calls are run by a separate Runner. The symbol check uses the
+Runner, its full host and the lifecycle test binary as positive controls.
 
 ## Codex replay
 
@@ -123,7 +97,7 @@ normal production-sized host/worker stacks.
 The normal `server:check` dependency executes generated protocol drift checking.
 The native bridge serializes the actual Rust protocol events, so SDK/native/WS
 interoperability does not depend on a second hand-maintained test protocol.
-The driver requires Bun and, for headless shutdown coverage, Unix SIGTERM.
+Run the driver with the pinned developer toolchain. Headless shutdown coverage uses Unix SIGTERM.
 All builds and data directories belong to the local worktree; no parent target
 or live application storage is modified.
 

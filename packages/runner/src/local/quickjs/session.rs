@@ -275,7 +275,7 @@ pub(in crate::local) async fn connection(
                 }
                 Some(Request::Route { id, artifact }) => bridge.route(&id, artifact),
                 Some(Request::Retire { artifact }) => bridge.retire(&build, artifact),
-                Some(Request::Load { .. }) => return Err("QuickJS does not load other plugins".into()),
+                Some(Request::Load { .. }) => return Err("Plugin processes do not load other plugins".into()),
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
             },

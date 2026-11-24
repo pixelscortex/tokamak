@@ -52,10 +52,8 @@ export type LaunchLocalWorker = (
 ) => Promise<{
   send(message: JsonValue): Promise<void>;
   close(): Promise<void>;
-  load?(artifact: LocalArtifact): Promise<string>;
-  routed?: boolean;
-  route?(id: number, artifact: LocalArtifact): Promise<void>;
-  retire?(artifact: LocalArtifact): Promise<void>;
+  route(id: number, artifact: LocalArtifact): Promise<void>;
+  retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
 type ServerConnection = ClientTransport & {
@@ -141,8 +139,7 @@ export class LocalFunctions implements LocalTransport {
         this.workspace,
         () => this.catalog,
         (catalog, caller, operation, payload) => this.serverCall(catalog, caller ?? id, operation, payload),
-        (catalog, caller, host, key, load, allow, routed) =>
-          this.contractProviders(catalog, caller ?? id, host ?? id, key, load, allow, routed),
+        (catalog, caller, key, allow) => this.contractProviders(catalog, caller ?? id, id, key, allow),
         () => {
           if (this.workers.get(id) === current) this.workers.delete(id);
           this.draining.delete(current);
@@ -175,7 +172,7 @@ export class LocalFunctions implements LocalTransport {
   private async refresh(generation: number) {
     const { plugins } = (await this.server.plugins()) as unknown as { plugins: Manifest[] };
     const workers = [...this.workers.values()];
-    // Learn which runtime each worker uses before applying the new catalog.
+    // Retire only after the process connection is ready to receive the frame.
     await Promise.allSettled(workers.map((worker) => worker.ready));
     if (this.closed || generation !== this.generation) return;
     const previous = this.catalog;
@@ -202,22 +199,20 @@ export class LocalFunctions implements LocalTransport {
     this.loaded = generation;
   }
 
-  private async contractProviders(
+  private contractProviders(
     catalog: Catalog,
     caller: string,
     worker: string,
     payload: JsonValue,
-    load: (artifact: LocalArtifact) => Promise<string>,
     allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
-    routed: boolean,
-  ): Promise<JsonValue> {
+  ): JsonValue {
     const { name, owner } = payload as { name: string; owner?: string };
     if (owner !== undefined && owner !== caller)
       throw new Error("Only the defining plugin can list contract providers");
     const definingPlugin = catalog.plugins.find(({ plugin }) => plugin.id === caller);
     const declaration = definingPlugin?.contracts?.find((key) => key.name === name && key.place === "local");
     if (!declaration) throw new Error(`Unknown local contract: ${caller}/${name}`);
-    if (routed && declaration.dataMethods !== true)
+    if (declaration.dataMethods !== true)
       throw new Error(
         `Local contract ${caller}/${name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
       );
@@ -238,7 +233,6 @@ export class LocalFunctions implements LocalTransport {
       const artifact = this.artifact(manifest);
       if (!artifact) continue;
       const own = plugin === worker;
-      const path = !routed && !own ? await load(artifact) : undefined;
       for (const { registration, unavailable } of registrations) {
         // A compatible provider can be replaced independently of its caller.
         const current = this.catalog.plugins.find(({ plugin: candidate }) => candidate.id === plugin);
@@ -255,16 +249,15 @@ export class LocalFunctions implements LocalTransport {
             ? this.artifact(current)
             : undefined;
         const target = own ? artifact : (currentArtifact ?? artifact);
-        if (routed) allow(caller, name, registration, target);
+        allow(caller, name, registration, target);
 
         providers.push({
           plugin,
           registration,
-          ...(path !== undefined && { path }),
           own,
           owner: caller,
           ...(unavailable === undefined ? {} : { unavailable }),
-          ...(routed && { build: `${target.entryHash}:${target.codeHash}` }),
+          build: `${target.entryHash}:${target.codeHash}`,
         });
       }
     }
@@ -324,7 +317,6 @@ function routeKey(plugin: string, owner: string, name: string, registration: str
 
 class LocalWorker {
   private readonly endpoint: Promise<Worker>;
-  private routed = false;
   private readonly calls = new Map<
     number,
     {
@@ -340,7 +332,6 @@ class LocalWorker {
   private draining = false;
   private reloadTimer?: ReturnType<typeof setTimeout>;
   private invoking = 0;
-  private readonly loaded = new Map<string, { artifact: LocalArtifact; path: Promise<string> }>();
 
   constructor(
     launch: LaunchLocalWorker,
@@ -356,12 +347,9 @@ class LocalWorker {
     private readonly contractProviders: (
       catalog: Catalog,
       caller: string | undefined,
-      host: string | undefined,
       key: JsonValue,
-      load: (artifact: LocalArtifact) => Promise<string>,
       allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
-      routed: boolean,
-    ) => Promise<JsonValue>,
+    ) => JsonValue,
     private readonly retire: () => void,
   ) {
     this.endpoint = launch(
@@ -373,10 +361,7 @@ class LocalWorker {
         void this.close(reason);
       },
       workspace,
-    ).then((worker) => {
-      this.routed = worker.routed === true;
-      return worker;
-    });
+    );
   }
 
   get ready() {
@@ -414,7 +399,7 @@ class LocalWorker {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const cancel = () => {
         call.cancelled = true;
-        // A handler can ignore abort or block Bun; retire the worker if it
+        // A handler can ignore abort; close the connection if it
         // cannot finish cooperative cleanup before the deadline.
         timer = setTimeout(() => {
           void this.close("Local function cancellation timed out");
@@ -463,10 +448,7 @@ class LocalWorker {
         if (frame.plugin !== undefined && !call.providers.has(frame.plugin))
           throw new Error("Local provider is not active in this invocation");
         const worker = await this.endpoint;
-        if (
-          worker.routed &&
-          (frame.name === "local.contract.call" || frame.name === "local.contract.describe")
-        ) {
+        if (frame.name === "local.contract.call" || frame.name === "local.contract.describe") {
           const { plugin, owner, name, registration, method } = frame.payload as {
             plugin: string;
             owner: string;
@@ -483,29 +465,21 @@ class LocalWorker {
             throw new Error(`Invalid local contract route for ${owner}/${name}.${method ?? "describe"}`);
           if (this.calls.get(frame.call) === call && !call.cancelled) {
             call.providers.add(plugin);
-            await worker.route!(frame.id, route);
+            await worker.route(frame.id, route);
           }
           return;
         }
-        const catalog = worker.routed ? call.catalog : this.catalog();
         const value =
           frame.name === "local.contracts"
-            ? await this.contractProviders(
-                catalog,
+            ? this.contractProviders(
+                call.catalog,
                 frame.plugin,
-                worker.routed ? frame.plugin : undefined,
                 frame.payload,
-                async (artifact) => {
-                  const path = await this.loadProvider(artifact);
-                  call.providers.add(artifact.id);
-                  return path;
-                },
                 (owner, name, registration, artifact) => {
                   call.routes.set(routeKey(artifact.id, owner, name, registration), artifact);
                 },
-                worker.routed === true,
               )
-            : await this.serverCall(catalog, frame.plugin, frame.name, frame.payload);
+            : await this.serverCall(call.catalog, frame.plugin, frame.name, frame.payload);
         response = {
           type: "opResult",
           id: frame.id,
@@ -523,15 +497,7 @@ class LocalWorker {
   }
 
   catalogChange(artifacts: ReadonlyMap<string, LocalArtifact | undefined>) {
-    const matches = (artifact: LocalArtifact) => sameArtifact(artifact, artifacts.get(artifact.id));
-    if (!matches(this.artifact)) {
-      if (this.routed) return true;
-      void this.close("Local plugin generation retired");
-    } else if (!this.routed && [...this.loaded.values()].some(({ artifact }) => !matches(artifact))) {
-      // Bun caches imported modules. Closing the worker releases the provider and its tasks.
-      void this.close("Local plugin generation retired");
-    }
-    return false;
+    return !sameArtifact(this.artifact, artifacts.get(this.artifact.id));
   }
 
   drain() {
@@ -540,7 +506,7 @@ class LocalWorker {
       // Give this build's admitted calls a bounded chance to settle on reload.
       const retired = "Local plugin build retired";
       this.reloadTimer = setTimeout(() => void this.close(new LocalReloadTimeout()), 5_000);
-      void this.endpoint.then((worker) => worker.retire?.(this.artifact)).catch(() => this.close(retired));
+      void this.endpoint.then((worker) => worker.retire(this.artifact)).catch(() => this.close(retired));
     }
     this.finishDraining();
   }
@@ -552,28 +518,7 @@ class LocalWorker {
 
   async retireArtifact(artifact: LocalArtifact) {
     if (this.draining && artifact.id === this.artifact.id && sameArtifact(artifact, this.artifact)) return;
-    await (await this.endpoint).retire?.(artifact);
-  }
-
-  private loadProvider(artifact: LocalArtifact): Promise<string> {
-    const current = this.loaded.get(artifact.id);
-    if (current) {
-      if (
-        current.artifact.codeHash !== artifact.codeHash ||
-        current.artifact.entryHash !== artifact.entryHash
-      )
-        return Promise.reject(new Error("Local provider generation changed"));
-      return current.path;
-    }
-    const path = this.endpoint.then((worker) => {
-      if (!worker.load) throw new Error("Local contract loading is unavailable");
-      return worker.load(artifact);
-    });
-    this.loaded.set(artifact.id, { artifact, path });
-    void path.catch(() => {
-      if (this.loaded.get(artifact.id)?.path === path) this.loaded.delete(artifact.id);
-    });
-    return path;
+    await (await this.endpoint).retire(artifact);
   }
 
   close(reason: Error | string, retire = false) {
@@ -581,7 +526,7 @@ class LocalWorker {
       clearTimeout(this.reloadTimer);
       this.closing = this.endpoint
         .then(async (worker) => {
-          if (retire) await worker.retire?.(this.artifact).catch(() => {});
+          if (retire) await worker.retire(this.artifact).catch(() => {});
           await worker.close();
         })
         .catch(() => {});

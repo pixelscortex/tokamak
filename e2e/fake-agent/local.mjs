@@ -1,7 +1,7 @@
 // The local part as the desktop client starts it, and the `fake-agent` command,
 // for any test runtime (Bun or Node): the server harness and the browser suite.
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -42,29 +42,19 @@ export async function installFakeAgent(bin, commands) {
   }
 }
 
-// Ask the server's selector so the test client has the same platform defaults.
-export function selectedRuntime(binary) {
-  const runtime = execFileSync(binary, ["--plugin-runtime"], { encoding: "utf8" }).trim();
-  assert.ok(runtime === "quickjs" || runtime === "bun", `Unexpected plugin runtime: ${runtime}`);
-  return { binary, runtime };
-}
-
 /**
- * Launches a plugin's local worker for server-only fixtures
+ * Launches a plugin process directly for server-only fixtures
  * (the Runner implementation is in packages/runner/src/local.rs): the installed, hash-checked `local-entry.js`
- * and `local.js` with the selected runtime and the desktop’s short environment.
+ * and `local.js` with the QuickJS host and the desktop’s short environment.
  * Programs started with `ctx.proc` inherit exactly that environment.
  * `installed(id)` is the folder holding a plugin's build.
  */
-export function localLauncher({ binary, runtime }, installed, env, observe) {
-  const quickjs = runtime === "quickjs";
-  const host = quickjs
-    ? resolve(
-        process.env.TOKAMAK_TEST_PLUGIN_HOST ??
-          process.env.TOKAMAK_PLUGIN_HOST ??
-          join(dirname(binary), "tokamak-plugin-host"),
-      )
-    : undefined;
+export function localLauncher(binary, installed, env, observe) {
+  const host = resolve(
+    process.env.TOKAMAK_TEST_PLUGIN_HOST ??
+      process.env.TOKAMAK_PLUGIN_HOST ??
+      join(dirname(binary), "tokamak-plugin-host"),
+  );
 
   async function verified(artifact) {
     const root = installed(artifact.id);
@@ -81,23 +71,19 @@ export function localLauncher({ binary, runtime }, installed, env, observe) {
   }
   return async (artifact, receive, closed) => {
     const root = await verified(artifact);
-    if (host) {
-      assert.equal(basename(host), "tokamak-plugin-host", `Expected the QuickJS plugin host, got ${host}`);
-      assert.ok(
-        await stat(host)
-          .then((file) => file.isFile())
-          .catch(() => false),
-        `Missing plugin host: ${host}`,
-      );
-      await access(host, constants.X_OK);
-    }
-
-    const command = host ? [host] : [bunPath(), join(root, "local-entry.js")];
-    const worker = spawn(command[0], [...command.slice(1), join(root, "local.js")], {
-      detached: quickjs,
+    assert.equal(basename(host), "tokamak-plugin-host", `Expected the QuickJS plugin host, got ${host}`);
+    assert.ok(
+      await stat(host)
+        .then((file) => file.isFile())
+        .catch(() => false),
+      `Missing plugin host: ${host}`,
+    );
+    await access(host, constants.X_OK);
+    const worker = spawn(host, [join(root, "local.js")], {
+      detached: true,
       stdio: ["pipe", "pipe", "inherit"],
       cwd: env.HOME,
-      env: { ...env, TOKAMAK_WORKER_LANE: "local" },
+      env,
     });
     worker.stdin.on("error", (error) => closed(String(error)));
     const exited = new Promise((resolve) => {
@@ -120,15 +106,16 @@ export function localLauncher({ binary, runtime }, installed, env, observe) {
       }
     })();
     return {
-      // A provider's local code (the fake agent) loads into its contract owner's worker (ai).
-      load: async (provider) => join(await verified(provider), "local.js"),
+      async route() {
+        throw new Error("Use a Runner for local contract routing");
+      },
+      async retire() {},
       async send(value) {
         const hold = observe?.(artifact.id, value, "toWorker");
         if (hold) await hold;
         worker.stdin.write(JSON.stringify(value) + "\n");
       },
       async close() {
-        if (!quickjs) worker.kill();
         worker.stdin.end();
         await exited;
       },

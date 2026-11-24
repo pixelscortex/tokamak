@@ -44,12 +44,12 @@ export function workerDispatch(
   functions: FunctionRegistry,
   send: (message: object) => void,
   allocateOp: () => number,
-  createPrograms?: (
-    signal: AbortSignal,
-    call: number,
-  ) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>,
-  contracts?: Parameters<typeof invocationHost>[3],
-  options?: {
+  options: {
+    createPrograms?: (
+      signal: AbortSignal,
+      call: number,
+    ) => ReturnType<NonNullable<Parameters<typeof invocationHost>[2]>>;
+    contracts?: Parameters<typeof invocationHost>[3];
     observeInvocation?: boolean;
     errorMessage(error: unknown): string;
     errorStack?(error: unknown): string | undefined;
@@ -57,7 +57,6 @@ export function workerDispatch(
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
     attachChannel?: AttachChannel;
     sendWaiting?(message: object): void | Promise<void>;
-    reapAfterResult?: boolean;
   },
 ) {
   const calls = new Map<
@@ -75,7 +74,7 @@ export function workerDispatch(
   >();
   const waiting = new Map<number, { call: number; send(): void; reject(error: Error): void }>();
   function transmit(message: object): void | Promise<void> {
-    if (options?.sendWaiting) return options.sendWaiting(message);
+    if (options.sendWaiting) return options.sendWaiting(message);
     send(message);
   }
 
@@ -133,7 +132,7 @@ export function workerDispatch(
         throw new Error("stale invocation: host operation refused");
       if (signal?.aborted) throw new Error("Local contract call cancelled");
       const wait = pending.size >= WORKER_CAPACITY;
-      if (wait && (!options?.sendWaiting || waiting.size >= WORKER_CAPACITY))
+      if (wait && (!options.sendWaiting || waiting.size >= WORKER_CAPACITY))
         throw new Error("Worker operation capacity exceeded");
       return new Promise<JsonValue>((resolve, reject) => {
         const cleanup = () => signal?.removeEventListener("abort", cancel);
@@ -197,46 +196,40 @@ export function workerDispatch(
         else dispatch();
       });
     }
-    const channel = options?.attachChannel?.(id, target, controller.signal, operation);
+    const channel = options.attachChannel?.(id, target, controller.signal, operation);
     const invocation = invocationHost(
       controller.signal,
       (plugin) => (name, payload, signal) =>
         operation(allocateOp(), name, payload, plugin, undefined, signal),
-      createPrograms && (() => createPrograms(controller.signal, id)),
-      contracts,
+      options.createPrograms && (() => options.createPrograms!(controller.signal, id)),
+      options.contracts,
       channel?.bridge,
       retiring?.signal,
-      options?.reapAfterResult,
     );
     function close() {
       // Stop accepting programs immediately; native ownership keeps reaping
       // them even after the Runner has received the result.
-      const reaping = invocation.close();
-      if (options?.reapAfterResult) void reaping.catch(() => {});
-      else return reaping;
+      void invocation.close().catch(() => {});
     }
     try {
-      if (!(target && options?.contract) && functions[name]?.kind !== kind)
+      if (!(target && options.contract) && functions[name]?.kind !== kind)
         throw new Error(`Unknown worker ${kind} function: ${name}`);
       const value =
-        target && options?.contract
+        target && options.contract
           ? await options.contract(target, args, invocation.host())
           : await invokeFunction(functions, { name, args }, invocation.host());
-      const closing = close();
-      if (closing) await closing;
+      close();
       if (calls.get(id) === call) {
         const sending = transmit({ type: "result", id, value });
         if (sending) await sending;
       }
     } catch (error) {
-      const closing = close();
-      if (closing) await closing;
-      const message =
-        options?.errorMessage(error) ?? (error instanceof Error ? error.message : String(error));
+      close();
+      const message = options.errorMessage(error);
       if (calls.get(id) === call) {
         let stack: string | undefined;
         try {
-          stack = options?.errorStack?.(error);
+          stack = options.errorStack?.(error);
         } catch {
           // Error properties may have user-defined getters.
         }
@@ -255,7 +248,7 @@ export function workerDispatch(
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
       const invocation = invoke(message.id, message.fn, message.args, message.contract, message.routed);
-      if (options?.observeInvocation) return invocation;
+      if (options.observeInvocation) return invocation;
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);
       pending.delete(message.id);
@@ -272,22 +265,20 @@ export function workerDispatch(
       pump();
     } else if (message.type === "retire") {
       const retiring = calls.get(message.id)?.retiring;
-      if (retiring) options?.abort(retiring);
+      if (retiring) options.abort(retiring);
     } else if (message.type === "cancel") {
       const call = calls.get(message.id);
       if (call) {
-        if (options) {
-          options.abort(call.controller);
-          // Abort listeners can throw in LLRT. Always close every scope.
-          void call.close();
-        } else call.controller.abort();
+        options.abort(call.controller);
+        // Abort listeners can throw in LLRT. Always close every scope.
+        void call.close();
       }
       for (const [id, op] of pending)
         if (op.call === message.id) {
           pending.delete(id);
           op.reject(new Error(`Plugin ${kind} function cancelled`));
         }
-      if (options) retire(message.id);
+      retire(message.id);
     } else throw new Error("Invalid worker message");
   };
 }

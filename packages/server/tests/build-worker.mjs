@@ -30,18 +30,28 @@ try {
     "bundle.js",
     "bundle.js.map",
     "api.ts",
-    "worker-entry.js",
-    "worker.js",
-    "worker.js.map",
+    "transactions.js",
+    "transactions.js.map",
   ])
     files[name] = await readFile(join(temporary, "dist", name), "utf8");
-  // Keep both variants so the same old artifact exercises Bun teardown and
-  // QuickJS's refusal of imports that the current builder would not allow.
-  const legacy = { ...files };
-  legacy["worker.js"] += '\nimport { spawn as fixtureSpawn } from "node:child_process";\n';
-  legacy["worker.js"] += 'import { writeFileSync as fixtureWriteFile } from "node:fs";\n';
+  // An installed legacy action bundle must still be inspected by QuickJS.
+  const legacy = {
+    ...files,
+    "bundle.js": files["transactions.js"],
+    "bundle.js.map": files["transactions.js.map"],
+    "worker-entry.js": "",
+    "worker.js": 'import "node:child_process"; export const functions = {};',
+    "worker.js.map": files["bundle.js.map"],
+  };
+  delete legacy["transactions.js"];
+  delete legacy["transactions.js.map"];
   const manifest = JSON.parse(legacy["manifest.json"]);
-  manifest.hashes["worker.js"] = createHash("sha256").update(legacy["worker.js"]).digest("hex");
+  manifest.plugin.runtime = "worker";
+  manifest.entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
+  delete manifest.hashes["transactions.js"];
+  delete manifest.hashes["transactions.js.map"];
+  for (const [name, source] of Object.entries(legacy))
+    if (name !== "manifest.json") manifest.hashes[name] = createHash("sha256").update(source).digest("hex");
   legacy["manifest.json"] = JSON.stringify(manifest);
   console.log(JSON.stringify({ portable: files, legacy }));
 } finally {

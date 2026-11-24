@@ -83,7 +83,7 @@ async function syntheticHosts() {
   await mkdir(plugins);
   const token = randomBytes(32).toString("hex");
   const runner = spawn(binary, ["--desktop", "--plugins", plugins, "--data", join(scratch, "store")], {
-    env: { ...process.env, TOKAMAK_PLUGIN_RUNTIME: "quickjs" },
+    env: { ...process.env },
     stdio: ["pipe", "pipe", "inherit"],
   });
   const exited = new Promise((resolve) => runner.on("exit", resolve));

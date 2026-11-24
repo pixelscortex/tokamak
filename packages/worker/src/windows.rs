@@ -1,6 +1,4 @@
-use super::Lane;
 use std::{
-    collections::BTreeMap,
     ffi::OsStr,
     io,
     marker::PhantomData,
@@ -38,33 +36,7 @@ impl Child {
     }
 }
 
-pub(super) fn spawn(
-    bun: &Path,
-    entry: &Path,
-    code: &Path,
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
-    lane: Lane,
-) -> io::Result<(Child, OwnedHandle)> {
-    let environment = environment_block(env, lane)?;
-    spawn_contained(
-        bun,
-        &[entry.as_os_str(), code.as_os_str()],
-        Some(cwd),
-        Some(environment),
-    )
-}
-
 pub(super) fn spawn_runner(path: &Path, args: &[&OsStr]) -> io::Result<(Child, OwnedHandle)> {
-    spawn_contained(path, args, None, None)
-}
-
-fn spawn_contained(
-    path: &Path,
-    args: &[&OsStr],
-    cwd: Option<&Path>,
-    environment: Option<Vec<u16>>,
-) -> io::Result<(Child, OwnedHandle)> {
     let (input, stdin) = io::pipe()?;
     let (stdout, output) = io::pipe()?;
     let (stderr, errors) = io::pipe()?;
@@ -78,7 +50,7 @@ fn spawn_contained(
         output.as_raw_handle(),
         errors.as_raw_handle(),
     ];
-    let handle = create_process(path, args, cwd, environment, &job, pipes)?;
+    let handle = create_process(path, args, None, None, &job, pipes)?;
     let exit = spawn_blocking(move || {
         // SAFETY: The process handle is owned by this wait until it completes.
         unsafe {
@@ -208,36 +180,6 @@ fn create_process(
         )?;
         drop(OwnedHandle::from_raw_handle(process.hThread));
         Ok(OwnedHandle::from_raw_handle(process.hProcess))
-    }
-}
-
-fn environment_block(env: &BTreeMap<String, String>, lane: Lane) -> io::Result<Vec<u16>> {
-    // Windows expects case-insensitively sorted entries and a double NUL.
-    let sorted: BTreeMap<_, _> = env
-        .iter()
-        .map(|(name, value)| (name.as_str(), value.as_str()))
-        .chain([lane.env()])
-        .map(|(name, value)| (name.to_ascii_uppercase(), (name, value)))
-        .collect();
-    let mut environment = Vec::new();
-    for (name, value) in sorted.values() {
-        if name.is_empty() || name.contains('=') {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid environment key",
-            ));
-        }
-        environment.extend(wide(OsStr::new(&format!("{name}={value}")))?);
-    }
-    environment.resize(environment.len().max(1) + 1, 0);
-    Ok(environment)
-}
-
-fn check(success: bool) -> io::Result<()> {
-    if success {
-        Ok(())
-    } else {
-        Err(io::Error::last_os_error())
     }
 }
 

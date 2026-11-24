@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { symlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
-import { Readable } from "node:stream";
-import { createApi, TokamakClient, WebSocketTransport } from "../../sdk/src/index.ts";
-import { LocalFunctions } from "../../runtime/js/local.ts";
+import { createApi, WebSocketTransport } from "../../sdk/src/index.ts";
 
 const target = join(import.meta.dir, "../target");
 await mkdir(target, { recursive: true });
@@ -16,7 +12,9 @@ await mkdir(installs);
 const owner = "fixture-owner";
 const providers = ["fixture-one", "fixture-two"];
 const builds = new Map();
-let server, socket, transport, local;
+let server, socket, transport, desktop;
+import { connect, startRunner } from "../../../e2e/fake-agent/harness.mjs";
+const cleanup = [];
 
 async function build(id, requirements, files) {
   const root = join(scratch, id);
@@ -126,7 +124,7 @@ async function checkReloads() {
     [copiedDeclaration]: declaration + "\n// stale declaration\n",
   });
   await rename(hidden, ownerDeclaration);
-  await build(providers[1], `depends: ["${owner}"], runtime: "worker"`, provider("two", "beta"));
+  await build(providers[1], `depends: ["${owner}"]`, provider("two", "beta"));
   await rename(builds.get(providers[0]), join(installs, providers[0]));
   const privateDir = join(scratch, "server");
   await mkdir(privateDir);
@@ -170,55 +168,13 @@ async function checkReloads() {
     const response = await fetch(new URL(`/plugins/${id}/reload`, http), { method: "POST", headers });
     assert.equal(response.status, 200, await response.text());
   }
-  let ownerStarts = 0;
-  async function verified(artifact) {
-    const root = join(installs, artifact.id);
-    for (const [name, hash] of [
-      ["local-entry.js", artifact.entryHash],
-      ["local.js", artifact.codeHash],
-    ])
-      assert.equal(
-        createHash("sha256")
-          .update(await readFile(join(root, name)))
-          .digest("hex"),
-        hash,
-      );
-    return root;
-  }
-  local = new LocalFunctions(transport, async (artifact, receive, closed) => {
-    if (artifact.id === owner) ownerStarts++;
-    const root = await verified(artifact);
-    const worker = Bun.spawn([process.execPath, join(root, "local-entry.js"), join(root, "local.js")], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "inherit",
-      cwd: scratch,
-      env: { ...process.env, TOKAMAK_WORKER_LANE: "local" },
-    });
-    void (async () => {
-      try {
-        for await (const line of createInterface({ input: Readable.fromWeb(worker.stdout) }))
-          receive(JSON.parse(line));
-        closed("Local worker exited");
-      } catch (error) {
-        closed(String(error));
-      }
-    })();
-    return {
-      async load(artifact) {
-        return join(await verified(artifact), "local.js");
-      },
-      async send(value) {
-        worker.stdin.write(JSON.stringify(value) + "\n");
-      },
-      async close() {
-        worker.kill();
-        worker.stdin.end();
-        await worker.exited;
-      },
-    };
+  desktop = await startRunner({
+    binary: process.argv[3],
+    plugins: installs,
+    directory: join(scratch, "desktop"),
+    env: { TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST ?? process.env.TOKAMAK_PLUGIN_HOST },
   });
-  const client = new TokamakClient(transport, local);
+  const client = await connect(url, { token, launch: desktop.launch, cleanup });
   const api = createApi(owner);
   const first = createApi(providers[0]);
   assert.equal(await client.query(first.provider.status, {}), "alpha");
@@ -260,9 +216,8 @@ async function checkReloads() {
   assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
     ids: ["one"],
     result: null,
-    calls: 1,
+    calls: 3, // Changing the provider leaves the owner process running.
   });
-  assert.equal(ownerStarts, 2, "retire the worker that loaded the removed provider");
   await rename(builds.get("fixture-stale"), join(installs, "fixture-stale"));
   const rejected = await fetch(new URL("/plugins/fixture-stale/reload", http), { method: "POST", headers });
   assert.notEqual(rejected.status, 200);
@@ -295,7 +250,8 @@ try {
   if (process.argv[2] === "--prepare-auth") await prepareAuth(process.argv[3]);
   else await checkReloads();
 } finally {
-  await local?.close();
+  for (const close of cleanup.reverse()) await close();
+  await desktop?.stop();
   transport?.close();
   socket?.close();
   if (server) {

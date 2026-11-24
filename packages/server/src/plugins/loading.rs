@@ -6,14 +6,9 @@ use crate::{
     service::{FunctionKind, InspectedBundle},
 };
 
-#[cfg(feature = "local-runtime")]
-use crate::host::worker::Supervisor;
-
 const ACTION_INSPECTIONS: usize = 8;
 
 struct Prepared {
-    #[cfg(feature = "local-runtime")]
-    worker: Option<Arc<Supervisor>>,
     server: Option<PreparedServer>,
 }
 
@@ -48,16 +43,14 @@ impl Loaded {
         catalog: Catalog,
         pool: &engine::Pool,
         policy: StartupPolicy,
-        quickjs: bool,
     ) -> Result<Self, Error> {
-        Self::load_with_policy(catalog, pool, None, policy, quickjs, None).await
+        Self::load_with_policy(catalog, pool, None, policy, None).await
     }
 
     pub async fn load_reusing(
         catalog: Catalog,
         pool: &engine::Pool,
         previous: Option<&Self>,
-        quickjs: bool,
         reloaded: &str,
     ) -> Result<Self, Error> {
         Self::load_with_policy(
@@ -65,7 +58,6 @@ impl Loaded {
             pool,
             previous,
             StartupPolicy::Strict,
-            quickjs,
             Some(reloaded),
         )
         .await
@@ -76,7 +68,6 @@ impl Loaded {
         pool: &engine::Pool,
         previous: Option<&Self>,
         policy: StartupPolicy,
-        quickjs: bool,
         reloaded: Option<&str>,
     ) -> Result<Self, Error> {
         let mut loaded = Self {
@@ -86,12 +77,10 @@ impl Loaded {
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
             contracts: BTreeMap::new(),
-            #[cfg(feature = "local-runtime")]
-            workers: BTreeMap::new(),
             action_sources: BTreeMap::new(),
             skipped: BTreeMap::new(),
         };
-        if quickjs && reloaded.is_none() {
+        if reloaded.is_none() {
             let mut checked = Self::check_startup_actions(&loaded.catalog, pool).await?;
             for (index, id) in loaded.catalog.order.clone().into_iter().enumerate() {
                 let prepared = checked.remove(&index).expect("plugin preparation result");
@@ -108,7 +97,6 @@ impl Loaded {
                     &id,
                     pool,
                     previous,
-                    quickjs,
                     reloaded == Some(id.as_str()),
                 )
                 .await;
@@ -159,7 +147,7 @@ impl Loaded {
                 ordered.insert(index, prepared);
             }
 
-            match Self::prepare_plugin(catalog, id, pool, None, true, false).await {
+            match Self::prepare_plugin(catalog, id, pool, None, false).await {
                 Ok(prepared) => {
                     checks.spawn(async move { (index, prepared.check_actions().await) });
                 }
@@ -180,16 +168,9 @@ impl Loaded {
         id: &str,
         pool: &engine::Pool,
         previous: Option<&Self>,
-        quickjs: bool,
         reloaded: bool,
     ) -> Result<Prepared, Error> {
         let artifact = &catalog.plugins[id];
-        #[cfg(feature = "local-runtime")]
-        let worker = if quickjs {
-            None
-        } else {
-            prepare_worker(catalog, id, artifact)?
-        };
         let unchanged = previous.filter(|old| {
             old.catalog.plugins.get(id).is_some_and(|old| {
                 old.manifest.hashes == artifact.manifest.hashes
@@ -197,25 +178,8 @@ impl Loaded {
                         == serde_json::to_value(&artifact.manifest).ok()
             })
         });
-        let server_bundle = if quickjs {
-            artifact.transactions().await?
-        } else {
-            artifact.bundle.clone()
-        };
-        let server = if let Some(bundle) = server_bundle {
-            let cached = if quickjs {
-                unchanged.and_then(|old| old.inspected.get(id))
-            } else {
-                previous
-                    .filter(|old| {
-                        old.catalog
-                            .plugins
-                            .get(id)
-                            .and_then(|p| p.bundle.as_ref())
-                            .is_some_and(|old| Arc::ptr_eq(old, &bundle))
-                    })
-                    .and_then(|old| old.inspected.get(id))
-            };
+        let server = if let Some(bundle) = artifact.transactions().await? {
+            let cached = unchanged.and_then(|old| old.inspected.get(id));
             let inspected = match cached {
                 Some(value) => value.clone(),
                 None => crate::service::inspect(pool, bundle.clone()).await?,
@@ -223,11 +187,10 @@ impl Loaded {
             validate_exports(id, &artifact.manifest, &inspected)?;
             validate_maintenance(artifact, Some(&inspected.kinds))?;
             let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
-            let (source, inspect_source) = if quickjs
-                && inspected
-                    .kinds
-                    .values()
-                    .any(|kind| *kind == FunctionKind::Action)
+            let (source, inspect_source) = if inspected
+                .kinds
+                .values()
+                .any(|kind| *kind == FunctionKind::Action)
             {
                 let prior = unchanged
                     .filter(|_| !reloaded)
@@ -250,11 +213,7 @@ impl Loaded {
             validate_maintenance(artifact, None)?;
             None
         };
-        Ok(Prepared {
-            #[cfg(feature = "local-runtime")]
-            worker,
-            server,
-        })
+        Ok(Prepared { server })
     }
 
     fn apply_plugin(
@@ -269,11 +228,7 @@ impl Loaded {
             return Ok(());
         }
 
-        let Prepared {
-            #[cfg(feature = "local-runtime")]
-            worker,
-            server,
-        } = match prepared {
+        let Prepared { server } = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
                 if policy == StartupPolicy::Strict
@@ -313,10 +268,6 @@ impl Loaded {
             }
             self.inspected.insert(id.clone(), inspected);
         }
-        #[cfg(feature = "local-runtime")]
-        if let Some(worker) = worker {
-            self.workers.insert(id, worker);
-        }
         Ok(())
     }
 
@@ -343,8 +294,6 @@ impl Loaded {
             .retain(|_, target| !skipped.contains_key(&target.owner));
         self.action_sources
             .retain(|id, _| !skipped.contains_key(id));
-        #[cfg(feature = "local-runtime")]
-        self.workers.retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
         Ok(())
     }
@@ -538,26 +487,6 @@ fn client_descriptors(
             Some(function)
         })
         .collect()
-}
-
-#[cfg(feature = "local-runtime")]
-fn prepare_worker(
-    catalog: &Catalog,
-    id: &str,
-    artifact: &Artifact,
-) -> Result<Option<Arc<crate::host::worker::Supervisor>>, Error> {
-    let Some(entry) = &artifact.manifest.entries.worker else {
-        return Ok(None);
-    };
-    crate::host::worker::Supervisor::new(
-        id.to_owned(),
-        artifact.assets[&entry.entry].clone(),
-        artifact.assets[&entry.code].clone(),
-        catalog.directory.join("plugin-data").join(id),
-        &catalog.environment,
-        &artifact.manifest.plugin.permissions,
-    )
-    .map(Some)
 }
 
 fn validate_exports(

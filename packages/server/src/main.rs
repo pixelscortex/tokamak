@@ -154,17 +154,13 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             println!("{}", build_id()?);
             return Ok(None);
         }
-        if flag == "--plugin-runtime" {
-            println!("{}", server::action_runtime()?);
-            return Ok(None);
-        }
         if flag == "--local-path" {
             println!("{}", local_directory()?.display());
             return Ok(None);
         }
         if flag == "--help" {
             println!(
-                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nDiagnostics: tokamak-server --plugin-runtime\nMembers: tokamak-server members | revoke <id> --server <https://address> [--token <owner key>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak-server members | revoke <id> --server <https://address> [--token <owner key>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }
@@ -213,9 +209,6 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
 
 fn read_standalone_bundle(path: &Path) -> Result<Bundle, Box<dyn std::error::Error>> {
     let source = std::fs::read_to_string(path)?;
-    if server::action_runtime()? != "quickjs" {
-        return Ok(Bundle::new(source, None)?);
-    }
     let mut map_path = path.as_os_str().to_owned();
     map_path.push(".map");
     let map = std::fs::read_to_string(map_path).ok();

@@ -1,12 +1,12 @@
 //! The window answers host operations using its own workspace connection.
-//! Bun keeps the original socket-owned worker; QuickJS hosts belong to the Runner.
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod quickjs;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::artifact::client_env;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::artifact::quickjs_bundle;
-use crate::artifact::{artifact, artifact_folder, client_env, snapshot};
 use axum::{
     extract::{
         State, WebSocketUpgrade,
@@ -16,40 +16,30 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{MethodRouter, get},
 };
-use futures_util::StreamExt;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
-use tempfile::TempPath;
+use std::{path::PathBuf, sync::Arc, time::Duration};
+use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
+use tokio::sync::Semaphore;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-use tokamak_worker::LocalRuntime;
-use tokamak_worker::{Process, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    sync::{Semaphore, mpsc},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    sync::mpsc,
 };
-use tokio_util::{
-    codec::{FramedRead, LinesCodec},
-    sync::CancellationToken,
-    task::AbortOnDropHandle,
-};
+use tokio_util::sync::CancellationToken;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub(super) struct Local {
-    plugins: Arc<PathBuf>,
-    app_data: Arc<PathBuf>,
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pool: quickjs::Pool,
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Artifact {
@@ -58,6 +48,7 @@ pub(super) struct Artifact {
     pub(super) code_hash: String,
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Request {
@@ -69,10 +60,8 @@ enum Request {
     Write {
         message: Value,
     },
-    Load {
-        id: u32,
-        artifact: Artifact,
-    },
+    // Recognize the old frame so the connection can reject it explicitly.
+    Load {},
     Route {
         #[serde(default)]
         id: Value,
@@ -89,13 +78,11 @@ enum Request {
 impl Local {
     pub(super) fn new(plugins: PathBuf, app_data: PathBuf) -> Self {
         let stopping = CancellationToken::new();
-        let plugins = Arc::new(plugins);
-        let app_data = Arc::new(app_data);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let _ = (plugins, app_data);
         Self {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            pool: quickjs::Pool::new(plugins.clone(), app_data.clone(), stopping.clone()),
-            plugins,
-            app_data,
+            pool: quickjs::Pool::new(Arc::new(plugins), Arc::new(app_data), stopping.clone()),
             stopping,
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
         }
@@ -119,10 +106,11 @@ impl Local {
         workspace: &str,
     ) -> Result<(), server::Error> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if LocalRuntime::selected() == Ok(LocalRuntime::QuickJs) {
+        {
             self.pool
                 .observe(server, server.connect().await?, workspace.into());
         }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = (server, workspace);
         Ok(())
     }
@@ -154,6 +142,7 @@ async fn upgrade(State(local): State<Local>, ws: WebSocketUpgrade) -> Response {
         .into_response()
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String> {
     let started = async {
         let Some(Request::Start {
@@ -169,55 +158,12 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
     };
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    if LocalRuntime::selected()? == LocalRuntime::QuickJs {
-        return quickjs::connection(socket, &local.pool, requested, workspace).await;
-    }
-    drop(workspace);
-    let Artifact {
-        id: plugin,
-        entry_hash,
-        code_hash,
-    } = requested;
-    let plugins = local.plugins.clone();
-    let verified = tokio::task::spawn_blocking(move || {
-        let files = artifact(&plugins, &plugin, &entry_hash, &code_hash)?;
-        Ok::<_, String>((plugin, files))
-    });
-    let (plugin, (entry, code)) = tokio::select! {
-        _ = local.stopping.cancelled() => return Ok(()),
-        result = tokio::time::timeout(TIMEOUT, verified) => {
-            result.map_err(|_| "Local worker startup stalled")?.map_err(|e| e.to_string())??
-        }
-    };
-    let paths = tokamak_worker::search_paths();
-    let mut env = client_env(|name| std::env::var(name).ok());
-    env.insert(
-        "TOKAMAK_APP_DATA_DIR".into(),
-        local.app_data.to_string_lossy().into_owned(),
-    );
-    if let Ok(path) = std::env::join_paths(&paths) {
-        env.insert("PATH".into(), path.to_string_lossy().into_owned());
-    }
-    let cwd = local.plugins.parent().unwrap_or(&local.plugins);
-    let (mut process, _) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
-    let (input, output, mut stderr) = process.pipes()?;
-    let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
-        let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
-    }));
-    let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
-    let relay = async {
-        send(socket, json!({ "type": "started" })).await?;
-        relay(socket, output, writes, &local.plugins, &plugin).await
-    };
-    let result = tokio::select! {
-        _ = local.stopping.cancelled() => Ok(()),
-        reason = process.exited() => Err(reason),
-        error = write(input, outgoing) => Err(error),
-        result = relay => result,
-    };
-    process.stop().await;
-    result
+    quickjs::connection(socket, &local.pool, requested, workspace).await
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+async fn connection(_: &mut WebSocket, _: &Local) -> Result<(), String> {
+    tokamak_worker::require_plugin_platform(std::env::consts::OS).map_err(str::to_owned)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -244,81 +190,7 @@ async fn stderr_tail(mut input: impl AsyncRead + Unpin) -> String {
     text[text.ceil_char_boundary(text.len().saturating_sub(STDERR_BYTES))..].to_owned()
 }
 
-async fn relay(
-    socket: &mut WebSocket,
-    output: impl AsyncRead + Unpin,
-    writes: mpsc::Sender<Vec<u8>>,
-    plugins: &Path,
-    plugin: &str,
-) -> Result<(), String> {
-    let mut output = FramedRead::new(
-        BufReader::new(output),
-        LinesCodec::new_with_max_length(WORKER_FRAME_BYTES - 1),
-    );
-    let mut providers = Vec::new();
-    loop {
-        tokio::select! {
-            request = receive(socket) => match request? {
-                Some(Request::Write { message }) => {
-                    let mut line = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
-                    if line.len() >= WORKER_FRAME_BYTES {
-                        return Err("Local worker message exceeds 1 MiB".into());
-                    }
-                    line.push(b'\n');
-                    writes.try_send(line).map_err(|_| "Local worker input queue full or closed")?;
-                }
-                Some(Request::Load { id, artifact }) => {
-                    let result = provider(plugins.to_owned(), artifact).await.and_then(|code| {
-                        let path = code.to_str().ok_or("Local provider path is not UTF-8")?.to_owned();
-                        providers.push(code);
-                        Ok(path)
-                    });
-                    let response = match result {
-                        Ok(path) => json!({ "type": "loaded", "id": id, "path": path }),
-                        Err(error) => json!({ "type": "loaded", "id": id, "error": error }),
-                    };
-                    send(socket, response).await?;
-                }
-                Some(Request::Close) | None => return Ok(()),
-                Some(Request::Start { .. }) => return Err("Local worker already started".into()),
-                Some(Request::Route { id, artifact }) => {
-                    drop((id, artifact));
-                    return Err("Bun does not route local contract calls".into());
-                }
-                Some(Request::Retire { artifact }) => {
-                    drop(artifact);
-                    return Err("Bun local workers belong to their socket".into());
-                }
-            },
-            line = output.next() => {
-                let line = line.ok_or("Local worker output closed")?.map_err(|e| e.to_string())?;
-                let message: Value = serde_json::from_str(&line).map_err(|_| "Invalid local worker JSON")?;
-                if message["type"] == "log" {
-                    let level = message["level"].as_str().unwrap_or("info");
-                    let text = message["text"].as_str().unwrap_or("");
-                    tokamak_worker::log(format!("Plugin {plugin} [{level}]: {text}"));
-                } else {
-                    send(socket, json!({ "type": "message", "message": message })).await?;
-                }
-            },
-        }
-    }
-}
-
-async fn provider(plugins: PathBuf, artifact: Artifact) -> Result<TempPath, String> {
-    tokio::task::spawn_blocking(move || {
-        let (folder, _) = artifact_folder(
-            &plugins,
-            &artifact.id,
-            &artifact.entry_hash,
-            &artifact.code_hash,
-        )?;
-        snapshot(&folder, "local.js", &artifact.code_hash)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn receive(socket: &mut WebSocket) -> Result<Option<Request>, String> {
     loop {
         match socket.recv().await {
@@ -345,6 +217,7 @@ async fn send(socket: &mut WebSocket, message: Value) -> Result<(), String> {
     .map_err(|error| error.to_string())
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn write(
     mut input: impl AsyncWrite + Unpin,
     mut outgoing: mpsc::Receiver<Vec<u8>>,

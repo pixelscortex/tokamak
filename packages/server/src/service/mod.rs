@@ -1,5 +1,5 @@
 //! Bounded, transport-independent feature service. One coordinator linearizes
-//! transactions and subscription refreshes; actions use separate workers and
+//! transactions and subscription refreshes; actions use the action process and
 //! rejoin that coordinator only for nested query/mutation calls.
 //! A session has ONE ordered output stream; transports must preserve its order.
 
@@ -9,7 +9,7 @@ use crate::{
     data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
 };
-use engine::{Bundle, OpRegistry, Pool, PoolConfig};
+use engine::{Bundle, OpRegistry, Pool};
 use serde_json::Value as Json;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -262,10 +262,8 @@ struct Coordinator {
     plugins: Option<Arc<crate::plugins::Loaded>>,
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
-    action_pool: Option<Arc<Pool>>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
-    sign_in_pool: Option<Pool>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
     commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,

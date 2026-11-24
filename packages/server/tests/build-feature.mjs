@@ -25,7 +25,7 @@ export async function buildFeature({
         extends: fileURLToPath(new URL("../../../tsconfig.json", import.meta.url)),
       }),
     );
-    await bundleFeature(feature, undefined, false, true);
+    await bundleFeature(feature, undefined, true);
     return feature;
   } catch (error) {
     await rm(feature, { recursive: true, force: true });

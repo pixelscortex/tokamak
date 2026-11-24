@@ -50,33 +50,26 @@ export async function initialize(
     functions: FunctionRegistry;
     contractProviders?: Record<string, Provider<"local">>;
   };
-  const dispatch = workerDispatch(
-    "local",
-    root.functions,
-    emit,
-    nextOp,
-    (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
-    workerContracts(root),
-    {
-      contract: dataContracts(root),
-      attachChannel: channels.attach,
-      sendWaiting: emitWaiting,
-      reapAfterResult: true,
-      abort(controller) {
+  const dispatch = workerDispatch("local", root.functions, emit, nextOp, {
+    createPrograms: (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
+    contracts: workerContracts(),
+    contract: dataContracts(root),
+    attachChannel: channels.attach,
+    sendWaiting: emitWaiting,
+    abort(controller) {
+      try {
+        controller.abort();
+      } catch (error) {
+        // LLRT can propagate a listener exception out of abort().
         try {
-          controller.abort();
-        } catch (error) {
-          // LLRT can propagate a listener exception out of abort().
-          try {
-            logger.error(error);
-          } catch {
-            // Logging must not prevent the dispatcher from rejecting pending operations.
-          }
+          logger.error(error);
+        } catch {
+          // Logging must not prevent the dispatcher from rejecting pending operations.
         }
-      },
-      errorMessage,
+      }
     },
-  );
+    errorMessage,
+  });
   return (frame) => {
     const message = JSON.parse(frame) as WorkerMessage | PeerMessage;
     if (message.type === "peer") void channels.receive(message).catch(() => {});

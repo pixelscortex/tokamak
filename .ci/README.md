@@ -10,8 +10,7 @@ three fast jobs on every PR, and `.ci/check.sh` holds their commands:
   They share only Cargo's intermediate cache. CI checks that each forbidden
   symbol pattern finds a match in the Runner build and none in the cloud
   build, then runs the [test matrix](../packages/server/tests/README.md).
-  The turn replays use fake agents: Bun writes the references, and QuickJS
-  compares the stored turns against them.
+  The turn replays run fake agents against the Runner and check the stored turns.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:
@@ -24,8 +23,8 @@ TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
 request is marked ready for review. `dev` is the integration branch: feature pull requests target
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
-workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build,
-smoke-check the Runner's `--plugin-runtime` and upload the bundle (`desktop-mac-<arch>`,
+workflow), because desktop runners cost more (macOS 20×, Windows 2× Linux). They build
+and upload the bundle (`desktop-mac-<arch>`,
 `desktop-windows-x64`); they run no test suites. Download caches cover pinned
 tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 

@@ -1,14 +1,11 @@
-import type { LocalContext } from "@tokamak/sdk";
 import {
   AGENT_TURN_PROTOCOL,
-  ASK_FOR_TURN,
   checkedHelper,
   checkedTasks,
   checkedText,
   checkedTool,
   checkedUsage,
   openLocalChannel,
-  permissionAnswer,
 } from "@tokamak/sdk/agent-turn";
 import type {
   AgentTurnAsk,
@@ -18,9 +15,8 @@ import type {
   TurnAddress,
   TurnAnswer,
   TurnResult,
-  TurnRun,
 } from "@tokamak/sdk/agent-turn";
-import { agent, type Agent, type Run } from "../contracts";
+import type { Agent, Run } from "../contracts";
 import type { turnControl } from "./controls";
 
 type Questions = { ask(question: Question): Promise<TurnAnswer>; cancel(): Promise<void>; expire(): void };
@@ -33,34 +29,6 @@ const FORCE_DRAIN_MS = 750;
 
 function channelEnded(error: unknown): boolean {
   return error instanceof Error && error.message === "Local contract channel ended";
-}
-
-export function runAgent(
-  ctx: LocalContext,
-  provider: Agent,
-  request: AgentTurnStart,
-  reports: Reports,
-  questions: Questions,
-  control: Control,
-) {
-  const linked = startAgent(provider, request, reports, questions, control);
-  if (linked) return linked;
-
-  const { threadId: _thread, turnId: _turn, ...input } = request;
-  return ctx.withPrograms((kill, scoped) =>
-    control.run(() => {
-      const run: TurnRun = {
-        ...input,
-        ...reports,
-        [ASK_FOR_TURN]: questions.ask,
-        ask: async (question) => permissionAnswer(await questions.ask(question)),
-        onSteer: control.onSteer,
-        onStop: control.onStop,
-      };
-      // Bun gives the live Run to the provider in ai's worker.
-      return agent.get(provider.id, scoped).start(run);
-    }, kill),
-  );
 }
 
 /** A linked start owns every message of one turn, even across an agent reload. */
@@ -89,7 +57,7 @@ export function startAgent(
           applyReports((value as unknown as AgentTurnReport).events, reports, () =>
             control.onSteer(async (text) => {
               await channel!.send("steer", { ...address, text });
-            }, true),
+            }),
           );
           return null;
         default:
@@ -97,7 +65,7 @@ export function startAgent(
       }
     },
   );
-  if (!channel) return undefined;
+  if (!channel) throw new Error("The agent does not provide a turn channel");
 
   control.onStop(async () => {
     await channel.send("stop", { ...address });
@@ -155,7 +123,7 @@ export function startAgent(
 function validateReports(events: AgentTurnReport["events"]) {
   if (!Array.isArray(events)) throw new TypeError("Invalid agent turn report batch");
   // Validate the whole batch before a report can write to the thread or
-  // register a control. The writer still checks its own inputs on both runtimes.
+  // register a control. The writer still checks its own inputs.
   for (const event of events) {
     switch (event?.kind) {
       case "text":

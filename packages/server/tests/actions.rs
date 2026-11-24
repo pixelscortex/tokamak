@@ -333,11 +333,6 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
-    if server::action_runtime().unwrap() != "quickjs" {
-        eprintln!("Skipping action process reload isolation: Bun has no shared action process");
-        return;
-    }
-
     let installation = Installation::new();
     let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
     let server = Server::load_plugins(
@@ -624,10 +619,6 @@ fn configure_action_process_resolver(
     library: &std::path::Path,
 ) {
     use std::os::unix::fs::PermissionsExt;
-
-    if server::action_runtime().unwrap() != "quickjs" {
-        return;
-    }
 
     // The launcher deliberately clears its environment. Use an executable
     // owned by this test to interpose DNS in the process making the requests.

@@ -17,10 +17,6 @@ use std::{
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
-fn quickjs() -> bool {
-    server::action_runtime().unwrap() == "quickjs"
-}
-
 fn artifacts(legacy: bool) -> &'static BTreeMap<String, String> {
     static FILES: OnceLock<BTreeMap<String, BTreeMap<String, String>>> = OnceLock::new();
     &FILES.get_or_init(|| {
@@ -54,22 +50,13 @@ struct Fixture {
     server: Server,
     session: server::Session,
     next: u64,
-    _exclusive: Option<tokio::sync::MutexGuard<'static, ()>>,
+    _exclusive: tokio::sync::MutexGuard<'static, ()>,
 }
 impl Fixture {
     async fn new() -> Self {
-        Self::with_legacy_artifact(!quickjs()).await
-    }
-
-    async fn with_legacy_artifact(legacy: bool) -> Self {
         static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-        let exclusive = if quickjs() {
-            Some(SERIAL.lock().await)
-        } else {
-            None
-        };
-
-        let directory = install_fixture(legacy);
+        let exclusive = SERIAL.lock().await;
+        let directory = install_fixture(false);
         let server = load_fixture(&directory).await.unwrap();
         let session = server.connect().await.unwrap();
         Self {
@@ -153,24 +140,10 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     assert_eq!(fixture.result().await.1.unwrap(), json!("QuickJS"));
     assert_eq!(first["count"], 1);
     assert_eq!(first["secret"], Value::Null);
-    if quickjs() {
-        assert_eq!(first["pid"], Value::Null);
-        assert_eq!(first["cwd"], Value::Null);
-    } else {
-        assert!(
-            first["cwd"]
-                .as_str()
-                .unwrap()
-                .ends_with("plugin-data/worker-test")
-        );
-    }
+    assert_eq!(first["pid"], Value::Null);
+    assert_eq!(first["cwd"], Value::Null);
     let second = fixture.call("state", json!({})).await.unwrap();
-    let expected_count = if quickjs() {
-        1
-    } else {
-        2
-    };
-    assert_eq!(second["count"], expected_count);
+    assert_eq!(second["count"], 1);
     assert_eq!(first["pid"], second["pid"]);
     assert_eq!(
         fixture
@@ -183,14 +156,9 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
     let fast = fixture.start("echo", json!({"value":"fast","delay":0}));
     assert_eq!(fixture.result().await, (fast, Ok(json!("fast"))));
     assert_eq!(fixture.result().await, (slow, Ok(json!("slow"))));
-    if !quickjs() {
-        check_bun_stale_invocation(&mut fixture).await;
-    }
     let env_error = fixture.call("envDenied", json!({})).await.unwrap_err();
     assert!(env_error.contains("env:WORKER_UNGRANTED"), "{env_error}");
-    if quickjs() {
-        check_action_process_errors(&mut fixture).await;
-    }
+    check_action_process_errors(&mut fixture).await;
     assert_eq!(
         fixture.call("dbDenied", json!({})).await.unwrap(),
         Value::Null
@@ -201,32 +169,7 @@ async fn worker_values_ops_concurrency_state_and_crash_recovery() {
             .await
             .is_err()
     );
-    if quickjs() {
-        check_action_process_recovery(fixture).await;
-        return;
-    }
-    assert!(
-        fixture
-            .call("crash", json!({}))
-            .await
-            .unwrap_err()
-            .contains("worker exited")
-    );
-    assert_eq!(fixture.call("state", json!({})).await.unwrap()["count"], 1);
-    fixture.close().await;
-}
-
-async fn check_bun_stale_invocation(fixture: &mut Fixture) {
-    fixture.call("remember", json!({})).await.unwrap();
-    assert!(
-        fixture
-            .call("stale", json!({}))
-            .await
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .contains("stale invocation")
-    );
+    check_action_process_recovery(fixture).await;
 }
 
 async fn check_action_process_errors(fixture: &mut Fixture) {
@@ -339,53 +282,28 @@ fn alive(pid: u64) -> bool {
 }
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn disable_kills_worker_and_children_and_fails_stuck_calls() {
+async fn disable_fails_stuck_calls_and_keeps_the_action_process_alive() {
     let mut fixture = Fixture::new().await;
-    if quickjs() {
-        fixture.call("state", json!({})).await.unwrap();
-        let pid = action_process_pid(std::process::id());
-        fixture.start("stuck", json!({}));
-        std::fs::remove_dir_all(fixture.directory.path().join("plugins/worker-test")).unwrap();
-        fixture
-            .server
-            .reload_plugin("worker-test".into())
-            .await
-            .unwrap();
-        assert!(fixture.result().await.1.unwrap_err().contains("cancelled"));
-        assert!(alive(pid));
-        fixture.close().await;
-        assert!(!alive(pid));
-        return;
-    }
-    let pids = fixture.call("child", json!({})).await.unwrap();
-    assert!(alive(pids["child"].as_u64().unwrap()));
-    fixture.start("cpu", json!({}));
+    fixture.call("state", json!({})).await.unwrap();
+    let pid = action_process_pid(std::process::id());
+    fixture.start("stuck", json!({}));
     std::fs::remove_dir_all(fixture.directory.path().join("plugins/worker-test")).unwrap();
     fixture
         .server
         .reload_plugin("worker-test".into())
         .await
         .unwrap();
-    assert!(fixture.result().await.1.unwrap_err().contains("worker"));
-    for _ in 0..100 {
-        if !alive(pids["worker"].as_u64().unwrap()) && !alive(pids["child"].as_u64().unwrap()) {
-            fixture.close().await;
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("worker or child survived disable: {pids}");
+    assert!(fixture.result().await.1.unwrap_err().contains("cancelled"));
+    assert!(alive(pid));
+    fixture.close().await;
+    assert!(!alive(pid));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn oversized_messages_fail_only_their_invocation() {
     let mut fixture = Fixture::new().await;
     let first = fixture.call("state", json!({})).await.unwrap();
-    let waiting = if quickjs() {
-        fixture.start("echo", json!({"value":"waiting","delay":50}))
-    } else {
-        fixture.start("waitForLarge", json!({}))
-    };
+    let waiting = fixture.start("echo", json!({"value":"waiting","delay":50}));
     let large = fixture.start("large", json!({}));
     let results = BTreeMap::from([fixture.result().await, fixture.result().await]);
     let error = results[&large].as_ref().unwrap_err();
@@ -403,12 +321,7 @@ async fn oversized_messages_fail_only_their_invocation() {
     );
     let second = fixture.call("state", json!({})).await.unwrap();
     assert_eq!(first["pid"], second["pid"]);
-    let expected_count = if quickjs() {
-        1
-    } else {
-        2
-    };
-    assert_eq!(second["count"], expected_count);
+    assert_eq!(second["count"], 1);
     fixture.close().await;
 }
 
@@ -426,7 +339,7 @@ fn worker_lifecycle(scenario: &str) {
     let directory = tempfile::tempdir().unwrap();
     let plugins = directory.path().join("plugins/worker-test");
     std::fs::create_dir_all(&plugins).unwrap();
-    for (name, text) in artifacts(!quickjs()) {
+    for (name, text) in artifacts(false) {
         std::fs::write(plugins.join(name), text).unwrap();
     }
     let mut server = ServerGuard(
@@ -459,11 +372,6 @@ fn worker_lifecycle(scenario: &str) {
         .arg(url)
         .arg(server.0.id().to_string())
         .arg(scenario)
-        .arg(if quickjs() {
-            "quickjs"
-        } else {
-            "bun"
-        })
         .current_dir(root())
         .output()
         .unwrap();
@@ -478,7 +386,7 @@ fn worker_lifecycle(scenario: &str) {
             if scenario == "logs" {
                 assert!(status.success(), "{status}");
             }
-            if quickjs() && scenario == "logs" {
+            if scenario == "logs" {
                 assert_action_log(server.0.stderr.take().unwrap());
             }
             return;
@@ -505,18 +413,12 @@ fn worker_logs_cannot_block_invocation_or_shutdown() {
 }
 #[cfg(unix)]
 #[test]
-fn busy_worker_and_children_die_with_server() {
+fn busy_action_process_dies_with_server() {
     worker_lifecycle("parent-death");
 }
 
 #[tokio::test]
 async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
-    if !quickjs() {
-        eprintln!(
-            "Skipping old worker import rejection: the Bun fallback still supports these imports"
-        );
-        return;
-    }
     let directory = install_fixture(true);
     let error = load_fixture(&directory).await.err().unwrap().to_string();
     assert!(
@@ -527,16 +429,9 @@ async fn quickjs_refuses_node_imports_in_old_worker_artifacts() {
 
 #[tokio::test]
 async fn quickjs_rejects_a_reload_if_the_action_module_throws_during_evaluation() {
-    if !quickjs() {
-        eprintln!(
-            "Skipping action inspection at reload: the Bun worker evaluates the module on demand"
-        );
-        return;
-    }
-
     let mut fixture = Fixture::new().await;
     let path = fixture.directory.path().join("plugins/worker-test");
-    let code = path.join("worker.js");
+    let code = path.join("bundle.js");
     let mut source = std::fs::read_to_string(&code).unwrap();
     source.push_str("\nthrow new Error('broken action module on reload');");
     std::fs::write(code, &source).unwrap();
@@ -544,7 +439,7 @@ async fn quickjs_rejects_a_reload_if_the_action_module_throws_during_evaluation(
     let manifest_path = path.join("manifest.json");
     let mut manifest: Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-    manifest["hashes"]["worker.js"] = json!(format!("{:x}", Sha256::digest(source.as_bytes())));
+    manifest["hashes"]["bundle.js"] = json!(format!("{:x}", Sha256::digest(source.as_bytes())));
     std::fs::write(manifest_path, manifest.to_string()).unwrap();
 
     let error = fixture

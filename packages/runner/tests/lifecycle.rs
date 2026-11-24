@@ -161,7 +161,6 @@ fn quickjs_runner(directory: &Path, plugins: &Path) -> Command {
         .arg("--token-file")
         .arg(secret)
         .args(["--listen", "127.0.0.1:0"])
-        .env("TOKAMAK_PLUGIN_RUNTIME", "quickjs")
         .stdout(Stdio::piped())
         .kill_on_drop(true);
     command
@@ -601,71 +600,66 @@ async fn a_runner_started_by_hand_leaves_the_server_that_holds_the_store_running
     drop(lock);
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[tokio::test]
 async fn standalone_runner_serves_a_workspace_and_runs_a_local_function() {
     use tokio::io::AsyncWriteExt;
 
-    for runtime in ["quickjs", "bun"] {
-        if runtime == "quickjs" && !cfg!(any(target_os = "macos", target_os = "linux")) {
-            continue;
-        }
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("local");
-        std::fs::write(&path, "read on the Runner's machine").unwrap();
-        let secret = dir.path().join("secret");
-        let mut file = tokio::fs::OpenOptions::new();
-        file.create_new(true).write(true);
-        #[cfg(unix)]
-        file.mode(0o600);
-        file.open(&secret)
-            .await
-            .unwrap()
-            .write_all(SECRET.as_bytes())
-            .await
-            .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("local");
+    std::fs::write(&path, "read on the Runner's machine").unwrap();
+    let secret = dir.path().join("secret");
+    let mut file = tokio::fs::OpenOptions::new();
+    file.create_new(true).write(true);
+    #[cfg(unix)]
+    file.mode(0o600);
+    file.open(&secret)
+        .await
+        .unwrap()
+        .write_all(SECRET.as_bytes())
+        .await
+        .unwrap();
 
-        let mut child = Command::new(BINARY)
-            .args(["--plugins"])
-            .arg(fixture())
-            .args(["--data"])
-            .arg(dir.path().join("store"))
-            .args(["--token-file"])
-            .arg(secret)
-            .args(["--listen", "127.0.0.1:0"])
-            .env("TOKAMAK_PLUGIN_RUNTIME", runtime)
-            .stdout(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let mut output = tokio::io::BufReader::new(child.stdout.take().unwrap());
-        let mut line = String::new();
-        timeout(DEADLINE, output.read_line(&mut line))
-            .await
-            .unwrap()
-            .unwrap();
-        let address = line.trim().strip_prefix("Tokamak listening on ").unwrap();
-        let mut server = socket(address, Some(SECRET)).await.unwrap();
-        action(&mut server).await;
-        let mut worker = open_worker(address, SECRET).await;
-        invoke(&mut server, &mut worker, "read", &path).await;
-        let frame = read(&mut worker).await;
-        assert_eq!(
-            frame["message"]["value"], "read on the Runner's machine",
-            "{runtime}: {frame}"
-        );
-        send(&mut worker, json!({"type":"close"})).await;
-        assert_eq!(read(&mut worker).await["type"], "closed");
-        #[cfg(unix)]
-        signal(child.id().unwrap(), libc::SIGTERM);
-        #[cfg(not(unix))]
-        child.start_kill().unwrap();
-        let exit = timeout(DEADLINE, child.wait()).await.unwrap().unwrap();
-        #[cfg(unix)]
-        assert!(exit.success());
-        #[cfg(not(unix))]
-        let _ = exit;
-        println!("standalone {runtime}: workspace action and local file read passed");
-    }
+    let mut child = Command::new(BINARY)
+        .args(["--plugins"])
+        .arg(fixture())
+        .args(["--data"])
+        .arg(dir.path().join("store"))
+        .args(["--token-file"])
+        .arg(secret)
+        .args(["--listen", "127.0.0.1:0"])
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut output = tokio::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    timeout(DEADLINE, output.read_line(&mut line))
+        .await
+        .unwrap()
+        .unwrap();
+    let address = line.trim().strip_prefix("Tokamak listening on ").unwrap();
+    let mut server = socket(address, Some(SECRET)).await.unwrap();
+    action(&mut server).await;
+    let mut worker = open_worker(address, SECRET).await;
+    invoke(&mut server, &mut worker, "read", &path).await;
+    let frame = read(&mut worker).await;
+    assert_eq!(
+        frame["message"]["value"], "read on the Runner's machine",
+        "{frame}"
+    );
+    send(&mut worker, json!({"type":"close"})).await;
+    assert_eq!(read(&mut worker).await["type"], "closed");
+    #[cfg(unix)]
+    signal(child.id().unwrap(), libc::SIGTERM);
+    #[cfg(not(unix))]
+    child.start_kill().unwrap();
+    let exit = timeout(DEADLINE, child.wait()).await.unwrap().unwrap();
+    #[cfg(unix)]
+    assert!(exit.success());
+    #[cfg(not(unix))]
+    let _ = exit;
+    println!("standalone Runner: workspace action and local file read passed");
 }
 
 #[cfg(unix)]
@@ -747,13 +741,11 @@ async fn force_killing_the_supervisor_leaves_no_runner_plugin_or_program() {
         supervise_child(PathBuf::from(directory)).await;
         return;
     }
-    for runtime in ["quickjs", "bun"] {
-        assert_no_orphans(runtime).await;
-    }
+    assert_no_orphans().await;
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn assert_no_orphans(runtime: &str) {
+async fn assert_no_orphans() {
     let temp = tempfile::tempdir().unwrap();
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args([
@@ -763,7 +755,6 @@ async fn assert_no_orphans(runtime: &str) {
         ])
         .env("TOKAMAK_TEST_SUPERVISOR", temp.path())
         .env("TOKAMAK_TEST_FIXTURE", fixture())
-        .env("TOKAMAK_PLUGIN_RUNTIME", runtime)
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -860,28 +851,14 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Vec<Socke
         line.split_whitespace()
             .any(|part| part.ends_with("/tokamak-plugin-host"))
     };
-    let quickjs =
-        tokamak_worker::LocalRuntime::selected().unwrap() == tokamak_worker::LocalRuntime::QuickJs;
     let action = before_local
         .iter()
-        .find(|(_, cmd)| {
-            if quickjs {
-                host(cmd) && cmd.ends_with(" --actions")
-            } else {
-                cmd.ends_with(".mjs")
-            }
-        })
+        .find(|(_, cmd)| host(cmd) && cmd.ends_with(" --actions"))
         .unwrap()
         .0;
     let local: Vec<_> = children
         .iter()
-        .filter(|(pid, cmd)| {
-            if quickjs {
-                host(cmd) && cmd.split_whitespace().any(|part| part == "--local-plugin")
-            } else {
-                cmd.ends_with(".mjs") && !before_local.iter().any(|(before, _)| before == pid)
-            }
-        })
+        .filter(|(_, cmd)| host(cmd) && cmd.split_whitespace().any(|part| part == "--local-plugin"))
         .map(|(pid, _)| *pid)
         .collect();
     assert_eq!(local.len(), 2, "{children:?}");

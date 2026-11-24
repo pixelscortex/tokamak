@@ -13,7 +13,6 @@ import { runnerLauncher } from "../../runtime/js/runner.ts";
 const [server, binary, mode] = process.argv.slice(2);
 const serverBuild = mode === "--server-build";
 // The old runtime setting must not select Bun on the cloud server.
-if (serverBuild) process.env.TOKAMAK_PLUGIN_RUNTIME = "bun";
 const h = await agentHarness({ binary: server, name: "runner-routing" });
 const cleanup = [];
 try {
@@ -47,7 +46,6 @@ try {
   const shared = await h.serve("shared", { shared: true, pluginsDir });
   const token = await h.ownerDevice(shared, "Test window");
   if (serverBuild) {
-    assert.equal(h.selection.runtime, "quickjs");
     const http = shared.replace(/^ws:/, "http:");
     const headers = { Authorization: `Bearer ${token}`, Origin: "http://tauri.localhost" };
     const installed = await fetch(new URL("/plugins", http), { headers });
@@ -102,7 +100,6 @@ try {
       HOME: h.home,
       PATH: [h.bin, "/usr/bin", "/bin", process.env.PATH].join(delimiter),
       ...(serverBuild && {
-        TOKAMAK_PLUGIN_RUNTIME: undefined,
         TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST,
       }),
     },
@@ -123,7 +120,7 @@ try {
         workspace,
       ),
   });
-  if (h.selection.runtime === "quickjs") {
+  {
     const member = await h.signInMember(shared, "SecondMember");
     const second = await connect(shared, { token: member.key, launch: local.launch, cleanup });
     const identity = (client) => client.query(authCaller, {});

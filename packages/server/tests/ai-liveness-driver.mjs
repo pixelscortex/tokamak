@@ -29,7 +29,7 @@ try {
   // The lost server and a crashed ai host wait out their deadlines alongside.
   const scenarios = [lostServer(), crashedApp()];
   const binary = process.env.TOKAMAK_TEST_RUNNER_BIN;
-  if (binary && h.selection.runtime === "quickjs") scenarios.push(crashedManager(binary));
+  if (binary) scenarios.push(crashedManager(binary));
   await Promise.all(scenarios);
   console.log(
     "ai liveness: killed app interrupted after 45 s with its reply kept, waiting question ended, stranded queue settled, slow turn kept running, thread free again, agent stopped when the server stays out of reach",
@@ -47,7 +47,6 @@ async function crashedManager(binary) {
     env: {
       HOME: h.home,
       PATH: [h.bin, "/usr/bin", "/bin"].join(delimiter),
-      TOKAMAK_PLUGIN_RUNTIME: "quickjs",
     },
   });
   const cleanup = [];

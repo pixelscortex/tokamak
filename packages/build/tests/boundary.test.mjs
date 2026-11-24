@@ -19,56 +19,54 @@ async function file(root, path, code) {
   await mkdir(resolve(destination, ".."), { recursive: true });
   await writeFile(destination, code);
 }
-async function backend(root, id, worker = false) {
+async function backend(root, id) {
   const path = await source(root, id, "", { ui: false });
   await file(
     path,
     "plugin.ts",
-    `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({id:${JSON.stringify(id)}, version:"1.0.0", depends:[], ${worker ? 'runtime:"worker",' : ""}});`,
+    `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({id:${JSON.stringify(id)}, version:"1.0.0", depends:[],});`,
   );
   await file(
     path,
     "src/server/tsconfig.json",
     JSON.stringify({
       extends: resolve(workspace, "tsconfig.json"),
-      compilerOptions: { skipLibCheck: true, ...(worker ? { types: ["node"], lib: ["ES2022", "DOM"] } : {}) },
+      compilerOptions: { skipLibCheck: true },
     }),
   );
   return path;
 }
 const output = (path, name) => readFile(resolve(path, "dist", name), "utf8");
 
-for (const worker of [false, true]) {
-  test(`${worker ? "worker" : "server"} rejects runtime and erased imports outside its plugin`, async () => {
-    await scratch(async (root) => {
-      const other = await backend(root, "other");
-      await file(
-        other,
-        "src/server/x.ts",
-        'export const value = "foreign implementation"; export type Shape = string;',
-      );
-      const path = await backend(root, "consumer", worker);
-      for (const statement of [
-        'import { value } from "../../../other/src/server/x"; export const used = value;',
-        'import type { Shape } from "../../../other/src/server/x"; export type Used = Shape;',
-        'export * from "../../../other/src/server/x";',
-        'export type Used = import("../../../other/src/server/x").Shape;',
-        'export const load = () => import("../../../other/src/server/x");',
-        'export const load = () => require("../../../other/src/server/x");',
-        '/// <reference path="../../../other/src/server/x.ts" />\nexport {};',
-      ]) {
-        await file(path, "src/server/leak.ts", statement);
-        const result = build(path);
-        expect(result.status).not.toBe(0);
-        const error = result.stdout + result.stderr;
-        expect(error).toContain("Plugin import boundary");
-        expect(error).toContain("src/server/leak.ts");
-        expect(error).toContain("../../../other/src/server/x");
-        expect(error).toContain("plugin:<id>/server");
-      }
-    });
-  }, 60_000);
-}
+test("server rejects runtime and erased imports outside its plugin", async () => {
+  await scratch(async (root) => {
+    const other = await backend(root, "other");
+    await file(
+      other,
+      "src/server/x.ts",
+      'export const value = "foreign implementation"; export type Shape = string;',
+    );
+    const path = await backend(root, "consumer");
+    for (const statement of [
+      'import { value } from "../../../other/src/server/x"; export const used = value;',
+      'import type { Shape } from "../../../other/src/server/x"; export type Used = Shape;',
+      'export * from "../../../other/src/server/x";',
+      'export type Used = import("../../../other/src/server/x").Shape;',
+      'export const load = () => import("../../../other/src/server/x");',
+      'export const load = () => require("../../../other/src/server/x");',
+      '/// <reference path="../../../other/src/server/x.ts" />\nexport {};',
+    ]) {
+      await file(path, "src/server/leak.ts", statement);
+      const result = build(path);
+      expect(result.status).not.toBe(0);
+      const error = result.stdout + result.stderr;
+      expect(error).toContain("Plugin import boundary");
+      expect(error).toContain("src/server/leak.ts");
+      expect(error).toContain("../../../other/src/server/x");
+      expect(error).toContain("plugin:<id>/server");
+    }
+  });
+}, 60_000);
 
 test("client rejects relative, absolute, alias and symlink escapes before bundling", async () => {
   await scratch(async (root) => {
@@ -99,29 +97,28 @@ test("client rejects relative, absolute, alias and symlink escapes before bundli
   });
 }, 30_000);
 
-for (const worker of [false, true]) {
-  test(`${worker ? "worker" : "server"} sanctioned imports contain only host references and public types`, async () => {
-    await scratch(async (root) => {
-      const third = await backend(root, "third");
-      await file(third, "src/server/api.ts", "export type Label = string;");
-      const other = await backend(root, "other");
-      await file(
-        other,
-        "src/server/x.ts",
-        `import {query} from "@tokamak/sdk";
+test("server and transaction bundles contain only host references and public types", async () => {
+  await scratch(async (root) => {
+    const third = await backend(root, "third");
+    await file(third, "src/server/api.ts", "export type Label = string;");
+    const other = await backend(root, "other");
+    await file(
+      other,
+      "src/server/x.ts",
+      `import {query} from "@tokamak/sdk";
         throw new Error("FOREIGN_IMPLEMENTATION_MUST_NOT_RUN");
         export const read = query({handler: () => "FOREIGN_IMPLEMENTATION_MUST_NOT_BUNDLE"});`,
-      );
-      await file(
-        other,
-        "src/server/api.ts",
-        'import type {Label} from "plugin:third/server"; export {read as readOther} from "./x"; export type Shape<T = Label> = {value:T};',
-      );
-      const path = await backend(root, "consumer", worker);
-      await file(
-        path,
-        "src/server/main.ts",
-        `import {action} from "@tokamak/sdk";
+    );
+    await file(
+      other,
+      "src/server/api.ts",
+      'import type {Label} from "plugin:third/server"; export {read as readOther} from "./x"; export type Shape<T = Label> = {value:T};',
+    );
+    const path = await backend(root, "consumer");
+    await file(
+      path,
+      "src/server/main.ts",
+      `import {action} from "@tokamak/sdk";
         import {api, readOther, type Shape} from "plugin:other/server";
         import {api as short} from "plugin:other";
         export const call = action({handler: async ctx => {
@@ -129,23 +126,22 @@ for (const worker of [false, true]) {
           await ctx.runQuery(readOther, {});
           return value.value + await ctx.use(short).readOther({});
         }});`,
-      );
-      // Tests are excluded from the production boundary.
-      await file(path, "src/server/main.test.ts", 'import "../../../other/src/server/x";');
-      built(path);
-      for (const name of ["bundle.js", "bundle.js.map", ...(worker ? ["worker.js", "worker.js.map"] : [])]) {
-        const bytes = await output(path, name);
-        expect(bytes).not.toContain("FOREIGN_IMPLEMENTATION");
-        if (name.endsWith(".map")) {
-          expect(JSON.parse(bytes).sources.some((source) => source.includes("/other/"))).toBe(false);
-        }
+    );
+    // Tests are excluded from the production boundary.
+    await file(path, "src/server/main.test.ts", 'import "../../../other/src/server/x";');
+    built(path);
+    for (const name of ["bundle.js", "bundle.js.map", "transactions.js", "transactions.js.map"]) {
+      const bytes = await output(path, name);
+      expect(bytes).not.toContain("FOREIGN_IMPLEMENTATION");
+      if (name.endsWith(".map")) {
+        expect(JSON.parse(bytes).sources.some((source) => source.includes("/other/"))).toBe(false);
       }
-      const code = await output(path, worker ? "worker.js" : "bundle.js");
-      expect(code).toContain('createApi("other")');
-      expect(code).toContain('["x"]["read"]');
-    });
-  }, 60_000);
-}
+    }
+    const code = await output(path, "bundle.js");
+    expect(code).toContain('createApi("other")');
+    expect(code).toContain('["x"]["read"]');
+  });
+}, 60_000);
 
 test("sanctioned client imports use the registry, including lazy imports", async () => {
   await scratch(async (root) => {

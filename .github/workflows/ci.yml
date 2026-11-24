@@ -82,10 +82,6 @@ jobs:
       - uses: ./.ci/setup
       - name: Build unsigned macOS bundle
         run: proto run bun -- run --cwd app tauri build --no-sign
-      - name: Smoke check Runner runtime
-        shell: bash
-        run: |
-          test "$(./target/release/tokamak-runner --plugin-runtime)" = quickjs
       - name: Archive macOS bundle
         run: |
           mkdir -p .ci-results
@@ -138,13 +134,6 @@ jobs:
       # Build only: Windows test suites are intentionally outside this job's scope.
       - name: Build unsigned Windows installer
         run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
-      - name: Smoke check Runner runtime
-        shell: pwsh
-        run: |
-          $runtime = & ./target/release/tokamak-runner.exe --plugin-runtime
-          if ($LASTEXITCODE -ne 0 -or $runtime -cne 'bun') {
-            throw 'Runner did not select Bun'
-          }
       - name: Save Windows release build
         if: steps.windows-release.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

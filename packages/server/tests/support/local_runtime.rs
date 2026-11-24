@@ -1,69 +1,58 @@
 use std::{path::Path, process::Command};
 
 #[cfg(feature = "local-runtime")]
-use tokamak_worker::LocalRuntime;
-
-#[cfg(feature = "local-runtime")]
-pub fn selected() -> LocalRuntime {
-    LocalRuntime::selected().expect("valid local function runtime")
-}
-
-#[cfg(feature = "local-runtime")]
 #[allow(dead_code)] // Each integration test includes only the entry point it needs.
-pub fn driver(command: Command, script: &str, runtime: &LocalRuntime) -> Command {
-    driver_for(command, script, runtime, false)
+pub fn driver(command: Command, script: &str) -> Command {
+    driver_for(command, script, false)
 }
 
 #[cfg(feature = "local-runtime")]
-pub fn driver_for(
-    mut command: Command,
-    script: &str,
-    runtime: &LocalRuntime,
-    runner: bool,
-) -> Command {
+pub fn driver_for(mut command: Command, script: &str, runner: bool) -> Command {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let host = (*runtime == LocalRuntime::QuickJs).then(|| {
+    let host = {
         let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
         let probe = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("build the host capability probe runtime");
-        let check = || probe.block_on(LocalRuntime::require_local_host(server));
-        let error = match check() {
-            Ok(host) => return host,
-            Err(error) => error,
-        };
-        if std::env::var_os("TOKAMAK_PLUGIN_HOST").is_some() {
-            panic!("{error}");
+        let check = || probe.block_on(tokamak_worker::require_local_host(server));
+        match check() {
+            Ok(host) => host,
+            Err(error) => {
+                if std::env::var_os("TOKAMAK_PLUGIN_HOST").is_some() {
+                    panic!("{error}");
+                }
+                let mut build = Command::new(env!("CARGO"));
+                build
+                    .args([
+                        "build",
+                        "--locked",
+                        "-p",
+                        "tokamak-plugin-host",
+                        "--target-dir",
+                    ])
+                    .arg(server.parent().unwrap().parent().unwrap())
+                    .current_dir(&root);
+                if let Some(profile) = server
+                    .parent()
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    .filter(|name| *name != "debug")
+                {
+                    build.args(["--profile", profile]);
+                }
+                let status = build
+                    .status()
+                    .expect("run Cargo to build the plugin host for local integration tests");
+                assert!(
+                    status.success(),
+                    "building tokamak-plugin-host for local integration tests failed: {status}"
+                );
+                check()
+                    .expect("expected a local plugin host beside tokamak-server after building it")
+            }
         }
-        let mut build = Command::new(env!("CARGO"));
-        build
-            .args([
-                "build",
-                "--locked",
-                "-p",
-                "tokamak-plugin-host",
-                "--target-dir",
-            ])
-            .arg(server.parent().unwrap().parent().unwrap())
-            .current_dir(&root);
-        if let Some(profile) = server
-            .parent()
-            .and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            .filter(|name| *name != "debug")
-        {
-            build.args(["--profile", profile]);
-        }
-        let status = build
-            .status()
-            .expect("run Cargo to build the plugin host for local integration tests");
-        assert!(
-            status.success(),
-            "building tokamak-plugin-host for local integration tests failed: {status}"
-        );
-        check().expect("expected a local plugin host beside tokamak-server after building it")
-    });
+    };
     let server = Path::new(env!("CARGO_BIN_EXE_tokamak-server"));
     let executable = if runner {
         self::runner()
@@ -74,10 +63,7 @@ pub fn driver_for(
         .arg(script)
         .arg(executable)
         .current_dir(root)
-        .env_remove("TOKAMAK_TEST_PLUGIN_HOST");
-    if let Some(host) = host {
-        command.env("TOKAMAK_TEST_PLUGIN_HOST", host);
-    }
+        .env("TOKAMAK_TEST_PLUGIN_HOST", host);
     command
 }
 

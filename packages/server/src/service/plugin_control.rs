@@ -186,11 +186,8 @@ impl Coordinator {
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog = crate::plugins::Catalog::read_reusing(
-            root,
-            self.plugins.as_ref().map(|p| &p.catalog),
-            self.action_process.is_some(),
-        )?;
+        let catalog =
+            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
 
         if !catalog.plugins.contains_key(id)
             && !catalog.removed_plugins.iter().any(|removed| removed == id)
@@ -198,27 +195,9 @@ impl Coordinator {
             return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
         }
 
-        let mut candidate = crate::plugins::Loaded::load_reusing(
-            catalog,
-            &self.pool,
-            self.plugins.as_deref(),
-            self.action_process.is_some(),
-            id,
-        )
-        .await?;
-        // Each generation gets a fresh action lane; build it before the swap so
-        // a pool failure leaves the current generation fully intact.
-        let action_pool = if self.action_process.is_none() {
-            Some(Arc::new(
-                Pool::new_actions(PoolConfig {
-                    limits: self.pool.limits().clone(),
-                    ..PoolConfig::default()
-                })
-                .map_err(|e| Error::Invalid(e.to_string()))?,
-            ))
-        } else {
-            None
-        };
+        let mut candidate =
+            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref(), id)
+                .await?;
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         Box::pin(window_state::remove_plugins(
             &self.database,
@@ -231,8 +210,7 @@ impl Coordinator {
             .persist_install_order(self.database.directory())?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
-        self.retire_actions_for_reload(&candidate).await;
-        self.action_pool = action_pool;
+        self.retire_actions_for_reload(&candidate);
         self.kinds = candidate.client_kinds();
 
         let changed = self.changed_plugins(&candidate);
@@ -272,17 +250,10 @@ impl Coordinator {
             .collect()
     }
 
-    async fn retire_actions_for_reload(&self, candidate: &crate::plugins::Loaded) {
-        if let Some(pool) = &self.action_pool {
-            pool.cancel_actions();
-        }
+    fn retire_actions_for_reload(&self, candidate: &crate::plugins::Loaded) {
         let Some(previous) = &self.plugins else {
             return;
         };
-        #[cfg(feature = "local-runtime")]
-        for worker in previous.workers.values() {
-            worker.stop().await;
-        }
         if let Some(process) = &self.action_process {
             for (id, source) in &previous.action_sources {
                 if !candidate.same_action_source(previous, id) {

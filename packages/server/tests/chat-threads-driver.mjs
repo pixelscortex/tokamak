@@ -1,6 +1,6 @@
 // End to end for chat on the new API: the real tokamak-server binary, the real
 // chat build, two real WebSocket clients ("windows") and chat's real local part
-// on the selected runtime. Checks what a person sees: thread rows, messages, live updates in a
+// in its plugin process. Checks what a person sees: thread rows, messages, live updates in a
 // second window, folders, and the "No folder" thread's own folder on disk.
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
@@ -10,8 +10,7 @@ import {
   build,
   connect as connectWindow,
   copySource,
-  localLauncher,
-  selectedRuntime,
+  startRunner,
   startServer,
   installBasicAuth,
   signInMember,
@@ -21,7 +20,6 @@ import {
 
 const binary = process.argv[2];
 assert.ok(binary, "Expected the path to the tokamak-server binary");
-const selection = selectedRuntime(binary);
 const target = join(import.meta.dir, "../target");
 await mkdir(target, { recursive: true });
 const scratch = await mkdtemp(join(target, "chat-threads-"));
@@ -55,14 +53,6 @@ async function checkTranscriptLimits(client, api) {
   assert.equal(bounded.at(-1).parts[0].text, `19:${body}`);
 }
 
-function localPart(dist, home) {
-  return localLauncher(selection, () => dist, {
-    HOME: home,
-    TOKAMAK_APP_DATA_DIR: join(home, "app-data"),
-    PATH: process.env.PATH,
-  });
-}
-
 /** Starts the real server on a plugins folder; resolves its WebSocket address. */
 const serve = (plugins, name, shared) =>
   startServer({
@@ -91,15 +81,21 @@ try {
   const plugins = join(scratch, "plugins");
   await cp(join(workspace, "plugins/chat/dist"), join(plugins, "chat"), { recursive: true });
   await cp(join(probeSource, "dist"), join(plugins, "reply-probe"), { recursive: true });
-  const dist = join(plugins, "chat");
   const home = join(scratch, "home");
   await mkdir(home);
+  const { launch, stop } = await startRunner({
+    binary: process.env.TOKAMAK_TEST_RUNNER_BIN,
+    plugins,
+    directory: join(home, "app-data"),
+    env: { HOME: home },
+  });
+  cleanup.push(stop);
   const { api } = await import(join(workspace, "plugins/chat/src/server/_generated/api.ts"));
   const probe = createApi("reply-probe");
 
   // ---- The local server: the person is the owner; two windows, one with a local part.
   const address = await serve(plugins, "local", false);
-  const a = (await connect(address, undefined, localPart(dist, home))).client;
+  const a = (await connect(address, undefined, launch)).client;
   const b = (await connect(address)).client;
 
   // Nothing exists before the first Send, and a Send with no text makes nothing.
@@ -241,9 +237,7 @@ try {
   await installBasicAuth(plugins);
   const shared = await serve(plugins, "shared", true);
   const owner = (await connect(shared, ownerToken)).client;
-  const member = (
-    await connect(shared, (await signInMember(shared, ownerToken, "Noor")).key, localPart(dist, home))
-  ).client;
+  const member = (await connect(shared, (await signInMember(shared, ownerToken, "Noor")).key, launch)).client;
   const mine = await owner.mutation(api.threads.start, { text: "Owner's thread", folder: { kind: "own" } });
   await assert.rejects(
     member.mutation(api.threads.setFolder, { threadId: mine.threadId, path: "/tmp/elsewhere" }),

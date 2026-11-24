@@ -25,7 +25,7 @@ the startup refusal. Keep the matching
 actions-only host alongside `tokamak-server`, or set `TOKAMAK_PLUGIN_HOST` to it.
 To package a plugin for the Server, run
 `proto run bun -- packages/build/src/stage-server-plugin.ts <built-dist> <destination>`
-with a new destination. The Server doesn't open local bundles or Bun launchers.
+with a new destination. The Server doesn't open local bundles.
 Staging omits those files but keeps the manifest and hashes so the Runner can
 match its own installed copy.
 
@@ -187,7 +187,7 @@ not an upsert and is not exposed through the JavaScript database API.
 
 **Network access belongs to actions only.** A `net:<host>` declaration is an
 exact-host grant for `fetch` inside `action` functions; there is no `net:*`
-wildcard (see `packages/engine/WEB_APIS.md`). Actions run on a separate worker
+wildcard (see `packages/engine/WEB_APIS.md`). Actions run in the action process
 lane and reach data only through `ctx.runQuery` / `ctx.runMutation`. Queries and
 mutations cannot call actions or `fetch`, so they gain no external effects that
 could repeat during transaction retries. Reload cancels old-generation actions.
@@ -290,8 +290,7 @@ rebuild the provider to update its manifest.
 The window authorizes the route using the catalog, and the QuickJS Runner
 routes JSON arguments and results between plugin processes. The provider
 handles the call with the caller's signed-in member and device. Turn hooks and
-thread deletion hooks use this route. Bun still binds provider functions in
-the caller's worker.
+thread deletion hooks use this route.
 
 On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
 author's live `Run` to plain-data messages over the link established by the

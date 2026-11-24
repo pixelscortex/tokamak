@@ -6,13 +6,13 @@ import { join } from "node:path";
 import { test } from "bun:test";
 import { build, built, source } from "./plugin-fixtures.mjs";
 
-async function fixture(run, worker = false) {
+async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "tokamak-local-build-"));
   try {
     const folder = await source(root, "local-test", 'export { Window } from "./mixed";', {});
     await writeFile(
       join(folder, "plugin.ts"),
-      `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "local-test", version: "1.0.0", ${worker ? 'runtime: "worker"' : ""} });`,
+      `import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "local-test", version: "1.0.0", });`,
     );
     await run(folder);
   } finally {
@@ -176,7 +176,7 @@ test("server actions cannot import node:fs/promises even when a local function c
       result.stderr + result.stdout,
       /src\/helper.ts imports "node:fs\/promises".*server actions.*through proc/,
     );
-  }, true);
+  });
 }, 30_000);
 
 test("local functions cannot require a bare built-in through a helper", async () => {
@@ -251,7 +251,7 @@ test("forbidden Bun modules retain their specifier", async () => {
     );
     const result = build(folder);
     assert.match(result.stderr + result.stdout, /imports "bun:sqlite", which is unavailable/);
-  }, true);
+  });
 }, 30_000);
 
 test("the server part's Node module check does not apply to the window", async () => {
