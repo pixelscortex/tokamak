@@ -58,14 +58,12 @@ export async function infoOf(provider: Agent, forTurn = false): Promise<Info> {
   const key = localProviderIdentity(provider);
   const cached = key && turnInfo.get(key);
   if (forTurn && cached && cached.until > Date.now()) return cached.info;
-  const info = await provider.info().then(
-    (info) => ({ ...info, speeds: info.speeds ?? [], modes: info.modes ?? [] }),
-    () => UNKNOWN,
-  );
+  const { cacheUntil, ...answer } = await provider.info().catch(() => UNKNOWN);
+  const info = { ...answer, speeds: answer.speeds ?? [], modes: answer.modes ?? [] };
   if (key) {
     const now = Date.now();
-    if (info.installed && info.signedIn && typeof info.cacheUntil === "number" && info.cacheUntil > now)
-      turnInfo.set(key, { info, until: Math.min(info.cacheUntil, now + AGENT_INFO_MAX_AGE_MS) });
+    if (info.installed && info.signedIn && typeof cacheUntil === "number" && cacheUntil > now)
+      turnInfo.set(key, { info, until: Math.min(cacheUntil, now + AGENT_INFO_MAX_AGE_MS) });
     else turnInfo.delete(key);
   }
   return info;
