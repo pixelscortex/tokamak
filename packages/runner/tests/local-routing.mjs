@@ -304,6 +304,17 @@ try {
 
   const legacyProvider = "routed-legacy";
   await cloneProvider(legacyProvider);
+  await editBundle(
+    distFor(legacyProvider),
+    `
+const legacyRegistration = Object.keys(contractProviders)[0];
+const legacyProvider = contractProviders[legacyRegistration];
+contractProviders[legacyRegistration] = {
+  ...legacyProvider,
+  contract: { ...legacyProvider.contract, dataMethods: ["identify"] },
+};
+`,
+  );
   const legacyManifest = join(distFor(legacyProvider), "manifest.json");
   const legacySpec = await Bun.file(legacyManifest).json();
   legacySpec.contractProviders[0].dataMethods = ["identify"];
