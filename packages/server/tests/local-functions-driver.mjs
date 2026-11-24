@@ -44,7 +44,10 @@ async function waitForFile(path) {
 
 async function expectHeartbeatStopped(path) {
   let last = await waitForFile(path);
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // The fixture ignores TERM. Leave room for the QuickJS guardian's two-second
+  // grace period before requiring the heartbeat to stop.
+  const deadline = performance.now() + 4_000;
+  while (performance.now() < deadline) {
     await Bun.sleep(150);
     const current = await readFile(path, "utf8");
     if (current === last) {
@@ -53,7 +56,7 @@ async function expectHeartbeatStopped(path) {
     }
     last = current;
   }
-  assert.fail("grandchild still running");
+  assert.fail(`grandchild still running: ${path}`);
 }
 await mkdir(src, { recursive: true });
 acceptance: try {
