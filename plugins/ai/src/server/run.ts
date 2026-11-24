@@ -1,16 +1,6 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
-import {
-  fail,
-  isFailure,
-  local,
-  routesLocalContracts,
-  v,
-  type ArgsOf,
-  type Id,
-  type Infer,
-  type LocalContext,
-} from "@tokamak/sdk";
+import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
 import { agent, type Helper, type Run, type Task, type Tool, type Usage } from "../contracts";
 import { errorText } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
@@ -88,21 +78,21 @@ export const turn = local({
       carried: sessionId,
     });
     // Stop answers a waiting question "cancel" first: an agent may wait for the answer before it stops.
-    const control = turnControl(turnId, ctx.auth, questions.cancel, hooks.stop);
+    const control = turnControl(turnId, ctx.auth, questions.cancel, hooks.stopBefore);
     // From here until the turn is settled, the server hears from this computer (liveness.ts), and
     // quitting the app asks first (working.ts). Both are released however the turn ends.
     let lost: string | undefined;
     const alive = keepAlive(ctx, turnId, (reason) => {
       lost = reason;
-      hooks.stop();
+      hooks.cancel();
       void control.forceStop();
     });
     const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
     try {
       let ending: { state: "done" | "failed" | "stopped"; error?: string; sessionId?: string };
-      let hookNotice = await hooks.before();
-      if (hookNotice !== undefined) {
-        ending = { state: "failed", error: hookNotice };
+      const beforeError = await hooks.before();
+      if (beforeError !== undefined) {
+        ending = { state: "failed", error: beforeError };
       } else if (lost !== undefined) {
         // The turn ended (or the server went away) while the hook ran: the agent never starts.
         ending = { state: "failed", error: lost };
@@ -139,15 +129,14 @@ export const turn = local({
       if (lost !== undefined) ending = { ...ending, state: "failed", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
-      if (routesLocalContracts(ctx)) control.closeAgent();
-      else control.close();
+      control.close();
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
       if (broken !== undefined)
         ending = { ...ending, state: "failed", error: `Could not save the reply: ${errorText(broken)}` };
       // Force stop only closes the agent's program scope. Run after hooks before releasing the queue.
-      if (hookNotice === undefined) hookNotice = await hooks.after();
+      const hookNotice = beforeError ?? (lost === undefined ? await hooks.after() : hooks.notice());
       let state;
       try {
         state = await ctx.runMutation(api.turns.finish, { turnId, ...ending, finishedAt: Date.now() });
@@ -163,7 +152,6 @@ export const turn = local({
       }
       return { turnId, state, ...(hookNotice !== undefined && { hookNotice }) };
     } finally {
-      hooks.close();
       control.close();
       alive.stop();
       unregister();

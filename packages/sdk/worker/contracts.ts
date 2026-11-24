@@ -25,7 +25,19 @@ export type ContractInvocation = {
   name: string;
   registration: string;
   method?: string;
+  invocationSignal?: true;
 };
+
+/** Runner transport errors are distinct from errors thrown by the provider. */
+export class ContractCallError extends Error {
+  constructor(
+    message: string,
+    readonly unavailable: boolean,
+    readonly providerError: boolean,
+  ) {
+    super(message);
+  }
+}
 
 function dataMethod(methods: true | readonly string[] | undefined, member: string) {
   return methods === true || methods?.includes(member) === true;
@@ -76,7 +88,21 @@ export function dataContracts(root: ProviderModule) {
     const implementation = bindProvider(definition, bridge, auth);
     const handler = implementation[method];
     if (typeof handler !== "function") throw new Error(`${label} is not a method`);
-    const result = await handler(...args);
+    let input: unknown[] = args;
+    if (target.invocationSignal === true) {
+      const [value] = args;
+      if (
+        args.length !== 1 ||
+        value === null ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Object.hasOwn(value, "signal") ||
+        !bridge.signal
+      )
+        throw new Error(`${label} cannot attach the invocation signal`);
+      input = [{ ...value, signal: bridge.signal }];
+    }
+    const result = await handler(...input);
     return wireData(result === undefined ? null : result, `${label} result`);
   };
 }
@@ -92,10 +118,10 @@ export function workerContracts(
   const descriptions = new Map<string, { build?: string; value: Description }>();
   return function bind(bridge: HostBridge, host: (plugin?: string) => HostBridge): ContractScope {
     return {
-      routed,
       async list(key, selected, options) {
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
         const signal = routed ? options?.signal : undefined;
+        const inputSignal = options?.inputSignal ?? signal;
         const candidates = await callHost(
           bridge,
           "local.contracts",
@@ -114,24 +140,64 @@ export function workerContracts(
           owner,
           dataMethods,
           build,
+          unavailable: notice,
         }: (typeof candidates)[number]) => {
           const target = { plugin, owner, name: key.name, registration };
+          function reportUnavailable(error: unknown) {
+            if (
+              options?.onUnavailable &&
+              !signal?.aborted &&
+              error instanceof ContractCallError &&
+              error.unavailable
+            ) {
+              options.onUnavailable({ plugin, message: error.message, notice });
+              return true;
+            }
+            return false;
+          }
           const remote =
             (method: string) =>
-            (...args: unknown[]) =>
-              callHost(
-                bridge,
-                "local.contract.call",
-                {
-                  ...target,
-                  method,
-                  args: wireData(
-                    args,
-                    `Local contract ${owner}/${key.name}.${method} arguments`,
-                  ) as JsonValue[],
-                },
-                signal,
-              );
+            async (...args: unknown[]) => {
+              const [input] = args;
+              let invocationSignal: true | undefined;
+              // A hook passes the very signal used to cancel this call. Only
+              // its data crosses the wire; the provider adds its own signal.
+              if (
+                signal &&
+                args.length === 1 &&
+                input &&
+                typeof input === "object" &&
+                (Object.getPrototypeOf(input) === Object.prototype || Object.getPrototypeOf(input) === null)
+              ) {
+                const fields = Object.getOwnPropertyDescriptors(input);
+                if (fields.signal?.enumerable && fields.signal.value === inputSignal) {
+                  delete fields.signal;
+                  invocationSignal = true;
+                  args = [Object.defineProperties({}, fields)];
+                }
+              }
+              try {
+                return await callHost(
+                  bridge,
+                  "local.contract.call",
+                  {
+                    ...target,
+                    method,
+                    ...(invocationSignal && { invocationSignal }),
+                    args: wireData(
+                      args,
+                      `Local contract ${owner}/${key.name}.${method} arguments`,
+                    ) as JsonValue[],
+                  },
+                  signal,
+                );
+              } catch (error) {
+                if (reportUnavailable(error)) return null;
+                if (options?.onUnavailable && error instanceof ContractCallError && error.providerError)
+                  throw new Error(error.message.replace(`Plugin ${plugin}: `, ""));
+                throw error;
+              }
+            };
           let implementation: Readonly<Record<string, unknown>>;
           if (!own && dataMethods === true) {
             const cacheKey = JSON.stringify([plugin, owner, key.name, registration]);
@@ -148,6 +214,8 @@ export function workerContracts(
               });
             } catch (error) {
               if (signal?.aborted) throw error;
+              if (reportUnavailable(error)) return;
+              if (options?.onUnavailable) throw error;
               unavailable.push({ plugin, lastId: cached?.value.data.id, error });
               return;
             }

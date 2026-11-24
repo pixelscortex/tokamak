@@ -8,19 +8,28 @@ import {
   readdir,
   rm,
   stat,
+  symlink,
   truncate,
   unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { separateProcesses, stopIsolation } from "./code-snapshot-process-cases.mjs";
+import {
+  cancelledCleanup,
+  separateProcesses,
+  stopDuringAfter,
+  stopIsolation,
+  unavailableProviders,
+} from "./code-snapshot-process-cases.mjs";
 import { snapshotReviewCases } from "./code-snapshot-review-cases.mjs";
 import { agentHarness, build, copySource, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 
 const h = await agentHarness({ binary: process.argv[2], name: "code-snapshots" });
 const { ai, chat } = h.api;
 const source = join(workspace, "plugins/code");
+const bunCore = process.env.TOKAMAK_TEST_CODE_CORE === "1";
+const withRunner = process.argv[2].includes("tokamak-runner");
 const threadRef = (id) => `refs/tokamak/threads/${id.split(":")[1]}`;
 const turnRef = (threadId, turnId) => `${threadRef(threadId)}/turns/${turnId.split(":")[1]}`;
 
@@ -28,6 +37,7 @@ try {
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "code"), { recursive: true });
   const { api: code } = await import(join(source, "src/server/_generated/api.ts"));
+  if (withRunner && h.selection.runtime === "quickjs") await installThirdPartyHook();
   const address = await h.serve("snapshots");
   const runner = h.runner(address);
   const routed = runner && h.selection.runtime === "quickjs";
@@ -48,32 +58,86 @@ try {
   });
   await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
-  await prunesWhenReopened(address, desk, code);
+  if (!bunCore) await prunesWhenReopened(address, desk, code);
   if (!runner) await withoutDataFolder(address);
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
-  if (routed) {
-    await separateProcesses(fixture);
-    assert.deepEqual([...hookCalls].sort(), [
-      "ai/turnHooks/after",
-      "ai/turnHooks/before",
-      "chat/threadDeletedLocal/after",
-    ]);
+  await stopDuringAfter(fixture);
+  if (bunCore) {
+    console.log("code snapshots (Bun): matching before/after refs, failing before, deletion, no data folder");
+  } else {
+    if (routed) {
+      await separateProcesses(fixture);
+      assert.deepEqual([...hookCalls].sort(), [
+        "ai/turnHooks/after",
+        "ai/turnHooks/before",
+        "chat/threadDeletedLocal/after",
+      ]);
+      await unavailableProviders(fixture);
+      await thirdPartyNotice(desk);
+      await cancelledCleanup(fixture);
+    }
+    await snapshotReviewCases({
+      ...fixture,
+      gate: h.gate,
+      removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+      routed,
+      stopIsolation: () => stopIsolation(fixture),
+    });
+    await gitAppearsMidTurn(desk);
+    await stoppedTurn(desk);
+    await withoutAi(code);
+    console.log(
+      "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
+    );
   }
-  await snapshotReviewCases({
-    ...fixture,
-    gate: h.gate,
-    removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
-    routed,
-    stopIsolation: () => stopIsolation(fixture),
-  });
-  await gitAppearsMidTurn(desk);
-  await stoppedTurn(desk);
-  await withoutAi(code);
-  console.log(
-    "code snapshots: refs, parent chain, unchanged user Git state, clean filters, ignored files, folder scope, merge conflicts, disabled Git hooks, hook deadlines, deletion, Git added mid-thread, standalone code",
-  );
 } finally {
   await h.close();
+}
+
+async function installThirdPartyHook() {
+  const folder = join(h.scratch, "sources", "other-hook");
+  await mkdir(join(folder, "src/server"), { recursive: true });
+  await symlink(join(workspace, "plugins/ai/node_modules"), join(folder, "node_modules"), "dir");
+  await writeFile(join(folder, "package.json"), '{"name":"other-hook","version":"1.0.0","type":"module"}');
+  await writeFile(
+    join(folder, "plugin.ts"),
+    `
+import { definePlugin } from "@tokamak/sdk";
+export default definePlugin({ id: "other-hook", version: "1.0.0", depends: ["ai"] });
+`,
+  );
+  await writeFile(
+    join(folder, "src/server/hook.ts"),
+    `
+import { local, provide } from "@tokamak/sdk";
+import { turnHooks, type TurnInfo } from "plugin:ai/contracts";
+export const hooks = provide(turnHooks, {
+  before: local({ handler: async (ctx, turn: TurnInfo) => {
+    if (turn.signal !== ctx.signal || turn.signal.aborted) throw new Error("Missing provider signal");
+    return 1 as never; // Non-object hook results have always been ignored.
+  } }),
+  after: local({ handler: async (_ctx, turn: TurnInfo) => {
+    if (turn.folder.endsWith("/third-party-after")) throw new Error("The example hook could not update its report");
+  } }),
+});
+`,
+  );
+  build(folder);
+  await cp(join(folder, "dist"), join(h.plugins, "other-hook"), { recursive: true });
+}
+
+async function thirdPartyNotice(desk) {
+  const { folder, git } = await project("third-party-after");
+  const thread = await start(desk, folder);
+  await h.gate(folder, "go");
+  const result = await thread.run(thread.messageId, "edit");
+  assert.deepEqual(result, {
+    turnId: result.turnId,
+    state: "done",
+    hookNotice: "The example hook could not update its report",
+  });
+  assert.equal(refs(git, turnRef(thread.threadId, result.turnId)).length, 2);
+  console.log("code snapshots: third-party after error is shown verbatim and leaves the outcome alone");
 }
 
 function gitAt(folder) {

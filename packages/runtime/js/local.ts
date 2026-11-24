@@ -39,6 +39,7 @@ type Manifest = {
     owner: string;
     registration: string;
     declarationHash: string;
+    unavailable?: string;
   }[];
 };
 
@@ -288,7 +289,7 @@ export class LocalFunctions implements LocalTransport {
       const dataMethods = routed && !own ? declaration.dataMethods : undefined;
       const live = !own && dataMethods !== true;
       const path = live ? await load(artifact) : "";
-      for (const { registration } of registrations) {
+      for (const { registration, unavailable } of registrations) {
         // Keep the live import pinned. A compatible data method can use the
         // latest independent provider process even while this call drains.
         const current = this.catalog.plugins.find(({ plugin: candidate }) => candidate.id === plugin);
@@ -322,6 +323,7 @@ export class LocalFunctions implements LocalTransport {
           ...(live && routed && { artifact: { ...artifact } }),
           own,
           owner: caller,
+          ...(unavailable === undefined ? {} : { unavailable }),
           ...(dataMethods && { dataMethods, build: `${target.entryHash}:${target.codeHash}` }),
         });
       }

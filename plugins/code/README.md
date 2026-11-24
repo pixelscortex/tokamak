@@ -45,7 +45,10 @@ These read Git through the local functions `changes:forTurn`, `changes:diff` and
 
 The local `notices:forTurn({ threadId, turnId })` reads omissions and the warning
 from Git. `src/local/git.ts` has the matching `turnRefs(threadId, turnId)` helper.
+The after hook also reads the before ref for that turn. It can recover the
+pair even if the Code process restarted while the agent was running.
 
 Run `TOKAMAK_TEST_RUNNER=1 cargo test --locked -p server --test code_snapshots --test code_changes` for
-snapshots and change reads with the real server and a fake agent. Run
-`proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.
+snapshots and change reads with the real server and a fake agent. The Rust
+check also runs the core cases in Bun, including a client with no data folder.
+Run `proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.

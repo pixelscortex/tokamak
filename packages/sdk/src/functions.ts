@@ -16,7 +16,6 @@ import {
   serverContracts,
   withServerContracts,
   type ContractContext,
-  routesLocalContracts,
 } from "./internal/contracts";
 import { Visibility } from "./visibility";
 
@@ -377,22 +376,6 @@ export function local(definition: {
   return localFunction(definition as Parameters<typeof localFunction>[0]);
 }
 
-/** Add the invocation signal to a plain-data hook's input in the provider. */
-export function localHook<A extends object, R>(
-  handler: (ctx: LocalContext, input: A & { readonly signal: LocalContext["signal"] }) => R,
-): FunctionDefinition<"local", A, WireResult<R>, typeof Visibility.Public> {
-  return local({
-    handler: (ctx, input: A) => {
-      // Bun still passes the caller's live object and deadline signal.
-      const turn = input as A & { readonly signal?: LocalContext["signal"] };
-      const live = !routesLocalContracts(ctx) && turn.signal !== undefined;
-      return handler(
-        ctx,
-        live ? (turn as A & { signal: LocalContext["signal"] }) : { ...input, signal: ctx.signal },
-      );
-    },
-  });
-}
 export const internalQuery = builder<"query", LooseModel, typeof Visibility.Internal>(
   "query",
   Visibility.Internal,

@@ -126,15 +126,18 @@ impl Bridge {
         let Some(pending) = lock(&self.pending).remove(&id) else {
             return; // The invocation may have ended.
         };
-        let route = build.and_then(|build| {
-            if pending.target.as_deref() != Some(&build.artifact.id) {
-                return Err("Local contract route does not match its host operation".into());
-            }
-            self.leases.get(&build).map(Reply::Route)
-        });
-        let _ = pending
-            .answer
-            .send(route.unwrap_or_else(|error| Reply::Result(json!({"error":error}))));
+        let route = match build {
+            Ok(build) if pending.target.as_deref() == Some(&build.artifact.id) => self
+                .leases
+                .get(&build)
+                .map(Reply::Route)
+                .unwrap_or_else(|error| Reply::Result(json!({"error":error, "unavailable":true}))),
+            Ok(_) => Reply::Result(
+                json!({"error":"Local contract route does not match its host operation"}),
+            ),
+            Err(error) => Reply::Result(json!({"error":error})),
+        };
+        let _ = pending.answer.send(route);
     }
 }
 
@@ -386,23 +389,34 @@ async fn run(
                 }
                 let id = frame_id(&frame["id"])?;
                 if frame["type"] == "opCancel" {
-                    if let Some(handle) = pending.get(&id) {
+                    if let Some(handle) = pending.remove(&id) {
                         handle.abort();
                     }
                     continue;
                 }
-                let (handle, registration) = AbortHandle::new_pair();
-                if pending.insert(id, handle).is_some() {
-                    return Err("Duplicate local host operation".into());
-                }
+                let registration = if frame["cancellable"] == true {
+                    let (handle, registration) = AbortHandle::new_pair();
+                    if pending.insert(id, handle).is_some() {
+                        return Err("Duplicate cancellable local host operation".into());
+                    }
+                    Some(registration)
+                } else {
+                    None
+                };
                 // A crashed or cancelled caller drops its nested work.
                 let work = operation(pool, bridge, root, ancestors, host, frame, turn);
-                operations.push(async move { (id, Abortable::new(work, registration).await) });
+                operations.push(async move {
+                    let response = match registration {
+                        Some(registration) => Abortable::new(work, registration).await.ok(),
+                        None => Some(work.await),
+                    };
+                    (id, response)
+                });
             }
             Some((id, response)) = operations.next() => {
                 pending.remove(&id);
                 // Dropping a routed invocation sends cancel to the provider.
-                let Ok(response) = response else { continue };
+                let Some(response) = response else { continue };
                 let mut reply = match response {
                     Ok(reply) => reply,
                     Err(error) => json!({"error":error}),
@@ -470,10 +484,18 @@ async fn operation(
     }
     let mut ancestors = ancestors.to_vec();
     ancestors.push(artifact.id.clone());
-    let other = pool.host(&lease.build, &lease.slot, true).await?;
-    let response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await?;
+    let other = match pool.host(&lease.build, &lease.slot, true).await {
+        Ok(other) => other,
+        Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+    };
+    let response = match Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await {
+        Ok(response) => response,
+        Err(error) => return Ok(json!({"error":error, "unavailable":true})),
+    };
     if let Some(error) = response["error"].as_str() {
-        return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
+        return Ok(
+            json!({"error":format!("Plugin {}: {error}", artifact.id), "providerError":true}),
+        );
     }
     Ok(json!({"value":response["value"]}))
 }

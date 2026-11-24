@@ -125,11 +125,11 @@ async function scopesSnapshotsToFolder({ desk, code, project, start, turnRef }) 
   );
 }
 
-export async function stall(project) {
+export async function stall(project, wait = "sleep 90") {
   project.git(
     "config",
     "filter.stall.clean",
-    'printf "%s %s\\n" "$PPID" "$$" > .git/stall-pids; sleep 90; cat',
+    `printf "%s %s\\n" "$PPID" "$$" > .git/stall-pids; ${wait}; cat`,
   );
   await project.write(".git/info/attributes", "agent.txt filter=stall\n");
 }

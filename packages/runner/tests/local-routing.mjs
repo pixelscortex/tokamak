@@ -51,13 +51,13 @@ await plugin(
   export const hold = local({
     args: { id: v.string(), path: v.string(), cancelCall: v.optional(v.boolean()) },
     handler: async (ctx, { id, path, cancelCall }) => {
-      if (!cancelCall) return probe.get(id, ctx).hold({ path });
+      if (!cancelCall) return probe.get(id, ctx, { signal: ctx.signal }).hold({ path, signal: ctx.signal });
       const controller = new AbortController();
       const timer = setInterval(() => {
         void readFile(path + ".stop").then(() => controller.abort(), () => {});
       }, 20);
       try {
-        await probe.get(id, ctx, { signal: controller.signal }).hold({ path });
+        await probe.get(id, ctx, { signal: controller.signal }).hold({ path, signal: controller.signal });
         throw new Error("Expected the routed call to be cancelled");
       } catch (error) {
         if (!(error instanceof Error) || error.message !== "Local contract call cancelled") throw error;
@@ -68,7 +68,8 @@ await plugin(
     },
   });
   export const badArgs = local({
-    handler: (ctx) => probe.get("custom-alpha", ctx).hold({ path: (() => {}) as unknown as string }),
+    handler: (ctx) => probe.get("custom-alpha", ctx, { signal: ctx.signal })
+      .hold({ path: (() => {}) as unknown as string, signal: ctx.signal }),
   });
   const nested = () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown);
   export const badResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).badResult() });
@@ -81,11 +82,11 @@ await plugin(
   export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
 `,
   `
-  import { contract, type AuthContext } from "@tokamak/sdk";
+  import { contract, type ActionSignal, type AuthContext } from "@tokamak/sdk";
   export const probe = contract<{
     id?: string;
     identify(): Promise<AuthContext>;
-    hold(input: { path: string }): Promise<string>;
+    hold(input: { path: string; signal: ActionSignal }): Promise<string>;
     badResult(): Promise<string>;
     echo(value: unknown): Promise<unknown>;
     deepResult(): Promise<unknown>;
@@ -99,10 +100,10 @@ function provider(id) {
   return `
     /// <reference types="node" />
     import { readFile, writeFile } from "node:fs/promises";
-    import { local, localHook, provide, type ActionSignal } from "@tokamak/sdk";
+    import { local, provide, type ActionSignal } from "@tokamak/sdk";
     import { probe } from "plugin:${owner}/contracts";
     const identify = local({ handler: async (ctx) => ctx.auth });
-    const hold = localHook(async (_ctx, { path, signal }: { path: string; signal: ActionSignal }) => {
+    const hold = local({ handler: async (_ctx, { path, signal }: { path: string; signal: ActionSignal }) => {
         await new Promise<void>((resolve) => {
           const timer = setInterval(() => {
             void readFile(path + ".release").then(() => { clearInterval(timer); resolve(); }, () => {});
@@ -114,7 +115,7 @@ function provider(id) {
           void writeFile(path + ".started", "started");
         });
         return "${id}";
-    });
+    } });
     export default provide(probe, {
       id: "custom-alpha", identify, hold,
       badResult: async () => (() => {}) as unknown as string,

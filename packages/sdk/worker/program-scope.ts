@@ -20,8 +20,17 @@ export function invocationProcesses(signal: AbortSignal, spawn: SpawnProgram) {
   const start: LocalProcess = ([command, ...args], options) => {
     if (closed || signal.aborted) throw new Error("Local function cancelled");
     const program = spawn([command, ...args], options);
-    const stop = (signal?: "SIGTERM" | "SIGKILL") => program.stop(signal).finally(() => active.delete(stop));
-    active.add(stop);
+    const stop = (signal?: "SIGTERM" | "SIGKILL") =>
+      program.stop(signal).finally(() => active.delete(finish));
+    const finish = async (force?: "SIGKILL") => {
+      if (options?.finishOnCancel && !force) {
+        await program.exited.catch(() => {});
+        await stop();
+      } else {
+        await stop(force);
+      }
+    };
+    active.add(finish);
     void program.exited.then(
       () => stop(),
       () => stop(),

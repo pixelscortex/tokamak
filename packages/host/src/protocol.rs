@@ -18,6 +18,8 @@ use crate::{
 };
 
 const OUTPUT_BYTES: usize = 4 * WORKER_FRAME_BYTES;
+// Two safe JS integer ids and the fixed frame envelope, including its newline.
+const CANCEL_FRAME_BYTES: usize = 80;
 const CANCELLED: &str = "Plugin local function cancelled";
 const DID_NOT_YIELD: &str =
     "Plugin local function did not yield for 5 seconds; QuickJS runtime reset";
@@ -26,6 +28,7 @@ const DID_NOT_YIELD: &str =
 struct State {
     calls: HashMap<u64, bool>,
     contract_ops: HashMap<u64, u64>,
+    cancellable_ops: HashMap<u64, u64>,
     queued_bytes: usize,
 }
 
@@ -33,6 +36,7 @@ impl State {
     fn retire(&mut self, id: u64) {
         self.calls.remove(&id);
         self.contract_ops.retain(|_, call| *call != id);
+        self.cancellable_ops.retain(|_, call| *call != id);
     }
 }
 
@@ -58,19 +62,44 @@ impl Output {
                     state.calls.get(&call) == Some(&false),
                     "stale invocation: host operation refused"
                 );
-                if frame["name"] == "local.contracts" {
-                    let op = id(&frame["id"])?;
-                    self.enqueue(&mut state, line)?;
-                    state.contract_ops.insert(op, call);
-                    return Ok(());
+                let op = id(&frame["id"])?;
+                let cancellable = frame["cancellable"] == true;
+                ensure!(
+                    !state.cancellable_ops.contains_key(&op)
+                        && !state.contract_ops.contains_key(&op),
+                    "Duplicate worker operation"
+                );
+                if cancellable {
+                    ensure!(
+                        state.cancellable_ops.len() < WORKER_CAPACITY,
+                        "Worker cancellation capacity exceeded"
+                    );
+                    state.cancellable_ops.insert(op, call);
                 }
+                if let Err(error) = self.enqueue(&mut state, line) {
+                    if cancellable {
+                        state.cancellable_ops.remove(&op);
+                    }
+                    return Err(error);
+                }
+                if frame["name"] == "local.contracts" {
+                    state.contract_ops.insert(op, call);
+                }
+                return Ok(());
             }
             Some("opCancel") => {
                 let call = id(&frame["call"])?;
-                // Each cancel belongs to an already enqueued operation. It must
-                // get through even if the operation filled the output queue.
-                if state.calls.get(&call) == Some(&false) {
-                    self.write(&mut state, line)?;
+                let op = id(&frame["id"])?;
+                if state.calls.get(&call) == Some(&false)
+                    && state.cancellable_ops.get(&op) == Some(&call)
+                {
+                    // Use this operation's reservation once; ignore extra fields.
+                    state.cancellable_ops.remove(&op);
+                    state.contract_ops.remove(&op);
+                    self.write(
+                        &mut state,
+                        json!({"type":"opCancel", "id":op, "call":call}).to_string(),
+                    )?;
                 }
                 return Ok(());
             }
@@ -91,7 +120,8 @@ impl Output {
 
     fn enqueue(&self, state: &mut State, line: String) -> Result<()> {
         ensure!(
-            state.queued_bytes + line.len() < OUTPUT_BYTES,
+            state.queued_bytes + line.len() + 1 + state.cancellable_ops.len() * CANCEL_FRAME_BYTES
+                <= OUTPUT_BYTES,
             "Worker output queue exceeds 4 MiB limit"
         );
         self.write(state, line)
@@ -120,6 +150,7 @@ impl Output {
         let mut state = self.state.lock().expect("protocol state");
         let started = std::mem::take(&mut state.calls);
         state.contract_ops.clear();
+        state.cancellable_ops.clear();
         for id in started.into_keys() {
             self.result(&mut state, id, DID_NOT_YIELD)?;
         }
@@ -148,6 +179,7 @@ impl Output {
                 self.result(&mut state, id, CANCELLED)?;
             }
             Some("opResult") => {
+                state.cancellable_ops.remove(&id);
                 if let Some(call) = state.contract_ops.remove(&id)
                     && state.calls.get(&call) == Some(&false)
                     && frame["error"].is_null()
@@ -279,6 +311,39 @@ pub async fn run(code: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_pending_operations_can_use_reserved_cancel_space() {
+        let state = Shared::default();
+        let (writer, mut frames) = mpsc::unbounded_channel();
+        let output = Output { state, writer };
+        {
+            let mut state = output.state.lock().unwrap();
+            state.calls.extend([(1, false), (2, false)]);
+            state.queued_bytes = OUTPUT_BYTES - 160;
+        }
+
+        let send = |frame: Value| output.send(frame.to_string());
+        send(json!({"type":"op","call":1,"id":3,"cancellable":true})).unwrap();
+        assert!(send(json!({"type":"log","text":"no space left here"})).is_err());
+        send(json!({"type":"opCancel","call":2,"id":3})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":4})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":3,"extra":"x".repeat(2048)})).unwrap();
+        send(json!({"type":"opCancel","call":1,"id":3})).unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<Value>(&frames.try_recv().unwrap()).unwrap()["type"],
+            "op"
+        );
+        let cancel = frames.try_recv().unwrap();
+        assert!(cancel.len() < CANCEL_FRAME_BYTES);
+        assert_eq!(
+            serde_json::from_str::<Value>(&cancel).unwrap(),
+            json!({"type":"opCancel","id":3,"call":1})
+        );
+        assert!(frames.try_recv().is_err());
+        assert!(output.state.lock().unwrap().queued_bytes <= OUTPUT_BYTES);
+    }
 
     #[test]
     fn output_queue_counts_bytes_until_the_writer_flushes() {

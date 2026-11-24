@@ -69,6 +69,7 @@ export interface HostOperations {
       owner: string;
       dataMethods?: true | string[];
       build?: string;
+      unavailable?: string;
     }[];
   };
   "local.contract.call": {
@@ -78,6 +79,7 @@ export interface HostOperations {
       name: string;
       registration: string;
       method: string;
+      invocationSignal?: true;
       args: JsonValue[];
     };
     result: JsonValue;

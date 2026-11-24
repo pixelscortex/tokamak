@@ -20,7 +20,7 @@ export function turnControl(
   turnId: string,
   auth: AuthContext,
   cancelQuestion?: () => Promise<void>,
-  cancelHook?: () => void,
+  cancelBefore?: () => void,
 ) {
   let steer: Steer | undefined;
   let stop: Stop | undefined;
@@ -85,9 +85,9 @@ export function turnControl(
     },
     /** Cancel a pending run.ask before interrupting; some providers wait for the answer to proceed. */
     async requestStop() {
-      cancelHook?.();
-      if (stopRequested) return;
+      if (agentClosed || stopRequested) return;
       stopRequested = true;
+      cancelBefore?.();
       releaseSteers();
       try {
         await cancelQuestion?.();
@@ -112,12 +112,9 @@ export function turnControl(
       await forcing;
       return null;
     },
-    closeAgent() {
+    close() {
       agentClosed = true;
       releaseSteers();
-    },
-    close() {
-      this.closeAgent();
       running.delete(turnId);
     },
   };

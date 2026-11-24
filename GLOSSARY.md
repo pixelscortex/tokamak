@@ -125,7 +125,7 @@ A process the Runner starts on demand to run one installed build of a plugin's l
 _Avoid_: Worker (when referring to the QuickJS process), action process.
 
 **Plain-data method**:
-A local contract method declared to take and return only JSON data. On QuickJS, calls to another plugin's plain-data method run in that provider's plugin process.
+A local contract method declared to take and return only JSON data. On QuickJS, calls to another plugin's plain-data method run in that provider's plugin process. A contract with live methods can also load the provider code into the caller's process.
 _Avoid_: Remote method (which can also mean a call to a shared server).
 
 **Page**:

@@ -28,6 +28,10 @@ export interface Contract<T extends object, P extends ContractPlace = ContractPl
 interface LocalLookupOptions {
   /** Cancel provider discovery and calls made through the returned list. */
   readonly signal?: NonNullable<HostBridge["signal"]>;
+  /** When the live input uses a different signal, identify it so it stays off the wire. */
+  readonly inputSignal?: NonNullable<HostBridge["signal"]>;
+  /** Handle process failures without hiding healthy providers or their own errors. */
+  readonly onUnavailable?: (failure: { plugin: string; message: string; notice?: string }) => void;
 }
 
 export interface ContractContext {
@@ -171,6 +175,7 @@ export function contractReference<T extends object, P extends ContractPlace>(
 export function provide<T extends object, P extends ContractPlace>(
   key: Contract<T, P>,
   implementation: Implementation<NoInfer<T>, P>,
+  _options?: P extends "local" ? { unavailable: string } : never,
 ): Provider<P> {
   return Object.freeze({
     [providerBrand]: true as const,
@@ -185,13 +190,7 @@ export interface ContractEntry {
 }
 
 export interface ContractScope {
-  readonly routed?: boolean;
   list(key: ContractKey, id?: string, options?: LocalLookupOptions): Promise<readonly ContractEntry[]>;
-}
-
-/** Whether cross-plugin local data methods use the provider's own process. */
-export function routesLocalContracts(ctx: ContractContext): boolean {
-  return ctx[contractScope]?.routed === true;
 }
 
 let serverScope: ContractScope | undefined;

@@ -20,15 +20,19 @@ try {
   const { api: code } = await import(join(source, "src/server/_generated/api.ts"));
   const desk = await h.connect(await h.serve("changes"), { local: true });
   await countsAndDiffsMatchGit(desk, code);
-  await quietTurnChangesNothing(desk, code);
-  await folderScope(desk, code);
-  await hugeDiffIsCut(desk, code);
-  await changesWithoutLines(desk, code);
-  await startedTracking(desk, code);
-  await branchChip(desk, code);
-  console.log(
-    "code changes: counts and diffs match git diff, quiet turn, folder scope, line budget, started tracking, branch",
-  );
+  if (process.env.TOKAMAK_TEST_CODE_CORE === "1") {
+    console.log("code changes (Bun): counts and diffs from the saved before/after refs agree with Git");
+  } else {
+    await quietTurnChangesNothing(desk, code);
+    await folderScope(desk, code);
+    await hugeDiffIsCut(desk, code);
+    await changesWithoutLines(desk, code);
+    await startedTracking(desk, code);
+    await branchChip(desk, code);
+    console.log(
+      "code changes: counts and diffs match git diff, quiet turn, folder scope, line budget, started tracking, branch",
+    );
+  }
 } finally {
   await h.close();
 }

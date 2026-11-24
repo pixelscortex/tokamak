@@ -1,6 +1,8 @@
 export interface LocalProcessOptions {
   cwd?: string;
   env?: Readonly<Record<string, string>>;
+  /** Let a bounded write finish on ordinary cancellation, so it can release its locks. */
+  finishOnCancel?: boolean;
 }
 
 /** Output is decoded as UTF-8 and split on LF or CRLF. Each stream is read once. */

@@ -18,12 +18,18 @@ pub struct Programs(Rc<RefCell<HashMap<*const Program, OwnedProgram>>>);
 
 struct OwnedProgram {
     call: u64,
+    finish_on_cancel: bool,
     program: Arc<Program>,
 }
 
 impl Programs {
     pub fn stop_call(&self, call: u64) {
-        for owned in self.0.borrow().values().filter(|owned| owned.call == call) {
+        for owned in self
+            .0
+            .borrow()
+            .values()
+            .filter(|owned| owned.call == call && !owned.finish_on_cancel)
+        {
             owned.program.stop(false);
         }
     }
@@ -53,6 +59,9 @@ impl Programs {
     ) -> Result<Object<'js>> {
         let cwd = options.get::<_, Option<String>>("cwd")?;
         let env = options.get::<_, Option<HashMap<String, String>>>("env")?;
+        let finish_on_cancel = options
+            .get::<_, Option<bool>>("finishOnCancel")?
+            .unwrap_or_default();
         let mut programs = self.0.borrow_mut();
         programs.retain(|_, owned| !owned.program.finished());
         if programs.len() >= PROGRAM_CAPACITY {
@@ -74,6 +83,7 @@ impl Programs {
             Arc::as_ptr(&program),
             OwnedProgram {
                 call,
+                finish_on_cancel,
                 program: program.clone(),
             },
         );

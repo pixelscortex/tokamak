@@ -3,7 +3,7 @@ import type { JsonValue } from "../src/values";
 import type { HostBridge } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
-import type { ContractInvocation } from "./contracts";
+import { ContractCallError, type ContractInvocation } from "./contracts";
 
 export type WorkerMessage =
   | {
@@ -14,7 +14,14 @@ export type WorkerMessage =
       contract?: ContractInvocation;
       routed?: boolean;
     }
-  | { type: "opResult"; id: number; value: JsonValue; error?: string }
+  | {
+      type: "opResult";
+      id: number;
+      value: JsonValue;
+      error?: string;
+      unavailable?: true;
+      providerError?: true;
+    }
   | { type: "cancel"; id: number };
 
 export function workerDispatch(
@@ -100,6 +107,7 @@ export function workerDispatch(
               call: id,
               name,
               payload,
+              ...(signal && { cancellable: true }),
               ...(plugin === undefined ? {} : { plugin }),
             });
           } catch (error) {
@@ -145,8 +153,14 @@ export function workerDispatch(
       const op = pending.get(message.id);
       pending.delete(message.id);
       if (op) {
-        if (typeof message.error === "string") op.reject(new Error(message.error));
-        else op.resolve(message.value);
+        if (typeof message.error === "string") {
+          const { error, unavailable, providerError } = message;
+          op.reject(
+            unavailable || providerError
+              ? new ContractCallError(error, unavailable === true, providerError === true)
+              : new Error(error),
+          );
+        } else op.resolve(message.value);
       }
     } else if (message.type === "cancel") {
       const call = calls.get(message.id);

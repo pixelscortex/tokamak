@@ -640,9 +640,15 @@ contract and method name. Arguments and results also have size and nesting
 limits. A void result becomes `null` across processes.
 
 Pass `{ signal }` to a local contract lookup to cancel its pending routed
-calls without ending the caller's invocation. In the provider,
-`localHook((ctx, input) => …)` exposes that invocation's signal as
-`input.signal`. Send only the input's data fields across the contract.
+calls without ending the caller's invocation. A method that accepts one object
+can also take that same signal as `input.signal`. QuickJS sends only the other
+fields and assigns the provider invocation's signal to `input.signal` before
+calling the regular `local({ handler })` definition. Bun passes the caller's
+live object and signal. If the live input uses a different signal than the
+routed call, use `inputSignal` to identify the value to keep off the wire.
+A provider can use `{ unavailable: "…" }` in
+`provide()` to supply a notice for the lookup's `onUnavailable` callback even
+when its process cannot start; errors thrown by the handler still reject.
 
 Methods that take live objects stay in the caller's realm. For a mixed
 contract the provider module is also evaluated in that realm, even though its
