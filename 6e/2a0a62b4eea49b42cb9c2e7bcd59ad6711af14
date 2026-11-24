@@ -1,0 +1,25 @@
+e2e/browser/ai.spec.ts
+  s_d72ccb6f50b933::t_87d20d402b4c36 217-218
+plugins/claude/tests/replay.mjs
+  s_d72ccb6f50b933::t_5e798c59a81fde 9-12
+plugins/claude/tests/turns.mjs
+  s_d72ccb6f50b933::t_db1351071d8e91 4,156-158
+plugins/codex/tests/e2e.mjs
+  s_d72ccb6f50b933::t_f19197d8d4c659 21,86,93-96,395
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e2a0a62b4eea49b42cb9c2e7bcd59ad6711af14",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
