@@ -17,8 +17,11 @@ fn launch_local_defaults_to_quickjs_and_supports_bun() {
         return;
     }
 
-    let directory = std::env::temp_dir().join(format!("tokamak-launch-{}", std::process::id()));
-    fs::create_dir(&directory).unwrap();
+    // Executable discovery rejects directories writable by other users.
+    let directory = tempfile::Builder::new()
+        .permissions(fs::Permissions::from_mode(0o700))
+        .tempdir()
+        .unwrap();
     for (file, script) in [
         (
             "host",
@@ -29,7 +32,7 @@ fn launch_local_defaults_to_quickjs_and_supports_bun() {
             "#!/bin/sh\nprintf 'bun %s %s' \"$*\" \"$TOKAMAK_WORKER_LANE\"\n",
         ),
     ] {
-        let path = directory.join(file);
+        let path = directory.path().join(file);
         fs::write(&path, script).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     }
@@ -47,9 +50,9 @@ fn launch_local_defaults_to_quickjs_and_supports_bun() {
                 "--exact",
                 "launch_local_defaults_to_quickjs_and_supports_bun",
             ])
-            .env(CHILD, &directory)
+            .env(CHILD, directory.path())
             .env("TOKAMAK_TEST_LAUNCH_EXPECTED", expected)
-            .env("TOKAMAK_PLUGIN_HOST", directory.join("host"))
+            .env("TOKAMAK_PLUGIN_HOST", directory.path().join("host"))
             .env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", "123")
             .env_remove("TOKAMAK_PLUGIN_RUNTIME");
         if let Some(runtime) = runtime {
@@ -59,9 +62,6 @@ fn launch_local_defaults_to_quickjs_and_supports_bun() {
     })
     .collect();
 
-    fs::remove_file(directory.join("host")).unwrap();
-    fs::remove_file(directory.join("bun")).unwrap();
-    fs::remove_dir(directory).unwrap();
     for result in results {
         assert!(
             result.status.success(),

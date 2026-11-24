@@ -1,6 +1,6 @@
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { JsonValue } from "../src/values";
-import type { HostBridge } from "../src/host";
+import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
 import { ContractCallError, type ContractInvocation } from "./contracts";
@@ -24,6 +24,21 @@ export type WorkerMessage =
     }
   | { type: "cancel"; id: number };
 
+export type DispatchOperation = (
+  id: number,
+  name: HostOperation,
+  payload: JsonValue,
+  plugin?: string,
+  metadata?: { channel: true },
+) => Promise<JsonValue>;
+
+type AttachChannel = (
+  id: number,
+  target: ContractInvocation | undefined,
+  signal: AbortSignal,
+  operation: DispatchOperation,
+) => { bridge: HostBridge["channel"]; dispose(): void };
+
 export function workerDispatch(
   kind: "local" | "action",
   functions: FunctionRegistry,
@@ -41,21 +56,51 @@ export function workerDispatch(
     abort(controller: AbortController): void;
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
     routedContracts?: Parameters<typeof invocationHost>[3];
+    attachChannel?: AttachChannel;
+    sendWaiting?(message: object): void | Promise<void>;
   },
 ) {
-  const calls = new Map<number, { controller: AbortController; close(): Promise<void> }>();
+  const calls = new Map<
+    number,
+    {
+      controller: AbortController;
+      close(): Promise<void>;
+      disposeChannel(): void;
+    }
+  >();
   const pending = new Map<
     number,
     { call: number; resolve(value: JsonValue): void; reject(error: unknown): void }
   >();
+  const waiting = new Map<number, { call: number; send(): void; reject(error: Error): void }>();
+  function transmit(message: object): void | Promise<void> {
+    if (options?.sendWaiting) return options.sendWaiting(message);
+    send(message);
+  }
+
+  function pump() {
+    for (const [id, op] of waiting) {
+      if (pending.size >= WORKER_CAPACITY) break;
+      waiting.delete(id);
+      op.send();
+    }
+  }
 
   function retire(id: number) {
+    calls.get(id)?.disposeChannel();
     calls.delete(id);
+    const stale = new Error("stale invocation: host operation refused");
+    for (const [key, op] of waiting)
+      if (op.call === id) {
+        waiting.delete(key);
+        op.reject(stale);
+      }
     for (const [key, op] of pending)
       if (op.call === id) {
         pending.delete(key);
-        op.reject(new Error("stale invocation: host operation refused"));
+        op.reject(stale);
       }
+    pump();
   }
   async function invoke(
     id: number,
@@ -67,41 +112,71 @@ export function workerDispatch(
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
-    const call = { controller, close: (): Promise<void> => invocation.close() };
+    const call = {
+      controller,
+      close: (): Promise<void> => invocation.close(),
+      disposeChannel: () => channel?.dispose(),
+    };
     calls.set(id, call);
-    const invocation = invocationHost(
-      controller.signal,
-      (plugin) => (name, payload, signal) => {
-        if (calls.get(id) !== call || controller.signal.aborted)
-          throw new Error("stale invocation: host operation refused");
-        if (signal?.aborted) throw new Error("Local contract call cancelled");
-        if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
-        return new Promise<JsonValue>((resolve, reject) => {
-          const op = allocateOp();
-          const cancel = () => {
+    function operation(
+      op: number,
+      name: HostOperation,
+      payload: JsonValue,
+      plugin?: string,
+      metadata?: { channel: true },
+      signal?: ActionSignal,
+    ) {
+      if (calls.get(id) !== call || controller.signal.aborted)
+        throw new Error("stale invocation: host operation refused");
+      if (signal?.aborted) throw new Error("Local contract call cancelled");
+      const wait = pending.size >= WORKER_CAPACITY;
+      if (wait && (!options?.sendWaiting || waiting.size >= WORKER_CAPACITY))
+        throw new Error("Worker operation capacity exceeded");
+      return new Promise<JsonValue>((resolve, reject) => {
+        const cleanup = () => signal?.removeEventListener("abort", cancel);
+        const rejected = (error: unknown) => {
+          cleanup();
+          reject(error);
+        };
+        let sending: void | Promise<void>;
+        const cancel = () => {
+          const error = new Error("Local contract call cancelled");
+          if (waiting.delete(op)) {
+            rejected(error);
+            return;
+          }
+          if (!pending.has(op)) return;
+          rejected(error);
+          const sent = () => {
             if (!pending.delete(op)) return;
             try {
               send({ type: "opCancel", id: op, call: id });
             } finally {
-              rejected(new Error("Local contract call cancelled"));
+              pump();
             }
           };
-          const cleanup = () => signal?.removeEventListener("abort", cancel);
-          const rejected = (error: unknown) => {
-            cleanup();
-            reject(error);
-          };
+          // A send blocked on the host's byte budget must precede its cancel.
+          // Until then it still occupies a pending slot. If the call ends,
+          // the host refuses the stale send and no cancel frame is needed.
+          if (sending) void sending.then(sent, () => {}).catch(() => {});
+          else sent();
+        };
+        const dispatch = () => {
           pending.set(op, {
             call: id,
-            resolve: (value) => {
+            resolve(value) {
               cleanup();
               resolve(value);
             },
             reject: rejected,
           });
-          signal?.addEventListener("abort", cancel, { once: true });
+          const failed = (error: unknown) => {
+            pending.delete(op);
+            rejected(error);
+            pump();
+          };
           try {
-            send({
+            const message = {
               type: "op",
               id: op,
               call: id,
@@ -109,15 +184,27 @@ export function workerDispatch(
               payload,
               ...(signal && { cancellable: true }),
               ...(plugin === undefined ? {} : { plugin }),
-            });
+              ...metadata,
+            };
+            sending = transmit(message);
+            if (sending) void sending.catch(failed);
           } catch (error) {
-            pending.delete(op);
-            rejected(error);
+            failed(error);
           }
-        });
-      },
+        };
+        signal?.addEventListener("abort", cancel, { once: true });
+        if (wait) waiting.set(op, { call: id, send: dispatch, reject: rejected });
+        else dispatch();
+      });
+    }
+    const channel = options?.attachChannel?.(id, target, controller.signal, operation);
+    const invocation = invocationHost(
+      controller.signal,
+      (plugin) => (name, payload, signal) =>
+        operation(allocateOp(), name, payload, plugin, undefined, signal),
       createPrograms && (() => createPrograms(controller.signal, id)),
       routed ? (options?.routedContracts ?? contracts) : contracts,
+      channel?.bridge,
     );
     try {
       if (!(target && options?.contract) && functions[name]?.kind !== kind)
@@ -127,7 +214,10 @@ export function workerDispatch(
           ? await options.contract(target, args, invocation.host())
           : await invokeFunction(functions, { name, args }, invocation.host());
       await invocation.close();
-      if (calls.get(id) === call) send({ type: "result", id, value });
+      if (calls.get(id) === call) {
+        const sending = transmit({ type: "result", id, value });
+        if (sending) await sending;
+      }
     } catch (error) {
       await invocation.close();
       const message =
@@ -139,7 +229,13 @@ export function workerDispatch(
         } catch {
           // Error properties may have user-defined getters.
         }
-        send({ type: "result", id, error: message, ...(stack === undefined ? {} : { stack }) });
+        const sending = transmit({
+          type: "result",
+          id,
+          error: message,
+          ...(stack === undefined ? {} : { stack }),
+        });
+        if (sending) await sending;
       }
     } finally {
       if (calls.get(id) === call) retire(id);
@@ -162,6 +258,7 @@ export function workerDispatch(
           );
         } else op.resolve(message.value);
       }
+      pump();
     } else if (message.type === "cancel") {
       const call = calls.get(message.id);
       if (call) {
@@ -176,7 +273,7 @@ export function workerDispatch(
           pending.delete(id);
           op.reject(new Error(`Plugin ${kind} function cancelled`));
         }
-      if (options) calls.delete(message.id);
+      if (options) retire(message.id);
     } else throw new Error("Invalid worker message");
   };
 }

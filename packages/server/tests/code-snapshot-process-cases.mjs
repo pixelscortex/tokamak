@@ -154,7 +154,7 @@ export async function unavailableProviders({ h, runner, desk, code, project, sta
   await h.gate(folder, "go");
   const crashed = cached.run(cached.messageId, "edit");
   const pids = await gitPids({ folder });
-  const owner = Number(Bun.spawnSync(["ps", "-o", "ppid=", "-p", String(pids[0])]).stdout.toString());
+  const owner = Number(Bun.spawnSync(["ps", "-ww", "-o", "ppid=", "-p", String(pids[0])]).stdout.toString());
   const codeHost = hosts().find(({ id, pid }) => id === "code" && pid === owner);
   assert.ok(codeHost, "the cached hook's Git process belongs to the Code host being killed");
   process.kill(codeHost.pid, "SIGKILL");
@@ -278,4 +278,37 @@ cat >/dev/null
   );
   assert.equal(await desk.query(chat.threads.get, { threadId: thread.threadId }), null);
   console.log("code snapshots: cancellation lets Git release its packed refs lock");
+}
+
+export async function managerCrash({ h, runner, desk, project, start }) {
+  const hosts = await inspectHosts(runner);
+  const agent = await project("manager-crash-agent");
+  const agentThread = await start(desk, agent.folder);
+  const agentDone = assert.rejects(
+    agentThread.run(agentThread.messageId, "ignore-stop"),
+    /Plugin ai process:/,
+  );
+  void agentDone.catch(() => {});
+  await h.waitFor(agent.folder, "process-tree.json");
+  const agentPids = await Bun.file(join(agent.folder, "process-tree.json")).json();
+  assert.ok(agentPids.length > 1 && agentPids.every(alive));
+
+  const hook = await project("manager-crash-hook");
+  await stall(hook);
+  await hook.write("agent.txt", "Wait inside the before snapshot.\n");
+  const hookThread = await start(desk, hook.folder);
+  const hookDone = assert.rejects(hookThread.run(hookThread.messageId, "edit"), /Plugin ai process:/);
+  void hookDone.catch(() => {});
+  const hookPids = await gitPids(hook);
+
+  const manager = hosts().find(({ id }) => id === "ai");
+  const code = hosts().find(({ id }) => id === "code");
+  assert.ok(manager && code);
+  process.kill(manager.pid, "SIGKILL");
+  await Promise.all([agentDone, hookDone]);
+  await until("the agent and hook groups die after ai exits", () =>
+    [...agentPids, ...hookPids].every((pid) => !alive(pid)),
+  );
+  assert.ok(alive(code.pid), "cancellation leaves Code's host up");
+  console.log("code snapshots: ai crash reaped the linked agent and the in-flight hook Git group");
 }

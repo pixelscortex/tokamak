@@ -653,19 +653,58 @@ when its process cannot start; errors thrown by the handler still reject.
 Methods that take live objects stay in the caller's realm. For a mixed
 contract the provider module is also evaluated in that realm, even though its
 plain-data methods run in the provider's separate process. That shared
-evaluation remains for agent turns until TKM-247.
-A reload restarts the provider process only when its local bytes change. If
-the caller's live providers change, new calls use a new realm and admitted
-calls finish in the old one. “Always allow this session” grants in `ai`'s
-module state do not carry to the replacement realm: new turns ask again
-even when resuming the same agent session. This limitation goes away when
-agent turns move across processes (TKM-247).
+evaluation remains available for plugins with live methods. A change to a
+live provider gives new calls a new realm while admitted calls in the old
+one finish. The agent, turn hook and thread deletion contracts use only
+routed calls on QuickJS, so reloading an agent or Code does not replace
+`ai`'s process or clear its “Always allow this session” grants.
+
+Turn hook authors declare a regular `local({ handler })` and read
+`turn.signal`. On QuickJS the SDK attaches the hook invocation's signal
+as described above. Stop cancels the before hook; after hooks run together
+under one deadline and are also cancelled if the turn is lost. Code stores
+the before snapshot under a Git ref scoped to the thread and turn ID, so a
+replacement Code process can pair it with the after snapshot.
 
 Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
 All local methods receive the calling member and device in their context. A
 matching provider build must be installed on the client. With the Bun
 fallback, all local contract methods keep running in the caller's worker.
+
+The `ai` agent contract keeps the author's `start(ctx, run)` API in both
+runtimes. On QuickJS, the provider SDK builds the `Run` in the agent's host.
+`run.text` and other reports are batched, `run.ask` waits for the sender's
+answer, and `run.onSteer` and `run.onStop` register handlers in that host.
+CLI programs opened by the agent's `ctx.proc` belong to the turn and are
+reaped on force stop or when its manager's call is cancelled. Agent authors
+do not implement the message transport.
+
+The adapter in `packages/sdk/worker/contracts.ts` special-cases
+`owner === "ai" && name === "agent" && method === "start"` to build that
+`Run`. The Runner's linked call transport is general and does not inspect
+agent messages. The start carries a protocol version so an old ai bundle
+and a host with a different wire format fail with a version error. Reports
+are validated as a batch and acknowledged in order before the agent returns
+its final result. The 1008 KiB start payload keeps the full prompt and drops
+the oldest history as needed. A message that cannot fit even without history
+fails once, including when it is at the head of the queue.
+
+QuickJS allows up to 64 concurrent turns per Runner and up to 32 on an
+individual agent host, within the 128 invocation slots per host. The Runner
+enforces both limits. Reports and questions wait for space in bounded queues.
+The adapter merges consecutive text or thinking deltas and replaces unsent
+tasks, plan, and usage snapshots. It sends batches below 640 KiB and allows
+768 KiB per turn (JSON bytes plus 64 bytes per buffered event, including the
+batch awaiting acknowledgement). At 32 turns that accounts for 24 MiB of
+reports per host. The reporting API stays synchronous; if coalescing cannot
+keep the buffer below its limit, only that turn fails with “The agent produced
+output faster than it could be saved.”
+
+If Force stop cannot drain
+reports within 750 ms, the host can still kill the invocation's programs
+without running JavaScript. A stuck realm may subsequently be reset by the
+watchdog, which also ends its other invocations.
 
 A server contract defaults to `place: "server"`. For each
 method provide a server function definition such as `internalAction` or
@@ -678,7 +717,9 @@ installed. The compiler only needs its public contract types. If the defining
 plugin's source is unavailable, check in an exact copy of its public contract
 declaration at `contracts/<id>.ts` in the provider. That copy supplies types
 and a contract key. The implementation stays inactive until the owner is in
-the installed catalog, which refuses a mismatched declaration hash.
+the installed catalog. For a local contract, the client skips an incompatible
+provider individually; the ai agent list shows the provider as unavailable.
+For a server contract, the server refuses a mismatched declaration hash.
 
 For a direct server-to-server export, wrap a query, mutation or action in
 `pluginOnly(...)` and re-export it from `src/server/api.ts` as usual.

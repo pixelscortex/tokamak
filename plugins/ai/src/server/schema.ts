@@ -152,6 +152,8 @@ export default defineSchema({
     stoppingAt: v.optional(v.number()),
     /** Follow-up text in send order, displayed inside this turn's reply. */
     steers: v.optional(v.array(v.string())),
+    /** A linked steer being handed off. Only an acknowledged steer joins the history. */
+    pendingSteer: v.optional(v.string()),
     error: v.optional(v.string()),
     /** What the turn cost, as the agent last reported it. */
     usage: v.optional(usage),

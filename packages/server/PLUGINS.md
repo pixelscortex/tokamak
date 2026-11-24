@@ -289,21 +289,27 @@ For those methods, the window authorizes the provider and method using the
 catalog, and the QuickJS Runner routes the JSON arguments and result between
 the two plugin processes. The provider handles the call with the caller's
 signed-in member and device. Turn hooks and thread deletion hooks use this
-route. Live methods such as turn start still run in the caller's realm and
-can pass objects with callbacks. Bun
-continues to use the caller's worker for all local contract methods.
+route. Bun continues to use the caller's worker for all local contract
+methods.
 
-The QuickJS Runner reuses one verified snapshot of each live provider per
-caller realm. If a live provider changes, is added, or is removed, new calls
-use a new realm. The old realm keeps its original provider files until its
-admitted calls finish. Stop, force stop, steer and permission answers still
-reach the original realm. A reload with identical local bytes and live
-providers keeps the existing process.
+On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
+author's live `Run` to plain-data messages over the link established by the
+routed start. The Runner cancels that call if ai's process dies. The agent
+host can fail independently; its in-flight turns report the failure in their
+threads. “Always allow this session” grants live in ai's module state and
+survive agent reloads.
 
-“Always allow this session” grants live in `ai`'s module state. They still apply
-to turns in the old realm, but new turns in a replacement realm ask again,
-even when they resume the same agent session. This limitation goes away when
-agent turns move across processes (TKM-247).
+On QuickJS, turn hook inputs cross as data and the SDK supplies the
+provider invocation's abort signal as `turn.signal`. Stop cancels a pending
+before hook. After hooks share one deadline and can also be cancelled if
+the turn is lost. Code pairs its snapshots using the before ref, which
+survives a provider restart. Reloading Code, like reloading an agent, does
+not replace ai's process or clear its session grants.
+
+Contracts with live methods remain supported. The QuickJS Runner verifies
+the provider bundle before the caller imports it. If a live provider
+changes, new calls use a different realm, and the original realm retains
+its admitted calls and provider files until those calls end.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

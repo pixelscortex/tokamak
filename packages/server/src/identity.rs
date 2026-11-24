@@ -110,7 +110,11 @@ fn local_device_name() -> &'static str {
     static NAME: OnceLock<String> = OnceLock::new();
     NAME.get_or_init(|| {
         fn output(name: &str, args: &[&str]) -> Option<String> {
-            let output = std::process::Command::new(name).args(args).output().ok()?;
+            let mut command = std::process::Command::new(name);
+            command.args(args);
+            #[cfg(target_os = "macos")]
+            tokamak_worker::inherit_only(&mut command, None).ok()?;
+            let output = command.output().ok()?;
             output
                 .status
                 .success()

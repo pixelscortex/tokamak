@@ -175,16 +175,22 @@ impl Loaded {
         if owner != AUTH_CONTRACT_OWNER && !self.catalog.plugins.contains_key(owner) {
             return Ok(()); // An optional owner can be installed after its providers.
         }
-        if declarations.get(&(owner, name))
-            != Some(&(registration.place, registration.declaration_hash.as_str()))
+        let declaration = declarations.get(&(owner, name));
+        if declaration.is_some_and(|(place, _)| *place == ContractPlace::Local)
+            && registration.place == ContractPlace::Local
         {
+            // The client lists local providers and quarantines stale builds there.
+            // One mismatched local provider must not prevent catalog publication.
+            return Ok(());
+        }
+        if declaration != Some(&(registration.place, registration.declaration_hash.as_str())) {
             return Err(invalid(format!(
                 "Contract declaration mismatch for {owner}/{name} in {plugin}; rebuild against the owner's public declaration"
             )));
         }
-        let Some(providers) = contracts.get_mut(&(owner.to_owned(), name.to_owned())) else {
-            return Ok(()); // Local contracts are executed by the client.
-        };
+        let providers = contracts
+            .get_mut(&(owner.to_owned(), name.to_owned()))
+            .expect("checked server contract declaration");
         let provider = self.read_provider(plugin, registration)?;
         if providers.iter().any(|current| current.id == provider.id) {
             return Err(invalid(format!(

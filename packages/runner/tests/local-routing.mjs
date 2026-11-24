@@ -161,7 +161,7 @@ try {
         .map(({ id, pid }) => [id, pid]),
     );
   const alive = (pid) => {
-    const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    const state = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)])
       .stdout.toString()
       .trim();
     return state && !state.startsWith("Z");
@@ -192,8 +192,10 @@ try {
       { id: `custom-${id.slice("routed-".length)}`, path, cancelCall },
       { signal },
     );
-    void result.catch(() => {});
-    await until(name + " started", () => Bun.file(path + ".started").exists());
+    await Promise.race([
+      until(name + " started", () => Bun.file(path + ".started").exists()),
+      result.then(() => assert.fail(`${name} completed before the provider was ready`)),
+    ]);
     return { path, result };
   };
   const cancel = new AbortController();

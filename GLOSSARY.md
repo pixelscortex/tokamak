@@ -111,7 +111,7 @@ A saved picture of the thread folder before or after a turn, used to see what ch
 _Avoid_: Checkpoint, backup, diff.
 
 **Turn hooks**:
-The points before and after agent work at which other plugins can act on a turn.
+The points before and after agent work at which other plugins can act on a turn. On QuickJS they run in the provider’s plugin process; cancellation is delivered to the hook’s own signal.
 _Avoid_: Interceptors, middleware, callbacks (when referring to the extension points).
 
 ### Plugins

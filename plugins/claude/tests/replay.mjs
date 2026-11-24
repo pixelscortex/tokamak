@@ -37,6 +37,7 @@ if (args[0] === "--version") {
   let replay = args.includes("--strict-mcp-config") ? "claude-info" : basename(process.cwd());
   if (replay.startsWith("claude-resistant-")) replay = "claude-resistant";
   if (replay.startsWith("claude-hello-")) replay = "claude-hello";
+  if (replay === "claude-remember-snapshots") replay = "claude-remember";
   if (replay === "claude-hello" && flag("--resume")) {
     assert.equal(flag("--resume"), "ed0f9193-a023-4ab1-a74c-a8bba2877dc3");
     replay = "claude-resume";

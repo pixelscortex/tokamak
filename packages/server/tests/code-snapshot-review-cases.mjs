@@ -135,7 +135,7 @@ export async function stall(project, wait = "sleep 90") {
 }
 
 export function alive(pid) {
-  const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+  const state = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)])
     .stdout.toString()
     .trim();
   return !!state && !state.startsWith("Z");
@@ -154,7 +154,7 @@ export async function gitPids({ folder }) {
   return pids;
 }
 
-async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
+async function snapshotDeadlines({ desk, code, project, start, refs, gate, routed }) {
   const before = await project("slow-before");
   const after = await project("slow-after");
   await stall(before);
@@ -206,7 +206,11 @@ async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
   ]) {
     await unlink(join(project.folder, ".git/info/attributes"));
     const next = await thread.run(await thread.post(), "edit-fail");
-    assert.equal((await thread.reply(next.turnId)).error, "rate limited", "the next turn starts normally");
+    assert.equal(
+      (await thread.reply(next.turnId)).error,
+      routed ? "Plugin fake-agent: rate limited" : "rate limited",
+      "the next turn starts normally",
+    );
   }
   console.log("code snapshots: both hook deadlines reaped Git and its filter");
 }

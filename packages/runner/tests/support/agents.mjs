@@ -33,7 +33,13 @@ exec ${bun} ${quoted(join(workspace, "plugins/claude/tests/replay.mjs"))} "$@"
     `#!/bin/sh
 case "$1" in
   --version) echo 'codex-cli 0.170.0' ;;
-  app-server) exec ${bun} ${quoted(join(workspace, "e2e/fake-agent/program.mjs"))} --replay codex/info ;;
+  app-server)
+    if [ "$PWD/home" = "$HOME" ]; then tape=info; else
+      tape="\${PWD##*/}"
+      printf '%s' "$$" > codex.pid
+    fi
+    exec ${bun} ${quoted(join(workspace, "e2e/fake-agent/program.mjs"))} --replay "codex/$tape"
+    ;;
   *) exit 2 ;;
 esac
 `,

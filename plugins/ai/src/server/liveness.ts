@@ -151,7 +151,15 @@ async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number) {
     .collect();
   for (const step of steps)
     if (step.state === "running") await ctx.db.patch(step._id, { state: "failed", finishedAt: now });
-  const { _id, _creationTime, question: _question, questionToken: _token, current: _current, ...rest } = turn;
+  const {
+    _id,
+    _creationTime,
+    question: _question,
+    questionToken: _token,
+    current: _current,
+    pendingSteer: _steer,
+    ...rest
+  } = turn;
   await ctx.db.replace(_id, { ...rest, state: "interrupted", error: CLOSED, finishedAt: now });
   const sign = await signOf(ctx.db, _id);
   if (sign) await ctx.db.delete(sign._id);

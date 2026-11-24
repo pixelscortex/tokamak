@@ -8,7 +8,8 @@ use std::{
 use anyhow::{Result, anyhow};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Exception, Function, Module, Object,
-    Persistent, Promise, prelude::Func,
+    Persistent, Promise,
+    prelude::{Async, Func},
 };
 
 use crate::{
@@ -42,6 +43,7 @@ impl Runtime {
         heap: usize,
         output: Arc<Output>,
         next: Rc<Cell<u64>>,
+        programs: Programs,
     ) -> Result<Self> {
         let bundle = bundles.root().to_owned();
         let runtime = AsyncRuntime::new()?;
@@ -57,7 +59,6 @@ impl Runtime {
             .await;
 
         let context = AsyncContext::full(&runtime).await?;
-        let programs = Programs::default();
         let immediates = timers::Immediates::default();
         let dispatch = {
             let startup = context.async_with(async |ctx| {
@@ -165,19 +166,35 @@ async fn initialize<'js>(
     .eval()?;
     evaluated.into_future::<()>().await?;
     let initialize: Function = module.get("initialize")?;
-    let send = Func::from(move |ctx: Ctx<'js>, line: String| {
+    let waiting_output = output.clone();
+    let waiting_watchdog = watchdog.clone();
+    let send_wait = Func::from(Async(move |ctx: Ctx<'js>, line: String| {
+        let output = waiting_output.clone();
+        let watchdog = waiting_watchdog.clone();
+        async move {
+            if watchdog.tripped() {
+                return Ok(());
+            }
+            output
+                .send_wait(line)
+                .await
+                .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))
+        }
+    }));
+    let try_send = Func::from(move |ctx: Ctx<'js>, line: String| {
         if watchdog.tripped() {
-            return Ok(());
+            return Ok(true);
         }
         output
-            .send(line)
+            .try_send(line)
             .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))
     });
     let next_op = Func::from(move || {
         next.set(next.get() + 1);
         next.get() as f64
     });
-    let ready: Promise = initialize.call((send, next_op, bundle, programs.factory(ctx)?))?;
+    let ready: Promise =
+        initialize.call((try_send, send_wait, next_op, bundle, programs.factory(ctx)?))?;
     Ok(Persistent::save(
         ctx,
         ready.into_future::<Function>().await?,

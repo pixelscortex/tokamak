@@ -179,6 +179,7 @@ fn spawn_child(
         if let Some(env) = env {
             command.env_clear().envs(env);
         }
+        tokamak_worker::inherit_only(command.as_std_mut(), None)?;
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -252,6 +253,7 @@ kill -KILL "-$$" 2>/dev/null"#,
             Ok(())
         });
     }
+    tokamak_worker::inherit_only(guardian.as_std_mut(), None)?;
     guardian.spawn()
 }
 

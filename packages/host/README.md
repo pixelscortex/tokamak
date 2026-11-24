@@ -33,16 +33,22 @@ invocation cancels its child calls. The caller can also cancel one pending
 operation with `opCancel`; the Runner drops that route and sends `cancel`
 to the provider invocation.
 
-For live methods the host still imports the verified provider bundle in the
-same realm. The agent contract mixes both kinds: `info` runs in the provider's
-process, and `start` still receives the live turn in `ai`'s process. The bundle
-is available there for provider discovery and live calls. Turn hooks and
-thread deletion hooks use plain data and run in their providers' processes.
-The Runner reuses the same verified live snapshot in the caller's realm
-across windows. When its live providers change, new calls use a fresh
-process. The old realm keeps its original provider snapshots and finishes
-admitted calls before stopping. Turn controls still reach that realm by turn
-ID. Imports from other paths are refused.
+The agent contract uses plain data on QuickJS. The SDK recreates the author's
+`Run` in the agent host and the CLI belongs to that call's program scope.
+Reports are acknowledged in order before the final result, and an ask flushes
+earlier reports before waiting for an answer. Force stop kills only that
+scope, even if the author's handler never settles. An invocation can send
+messages only over its own authorized link; channels end with either peer.
+
+Turn hooks and thread deletion hooks run in their providers' processes.
+The SDK attaches a hook invocation's own abort signal before calling the
+handler. Reloading an agent or Code leaves ai's process and its permission
+grants in place.
+
+For other contracts with live methods, the host can still import the
+verified provider snapshot into the caller's realm. When that realm's live
+providers change, new calls use a fresh realm. Admitted calls keep their
+original snapshots until they finish. Imports from other paths are refused.
 
 A process exit fails its active calls with the plugin's name. Its next start
 is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run

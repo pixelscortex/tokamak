@@ -40,17 +40,23 @@ impl LocalRuntime {
                 path.display()
             )
         };
-        let output = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            tokio::process::Command::new(&path)
-                .arg("--capabilities")
-                .stdin(std::process::Stdio::null())
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await
-        .map_err(|_| failure("capability check timed out"))?
-        .map_err(|error| failure(&error.to_string()))?;
+        let mut command = tokio::process::Command::new(&path);
+        command
+            .arg("--capabilities")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(not(windows))]
+        let child = super::spawn_child(&mut command, None);
+        #[cfg(windows)]
+        let child = command.spawn();
+        let child = child.map_err(|error| failure(&error.to_string()))?;
+        let output =
+            tokio::time::timeout(std::time::Duration::from_secs(5), child.wait_with_output())
+                .await
+                .map_err(|_| failure("capability check timed out"))?
+                .map_err(|error| failure(&error.to_string()))?;
         if !output.status.success() {
             return Err(failure(&format!(
                 "capability check exited with {}",

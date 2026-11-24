@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { local } from "@tokamak/sdk";
+import { localProviders } from "@tokamak/sdk/agent-turn";
 import { agent, type Agent, type Info } from "../contracts";
 import { MAX_ICON_LENGTH } from "../shared/icon";
 
@@ -20,16 +21,29 @@ const UNKNOWN: Info = {
  * made meanwhile shows up. `ai` knows agents only through the contract.
  */
 export const list = local({
-  handler: async (ctx) =>
-    Promise.all(
-      (await agent.list(ctx)).map(async (provider) => ({
+  handler: async (ctx) => {
+    const { providers, incompatible } = await localProviders(agent, ctx);
+    const available = await Promise.all(
+      providers.map(async (provider) => ({
         id: provider.id,
         name: provider.name,
         ...(typeof provider.icon === "string" &&
           provider.icon.length <= MAX_ICON_LENGTH && { icon: provider.icon }),
         info: await infoOf(provider),
       })),
-    ),
+    );
+    return [
+      ...available,
+      ...incompatible.map((plugin): (typeof available)[number] => ({
+        id: plugin,
+        name: plugin,
+        info: {
+          ...UNKNOWN,
+          updateRequired: `${plugin} was built for a different version of ai's agent contract; rebuild or update it.`,
+        },
+      })),
+    ];
+  },
 });
 
 /**

@@ -1,5 +1,5 @@
 import type { FunctionDefinition, ServerFunctionKind, WireResult } from "../functions";
-import { callHost, type HostBridge } from "../host";
+import { callHost, type HostBridge, type LocalChannel, type ChannelHandler } from "../host";
 import { jsonSnapshot, type JsonValue } from "../values";
 
 export const contractName = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -8,6 +8,24 @@ export const MEMBER_HOOK_RUN = "run";
 const contractBrand: unique symbol = Symbol.for("tokamak.contract");
 const providerBrand: unique symbol = Symbol.for("tokamak.contract.provider");
 export const contractScope = Symbol.for("tokamak.contract.scope");
+export const openChannel = Symbol.for("tokamak.contract.channel");
+
+export function hasLocalChannel(provider: object): boolean {
+  return typeof (provider as { [openChannel]?: unknown })[openChannel] === "function";
+}
+
+/** Open a linked data call, when the provider runs in another QuickJS process. */
+export function openLocalChannel(
+  provider: object,
+  method: string,
+  args: unknown,
+  receive: ChannelHandler,
+): LocalChannel | undefined {
+  const entry = provider as {
+    [openChannel]?: (method: string, args: unknown, receive: ChannelHandler) => LocalChannel;
+  };
+  return entry[openChannel]?.(method, args, receive);
+}
 
 export type ContractPlace = "local" | "server";
 export interface ContractKey {
@@ -26,6 +44,7 @@ export interface Contract<T extends object, P extends ContractPlace = ContractPl
 }
 
 interface LocalLookupOptions {
+  readonly onIncompatible?: (plugin: string) => void;
   /** Cancel provider discovery and calls made through the returned list. */
   readonly signal?: NonNullable<HostBridge["signal"]>;
   /** When the live input uses a different signal, identify it so it stays off the wire. */
@@ -191,6 +210,18 @@ export interface ContractEntry {
 
 export interface ContractScope {
   list(key: ContractKey, id?: string, options?: LocalLookupOptions): Promise<readonly ContractEntry[]>;
+}
+
+/** List usable local providers alongside builds whose declarations no longer match. */
+export async function localProviders<T extends object>(key: Contract<T, "local">, context: ContractContext) {
+  const incompatible: string[] = [];
+  const entries = await context[contractScope].list(key, undefined, {
+    onIncompatible: (plugin) => incompatible.push(plugin),
+  });
+  return {
+    providers: entries.map((entry) => entry.implementation as BoundProvider<T, "local">),
+    incompatible,
+  };
 }
 
 let serverScope: ContractScope | undefined;

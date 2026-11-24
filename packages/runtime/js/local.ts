@@ -281,8 +281,11 @@ export class LocalFunctions implements LocalTransport {
         (p) => p.owner === caller && p.name === name && p.place === "local",
       );
       if (!registrations?.length) continue;
-      if (registrations.some((p) => p.declarationHash !== declaration.declarationHash))
-        throw new Error(`Contract declaration mismatch for ${caller}/${name} in ${plugin}`);
+      if (registrations.some((p) => p.declarationHash !== declaration.declarationHash)) {
+        // An incompatible build is discoverable but cannot be loaded or routed.
+        providers.push({ plugin, incompatible: true });
+        continue;
+      }
       const artifact = this.artifact(manifest);
       if (!artifact) continue;
       const own = plugin === worker;

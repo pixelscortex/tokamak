@@ -26,6 +26,9 @@ check_local_symbols() {
       patterns[++count] = "tokamak_worker::Process>?::launch_local$"
       patterns[++count] = "tokamak_worker::Process>?::launch_plugin$"
       patterns[++count] = "tokamak_plugin_host::local_plugin::run"
+      patterns[++count] = "tokamak_runner::local::quickjs::Host>?::peer$"
+      patterns[++count] = "tokamak_runner::local::quickjs::Host>?::stop_programs$"
+      patterns[++count] = "tokamak_plugin_host::protocol::native_control$"
       patterns[++count] = "tokamak_worker::Process>?::launch_runner$"
     }
     /tokamak_plugin_host::action_process::run/ { action_host = 1 }
@@ -49,6 +52,24 @@ check_local_symbols() {
         failed = 1
       }
       exit failed
+    }
+  '
+}
+
+check_channel_bundle() {
+  local build=$1 binary=$2
+  # The channel is JavaScript inside the host, so nm cannot see it.
+  LC_ALL=C strings "$binary" | awk -v build="$build" '
+    /local\.contract\.peer/ { found = 1 }
+    END {
+      if (build == "runner" && !found) {
+        print "Missing Runner control for the embedded local contract channel"
+        exit 1
+      }
+      if (build == "cloud" && found) {
+        print "Embedded local contract channel in cloud plugin host"
+        exit 1
+      }
     }
   '
 }
@@ -85,6 +106,7 @@ case "$1" in
     # Test executables link in the shared cache, away from either real host.
     export TOKAMAK_PLUGIN_HOST="$runner_debug/tokamak-plugin-host"
     test "$("$TOKAMAK_PLUGIN_HOST" --capabilities)" = "actions local"
+    check_channel_bundle runner "$TOKAMAK_PLUGIN_HOST"
 
     mkdir -p "$PWD/target"
     fixture_dir=$(mktemp -d "$PWD/target/agent-fixtures.XXXXXX")
@@ -163,6 +185,8 @@ case "$1" in
     test "$("$cloud_debug/tokamak-plugin-host" --capabilities)" = "actions"
     check_local_symbols cloud "$cloud_debug/tokamak-server" "$cloud_debug/tokamak-plugin-host"
     echo "Cloud binaries exclude local runtime symbols"
+    check_channel_bundle cloud "$cloud_debug/tokamak-plugin-host"
+    echo "Cloud host excludes the embedded local contract channel"
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test "${cloud[@]}" -p tokamak-plugin-host --all-targets
     echo "Timing Rust integration: actions-only cloud server"
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 TOKAMAK_TEST_RUNNER_HOST="$TOKAMAK_PLUGIN_HOST" \

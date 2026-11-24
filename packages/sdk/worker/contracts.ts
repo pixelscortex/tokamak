@@ -1,22 +1,17 @@
 import { pathToFileURL } from "node:url";
-import { type ContractEntry, type ContractScope, type Provider } from "../src/internal/contracts";
+import {
+  openChannel,
+  type ContractEntry,
+  type ContractScope,
+  type Provider,
+} from "../src/internal/contracts";
 import type { AuthContext, FunctionDefinition } from "../src/functions";
-import { callHost, type HostBridge, type HostOperations } from "../src/host";
-import { assertJson, type JsonValue } from "../src/values";
+import { callHost, type ChannelHandler, type HostBridge, type HostOperations } from "../src/host";
+import type { JsonValue } from "../src/values";
+import type { AgentTurnOpen } from "../src/agent-turn";
+import { agentTurn } from "./agent-turn";
 
-import { WORKER_FRAME_BYTES } from "../src/worker-limits";
-
-// Leave room for the operation and invocation envelopes in both directions.
-const MAX_DATA_BYTES = WORKER_FRAME_BYTES - 16 * 1024;
-const MAX_DATA_DEPTH = 100;
-
-function wireData(value: unknown, label: string): JsonValue {
-  assertJson(value, label, undefined, MAX_DATA_DEPTH);
-  const text = JSON.stringify(value);
-  if (text.length > MAX_DATA_BYTES || new TextEncoder().encode(text).length > MAX_DATA_BYTES)
-    throw new Error(`${label} exceeds the plain-data size limit`);
-  return JSON.parse(text) as JsonValue;
-}
+import { wireData } from "./wire-data";
 
 type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
 export type ContractInvocation = {
@@ -26,6 +21,7 @@ export type ContractInvocation = {
   registration: string;
   method?: string;
   invocationSignal?: true;
+  channel?: true;
 };
 
 /** Runner transport errors are distinct from errors thrown by the provider. */
@@ -85,6 +81,18 @@ export function dataContracts(root: ProviderModule) {
     const auth = await callHost(bridge, "auth.current", {});
     if (!auth) throw new Error("Local contracts require a signed-in caller");
     if (local && args.length > 1) throw new Error(`${label} expects at most one argument`);
+    // Agent plugins keep providing start(ctx, Run). Only the QuickJS
+    // provider dispatcher constructs that object, inside its own scope.
+    if (owner === "ai" && name === "agent" && method === "start") {
+      if (!target.channel || args.length !== 1) throw new Error(`${label} requires a turn channel`);
+      const result = await agentTurn(args[0] as unknown as AgentTurnOpen, bridge, (run, scoped) => {
+        const start = bindProvider(definition, scoped, auth)[method];
+        if (typeof start !== "function") throw new Error(`${label} is not a method`);
+        return start(run);
+      });
+      return wireData(result === undefined ? null : result, `${label} result`);
+    }
+    if (target.channel) throw new Error(`${label} does not accept a channel`);
     const implementation = bindProvider(definition, bridge, auth);
     const handler = implementation[method];
     if (typeof handler !== "function") throw new Error(`${label} is not a method`);
@@ -122,7 +130,7 @@ export function workerContracts(
         if (key.place !== "local") throw new Error("Server contracts run in server functions");
         const signal = routed ? options?.signal : undefined;
         const inputSignal = options?.inputSignal ?? signal;
-        const candidates = await callHost(
+        const catalog = await callHost(
           bridge,
           "local.contracts",
           { name: key.name, ...(key.owner === undefined ? {} : { owner: key.owner }) },
@@ -132,6 +140,18 @@ export function workerContracts(
         if (!auth) throw new Error("Local contracts require a signed-in caller");
         const entries = new Map<string, ContractEntry>();
         const unavailable: { plugin: string; lastId: JsonValue | undefined; error: unknown }[] = [];
+        const candidates = catalog.filter((candidate) => !candidate.incompatible);
+        for (const candidate of catalog) {
+          if (!candidate.incompatible) continue;
+          options?.onIncompatible?.(candidate.plugin);
+          unavailable.push({
+            plugin: candidate.plugin,
+            lastId: undefined,
+            error: new Error(
+              `${candidate.plugin} was built for a different version of ${key.owner ?? "the owner"}'s ${key.name} contract; rebuild or update it.`,
+            ),
+          });
+        }
         const resolve = async ({
           plugin,
           registration,
@@ -211,6 +231,17 @@ export function workerContracts(
               implementation = Object.freeze({
                 ...value.data,
                 ...Object.fromEntries(value.methods.map((method) => [method, remote(method)])),
+                ...(bridge.channel && {
+                  [openChannel](method: string, args: unknown, receive: ChannelHandler) {
+                    if (!value.methods.includes(method))
+                      throw new Error(`Unknown local contract method ${method}`);
+                    const label = `Local contract ${owner}/${key.name}.${method}`;
+                    return bridge.channel!.open(
+                      { ...target, method, args: [wireData(args, `${label} arguments`)] },
+                      receive,
+                    );
+                  },
+                }),
               });
             } catch (error) {
               if (signal?.aborted) throw error;
