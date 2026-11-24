@@ -1,8 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { runnerLauncher } from "../../packages/runtime/js/runner";
-import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
+import { createApi, isFailure, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { api as chat } from "../../plugins/chat/src/server/_generated/api";
 import { connect } from "../fake-agent/harness.mjs";
@@ -16,6 +15,44 @@ const conversation = (page: Page) => page.getByRole("log", { name: "Conversation
 const agentRow = (page: Page) => page.getByRole("group", { name: "Agent" });
 const threads = (page: Page) => page.getByRole("listbox", { name: "Threads" }).getByRole("option");
 const replyOf = (page: Page) => conversation(page).getByRole("article", { name: /^Fake agent at / });
+
+// The test calls public server functions without importing the plugins' implementations.
+const ai = createApi<{
+  turns: {
+    active: FunctionReference<"query", { threadId: string }, TurnView | null>;
+    list: FunctionReference<"query", { threadId: string }, TurnView[]>;
+    begin: FunctionReference<
+      "mutation",
+      {
+        threadId: string;
+        messageId: string;
+        agent: { id: string; name: string };
+        model: string;
+        access: "full";
+        replyToken: string;
+      },
+      { turnId: string }
+    >;
+    write: FunctionReference<
+      "mutation",
+      {
+        turnId: string;
+        text: string;
+        steps: {
+          key: string;
+          type: "tool";
+          kind: "read";
+          title: string;
+          state: "done";
+          startedAt: number;
+          finishedAt: number;
+        }[];
+      },
+      null
+    >;
+    finish: FunctionReference<"mutation", { turnId: string; state: "done"; finishedAt: number }, null>;
+  };
+}>("ai", ["turns:active", "turns:list", "turns:begin", "turns:write", "turns:finish"]);
 
 /** Picks the fake agent and one of its replays (each replay is a model) in the agent row. */
 async function pickReplay(page: Page, replay: string) {
@@ -35,14 +72,6 @@ async function chooseFolder(page: Page, home: string) {
   await page.getByRole("button", { name: "Use folder" }).click();
   return folder;
 }
-
-// These fixture calls drive the real server; the browser test does not load plugin server code.
-const ai = createApi<{
-  turns: {
-    active: FunctionReference<"query", { threadId: string }, TurnView | null>;
-    list: FunctionReference<"query", { threadId: string }, TurnView[]>;
-  };
-}>("ai", ["turns:active", "turns:list"]);
 
 test("without an agent the row is empty and the empty thread says Start a conversation", async ({ page }) => {
   await page.goto("/");
@@ -172,28 +201,19 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
   test.skip(browserName !== "chromium", "runs once");
   test.setTimeout(300_000);
   const context = await browser.newContext();
-  const cleanup: (() => void | Promise<void>)[] = [];
+  const cleanup: (() => void)[] = [];
   try {
     const { home, endpoint } = await asDesktop(context);
     const folder = join(home, "many-replies");
     await mkdir(folder);
     const client = await connect(endpoint.ws, {
       token: endpoint.token,
-      launch: runnerLauncher(async () => endpoint),
+      launch: undefined,
       cleanup,
     });
-    const run = createApi<{
-      run: {
-        turn: FunctionReference<
-          "local",
-          { threadId: string; messageId: string; folder: string; agentId: string; model: string },
-          { state: string }
-        >;
-      };
-    }>("ai", ["run:turn"]).run;
 
-    // Seed through the real turn path before opening either window. This
-    // avoids waiting for 300 browser assertions during fixture setup.
+    // Use the mutations that store real replies to seed the large thread.
+    // The browser's final Send still runs a real replay through the Runner.
     const { threadId, messageId } = await client.mutation(chat.threads.start, {
       text: "Message 1",
       folder: { kind: "chosen", path: folder },
@@ -201,14 +221,33 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
     for (let n = 1; n <= 150; n += 1) {
       const id =
         n === 1 ? messageId : await client.mutation(chat.messages.post, { threadId, text: `Message ${n}` });
-      const result = await client.local(run.turn, {
+      const begun = await client.mutation(ai.turns.begin, {
         threadId,
         messageId: id,
-        folder,
-        agentId: "fake-agent",
+        agent: { id: "fake-agent", name: "Fake agent" },
         model: "quick",
+        access: "full",
+        replyToken: crypto.randomUUID(),
       });
-      expect(result.state, `Message ${n}`).toBe("done");
+      if (isFailure(begun) || "state" in begun)
+        throw new Error(`Could not seed Message ${n}: ${JSON.stringify(begun)}`);
+      const at = Date.now();
+      await client.mutation(ai.turns.write, {
+        turnId: begun.turnId,
+        text: `Done: Message ${n}`,
+        steps: [
+          {
+            key: "read-1",
+            type: "tool",
+            kind: "read",
+            title: "README.md",
+            state: "done",
+            startedAt: at,
+            finishedAt: at,
+          },
+        ],
+      });
+      await client.mutation(ai.turns.finish, { turnId: begun.turnId, state: "done", finishedAt: at });
     }
 
     const openThread = async () => {
@@ -231,7 +270,7 @@ test("a thread with 150 agent replies loads and keeps updating", async ({ browse
     await expect(replies.last()).toContainText("Done: Message 151");
     await expect(replies.last().getByRole("button", { name: /^Worked\s*1 action/ })).toBeVisible();
   } finally {
-    for (const close of cleanup.reverse()) await close();
+    for (const close of cleanup.reverse()) close();
     await context.close();
   }
 });
