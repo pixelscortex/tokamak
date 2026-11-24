@@ -1,0 +1,19 @@
+packages/server/tests/local-functions-driver.mjs
+  s_d72ccb6f50b933::t_adf0cb4d057610 47-50,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3912ae60277730ca823f9799ad2b7ed5f3b90876",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
