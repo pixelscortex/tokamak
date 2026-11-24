@@ -1,0 +1,21 @@
+e2e/fake-agent/no-bun.mjs
+  s_1f323405e885d4::t_4275cd4d78b834 2-3
+  s_1f323405e885d4::t_4484f14ae4a2ac 18,33,88,108
+  s_1f323405e885d4::t_1244feab9244b9 90,94-95,101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aaa84972bba1f33087e664907c5b522c486b0447",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
