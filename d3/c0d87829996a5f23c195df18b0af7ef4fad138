@@ -1,0 +1,26 @@
+packages/sdk/worker/quickjs.ts
+  s_8acfe89c8adcd3::t_20f99f5aab5af1 2,24-26,28-29,39,54,67,70-74
+  s_8acfe89c8adcd3::t_035a3fa90808e2 27
+packages/sdk/worker/dispatch.ts
+  s_8acfe89c8adcd3::t_35e0379481cced 3,13-27,44,52,57,61,76,84,90,99,107,113
+.ci/check.sh
+  s_8acfe89c8adcd3::t_36efe0d7f931e3 57-74,107,183-184
+packages/sdk/worker/dispatch-channels.ts
+  s_8acfe89c8adcd3::t_20f99f5aab5af1 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d3c0d87829996a5f23c195df18b0af7ef4fad138",
+  "prompts": {},
+  "sessions": {
+    "s_8acfe89c8adcd3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aea-bad5-7ee3-94d2-2e80c9527074",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
