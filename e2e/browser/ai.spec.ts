@@ -4,6 +4,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { connect } from "../fake-agent/harness.mjs";
+import { pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 
 // ai on top of chat. A plain browser has no local part, so no agent can run
@@ -25,10 +26,8 @@ const ai = createApi<{
 
 /** Picks the fake agent and one of its replays (each replay is a model) in the agent row. */
 async function pickReplay(page: Page, replay: string) {
-  await agentRow(page).getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
-  await agentRow(page).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: replay }).click();
+  await pickAgentOption(page, "Agent", "Fake agent");
+  await pickAgentOption(page, "Model", replay);
   await expect(agentRow(page).getByRole("button", { name: replay })).toBeVisible();
 }
 
@@ -56,17 +55,9 @@ test("the agent row names the agent and Send streams its reply into the thread",
   const page = await context.newPage();
   await page.goto("/");
   // Pick the agent and the replay by name: other fake agents and replays may be installed too.
-  await agentRow(page).getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
+  await pickAgentOption(page, "Agent", "Fake agent");
   await expect(page.getByRole("heading", { name: "What should Fake agent work on?" })).toBeVisible();
-  await agentRow(page).getByRole("button", { name: /^Model:/ }).click();
-  const models = page.getByRole("menu", { name: /^Model:/ });
-  // Opening the picker refreshes the models and can replace the rows while it opens.
-  await expect(models).toHaveCSS("opacity", "1");
-  const echo = models.getByRole("menuitem", { name: "echo", exact: true });
-  await echo.scrollIntoViewIfNeeded();
-  await expect(echo).toBeInViewport();
-  await echo.click();
+  await pickAgentOption(page, "Model", "echo");
   await expect(agentRow(page).getByRole("button", { name: "Fake agent" })).toBeVisible();
   await expect(agentRow(page).getByRole("button", { name: "echo" })).toBeVisible();
 
@@ -218,8 +209,7 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
     const page = await context.newPage();
     await page.goto("/");
     const selectReplay = async (name: string) => {
-      await agentRow(page).getByRole("button").nth(1).click();
-      await page.getByRole("menuitem", { name, exact: true }).click();
+      await pickAgentOption(page, "Model", name);
       // The next Send and Queue read the stored choice from the server.
       await expect(agentRow(page).getByRole("button", { name: `Model: ${name}`, exact: true })).toBeVisible();
     };
@@ -229,8 +219,7 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
       await expect(composer(page)).toHaveValue("");
     };
 
-    await agentRow(page).getByRole("button").first().click();
-    await page.getByRole("menuitem", { name: "Fake agent" }).click();
+    await pickAgentOption(page, "Agent", "Fake agent");
     await selectReplay("steer");
     await send("Start here");
     await expect(conversation(page)).toContainText("Ready for steering.");
@@ -300,10 +289,8 @@ test("a reloaded window starts its queued turns when the old turn ends", async (
     });
     const page = await context.newPage();
     await page.goto("/");
-    await agentRow(page).getByRole("button").first().click();
-    await page.getByRole("menuitem", { name: "Fake agent" }).click();
-    await agentRow(page).getByRole("button").nth(1).click();
-    await page.getByRole("menuitem", { name: "echo", exact: true }).click();
+    await pickAgentOption(page, "Agent", "Fake agent");
+    await pickAgentOption(page, "Model", "echo");
     const folder = join(desk.home, "reload");
     await mkdir(folder);
     await page.getByRole("button", { name: "Choose a folder…" }).click();
@@ -357,10 +344,8 @@ test("on Ask first the agent's question waits on the composer and each answer re
   const { home } = await asDesktop(context);
   const page = await context.newPage();
   await page.goto("/");
-  await agentRow(page).getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
-  await agentRow(page).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: "ask-once" }).click();
+  await pickAgentOption(page, "Agent", "Fake agent");
+  await pickAgentOption(page, "Model", "ask-once");
   const card = page.getByRole("group", { name: "Permission question" });
   const replies = () => conversation(page).getByRole("article", { name: /^Fake agent at / });
   /** The turn has ended: Send is back in place of Stop (Enter during a turn would steer it). */

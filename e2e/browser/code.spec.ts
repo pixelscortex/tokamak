@@ -8,6 +8,7 @@ import { createApi, type FunctionReference } from "../../packages/sdk/src/index"
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { connect } from "../fake-agent/harness.mjs";
 import { startHostedFixture } from "../hosted-fixture";
+import { pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 
 test("a turn names the large file it skipped and deleting the thread removes its snapshots", async ({
@@ -28,14 +29,7 @@ test("a turn names the large file it skipped and deleting the thread removes its
 
     const page = await context.newPage();
     await page.goto("/");
-    const agent = page.getByRole("group", { name: "Agent" });
-    await agent.getByRole("button").first().click();
-    await page.getByRole("menuitem", { name: "Fake agent" }).click();
-    await agent.getByRole("button").nth(1).click();
-    await page.getByRole("menuitem", { name: "edit", exact: true }).click();
-    await page.getByRole("button", { name: "Choose a folder…" }).click();
-    await page.getByRole("textbox", { name: "Folder path" }).fill(folder);
-    await page.getByRole("button", { name: "Use folder" }).click();
+    await pickAgentAndFolder(page, folder, "edit");
 
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("Check the project");
@@ -70,9 +64,7 @@ async function desktopThread(context: BrowserContext, folder: string, model: str
 }
 
 async function pickAgentAndFolder(page: Page, folder: string, model: string) {
-  const agent = page.getByRole("group", { name: "Agent" });
-  await agent.getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
+  await pickAgentOption(page, "Agent", "Fake agent");
   await pickModel(page, model);
   await page.getByRole("button", { name: "Choose a folder…" }).click();
   await page.getByRole("textbox", { name: "Folder path" }).fill(folder);
@@ -80,8 +72,7 @@ async function pickAgentAndFolder(page: Page, folder: string, model: string) {
 }
 
 async function pickModel(page: Page, model: string) {
-  await page.getByRole("group", { name: "Agent" }).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: model, exact: true }).click();
+  await pickAgentOption(page, "Model", model);
 }
 
 async function send(page: Page, text: string) {
