@@ -60,11 +60,32 @@ export function contractDeclarations(entry) {
         throw new Error(`${entry}: contract names and places must be literals`);
       if (contracts.some((item) => item.name === key.text))
         throw new Error(`${entry}: duplicate contract ${key.text}`);
+      const data =
+        options && ts.isObjectLiteralExpression(options)
+          ? options.properties.find(
+              (p) =>
+                ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "dataMethods",
+            )?.initializer
+          : undefined;
+      let dataMethods;
+      if (data) {
+        if (place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
+        if (data.kind === ts.SyntaxKind.TrueKeyword) dataMethods = true;
+        else if (
+          ts.isArrayLiteralExpression(data) &&
+          data.elements.length > 0 &&
+          data.elements.every((name) => ts.isStringLiteralLike(name) && contractName.test(name.text))
+        )
+          dataMethods = data.elements.map((name) => name.text);
+        else
+          throw new Error(`${entry}: dataMethods must be true or a nonempty array of literal method names`);
+      }
       contracts.push({
         exported: name.text,
         name: key.text,
         place: place?.text ?? "server",
         declarationHash,
+        dataMethods,
         memberHook: call.typeArguments?.[0]?.getText(file) === "MemberHook",
       });
     }
@@ -155,11 +176,14 @@ export function discoverProviders(root, files, program, checker) {
 export const contractTarget = (provider, method) => `$contract:${provider.registration}:${method.member}`;
 
 export function contractManifest(root, namespace, providers = []) {
-  const contracts = contractDeclarations(contractEntry(root)).map(({ name, place, declarationHash }) => ({
-    name,
-    place,
-    declarationHash,
-  }));
+  const contracts = contractDeclarations(contractEntry(root)).map(
+    ({ name, place, declarationHash, dataMethods }) => ({
+      name,
+      place,
+      declarationHash,
+      dataMethods,
+    }),
+  );
   return {
     contracts,
     contractProviders: providers.map((p) => ({

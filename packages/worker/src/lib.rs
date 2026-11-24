@@ -2,6 +2,7 @@
 #[cfg(feature = "local-runtime")]
 mod discovery;
 mod logs;
+mod restart;
 #[cfg(feature = "local-runtime")]
 pub mod runner;
 mod runtime;
@@ -11,6 +12,7 @@ mod windows;
 #[cfg(feature = "local-runtime")]
 pub use discovery::{resolve, search_paths};
 pub use logs::send as log;
+pub use restart::{HEALTHY_UPTIME, RestartBackoff};
 pub use runtime::configured_action_heap_bytes;
 #[cfg(feature = "local-runtime")]
 pub use runtime::{LocalRuntime, configured_heap_bytes};
@@ -114,6 +116,34 @@ impl Process {
             .ok_or("Local functions need Bun: install from https://bun.sh")?;
         let process = Self::launch(&bun, entry, code, cwd, env, Lane::Local)?;
         Ok((process, runtime))
+    }
+
+    #[cfg(all(
+        feature = "local-runtime",
+        any(target_os = "macos", target_os = "linux")
+    ))]
+    pub fn launch_plugin(
+        plugin: &str,
+        code: &Path,
+        cwd: &Path,
+        env: &BTreeMap<String, String>,
+    ) -> Result<Self, String> {
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        let host = LocalRuntime::host_path(&executable)?;
+        let mut command = tokio::process::Command::new(host);
+        let (lane_key, lane_value) = Lane::Local.env();
+        command
+            .args(["--local-plugin", plugin])
+            .arg(code)
+            .env_clear()
+            .envs(env)
+            .env(lane_key, lane_value)
+            .current_dir(cwd);
+        if let Some(heap) = std::env::var_os("TOKAMAK_PLUGIN_HOST_HEAP_MIB") {
+            command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
+        }
+        let (child, containment, guardian) = spawn_group(command)?;
+        Ok(Self::contained(child, containment, guardian))
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

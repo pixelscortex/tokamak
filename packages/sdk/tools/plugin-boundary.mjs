@@ -161,8 +161,8 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
       'import { contractReference } from "@tokamak/sdk/internal/contracts";\n' +
       contractDeclarations(target.entry)
         .map(
-          ({ exported, name, place }) =>
-            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(place)}, ${JSON.stringify(target.id)});`,
+          ({ exported, name, place, dataMethods }) =>
+            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(place)}, ${JSON.stringify(target.id)}${dataMethods === undefined ? "" : ", " + JSON.stringify(dataMethods)});`,
         )
         .join("\n")
     );

@@ -24,6 +24,8 @@ check_local_symbols() {
       # Match method definitions in v0 and legacy mangling, not their closures.
       patterns[++count] = "tokamak_worker::Process>?::launch$"
       patterns[++count] = "tokamak_worker::Process>?::launch_local$"
+      patterns[++count] = "tokamak_worker::Process>?::launch_plugin$"
+      patterns[++count] = "tokamak_plugin_host::local_plugin::run"
       patterns[++count] = "tokamak_worker::Process>?::launch_runner$"
     }
     /tokamak_plugin_host::action_process::run/ { action_host = 1 }
@@ -84,6 +86,21 @@ case "$1" in
     export TOKAMAK_PLUGIN_HOST="$runner_debug/tokamak-plugin-host"
     test "$("$TOKAMAK_PLUGIN_HOST" --capabilities)" = "actions local"
 
+    mkdir -p "$PWD/target"
+    fixture_dir=$(mktemp -d "$PWD/target/agent-fixtures.XXXXXX")
+    unset TOKAMAK_TURN_PARITY_DIR
+    cleanup_rust() {
+      for dir in "$fixture_dir" "${TOKAMAK_TURN_PARITY_DIR:-}"; do
+        if [[ -n "$dir" && -d "$dir" ]]; then
+          find "$dir" ! -type d -exec unlink {} \;
+          find "$dir" -depth -type d -exec rmdir {} \;
+        fi
+      done
+    }
+    trap cleanup_rust EXIT
+    proto run bun -- e2e/fake-agent/build-fixtures.mjs "$fixture_dir"
+    export TOKAMAK_AGENT_FIXTURES="$fixture_dir/artifacts"
+
     # Server and host suites are split below; no Tauri bundle is built here.
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked --workspace --lib --exclude tokamak-worker --exclude server
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test --locked -p tokamak-worker -p tokamak-runner
@@ -93,14 +110,8 @@ case "$1" in
     # the stored content and order across runtimes, excluding wall-clock times.
     TOKAMAK_TURN_PARITY_DIR=$(mktemp -d)
     export TOKAMAK_TURN_PARITY_DIR
-    cleanup_parity() {
-      for file in "$TOKAMAK_TURN_PARITY_DIR"/{claude,codex}.json; do
-        if [[ -f "$file" ]]; then unlink "$file"; fi
-      done
-      rmdir "$TOKAMAK_TURN_PARITY_DIR"
-    }
-    trap cleanup_parity EXIT
     TOKAMAK_PLUGIN_RUNTIME=bun cargo test --locked -p server --lib host::worker::tests
+    echo "Timing Rust integration: Bun fallback"
     time TOKAMAK_PLUGIN_RUNTIME=bun CI=1 cargo test --locked -p server \
       --test claude_turns --test codex_turns --test local_functions --test workers
     # A clean quit must also reap the Bun fallback's processes.
@@ -109,11 +120,21 @@ case "$1" in
     # Run the QuickJS replays through the Runner instead of adding a third pass.
     # The Bun supervisor units already ran in the Bun lane above.
     export TOKAMAK_TEST_RUNNER=1
+    # The data, index and SDK transport suites need no local runtime; the
+    # cloud build below runs them once.
+    echo "Timing Rust integration: QuickJS main group"
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --lib --bins \
-      --test ai_liveness --test ai_threads --test ai_turns --test chat_threads --test claude_turns \
-      --test code_changes --test code_snapshots --test codex_turns --test local_functions \
-      --test actions --test identity --test plugins --test runner_routing --test service --test workers \
+      --test actions --test ai_threads --test ai_turns \
+      --test chat_threads --test claude_turns \
+      --test codex_turns --test identity --test local_functions --test plugins \
+      --test runner_routing --test service --test workers \
       -- --skip host::worker::tests::
+    # These suites use real deadlines and Git/hook timing. Run them only
+    # after the other test binaries finish compiling and running.
+    for suite in ai_liveness code_changes code_snapshots; do
+      echo "Timing Rust integration: $suite"
+      time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --test "$suite"
+    done
 
     # The lifecycle executable exercises launch_runner; the Runner itself
     # launches plugins, not other Runners.
@@ -140,6 +161,7 @@ case "$1" in
     check_local_symbols cloud "$cloud_debug/tokamak-server" "$cloud_debug/tokamak-plugin-host"
     echo "Cloud binaries exclude local runtime symbols"
     env -u TOKAMAK_PLUGIN_RUNTIME cargo test "${cloud[@]}" -p tokamak-plugin-host --all-targets
+    echo "Timing Rust integration: actions-only cloud server"
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 TOKAMAK_TEST_RUNNER_HOST="$TOKAMAK_PLUGIN_HOST" \
       TOKAMAK_PLUGIN_HOST="$cloud_debug/tokamak-plugin-host" \
       cargo test "${cloud[@]}" -p server --lib --bins --tests

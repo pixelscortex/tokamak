@@ -61,7 +61,30 @@ export interface HostOperations {
   "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.contracts": {
     args: { name: string; owner?: string };
-    result: { plugin: string; registration: string; own: boolean; path: string; owner: string }[];
+    result: {
+      plugin: string;
+      registration: string;
+      own: boolean;
+      path: string;
+      owner: string;
+      dataMethods?: true | string[];
+      build?: string;
+    }[];
+  };
+  "local.contract.call": {
+    args: {
+      plugin: string;
+      owner: string;
+      name: string;
+      registration: string;
+      method: string;
+      args: JsonValue[];
+    };
+    result: JsonValue;
+  };
+  "local.contract.describe": {
+    args: { plugin: string; owner: string; name: string; registration: string };
+    result: { data: JsonObject; methods: string[] };
   };
   "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };

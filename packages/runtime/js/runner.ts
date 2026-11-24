@@ -3,7 +3,7 @@ import { WORKER_CAPACITY, WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits
 import type { LaunchLocalWorker, LocalArtifact } from "./local";
 
 type WorkerEvent =
-  | { type: "started" }
+  | { type: "started"; routed?: boolean }
   | { type: "message"; message: JsonValue }
   | { type: "loaded"; id: number; path?: string; error?: string }
   | { type: "closed"; reason: string };
@@ -22,11 +22,19 @@ function deferred<T>() {
 
 /** The socket belongs to the local Runner, even if the window uses a shared workspace. */
 export function runnerLauncher(endpoint: () => Promise<RunnerEndpoint>): LaunchLocalWorker {
-  return async (artifact, receive, closed) => {
+  return async (artifact, receive, closed, live, workspace) => {
     const { ws, token } = await endpoint();
     if (!token) throw new Error("Missing Runner secret");
     const socket = new WebSocket(new URL("/local-worker", ws), ["tokamak", `tokamak.bearer.${token}`]);
-    const worker = new RunnerWorker(socket, artifact, receive, closed);
+    const origin = new URL(ws);
+    const worker = new RunnerWorker(
+      socket,
+      artifact,
+      receive,
+      closed,
+      live,
+      workspace ?? origin.origin + origin.pathname,
+    );
     await worker.ready;
     return worker;
   };
@@ -42,6 +50,7 @@ class RunnerWorker {
   );
   private next = 0;
   private started = false;
+  routed = false;
   private ended = false;
   private closing?: Promise<void>;
 
@@ -50,10 +59,12 @@ class RunnerWorker {
     artifact: LocalArtifact,
     private readonly receive: (message: JsonValue) => void,
     private readonly closed: (reason: string) => void,
+    live: LocalArtifact[] | undefined,
+    workspace: string | undefined,
   ) {
     socket.addEventListener("open", () => {
       try {
-        this.write({ type: "start", artifact });
+        this.write({ type: "start", artifact, live, workspace });
       } catch (error) {
         this.finish(String(error));
       }
@@ -77,6 +88,7 @@ class RunnerWorker {
     switch (event.type) {
       case "started":
         this.started = true;
+        this.routed = event.routed === true;
         clearTimeout(this.deadline);
         this.startup.resolve();
         break;
@@ -119,6 +131,14 @@ class RunnerWorker {
 
   async send(message: JsonValue) {
     this.write({ type: "write", message });
+  }
+
+  async route(id: number, artifact: LocalArtifact, live: LocalArtifact[]) {
+    this.write({ type: "route", id, artifact, live });
+  }
+
+  async retire(artifact: LocalArtifact, live: LocalArtifact[], changed: string) {
+    if (this.routed) this.write({ type: "retire", artifact, live, changed });
   }
 
   async load(artifact: LocalArtifact) {

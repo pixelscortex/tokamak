@@ -14,6 +14,8 @@ export interface ContractKey {
   readonly name: string;
   readonly owner?: string;
   readonly place: ContractPlace;
+  /** True routes every method; a list routes only the named methods. */
+  readonly dataMethods?: true | readonly string[];
 }
 
 export interface Contract<T extends object, P extends ContractPlace = ContractPlace> extends ContractKey {
@@ -85,17 +87,32 @@ export interface Provider<P extends ContractPlace> {
   readonly implementation: Readonly<Record<string, unknown>>;
 }
 
-export function contract<T extends object>(name: string, options: { place: "local" }): Contract<T, "local">;
+type MethodKey<T> = {
+  [K in keyof T]-?: [NonNullable<T[K]>] extends [never]
+    ? never
+    : NonNullable<T[K]> extends (...args: never[]) => unknown
+      ? K
+      : never;
+}[keyof T] &
+  string;
+
+export function contract<T extends object>(
+  name: string,
+  options: {
+    place: "local";
+    dataMethods?: true | readonly [MethodKey<T>, ...MethodKey<T>[]];
+  },
+): Contract<T, "local">;
 export function contract<T extends object>(
   name: string,
   options?: { place: "server" },
 ): Contract<T, "server">;
 export function contract<T extends object>(
   name: string,
-  options?: { place: ContractPlace },
+  options?: { place: ContractPlace; dataMethods?: true | readonly string[] },
 ): Contract<T, "local"> | Contract<T, "server"> {
   return options?.place === "local"
-    ? contractReference<T, "local">(name, "local")
+    ? contractReference<T, "local">(name, "local", undefined, options.dataMethods)
     : contractReference<T, "server">(name, "server");
 }
 
@@ -104,16 +121,24 @@ export function contractReference<T extends object, P extends ContractPlace>(
   name: string,
   place: P,
   owner?: string,
+  dataMethods?: true | readonly string[],
 ): Contract<T, P> {
   if (!contractName.test(name)) throw new Error(`Invalid contract name: ${name}`);
-  const key = Object.freeze({ name, place, ...(owner === undefined ? {} : { owner }) });
-  const resolve = async (context?: ContractContext): Promise<readonly ContractEntry[]> => {
+  const key = Object.freeze({
+    name,
+    place,
+    ...(owner === undefined ? {} : { owner }),
+    ...(dataMethods === undefined
+      ? {}
+      : { dataMethods: dataMethods === true ? (true as const) : Object.freeze([...dataMethods]) }),
+  });
+  const resolve = async (context?: ContractContext, id?: string): Promise<readonly ContractEntry[]> => {
     const scoped = context?.[contractScope] ?? (place === "server" ? serverScope : undefined);
     if (!scoped)
       throw new Error(
         "Contract lookup requires a plugin function; pass ctx in local functions and server actions",
       );
-    return scoped.list(key);
+    return scoped.list(key, id);
   };
   return Object.freeze({
     ...key,
@@ -124,7 +149,7 @@ export function contractReference<T extends object, P extends ContractPlace>(
       select(
         id,
         async () =>
-          (await resolve(context)).find((provider) => provider.id === id)?.implementation as
+          (await resolve(context, id)).find((provider) => provider.id === id)?.implementation as
             | BoundProvider<T, P>
             | undefined,
       ),
@@ -149,7 +174,7 @@ export interface ContractEntry {
 }
 
 export interface ContractScope {
-  list(key: ContractKey): Promise<readonly ContractEntry[]>;
+  list(key: ContractKey, id?: string): Promise<readonly ContractEntry[]>;
 }
 
 let serverScope: ContractScope | undefined;

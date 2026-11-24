@@ -21,11 +21,32 @@ If JavaScript runs without yielding for five seconds, QuickJS interrupts it.
 Only then does the host reset the runtime: started calls fail and module state
 is lost, while queued invocations run in the new runtime.
 
-Each host runs one QuickJS runtime and realm for its owning plugin. It loads
-verified provider bundles returned by the window's `local.contracts`
-operation in that same realm. Providers can receive live objects and call
-functions directly. Imports from other paths are refused; providers and the
-owning plugin use the same built-in allow list.
+Each local host runs one QuickJS runtime and realm for its owning plugin.
+The Runner starts it on demand and keeps it when calls and windows close.
+Calls to another plugin's plain-data contract methods run in that plugin's
+host. A host emits a `local.contract.call` operation with the owner, contract,
+provider registration, method and JSON argument array. The window checks the
+live catalog, and the Runner sends an `invoke` with a `contract` target to the
+provider and returns its `result` as an `opResult`. The provider's host
+operations use the original window's workspace and identity. Cancelling an
+invocation cancels its child calls.
+
+For live methods the host still imports the verified provider bundle in the
+same realm. The agent contract mixes both kinds: `info` runs in the provider's
+process, and `start` still receives the live turn in `ai`'s process. The bundle
+is available there for provider discovery and live calls. Turn hooks also
+stay in that realm. The Runner reuses the same verified snapshot in that
+realm across windows. When its live providers change, new calls use a fresh
+process. The old realm keeps its original provider snapshots and finishes
+admitted calls before stopping. Turn controls still reach that realm by turn
+ID. Imports from other paths are refused.
+
+A process exit fails its active calls with the plugin's name. Its next start
+is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run
+of at least 60 seconds resets the delay. Routed calls fail immediately during
+that delay so a lookup can continue with other providers. Reload retires
+changed builds and realms with changed live providers; unchanged local bytes
+reuse the existing process.
 
 Local functions can start up to 256 live programs per host with `proc` and
 `withPrograms`. Programs get their own process groups. On macOS and Linux a

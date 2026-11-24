@@ -167,7 +167,7 @@ async fn main() -> anyhow::Result<()> {
     check_local_runtime().await?;
     signals(stop.clone()).await?;
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
-    let address = listener.local_addr()?;
+    let ws = format!("ws://{}/ws", listener.local_addr()?);
     let plugins = config.plugins.canonicalize()?;
     let app_data = config
         .data
@@ -216,7 +216,7 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(error) => return Err(error.into()),
         };
-    let ws = format!("ws://{address}/ws");
+    local.observe(backend.server(), &ws).await?;
     let control = match owner.publish(&ws) {
         Ok(control) => control,
         Err(error) => {

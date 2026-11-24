@@ -113,12 +113,16 @@ fn worker_address(ws: &str) -> String {
 }
 
 async fn open_worker(ws: &str, token: &str) -> Socket {
-    let mut socket = request_worker(ws, token).await;
+    open_worker_for(ws, token, "runner-fixture").await
+}
+
+async fn open_worker_for(ws: &str, token: &str, plugin: &str) -> Socket {
+    let mut socket = request_worker(ws, token, plugin).await;
     assert_eq!(read(&mut socket).await["type"], "started");
     socket
 }
 
-async fn request_worker(ws: &str, token: &str) -> Socket {
+async fn request_worker(ws: &str, token: &str, plugin: &str) -> Socket {
     let manifest: Value =
         serde_json::from_slice(&std::fs::read(fixture().join("dist/manifest.json")).unwrap())
             .unwrap();
@@ -126,7 +130,7 @@ async fn request_worker(ws: &str, token: &str) -> Socket {
     send(
         &mut socket,
         json!({"type":"start","artifact":{
-            "id":"runner-fixture",
+            "id":plugin,
             "entryHash":manifest["hashes"]["local-entry.js"],
             "codeHash":manifest["hashes"]["local.js"],
         }}),
@@ -196,7 +200,7 @@ async fn runner_rejects_an_actions_only_host_before_listening() {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[tokio::test]
-async fn local_worker_close_frame_includes_the_hosts_stderr() {
+async fn plugin_start_failure_includes_the_hosts_stderr() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = quickjs_runner(dir.path(), fixture())
         .env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", "invalid")
@@ -209,18 +213,18 @@ async fn local_worker_close_frame_includes_the_hosts_stderr() {
         .unwrap()
         .unwrap();
     let address = line.trim().strip_prefix("Tokamak listening on ").unwrap();
-    let mut worker = request_worker(address, SECRET).await;
-    let mut closed = read(&mut worker).await;
-    if closed["type"] == "started" {
-        closed = read(&mut worker).await;
-    }
-    assert_eq!(closed["type"], "closed");
+    let mut worker = open_worker(address, SECRET).await;
+    send(
+        &mut worker,
+        json!({"type": "write", "message": {"type": "invoke", "id": 1, "fn": "anything", "args": null}}),
+    ).await;
+    let failed = read(&mut worker).await;
+    assert_eq!(failed["message"]["type"], "result");
+    let error = failed["message"]["error"].as_str().unwrap();
+    assert!(error.contains("Plugin runner-fixture"), "{failed}");
     assert!(
-        closed["reason"]
-            .as_str()
-            .unwrap()
-            .contains("TOKAMAK_PLUGIN_HOST_HEAP_MIB must be a positive integer in MiB"),
-        "{closed}"
+        error.contains("TOKAMAK_PLUGIN_HOST_HEAP_MIB must be a positive integer in MiB"),
+        "{failed}"
     );
     signal(child.id().unwrap(), libc::SIGTERM);
     assert!(
@@ -798,9 +802,9 @@ async fn assert_no_running_pids(pids: Vec<u32>) {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn supervise_child(directory: PathBuf) {
-    let plugin = PathBuf::from(std::env::var_os("TOKAMAK_TEST_FIXTURE").unwrap());
-    let runner = Runner::start(BINARY.into(), directory.clone(), plugin);
-    let (pids, _client, _worker) = process_tree(&runner, &directory).await;
+    let plugins = copy_process_fixtures(&directory);
+    let runner = Runner::start(BINARY.into(), directory.clone(), plugins);
+    let (pids, _sockets) = process_tree(&runner, &directory).await;
     std::fs::write(directory.join("writing"), json!(pids).to_string()).unwrap();
     std::fs::rename(directory.join("writing"), directory.join("ready")).unwrap();
     std::future::pending::<()>().await;
@@ -810,15 +814,33 @@ async fn supervise_child(directory: PathBuf) {
 #[tokio::test]
 async fn graceful_quit_reaps_the_workspace_action_local_plugin_and_program() {
     let temp = tempfile::tempdir().unwrap();
-    let runner = Runner::start(BINARY.into(), temp.path().into(), fixture().into());
-    let (pids, _client, _worker) = process_tree(&runner, temp.path()).await;
+    let plugins = copy_process_fixtures(temp.path());
+    let runner = Runner::start(BINARY.into(), temp.path().into(), plugins);
+    let (pids, _sockets) = process_tree(&runner, temp.path()).await;
     assert!(pids.iter().copied().all(alive), "{pids:?}");
     timeout(DEADLINE, runner.shutdown()).await.unwrap();
     assert_no_running_pids(pids).await;
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Socket, Socket) {
+fn copy_process_fixtures(directory: &Path) -> PathBuf {
+    let plugins = directory.join("plugins");
+    for id in ["runner-fixture", "runner-other"] {
+        let folder = plugins.join(id);
+        std::fs::create_dir_all(&folder).unwrap();
+        let manifest = copy_fixture(&folder);
+        if id != "runner-fixture" {
+            let mut value: Value =
+                serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+            value["plugin"]["id"] = json!(id);
+            std::fs::write(manifest, value.to_string()).unwrap();
+        }
+    }
+    plugins
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Vec<Socket>) {
     let endpoint = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
     let pid = runner_pid(&endpoint).await;
     let mut client = socket(&endpoint.ws, Some(&endpoint.token)).await.unwrap();
@@ -828,6 +850,10 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Socket, S
     let program = directory.join("program");
     invoke(&mut client, &mut worker, "stay", &program).await;
     let program: u32 = wait_for_file(&program).await.trim().parse().unwrap();
+    let mut other = open_worker_for(&endpoint.ws, &endpoint.token, "runner-other").await;
+    let other_program = directory.join("other-program");
+    invoke(&mut client, &mut other, "stay", &other_program).await;
+    let other_program: u32 = wait_for_file(&other_program).await.trim().parse().unwrap();
 
     let children = child_commands(pid);
     let host = |line: &str| {
@@ -847,18 +873,21 @@ async fn process_tree(runner: &Runner, directory: &Path) -> (Vec<u32>, Socket, S
         })
         .unwrap()
         .0;
-    let local = children
+    let local: Vec<_> = children
         .iter()
-        .find(|(pid, cmd)| {
+        .filter(|(pid, cmd)| {
             if quickjs {
                 host(cmd) && cmd.ends_with(".mjs")
             } else {
                 cmd.ends_with(".mjs") && !before_local.iter().any(|(before, _)| before == pid)
             }
         })
-        .unwrap()
-        .0;
-    (vec![pid, action, local, program], client, worker)
+        .map(|(pid, _)| *pid)
+        .collect();
+    assert_eq!(local.len(), 2, "{children:?}");
+    let mut pids = vec![pid, action, program, other_program];
+    pids.extend(local);
+    (pids, vec![client, worker, other])
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -903,4 +932,36 @@ fn alive(pid: u32) -> bool {
     let state = String::from_utf8(output.stdout).unwrap();
     let state = state.trim();
     !state.is_empty() && !state.starts_with('Z')
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn plain_contracts_route_between_persistent_plugin_processes() {
+    routing_test("local-routing.mjs");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn production_agent_info_uses_dedicated_hosts_and_reuses_live_imports() {
+    routing_test("agent-routing.mjs");
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn routing_test(name: &str) {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join(name);
+    let output = std::process::Command::new("proto")
+        .args(["run", "bun", "--"])
+        .arg(script)
+        .arg(BINARY)
+        .output()
+        .expect("run the QuickJS routing integration test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    print!("{stdout}");
 }

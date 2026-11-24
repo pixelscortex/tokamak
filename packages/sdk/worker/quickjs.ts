@@ -2,7 +2,7 @@ import { workerDispatch, type WorkerMessage } from "./dispatch";
 import { installConsole } from "./quickjs-console";
 import { invocationProcesses } from "./program-scope";
 import { quickJsPrograms, type NativeSpawn } from "./quickjs-process";
-import { workerContracts } from "./contracts";
+import { dataContracts, workerContracts } from "./contracts";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
 
@@ -42,6 +42,7 @@ export async function initialize(
     (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     workerContracts(root, loadLocalModule),
     {
+      contract: dataContracts(root),
       abort(controller) {
         try {
           controller.abort();

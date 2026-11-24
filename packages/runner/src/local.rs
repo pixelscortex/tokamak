@@ -1,5 +1,8 @@
-//! One authenticated socket owns one plugin process. The window answers its
-//! host operations using the workspace connection it already has.
+//! The window answers host operations using its own workspace connection.
+//! Bun keeps the original socket-owned worker; QuickJS hosts belong to the Runner.
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod quickjs;
 
 use crate::artifact::{artifact, artifact_folder, client_env, snapshot};
 use axum::{
@@ -15,15 +18,16 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    collections::VecDeque,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 use tempfile::TempPath;
-use tokamak_worker::{LocalRuntime, Process, WORKER_CAPACITY, WORKER_FRAME_BYTES};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use tokamak_worker::LocalRuntime;
+use tokamak_worker::{Process, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     sync::{Semaphore, mpsc},
 };
 use tokio_util::{
@@ -33,8 +37,6 @@ use tokio_util::{
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
-const STDERR_BYTES: usize = 4096;
-const STDERR_LINES: usize = 8;
 
 #[derive(Clone)]
 pub(super) struct Local {
@@ -42,9 +44,11 @@ pub(super) struct Local {
     app_data: Arc<PathBuf>,
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pool: quickjs::Pool,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "camelCase")]
 struct Artifact {
     id: String,
@@ -55,18 +59,45 @@ struct Artifact {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Request {
-    Start { artifact: Artifact },
-    Write { message: Value },
-    Load { id: u32, artifact: Artifact },
+    Start {
+        artifact: Artifact,
+        #[serde(default)]
+        live: Vec<Artifact>,
+        #[serde(default)]
+        workspace: String,
+    },
+    Write {
+        message: Value,
+    },
+    Load {
+        id: u32,
+        artifact: Artifact,
+    },
+    Route {
+        id: u64,
+        artifact: Artifact,
+        #[serde(default)]
+        live: Vec<Artifact>,
+    },
+    Retire {
+        artifact: Artifact,
+        live: Vec<Artifact>,
+        changed: String,
+    },
     Close,
 }
 
 impl Local {
     pub(super) fn new(plugins: PathBuf, app_data: PathBuf) -> Self {
+        let stopping = CancellationToken::new();
+        let plugins = Arc::new(plugins);
+        let app_data = Arc::new(app_data);
         Self {
-            plugins: Arc::new(plugins),
-            app_data: Arc::new(app_data),
-            stopping: CancellationToken::new(),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            pool: quickjs::Pool::new(plugins.clone(), app_data.clone(), stopping.clone()),
+            plugins,
+            app_data,
+            stopping,
             slots: Arc::new(Semaphore::new(WORKER_CAPACITY)),
         }
     }
@@ -79,6 +110,22 @@ impl Local {
         self.stopping.cancel();
         // Includes sockets upgraded but not yet running a worker.
         let _ = self.slots.acquire_many(WORKER_CAPACITY as u32).await;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        self.pool.wait().await;
+    }
+
+    pub(super) async fn observe(
+        &self,
+        server: &Arc<server::Server>,
+        workspace: &str,
+    ) -> Result<(), server::Error> {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if LocalRuntime::selected() == Ok(LocalRuntime::QuickJs) {
+            self.pool
+                .observe(server, server.connect().await?, workspace.into());
+        }
+        let _ = (server, workspace);
+        Ok(())
     }
 }
 
@@ -111,28 +158,45 @@ async fn upgrade(State(local): State<Local>, ws: WebSocketUpgrade) -> Response {
 async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String> {
     let started = async {
         let Some(Request::Start {
-            artifact: requested,
+            artifact,
+            live,
+            workspace,
         }) = receive(socket).await?
         else {
             return Err("Expected a local worker artifact".into());
         };
-        let Artifact {
-            id,
-            entry_hash,
-            code_hash,
-        } = requested;
-        let plugins = local.plugins.clone();
-        let verified = tokio::task::spawn_blocking(move || {
-            let files = artifact(&plugins, &id, &entry_hash, &code_hash)?;
-            Ok::<_, String>((id, files))
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-        Ok::<_, String>(verified)
+        Ok::<_, String>((artifact, live, workspace))
     };
-    let (plugin, (entry, code)) = tokio::select! {
+    let (requested, live, workspace) = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
         result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
+    };
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if LocalRuntime::selected()? == LocalRuntime::QuickJs {
+        return quickjs::connection(
+            socket,
+            &local.pool,
+            quickjs::Build::new(requested, live)?,
+            workspace,
+        )
+        .await;
+    }
+    drop((live, workspace));
+    let Artifact {
+        id: plugin,
+        entry_hash,
+        code_hash,
+    } = requested;
+    let plugins = local.plugins.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        let files = artifact(&plugins, &plugin, &entry_hash, &code_hash)?;
+        Ok::<_, String>((plugin, files))
+    });
+    let (plugin, (entry, code)) = tokio::select! {
+        _ = local.stopping.cancelled() => return Ok(()),
+        result = tokio::time::timeout(TIMEOUT, verified) => {
+            result.map_err(|_| "Local worker startup stalled")?.map_err(|e| e.to_string())??
+        }
     };
     let paths = tokamak_worker::search_paths();
     let mut env = client_env(|name| std::env::var(name).ok());
@@ -144,9 +208,11 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         env.insert("PATH".into(), path.to_string_lossy().into_owned());
     }
     let cwd = local.plugins.parent().unwrap_or(&local.plugins);
-    let (mut process, runtime) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
-    let (input, output, stderr) = process.pipes()?;
-    let mut stderr = AbortOnDropHandle::new(tokio::spawn(stderr_tail(stderr)));
+    let (mut process, _) = Process::launch_local(&entry, &code, cwd, &env, &paths)?;
+    let (input, output, mut stderr) = process.pipes()?;
+    let _drain = AbortOnDropHandle::new(tokio::spawn(async move {
+        let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
+    }));
     let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
     let relay = async {
         send(socket, json!({ "type": "started" })).await?;
@@ -159,24 +225,16 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
         result = relay => result,
     };
     process.stop().await;
-    match (result, runtime) {
-        (Err(reason), LocalRuntime::QuickJs) => {
-            let mut error = format!("Plugin host closed: {reason}");
-            // Reap first so ordinary pipe EOF delivers the final diagnostic.
-            // A descendant retaining stderr must not stall the response.
-            if let Ok(Ok(tail)) = tokio::time::timeout(Duration::from_secs(1), &mut stderr).await
-                && !tail.is_empty()
-            {
-                error.push_str(":\n");
-                error.push_str(&tail);
-            }
-            Err(error)
-        }
-        (result, _) => result,
-    }
+    result
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn stderr_tail(mut input: impl AsyncRead + Unpin) -> String {
+    use std::collections::VecDeque;
+    use tokio::io::AsyncReadExt;
+
+    const STDERR_BYTES: usize = 4096;
+    const STDERR_LINES: usize = 8;
     let mut tail = VecDeque::with_capacity(STDERR_BYTES);
     let mut chunk = [0; STDERR_BYTES];
     while let Ok(count) = input.read(&mut chunk).await {
@@ -190,9 +248,8 @@ async fn stderr_tail(mut input: impl AsyncRead + Unpin) -> String {
     let text = String::from_utf8_lossy(tail.make_contiguous());
     let text = text.trim_end();
     let start = text.match_indices('\n').rev().nth(STDERR_LINES - 1);
-    start
-        .map_or(text, |(index, _)| &text[index + 1..])
-        .to_owned()
+    let text = start.map_or(text, |(index, _)| &text[index + 1..]);
+    text[text.ceil_char_boundary(text.len().saturating_sub(STDERR_BYTES))..].to_owned()
 }
 
 async fn relay(
@@ -232,6 +289,14 @@ async fn relay(
                 }
                 Some(Request::Close) | None => return Ok(()),
                 Some(Request::Start { .. }) => return Err("Local worker already started".into()),
+                Some(Request::Route { id, artifact, live }) => {
+                    drop((id, artifact, live));
+                    return Err("Bun does not route local contract calls".into());
+                }
+                Some(Request::Retire { artifact, live, changed }) => {
+                    drop((artifact, live, changed));
+                    return Err("Bun local workers belong to their socket".into());
+                }
             },
             line = output.next() => {
                 let line = line.ok_or("Local worker output closed")?.map_err(|e| e.to_string())?;

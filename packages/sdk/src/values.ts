@@ -34,6 +34,7 @@ export function assertJson(
   value: unknown,
   path = "value",
   ancestors = new Set<object>(),
+  depthLeft = Infinity,
 ): asserts value is JsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number" && Number.isFinite(value)) return;
@@ -41,19 +42,20 @@ export function assertJson(
     throw new Error(`${path} must be a JSON value (numbers must be finite)`);
   }
 
+  if (depthLeft <= 0) throw new Error(`${path} exceeds the JSON nesting limit`);
   if (ancestors.has(value)) throw new Error(`${path} contains a cycle`);
   ancestors.add(value);
   try {
     if (Reflect.ownKeys(value).some((key) => typeof key === "symbol"))
       throw new Error(`${path} has a symbol key`);
     if (Array.isArray(value)) {
-      assertJsonArray(value, path, ancestors);
+      assertJsonArray(value, path, ancestors, depthLeft - 1);
     } else {
       for (const key of Object.getOwnPropertyNames(value)) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
         if (!descriptor.enumerable || !("value" in descriptor))
           throw new Error(`${path}.${key} must be an enumerable data property`);
-        assertJson(descriptor.value, `${path}.${key}`, ancestors);
+        assertJson(descriptor.value, `${path}.${key}`, ancestors, depthLeft - 1);
       }
     }
   } finally {
@@ -62,19 +64,19 @@ export function assertJson(
 }
 
 /** Snapshot payloads so changing an input cannot mutate a pending query. */
-export function jsonSnapshot(value: unknown, path = "value"): JsonValue {
-  assertJson(value, path);
+export function jsonSnapshot(value: unknown, path = "value", maxDepth = Infinity): JsonValue {
+  assertJson(value, path, undefined, maxDepth);
   return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
 
-function assertJsonArray(value: unknown[], path: string, ancestors: Set<object>) {
+function assertJsonArray(value: unknown[], path: string, ancestors: Set<object>, depthLeft: number) {
   if (Object.getOwnPropertyNames(value).length !== value.length + 1)
     throw new Error(`${path} must be a dense JSON array without extra properties`);
   for (let i = 0; i < value.length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
     if (!descriptor?.enumerable || !("value" in descriptor))
       throw new Error(`${path}[${i}] must be an enumerable data property`);
-    assertJson(descriptor.value, `${path}[${i}]`, ancestors);
+    assertJson(descriptor.value, `${path}[${i}]`, ancestors, depthLeft);
   }
 }
 

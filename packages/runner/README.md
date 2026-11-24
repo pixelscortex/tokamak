@@ -1,10 +1,38 @@
 # Tokamak Runner
 
 The Runner combines a workspace server and the local runtime in one program. It
-owns the server's action process and starts a local plugin process when a client
-opens a worker socket. The window still resolves contracts and forwards calls
-to the workspace it is connected to, so a shared workspace can use the Runner
-on the person's own machine.
+owns the server's action process and up to 128 QuickJS local plugin processes.
+Each local process starts on its first call and stays up until its build is
+retired, it exits, or the Runner shuts down. The registry distinguishes a
+plugin's ID and its two local bundle hashes. It also separates realms that
+need different builds of live providers. Windows that use the same build and
+live profile share a process. The window reports its workspace address
+without credentials so the Runner can tell which installation superseded a
+build. A live provider change or addition sends new calls to a fresh realm.
+The original realm retains the admitted calls and their verified provider
+files until those calls finish. Stop, force stop, steer and permission answers
+use the active turn's workspace and turn ID to find its original realm; host
+operations still use the window that made each control call. The quit controls
+include turns in draining realms.
+
+An idle build that the same workspace supersedes can stop as soon as the
+replacement is acquired. Otherwise the Runner sweeps known superseded builds
+on a two-second timer once the last window and call release them, with at least
+two seconds of idle time. At capacity it evicts the least recently used
+unleased process; the limit is reported only when all slots are leased.
+Closing a window cancels its calls; an unchanged process stays up across
+reconnects. With the Bun fallback, each worker socket still owns its process.
+
+A window is a trusted Runner client. It checks `local.contract.call` against
+the signed-in workspace's catalog: who owns the contract, whether the
+provider declared access to the owner, and whether the method appears in
+`dataMethods`. The Runner verifies the installed artifact ID and hashes
+before starting a process or making a provider snapshot available to a live
+realm. It permits operations to claim only the process's own plugin ID or an
+ID for which that process received a verified live snapshot. The provider
+checks its registration and re-checks that the requested method is declared
+for plain data. Workspace operations in the provider still go through the
+calling window, with that window's signed-in member and device.
 
 Install the Runner on desktops, real machines and sandboxes. For Docker or a
 cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
@@ -47,3 +75,35 @@ the desktop, the Runner takes over a store held by a Tokamak server after
 verifying the server's identity and waiting for its shutdown to release the
 ownership lock. Started by hand, it never stops another process: it reports the
 store as in use and names the holder.
+
+### Linux memory measurement
+
+The original measurement ran on Linux arm64 in the local Docker image
+`tokamak:tkm-243-checks`. Reproduce it from a committed checkout by overlaying
+the source onto `/src` in that image and building in release mode:
+
+```sh
+git archive HEAD | docker run -i tokamak:tkm-243-checks bash -c '
+  set -e
+  tar xf - -C /src
+  cd /src
+  CARGO_BUILD_JOBS=4 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
+  proto run bun -- packages/runner/tests/measure-linux-memory.mjs target/release/tokamak-runner
+'
+```
+
+The script uses an empty workspace and 100 synthetic plugins with identical
+trivial local code. A host is warmed once: its first invocation completes
+(including the window's auth reply), then it sits idle. The script waits 200 ms
+before sampling one host and 400 ms before sampling 100. It reads
+`/proc/<pid>/smaps_rollup` for each child, sums proportional set size (PSS),
+and reports host and guardian memory separately. PSS apportions shared pages
+among the processes that map them; RSS charges each process for every page it
+maps. The marginal figure subtracts the one-host PSS from the 100-host PSS and
+divides by 99.
+
+A separate run starts the real `ai`, `claude` and `codex` bundles using replay
+executables on PATH. It opens the agent row so `ai` imports both live provider
+modules and the two provider processes each answer `info`. The script waits
+400 ms after the row returns and reports each host's PSS separately. Neither
+measurement includes the Runner or the agent executables.

@@ -168,7 +168,7 @@ async fn healthy_idle_child_resets_backoff_without_completing_a_call() {
         healthy
             .stopped_at
             .get()
-            .map(|stopped| *stopped + BASE_DELAY)
+            .map(|stopped| *stopped + Duration::from_millis(250))
     );
     supervisor.stop().await;
 }

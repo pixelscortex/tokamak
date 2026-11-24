@@ -1,10 +1,12 @@
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { JsonValue } from "../src/values";
+import type { HostBridge } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
+import type { ContractInvocation } from "./contracts";
 
 export type WorkerMessage =
-  | { type: "invoke"; id: number; fn: string; args: JsonValue }
+  | { type: "invoke"; id: number; fn: string; args: JsonValue; contract?: ContractInvocation }
   | { type: "opResult"; id: number; value: JsonValue; error?: string }
   | { type: "cancel"; id: number };
 
@@ -23,6 +25,7 @@ export function workerDispatch(
     errorMessage(error: unknown): string;
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
+    contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
   },
 ) {
   const calls = new Map<number, { controller: AbortController; close(): Promise<void> }>();
@@ -39,7 +42,7 @@ export function workerDispatch(
         op.reject(new Error("stale invocation: host operation refused"));
       }
   }
-  async function invoke(id: number, name: string, args: JsonValue) {
+  async function invoke(id: number, name: string, args: JsonValue, target?: ContractInvocation) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
@@ -73,8 +76,12 @@ export function workerDispatch(
       contracts,
     );
     try {
-      if (functions[name]?.kind !== kind) throw new Error(`Unknown worker ${kind} function: ${name}`);
-      const value = await invokeFunction(functions, { name, args }, invocation.host());
+      if (!(target && options?.contract) && functions[name]?.kind !== kind)
+        throw new Error(`Unknown worker ${kind} function: ${name}`);
+      const value =
+        target && options?.contract
+          ? await options.contract(target, args, invocation.host())
+          : await invokeFunction(functions, { name, args }, invocation.host());
       await invocation.close();
       if (calls.get(id) === call) send({ type: "result", id, value });
     } catch (error) {
@@ -96,7 +103,7 @@ export function workerDispatch(
   }
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
-      const invocation = invoke(message.id, message.fn, message.args);
+      const invocation = invoke(message.id, message.fn, message.args, message.contract);
       if (options?.observeInvocation) return invocation;
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);

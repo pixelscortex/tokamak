@@ -58,11 +58,31 @@ async fn main() -> anyhow::Result<()> {
             action_process::inspect::run(std::path::Path::new(&bundle)).await
         }
         #[cfg(feature = "local-runtime")]
+        Some(mode) if mode == "--local-plugin" => local_plugin::run(args).await,
+        #[cfg(feature = "local-runtime")]
         Some(code) => protocol::run(std::path::Path::new(code)).await,
         #[cfg(feature = "local-runtime")]
         None => anyhow::bail!("Expected a local function bundle path"),
         #[cfg(not(feature = "local-runtime"))]
         _ => anyhow::bail!("This host runs only server actions"),
+    }
+}
+
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
+mod local_plugin {
+    pub(super) async fn run(
+        mut args: impl Iterator<Item = std::ffi::OsString>,
+    ) -> anyhow::Result<()> {
+        let _plugin = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected a local plugin ID"))?;
+        let bundle = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
+        super::protocol::run(std::path::Path::new(&bundle)).await
     }
 }
 
