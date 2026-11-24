@@ -1,0 +1,19 @@
+e2e/browser/ai.spec.ts
+  s_1f323405e885d4::t_d8b8d57b58b143 62-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be56d714f477f5fe7871d8a75701f0e891e93c32",
+  "prompts": {},
+  "sessions": {
+    "s_1f323405e885d4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20e35-659d-7a10-b760-46045bf05b2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
