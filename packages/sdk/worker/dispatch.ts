@@ -110,7 +110,7 @@ export function workerDispatch(
     routed?: boolean,
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
-      throw new Error("Worker invocation capacity exceeded");
+      throw new Error("Plugin process invocation capacity exceeded");
     const controller = new AbortController();
     const retiring = routed && !target ? new AbortController() : undefined;
     const call = {
@@ -133,7 +133,7 @@ export function workerDispatch(
       if (signal?.aborted) throw new Error("Local contract call cancelled");
       const wait = pending.size >= WORKER_CAPACITY;
       if (wait && (!options.sendWaiting || waiting.size >= WORKER_CAPACITY))
-        throw new Error("Worker operation capacity exceeded");
+        throw new Error("Plugin process operation capacity exceeded");
       return new Promise<JsonValue>((resolve, reject) => {
         const cleanup = () => signal?.removeEventListener("abort", cancel);
         const rejected = (error: unknown) => {
@@ -213,7 +213,7 @@ export function workerDispatch(
     }
     try {
       if (!(target && options.contract) && functions[name]?.kind !== kind)
-        throw new Error(`Unknown worker ${kind} function: ${name}`);
+        throw new Error(`Unknown local ${kind} function: ${name}`);
       const value =
         target && options.contract
           ? await options.contract(target, args, invocation.host())
@@ -279,6 +279,6 @@ export function workerDispatch(
           op.reject(new Error(`Plugin ${kind} function cancelled`));
         }
       retire(message.id);
-    } else throw new Error("Invalid worker message");
+    } else throw new Error("Invalid plugin process message");
   };
 }

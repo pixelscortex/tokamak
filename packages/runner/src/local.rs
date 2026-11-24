@@ -134,7 +134,7 @@ async fn upgrade(State(local): State<Local>, ws: WebSocketUpgrade) -> Response {
                 &mut socket,
                 json!({
                     "type": "closed",
-                    "reason": result.err().unwrap_or_else(|| "Local worker stopped".into()),
+                    "reason": result.err().unwrap_or_else(|| "Plugin process stopped".into()),
                 }),
             )
             .await;
@@ -150,13 +150,13 @@ async fn connection(socket: &mut WebSocket, local: &Local) -> Result<(), String>
             workspace,
         }) = receive(socket).await?
         else {
-            return Err("Expected a local worker artifact".into());
+            return Err("Expected a plugin process artifact".into());
         };
         Ok::<_, String>((artifact, workspace))
     };
     let (requested, workspace) = tokio::select! {
         _ = local.stopping.cancelled() => return Ok(()),
-        result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Local worker startup stalled")??,
+        result = tokio::time::timeout(TIMEOUT, started) => result.map_err(|_| "Plugin process did not start in time")??,
     };
     quickjs::connection(socket, &local.pool, requested, workspace).await
 }
@@ -201,7 +201,7 @@ async fn receive(socket: &mut WebSocket) -> Result<Option<Request>, String> {
             }
             Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
             Some(Ok(Message::Close(_))) | None => return Ok(None),
-            Some(Ok(_)) => return Err("Expected a JSON local worker frame".into()),
+            Some(Ok(_)) => return Err("Expected a JSON plugin process frame".into()),
             Some(Err(error)) => return Err(error.to_string()),
         }
     }
@@ -213,7 +213,7 @@ async fn send(socket: &mut WebSocket, message: Value) -> Result<(), String> {
         socket.send(Message::Text(message.to_string().into())),
     )
     .await
-    .map_err(|_| "Local worker socket write stalled")?
+    .map_err(|_| "Plugin process socket write stalled")?
     .map_err(|error| error.to_string())
 }
 
@@ -226,8 +226,8 @@ async fn write(
         match tokio::time::timeout(TIMEOUT, input.write_all(&line)).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => return error.to_string(),
-            Err(_) => return "Local worker input stalled".into(),
+            Err(_) => return "Plugin process input stalled".into(),
         }
     }
-    "Local worker input closed".into()
+    "Plugin process input closed".into()
 }

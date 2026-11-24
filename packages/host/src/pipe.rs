@@ -9,14 +9,14 @@ pub(crate) fn read_frame(reader: &mut impl BufRead) -> Result<Option<Value>> {
     loop {
         let buffer = reader.fill_buf()?;
         if buffer.is_empty() {
-            ensure!(line.is_empty(), "Truncated worker frame");
+            ensure!(line.is_empty(), "Truncated process frame");
             return Ok(None);
         }
         let end = buffer.iter().position(|byte| *byte == b'\n');
         let count = end.unwrap_or(buffer.len());
         ensure!(
             line.len() + count < WORKER_FRAME_BYTES,
-            "Worker message exceeds 1 MiB limit"
+            "Process message exceeds 1 MiB limit"
         );
         line.extend_from_slice(&buffer[..count]);
         reader.consume(count + usize::from(end.is_some()));

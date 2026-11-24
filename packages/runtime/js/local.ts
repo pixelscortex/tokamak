@@ -132,7 +132,7 @@ export class LocalFunctions implements LocalTransport {
       worker = undefined;
     }
     if (!worker) {
-      if (this.workers.size >= WORKER_CAPACITY) throw new Error("Local plugin worker limit reached");
+      if (this.workers.size >= WORKER_CAPACITY) throw new Error("Plugin process limit reached");
       const current = new LocalWorker(
         this.launch,
         artifact,
@@ -387,10 +387,10 @@ class LocalWorker {
       void this.close(String(error));
       throw error;
     }
-    if (this.closing) throw new Error("Local worker retired");
+    if (this.closing) throw new Error("Plugin process retired");
     if (this.draining) throw new Error("Local plugin build retired");
     if (signal?.aborted) throw new Error("Local function cancelled");
-    if (this.calls.size >= WORKER_CAPACITY) throw new Error("Local worker invocation limit reached");
+    if (this.calls.size >= WORKER_CAPACITY) throw new Error("Plugin process invocation limit reached");
     const id = ++this.next;
     const invocation = { type: "invoke", id, fn: name, args };
     if (new TextEncoder().encode(JSON.stringify(invocation)).length >= WORKER_FRAME_BYTES)
@@ -486,13 +486,13 @@ class LocalWorker {
           value,
         };
         if (new TextEncoder().encode(JSON.stringify(response)).length >= WORKER_FRAME_BYTES)
-          throw new Error("Server result exceeds 1 MiB worker limit");
+          throw new Error("Server result exceeds the plugin process's 1 MiB limit");
       } catch (error) {
         response = { type: "opResult", id: frame.id, error: String(error).slice(0, 8192) };
       }
       if (this.calls.get(frame.call) === call && !call.cancelled) await (await this.endpoint).send(response);
     } else if (frame.type !== "log") {
-      throw new Error("Invalid local worker message");
+      throw new Error("Invalid plugin process message");
     }
   }
 

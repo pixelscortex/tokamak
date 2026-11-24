@@ -98,8 +98,9 @@ writes and schema migrations remain deferred.
 ## Actions
 
 `action({...})` (also returned by `createFunctions`) runs separately from
-queries and mutations. See [plugin runtimes](#plugin-runtimes) for the
-action process and its budgets. Actions keep the real clock and randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+queries and mutations. See [Plugin process and action process](#plugin-process-and-action-process)
+for action process budgets. Actions keep the real clock and randomness. They
+have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
 call rejoins the serialized coordinator and owns its own transaction. The action
 itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.

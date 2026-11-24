@@ -158,7 +158,7 @@ async fn oversized_output_fails_the_call_and_oversized_input_closes_the_host() {
     host.invoke(1, "huge", json!({})).await;
     assert_eq!(
         host.receive().await["error"],
-        "Worker message exceeds 1 MiB limit"
+        "Plugin process message exceeds 1 MiB limit"
     );
 
     host.input
@@ -239,7 +239,10 @@ async fn full_input_queue_waits_and_over_capacity_invocations_fail_individually(
             ops.push(frame["id"].clone());
         } else {
             assert_eq!(frame["id"], id);
-            assert_eq!(frame["error"], "Worker invocation capacity exceeded");
+            assert_eq!(
+                frame["error"],
+                "Plugin process invocation capacity exceeded"
+            );
             rejected += 1;
         }
         id += 1;

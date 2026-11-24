@@ -308,7 +308,7 @@ async fn oversized_messages_fail_only_their_invocation() {
     let results = BTreeMap::from([fixture.result().await, fixture.result().await]);
     let error = results[&large].as_ref().unwrap_err();
     assert!(
-        error.contains("Host operation result exceeds 1 MiB worker limit"),
+        error.contains("Host operation result exceeds the action process's 1 MiB limit"),
         "{error}"
     );
     assert_eq!(results[&waiting], Ok(json!("waiting")));
@@ -317,7 +317,7 @@ async fn oversized_messages_fail_only_their_invocation() {
             .call("echo", json!({"value":"x".repeat(1024 * 1024),"delay":0}))
             .await
             .unwrap_err()
-            .contains("Worker invocation exceeds 1 MiB limit")
+            .contains("Action process invocation exceeds 1 MiB limit")
     );
     let second = fixture.call("state", json!({})).await.unwrap();
     assert_eq!(first["pid"], second["pid"]);

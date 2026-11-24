@@ -46,7 +46,7 @@ class RunnerWorker {
   private readonly startup = deferred<void>();
   private readonly exited = deferred<void>();
   private readonly deadline = setTimeout(
-    () => this.finish("The Runner did not start the local worker"),
+    () => this.finish("The Runner did not start the plugin process"),
     10_000,
   );
   private started = false;
@@ -68,13 +68,13 @@ class RunnerWorker {
         this.finish(String(error));
       }
     });
-    socket.addEventListener("error", () => this.finish("Could not connect to the Runner's local worker"));
-    socket.addEventListener("close", () => this.finish("The Runner closed the local worker connection"));
+    socket.addEventListener("error", () => this.finish("Could not connect to the Runner's plugin process"));
+    socket.addEventListener("close", () => this.finish("The Runner closed the plugin process connection"));
     socket.addEventListener("message", ({ data }) => {
       try {
         this.event(JSON.parse(String(data)) as WorkerEvent);
       } catch {
-        this.finish("Invalid Runner worker event");
+        this.finish("Invalid Runner plugin process event");
       }
     });
   }
@@ -102,7 +102,7 @@ class RunnerWorker {
         this.onClosedFrame?.(event);
         break;
       default:
-        this.finish("Invalid Runner worker event");
+        this.finish("Invalid Runner plugin process event");
     }
   }
 
@@ -118,8 +118,8 @@ class RunnerWorker {
   }
 
   private write(frame: object) {
-    if (this.ended || this.socket.readyState !== WebSocket.OPEN) throw new Error("Local worker closed");
-    if (this.socket.bufferedAmount > 4 * WORKER_FRAME_BYTES) throw new Error("Local worker input queue full");
+    if (this.ended || this.socket.readyState !== WebSocket.OPEN) throw new Error("Plugin process closed");
+    if (this.socket.bufferedAmount > 4 * WORKER_FRAME_BYTES) throw new Error("Plugin process input queue full");
     this.socket.send(JSON.stringify(frame));
   }
 
@@ -144,10 +144,10 @@ class RunnerWorker {
     try {
       this.write({ type: "close" });
     } catch {
-      this.finish("Local worker closed");
+      this.finish("Plugin process closed");
       return;
     }
-    const deadline = setTimeout(() => this.finish("Local worker did not close in time"), 5_000);
+    const deadline = setTimeout(() => this.finish("Plugin process did not close in time"), 5_000);
     await this.exited.promise;
     clearTimeout(deadline);
   }

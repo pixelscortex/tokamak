@@ -304,7 +304,7 @@ impl Supervisor {
             "permissions":ops.network_permissions(),"network":options.anonymous.is_none(),
         });
         if super::process_frames::oversized(&frame)? {
-            return Err("Worker invocation exceeds 1 MiB limit".into());
+            return Err("Action process invocation exceeds 1 MiB limit".into());
         }
         let (reply, result) = oneshot::channel();
         let active = CancellationToken::new();

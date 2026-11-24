@@ -122,7 +122,7 @@ _Avoid_: Provider lookup, service name, interface (when referring to the agreeme
 
 **Plugin process**:
 A process the Runner starts on demand to run one installed build of a plugin's local part.
-_Avoid_: Action process (when referring to local functions).
+_Avoid_: Worker, action process (when referring to local functions).
 
 **Action process**:
 A process the server starts to run server actions. Each call starts with fresh module state.

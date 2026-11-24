@@ -21,13 +21,13 @@ pub(in crate::host) async fn read_frame(
             return if frame.is_empty() {
                 Ok(None)
             } else {
-                Err("Incomplete worker message".into())
+                Err("Incomplete action process message".into())
             };
         }
         let end = bytes.iter().position(|b| *b == b'\n');
         let count = end.map_or(bytes.len(), |n| n + 1);
         if frame.len() + count > WORKER_FRAME_BYTES {
-            return Err("Worker message exceeds 1 MiB limit".into());
+            return Err("Action process message exceeds 1 MiB limit".into());
         }
         frame.extend_from_slice(&bytes[..count]);
         output.consume(count);
@@ -45,7 +45,7 @@ pub(in crate::host) async fn write_messages(
         let mut bytes = serde_json::to_vec(&message).map_err(|e| e.to_string())?;
         bytes.push(b'\n');
         if bytes.len() > WORKER_FRAME_BYTES {
-            return Err("Worker message exceeds 1 MiB limit".into());
+            return Err("Action process message exceeds 1 MiB limit".into());
         }
         tokio::time::timeout(Duration::from_secs(5), async {
             input.write_all(&bytes).await?;
@@ -55,7 +55,7 @@ pub(in crate::host) async fn write_messages(
             Ok::<_, std::io::Error>(())
         })
         .await
-        .map_err(|_| "Worker stdin stalled")?
+        .map_err(|_| "Action process stdin stalled")?
         .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -79,7 +79,7 @@ pub(in crate::host) fn operation_reply(
         if let Some(object) = message.as_object_mut() {
             object.remove("value");
         }
-        message["error"] = json!("Host operation result exceeds 1 MiB worker limit");
+        message["error"] = json!("Host operation result exceeds the action process's 1 MiB limit");
     }
     Ok(message)
 }

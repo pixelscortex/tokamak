@@ -122,12 +122,13 @@ case "$1" in
     cargo test --locked -p tokamak-plugin-host --test protocol --test programs
     cargo test --locked -p tokamak-plugin-host --bin tokamak-plugin-host protocol::tests::
 
-    # The same action process serves either build. Run local suites here and
-    # run server-only suites and cloud routing against the cloud build below.
+    # Exercise Runner routing and artifact reads with the local runtime enabled.
+    # Run the shared action suites and cloud routing against the cloud build below.
+    cargo test --locked -p server --lib runner_assets_follow_the_build
     echo "Timing Rust integration: Runner"
     time CI=1 cargo test --locked -p server \
       --test ai_threads --test ai_turns --test chat_threads --test claude_turns \
-      --test codex_turns --test local_functions
+      --test codex_turns --test local_functions --test runner_routing
     # These suites use real deadlines and Git/hook timing. Run them only
     # after the other test binaries finish compiling and running.
     for suite in ai_liveness code_changes code_snapshots; do

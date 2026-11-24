@@ -164,7 +164,7 @@ fn create_process(
                 null(),
                 null(),
                 1,
-                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
                 null(),
                 null(),
                 (&raw const startup).cast(),

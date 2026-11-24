@@ -35,7 +35,7 @@ export async function initialize(
   spawn: NativeSpawn,
 ): Promise<(frame: string) => void> {
   const emit = (message: object) => {
-    if (!trySend(JSON.stringify(message))) throw new Error("Worker output queue exceeds 4 MiB limit");
+    if (!trySend(JSON.stringify(message))) throw new Error("Plugin process output queue exceeds 4 MiB limit");
   };
   const emitWaiting = (message: object) => {
     const json = JSON.stringify(message);

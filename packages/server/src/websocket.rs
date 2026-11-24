@@ -177,7 +177,7 @@ pub async fn serve_with_identities(
 }
 
 #[cfg(feature = "local-runtime")]
-/// Adds the Runner's local worker socket to the authenticated loopback listener.
+/// Adds the Runner's plugin process socket to the authenticated loopback listener.
 pub async fn serve_runner(
     listener: TcpListener,
     server: Arc<Server>,

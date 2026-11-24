@@ -131,7 +131,7 @@ impl Bridge {
             .slots
             .acquire()
             .await
-            .map_err(|_| "Local worker connection closed")?;
+            .map_err(|_| "Plugin process connection closed")?;
         lock(&self.pending).insert(id, Pending { target, answer });
         let _operation = Operation { bridge: self, id };
         frame["id"] = json!(id);
@@ -139,10 +139,10 @@ impl Bridge {
         self.output
             .send(json!({"type":"message", "message":frame}))
             .await
-            .map_err(|_| "Local worker connection closed")?;
+            .map_err(|_| "Plugin process connection closed")?;
         receive
             .await
-            .map_err(|_| "Local worker operation closed".into())
+            .map_err(|_| "Plugin process operation closed".into())
     }
 
     fn answer(&self, id: u64, reply: Reply) {
@@ -221,7 +221,7 @@ pub(in crate::local) async fn connection(
 ) -> Result<(), String> {
     let (output, mut outgoing) = mpsc::channel(WORKER_CAPACITY);
     if workspace.len() > 2048 {
-        return Err("Invalid local worker workspace".into());
+        return Err("Invalid plugin process workspace".into());
     }
     let workspace: Arc<str> = workspace.into();
     let bridge = Arc::new(Bridge {
@@ -243,16 +243,16 @@ pub(in crate::local) async fn connection(
             request = receive(socket) => match request? {
                 Some(Request::Write { message }) => {
                     if serde_json::to_vec(&message).map_err(|e| e.to_string())?.len() >= WORKER_FRAME_BYTES {
-                        return Err("Local worker message exceeds 1 MiB".into());
+                        return Err("Plugin process message exceeds 1 MiB".into());
                     }
                     let id = frame_id(&message["id"])?;
                     match message["type"].as_str() {
                         Some("invoke") if message.get("contract").is_none() => {
                             if active.contains_key(&id) {
-                                return Err("Duplicate local worker invocation".into());
+                                return Err("Duplicate plugin process invocation".into());
                             }
                             if active.len() >= WORKER_CAPACITY {
-                                send(socket, result(id, Some("Local worker invocation capacity exceeded"), Value::Null)).await?;
+                                send(socket, result(id, Some("Plugin process invocation capacity exceeded"), Value::Null)).await?;
                                 continue;
                             }
                             match bridge.leases.get(&build) {
@@ -270,14 +270,14 @@ pub(in crate::local) async fn connection(
                                 cancel.cancel();
                             }
                         }
-                        _ => return Err("Invalid local worker request".into()),
+                        _ => return Err("Invalid plugin process request".into()),
                     }
                 }
                 Some(Request::Route { id, artifact }) => bridge.route(&id, artifact),
                 Some(Request::Retire { artifact }) => bridge.retire(&build, artifact),
                 Some(Request::Load { .. }) => return Err("Plugin processes do not load other plugins".into()),
                 Some(Request::Close) | None => return Ok(()),
-                Some(Request::Start { .. }) => return Err("Local worker already started".into()),
+                Some(Request::Start { .. }) => return Err("Plugin process already started".into()),
             },
             Some(frame) = outgoing.recv() => send(socket, frame).await?,
             Some(completed) = calls.join_next() => {

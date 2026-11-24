@@ -100,7 +100,7 @@ export function localLauncher(binary, installed, env, observe) {
           observe?.(artifact.id, frame, "fromWorker");
           receive(frame);
         }
-        closed("Local worker exited");
+        closed("Plugin process exited");
       } catch (error) {
         closed(String(error));
       }

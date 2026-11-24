@@ -103,7 +103,7 @@ impl fmt::Display for Error {
         match self {
             Self::InvalidInput(s) | Self::Engine(s) => f.write_str(s),
             Self::Overloaded => f.write_str("runtime overloaded: admission queue is full"),
-            Self::Closed => f.write_str("runtime worker is closed"),
+            Self::Closed => f.write_str("Transaction runtime is closed"),
             Self::Timeout { phase } => write!(f, "runtime {phase} exceeded its wall-clock budget"),
             Self::JavaScript { message, stack } => {
                 f.write_str(message)?;

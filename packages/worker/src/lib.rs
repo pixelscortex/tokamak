@@ -12,7 +12,7 @@ mod spawn;
 mod windows;
 
 #[cfg(feature = "local-runtime")]
-pub use discovery::{resolve, search_paths};
+pub use discovery::search_paths;
 pub use logs::send as log;
 pub use restart::{HEALTHY_UPTIME, RestartBackoff};
 #[cfg(feature = "local-runtime")]
@@ -207,9 +207,15 @@ impl Process {
 
     pub fn pipes(&mut self) -> Result<(ChildStdin, ChildStdout, ChildStderr), String> {
         Ok((
-            self.child.stdin.take().ok_or("Worker stdin missing")?,
-            self.child.stdout.take().ok_or("Worker stdout missing")?,
-            self.child.stderr.take().ok_or("Worker stderr missing")?,
+            self.child.stdin.take().ok_or("Plugin host stdin missing")?,
+            self.child
+                .stdout
+                .take()
+                .ok_or("Plugin host stdout missing")?,
+            self.child
+                .stderr
+                .take()
+                .ok_or("Plugin host stderr missing")?,
         ))
     }
 
@@ -221,7 +227,7 @@ impl Process {
                     Some(child) => child.wait().await,
                     None => std::future::pending().await,
                 }
-            } => format!("worker guardian exited ({status:?})"),
+            } => format!("process guardian exited ({status:?})"),
         }
     }
 
@@ -267,7 +273,7 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
             .kill_on_drop(true);
         spawn_child(&mut command, None)
             .map(Some)
-            .map_err(|e| format!("Worker guardian could not start: {e}"))
+            .map_err(|e| format!("Process guardian could not start: {e}"))
     }
     #[cfg(not(unix))]
     {
@@ -289,7 +295,7 @@ fn spawn_group(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     let child = spawn_child(&mut command, keep).map_err(|e| e.to_string())?;
-    let group = Group(child.id().ok_or("Worker has no pid")?);
+    let group = Group(child.id().ok_or("Plugin host has no PID")?);
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
 }

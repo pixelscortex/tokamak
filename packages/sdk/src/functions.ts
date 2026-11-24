@@ -306,7 +306,7 @@ function builder<
 }
 
 export function localContext(host: HostBridge, auth: AuthContext): LocalContext {
-  if (!host.proc || !host.signal) throw new Error("Local functions require the client worker");
+  if (!host.proc || !host.signal) throw new Error("Local functions require a plugin process");
   async function run<A, R>(
     operation: "local.runQuery" | "local.runMutation" | "local.runAction",
     reference: FunctionReference<ServerFunctionKind, A, R>,
@@ -322,11 +322,11 @@ export function localContext(host: HostBridge, auth: AuthContext): LocalContext 
     proc: host.proc,
     [contractScope]: host.contracts ?? {
       list() {
-        throw new Error("Local contracts require the client worker");
+        throw new Error("Local contracts require a plugin process");
       },
     },
     withPrograms(run) {
-      if (!host.withPrograms) throw new Error("Program scopes require the client worker");
+      if (!host.withPrograms) throw new Error("Program scopes require a plugin process");
       return host.withPrograms((forceStop, scoped) => run(forceStop, localContext(scoped, auth)));
     },
     signal: host.signal,
