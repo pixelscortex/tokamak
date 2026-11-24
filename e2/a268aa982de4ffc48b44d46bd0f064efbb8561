@@ -1,0 +1,172 @@
+plugins/ai/src/client/lib/release.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 5,18-20
+packages/server/tests/ai-liveness-driver.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 16-19,29-33,41-103,286
+packages/worker/src/lib.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 9-10,21-22,44-52,94,143-145,148-152,158,166-168,341-342,371,377,381,385-386
+packages/sdk/src/agent-turn.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-237
+e2e/browser/code.spec.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,9,67-71,152-156,168-181,237-241,252-253
+packages/server/tests/README.md
+  s_e11e967c664e36::t_3f3ce56ff6c172 46-51
+packages/sdk/tests/agent-turn.test.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-50
+packages/host/src/main.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 63,76-77,87-100
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_e11e967c664e36::t_5b27a69391453f 138
+packages/host/src/protocol.rs
+  s_e11e967c664e36::t_7f129578f53e2b 23,43-48,68,92,121-123,136,143,152,154,190,221-223,380
+  s_e11e967c664e36::t_271d9666bcfba1 140
+  s_e11e967c664e36::t_3f3ce56ff6c172 4,13,18,56-57,61,69-91,93-100,155,158-160,192,219,267-286,292,304-307,309-318,327-331,333-346,348-355,377-379,381,398-405,423-428,435,437,461-466,471,473-502
+packages/sdk/README.md
+  s_e11e967c664e36::t_3f3ce56ff6c172 675-708,720-722
+  s_e11e967c664e36::t_271d9666bcfba1 656-667
+packages/sdk/worker/invocation-host.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 16,26
+packages/sdk/src/internal/contracts.ts
+  s_e11e967c664e36::t_d17e927ad9ba16 47
+  s_e11e967c664e36::t_5b27a69391453f 218-220
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,11-28,215-217,221-225
+  s_e11e967c664e36::t_b76088869899b9 226
+packages/host/src/runtime.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 11-12,46,169-184,186,189,196-197
+packages/sdk/worker/wire-data.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-12
+packages/server/src/identity.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 113-117
+plugins/ai/src/contracts.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 3-17,76-77,86
+packages/worker/src/runtime.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 43-59
+plugins/ai/src/server/limits.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1
+plugins/ai/tests/agent-turn.test.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-194
+packages/server/src/plugins/contracts.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 178-180,182-186,191-193
+.ci/check.sh
+  s_e11e967c664e36::t_3f3ce56ff6c172 29-31,59-76,109,188-189
+packages/runner/tests/support/routing.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 42,74
+plugins/ai/src/server/liveness.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 154-162
+packages/host/README.md
+  s_e11e967c664e36::t_3f3ce56ff6c172 36-42
+  s_e11e967c664e36::t_271d9666bcfba1 43-51
+plugins/ai/src/server/run.ts
+  s_e11e967c664e36::t_5b27a69391453f 109
+  s_e11e967c664e36::t_3f3ce56ff6c172 4-5,11-25,78,85-89,122-139,160-166,194-196,394-395,400-401
+GLOSSARY.md
+  s_e11e967c664e36::t_271d9666bcfba1 114
+packages/host/src/programs.rs
+  s_e11e967c664e36::t_d17e927ad9ba16 123
+  s_e11e967c664e36::t_3f3ce56ff6c172 4-8,21-27,39-42,49-64,66-68,95-106,116,121-122,124-126
+plugins/ai/src/server/agents.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 3,24-27,34-46
+plugins/ai/src/server/agent-turn.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-216
+plugins/ai/src/server/controls.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,8-9,11,30-31,42,62-75,78,80,87,96-100,106-114,119-121,143-146
+  s_e11e967c664e36::t_d17e927ad9ba16 93
+packages/runner/tests/support/agents.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 36-42
+plugins/chat/src/server/messages/messages.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,63
+packages/server/tests/worker-lifecycle-driver.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 64
+plugins/ai/src/server/questions.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 78,87,135-139
+plugins/claude/tests/permissions.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 39-45
+e2e/fake-agent/replays/codex/linked-hello.jsonl
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-13
+packages/runner/src/local/quickjs.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 22-23,67-74,86,272,495-496,506,525-526,536,581-583,628,630,638-644,648,650-652,672-689,700-726,732-735,737-757,791-801,812-823
+packages/server/tests/code-snapshots-driver.mjs
+  s_e11e967c664e36::t_5b27a69391453f 20,90
+packages/runner/tests/support/agent-channel.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-551
+packages/sdk/worker/dispatch.ts
+  s_e11e967c664e36::t_6d00465fea9208 3,127,131,136-150,155,158-163,167,175,189,195-196
+  s_e11e967c664e36::t_3f3ce56ff6c172 27-41,59-60,63-70,75-87,90,92-97,101,103,115-119,121-126,128-130,132-135,164,173-174,176-177,179,187-188,190,192,194,197-202,207,217-220,232-238,261,276
+  s_e11e967c664e36::t_5b27a69391453f 203-204
+plugins/ai/src/server/turns.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 12,31,231,236,255-259,261,271-273,288-289,297,303-332,423,428-433,456-458,464-469,471-478,480-484,615,618,643-644,655-659
+  s_e11e967c664e36::t_7dd277f1b2f7c1 660
+plugins/ai/src/server/schema.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 155-156
+packages/runner/tests/agent-routing.mjs
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,8,14-18,25-32,35-37,40,49,53,57-61,67-70,75,77,85-87,90-118,120-121,123,126-140,142-197,199-210,212-225,228-259,262,266,271-273,275-276,278-279
+packages/runtime/js/local.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 284-288
+e2e/hosted-fixture.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 8-16,20
+packages/host/src/programs/process.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 182,256
+packages/server/tests/workers.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 300
+packages/worker/src/spawn.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-222
+packages/server/PLUGINS.md
+  s_e11e967c664e36::t_3f3ce56ff6c172 295-300
+  s_e11e967c664e36::t_271d9666bcfba1 292-293,302-312
+  s_e11e967c664e36::t_37ab59b979dc25 294,301
+packages/sdk/worker/dispatch-channels.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-103
+plugins/code/contracts/ai.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 3-17,76-77,86
+packages/sdk/package.json
+  s_e11e967c664e36::t_3f3ce56ff6c172 14
+packages/runner/tests/lifecycle.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 880,895,897,946
+packages/sdk/src/worker-limits.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 4-5
+packages/sdk/worker/contracts.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 2-7,9-12,14,24,84-95,143-145,147-154,234-244
+  s_e11e967c664e36::t_d17e927ad9ba16 133,146
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_e11e967c664e36::t_5b27a69391453f 157,282-313
+  s_e11e967c664e36::t_9808c298dbe2de 314
+packages/sdk/src/host.ts
+  s_e11e967c664e36::t_d87836ed713d2f 73
+  s_e11e967c664e36::t_3f3ce56ff6c172 64-72,74-77,95-100,134-138,146-151
+  s_e11e967c664e36::t_a5bfdc31cd00ee 152-153
+packages/runner/README.md
+  s_e11e967c664e36::t_3f3ce56ff6c172 11,40-65,68-72,142-143
+  s_e11e967c664e36::t_271d9666bcfba1 12,14-19,66-67
+packages/worker/tests/launch_local.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 20-24,35,53,55
+packages/sdk/src/agent-reports.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-140
+plugins/claude/tests/snapshots.mjs
+  s_e11e967c664e36::t_5b27a69391453f 3-4,6,13-20,41-49,54,62-119
+packages/runner/src/local/quickjs/session.rs
+  s_e11e967c664e36::t_3f3ce56ff6c172 1,15,23,25-26,29-33,35,39-54,56-57,61,63-70,79,97-102,162,193,335,337,341-352,355-357,395,403-405,408-409,411-452,454-475,477-488,490-528,533-547,549-557,559,565-566,571-572
+  s_e11e967c664e36::t_271d9666bcfba1 276
+  s_e11e967c664e36::t_d87836ed713d2f 281-286,288-290,292-314,316-321,323-324,382-384
+  s_e11e967c664e36::t_7f129578f53e2b 4,62,125-133,354,365,368-369,373-375,378,388,529-532,548,558,560-564,567-570
+packages/sdk/worker/quickjs.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 2,24-29,31-32,37-44,47,63-64,77,80-84
+packages/sdk/worker/agent-turn.ts
+  s_e11e967c664e36::t_3f3ce56ff6c172 1-284
+plugins/claude/tests/replay.mjs
+  s_e11e967c664e36::t_d774147a58f2ae 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2a268aa982de4ffc48b44d46bd0f064efbb8561",
+  "prompts": {},
+  "sessions": {
+    "s_e11e967c664e36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aeb-0c88-7f10-9840-67eabb856bcf",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
