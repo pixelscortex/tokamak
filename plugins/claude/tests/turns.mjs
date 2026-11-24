@@ -186,11 +186,7 @@ async function discovery(client) {
   assert.deepEqual(readyState(await info()), [true, false]);
   for (const fixture of ["expired-iso", "expired-ms", "expired-seconds"]) {
     await writeFile(marker, fixture);
-    assert.deepEqual(
-      readyState(await info()),
-      [true, true],
-      `Claude can refresh past loginExpiresAt: ${fixture}`,
-    );
+    assert.deepEqual(readyState(await info()), [true, false], `Past loginExpiresAt: ${fixture}`);
   }
   await writeFile(marker, "old");
   const old = await info();

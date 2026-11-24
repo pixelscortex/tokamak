@@ -145,11 +145,21 @@ export async function signedIn(ctx: LocalContext, timeout = 5_000): Promise<bool
   const answer = await agentCommand(ctx, ["claude", "auth", "status"], timeout);
   if (!answer || answer === "missing") return;
   try {
-    const { loggedIn } = JSON.parse(answer.stdout);
-    // Claude reports an explicit logout with exit 1. It can refresh an
-    // expired login; the expiration alone is not evidence of sign-out.
-    if (loggedIn === true && answer.code === 0) return true;
+    const { loggedIn, loginExpiresAt } = JSON.parse(answer.stdout);
+    // Claude reports an explicit logout with exit 1.
     if (loggedIn === false && (answer.code === 0 || answer.code === 1)) return false;
+    if (loggedIn !== true || answer.code !== 0) return;
+    // Current Unix seconds fit in ten digits; even a millisecond deadline
+    // from the year 2000 is longer than that.
+    const timestamp =
+      typeof loginExpiresAt === "number"
+        ? loginExpiresAt < 1e10
+          ? loginExpiresAt * 1_000
+          : loginExpiresAt
+        : typeof loginExpiresAt === "string"
+          ? Date.parse(loginExpiresAt)
+          : NaN;
+    return !Number.isFinite(timestamp) || timestamp > Date.now();
   } catch {
     // Unrecognized or absent output says nothing about the login.
   }
