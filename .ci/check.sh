@@ -15,7 +15,7 @@ check_cloud_graph() {
 check_local_symbols() {
   local build=$1
   shift
-  nm -C "$@" | awk -v build="$build" -v platform="$(uname -s)" '
+  nm -C "$@" | awk -v build="$build" '
     BEGIN {
       count = split("fs modules programs protocol runtime timers", modules)
       for (i = 1; i <= count; i++) patterns[i] = "tokamak_plugin_host::" modules[i] "::"
@@ -30,7 +30,6 @@ check_local_symbols() {
       patterns[++count] = "tokamak_runner::local::quickjs::Host>?::stop_programs$"
       patterns[++count] = "tokamak_plugin_host::protocol::native_control$"
       patterns[++count] = "tokamak_worker::Process>?::launch_runner$"
-      if (platform == "Darwin") patterns[++count] = "tokamak_worker::with_spawn_lock"
     }
     /tokamak_plugin_host::action_process::run/ { action_host = 1 }
     /server::host::action_process::/ { action_launcher = 1 }

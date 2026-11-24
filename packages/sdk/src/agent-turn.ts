@@ -185,17 +185,41 @@ export const AGENT_TURN_PROTOCOL = 1;
 export const TURN_ENDED = "This turn has ended";
 export type AgentTurnOpen = AgentTurnStart & { version: number };
 
+/** The history notice shared by Chat and the local turn transport. */
+export function omittedHistoryNote(count: number): HistoryMessage {
+  return {
+    role: "note",
+    name: "Tokamak",
+    text: `${count} earlier ${count === 1 ? "message" : "messages"} of this thread ${count === 1 ? "is" : "are"} left out.`,
+  };
+}
+
 /** Keep the newest history that fits beside the complete prompt. */
 export function agentTurnHistory(start: AgentTurnStart): Run["history"] | undefined {
-  let remaining = WORKER_DATA_BYTES - jsonBytes([{ ...start, history: [], version: AGENT_TURN_PROTOCOL }]);
-  if (remaining < 0) return undefined;
-  let first = start.history.length;
-  while (first > 0) {
-    remaining -= jsonBytes(start.history[first - 1]) + (first < start.history.length ? 1 : 0);
-    if (remaining < 0) break;
-    first--;
+  const budget = WORKER_DATA_BYTES - jsonBytes([{ ...start, history: [], version: AGENT_TURN_PROTOCOL }]);
+  if (budget < 0) return undefined;
+  const { history } = start;
+  const omitted = omissionCount(history[0]);
+  const oldest = omitted ? 1 : 0;
+  let rowsBytes = 0;
+  let fitting: { first: number; note: HistoryMessage | undefined } | undefined;
+  for (let first = history.length; first >= oldest && rowsBytes <= budget; first--) {
+    const count = omitted + first - oldest;
+    const note = count ? omittedHistoryNote(count) : undefined;
+    const noteBytes = note ? jsonBytes(note) + (first < history.length ? 1 : 0) : 0;
+    if (rowsBytes + noteBytes <= budget) fitting = { first, note };
+    if (first > oldest) rowsBytes += jsonBytes(history[first - 1]) + (first < history.length ? 1 : 0);
   }
-  return first === 0 ? start.history : start.history.slice(first);
+  // A prompt that leaves no space even for a note still starts, without history.
+  if (!fitting) return [];
+  const rows = history.slice(fitting.first);
+  return fitting.note ? [fitting.note, ...rows] : rows;
+}
+
+function omissionCount(leading: HistoryMessage | undefined): number {
+  if (leading?.role !== "note" || leading.name !== "Tokamak") return 0;
+  const count = Number(/^([1-9][0-9]*) earlier /.exec(leading.text)?.[1]);
+  return Number.isSafeInteger(count) && leading.text === omittedHistoryNote(count).text ? count : 0;
 }
 
 type ReportMethods = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;

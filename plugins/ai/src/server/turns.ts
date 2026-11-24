@@ -612,9 +612,10 @@ export const finish = mutation({
     state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped")),
     error: v.optional(v.string()),
     sessionId: v.optional(v.string()),
+    acknowledgedSteer: v.optional(v.string()),
     finishedAt: v.number(),
   },
-  handler: async (ctx, { turnId, state, error, sessionId, finishedAt }) => {
+  handler: async (ctx, { turnId, state, error, sessionId, acknowledgedSteer, finishedAt }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
     if (turn.stoppingAt !== undefined) state = "stopped";
     const reason = error === undefined ? undefined : line(error, LINE_CHARS * 4);
@@ -640,6 +641,7 @@ export const finish = mutation({
       question: undefined,
       questionToken: undefined,
       pendingSteer: undefined,
+      steers: deliveredSteers(turn, acknowledgedSteer),
       state,
       current: undefined,
       finishedAt: Date.now(),
@@ -649,6 +651,12 @@ export const finish = mutation({
     return state;
   },
 });
+
+function deliveredSteers(turn: Turn, acknowledgedSteer: string | undefined) {
+  return acknowledgedSteer !== undefined && turn.pendingSteer === acknowledgedSteer
+    ? [...(turn.steers ?? []), acknowledgedSteer]
+    : turn.steers;
+}
 
 /** Writes `changes` over the turn; a field set to undefined is removed (patch cannot remove one). */
 async function update(db: DatabaseWriter<Model>, turn: Turn, changes: Partial<Turn>) {

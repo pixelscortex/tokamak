@@ -6,6 +6,8 @@ mod restart;
 #[cfg(feature = "local-runtime")]
 pub mod runner;
 mod runtime;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod spawn;
 #[cfg(all(windows, feature = "local-runtime"))]
 mod windows;
 
@@ -16,6 +18,8 @@ pub use restart::{HEALTHY_UPTIME, RestartBackoff};
 pub use runtime::configured_action_heap_bytes;
 #[cfg(feature = "local-runtime")]
 pub use runtime::{LocalRuntime, configured_heap_bytes};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use spawn::inherit_only;
 #[cfg(any(feature = "local-runtime", not(windows)))]
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -37,22 +41,12 @@ pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
 
-/// Serialize macOS child creation with the socketpair-to-CLOEXEC window.
-/// All Runner child launches, including the Server's device lookup, use it.
-#[cfg(all(target_os = "macos", feature = "local-runtime"))]
-pub fn with_spawn_lock<T>(spawn: impl FnOnce() -> T) -> T {
-    static SPAWN: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _guard = SPAWN
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    spawn()
-}
-
 #[cfg(not(windows))]
-fn spawn_child(command: &mut tokio::process::Command) -> std::io::Result<Child> {
-    #[cfg(all(target_os = "macos", feature = "local-runtime"))]
-    return with_spawn_lock(|| command.spawn());
-    #[cfg(not(all(target_os = "macos", feature = "local-runtime")))]
+fn spawn_child(command: &mut tokio::process::Command, keep: Option<i32>) -> std::io::Result<Child> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    inherit_only(command.as_std_mut(), keep)?;
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let _ = keep;
     command.spawn()
 }
 
@@ -97,7 +91,7 @@ impl Process {
         let (child, containment, guardian) = {
             let mut command = tokio::process::Command::new(path);
             command.args(args);
-            spawn_group(command)?
+            spawn_group(command, None)?
         };
         Ok(Self::contained(child, containment, guardian))
     }
@@ -151,14 +145,7 @@ impl Process {
 
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         let host = LocalRuntime::host_path(&executable)?;
-        // Darwin sets CLOEXEC in a separate syscall. While neither descriptor
-        // is safe to inherit, no other Runner thread can spawn. Linux uses
-        // atomic SOCK_CLOEXEC in UnixDatagram::pair.
-        #[cfg(target_os = "macos")]
-        let pair = with_spawn_lock(UnixDatagram::pair);
-        #[cfg(target_os = "linux")]
-        let pair = UnixDatagram::pair();
-        let (control, native) = pair.map_err(|error| error.to_string())?;
+        let (control, native) = UnixDatagram::pair().map_err(|error| error.to_string())?;
         control
             .set_nonblocking(true)
             .map_err(|error| error.to_string())?;
@@ -176,17 +163,8 @@ impl Process {
         if let Some(heap) = std::env::var_os("TOKAMAK_PLUGIN_HOST_HEAP_MIB") {
             command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
         }
-        // SAFETY: native remains open through spawn. Only this child inherits it;
-        // the pre-exec callback performs an async-signal-safe fcntl.
-        unsafe {
-            command.pre_exec(move || {
-                if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-        let (child, containment, guardian) = spawn_group(command)?;
+        // Native remains open through spawn. Only this child keeps it across exec.
+        let (child, containment, guardian) = spawn_group(command, Some(fd))?;
         Ok((Self::contained(child, containment, guardian), control))
     }
 
@@ -361,7 +339,7 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true);
-        spawn_child(&mut command)
+        spawn_child(&mut command, None)
             .map(Some)
             .map_err(|e| format!("Worker guardian could not start: {e}"))
     }
@@ -390,12 +368,13 @@ fn launch(
         command.env(key, value);
     }
     command.current_dir(cwd);
-    spawn_group(command)
+    spawn_group(command, None)
 }
 
 #[cfg(not(windows))]
 fn spawn_group(
     mut command: tokio::process::Command,
+    keep: Option<i32>,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
     #[cfg(unix)]
     command.process_group(0);
@@ -404,7 +383,7 @@ fn spawn_group(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    let child = spawn_child(&mut command).map_err(|e| e.to_string())?;
+    let child = spawn_child(&mut command, keep).map_err(|e| e.to_string())?;
     let group = Group(child.id().ok_or("Worker has no pid")?);
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))

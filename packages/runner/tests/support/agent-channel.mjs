@@ -28,6 +28,16 @@ export async function channelFixtures(plugins, scratch) {
     join(plugins, "ai"),
     `import { readFile as channelRead, writeFile as channelWrite } from "node:fs/promises";
 let pressureWrites = Promise.resolve();
+const steerCommitAttempts = new Map();
+async function recordSteerWithFailures(write, text, delivery) {
+  if (delivery === "delivered" && (text === "next" || text === "finish")) {
+    const attempt = (steerCommitAttempts.get(text) ?? 0) + 1;
+    steerCommitAttempts.set(text, attempt);
+    await channelWrite(${JSON.stringify(join(scratch, "steer-commits"))}, text + ":" + attempt + "\\n", { flag: "a" });
+    if (text === "finish" || attempt === 1) throw new Error("injected steer commit failure");
+  }
+  return write();
+}
 function writeUnderPressure(write, slow) {
   const result = pressureWrites.then(async () => {
     if (slow) await new Promise((resolve) => setTimeout(resolve, 125));
@@ -50,6 +60,8 @@ async function channelGate(path) {
       assert.ok(code.includes(version), "ai channel version seam");
       const writer = "await ctx.runMutation(api.turns.write, args)";
       assert.ok(code.includes(writer), "ai report writer seam");
+      const steer = "ctx.runMutation(api.turns.steer, { turnId, text, ...delivery && { delivery } })";
+      assert.ok(code.includes(steer), "ai steer mutation seam");
       return code
         .replace(
           version + " }, async",
@@ -76,6 +88,7 @@ async function channelGate(path) {
           ? channelWrite(request.folder + "/force-sent", "") : Promise.resolve()).then(() => channel.send("forceStop",`,
         )
         .replace("{ ...address }).catch(() => {}),", "{ ...address })).catch(() => {}),")
+        .replace(steer, `recordSteerWithFailures(() => ${steer}, text, delivery)`)
         .replace(
           writer,
           `await (args.thinking?.startsWith("burst") || args.thinking === "slow writer"
@@ -281,7 +294,7 @@ async function checkVersionAndSize({ client, ai, chat, folder, claudeTurns }) {
   const fitted = await claudeTurns.run(project, fittingPrompt, { threadId });
   assert.deepEqual(JSON.parse(fitted.text), {
     promptLength: fittingPrompt.length,
-    history: ["newest history"],
+    history: ["1 earlier message of this thread is left out.", "newest history"],
   });
 
   const prompt = "p".repeat(1009 * 1024);
@@ -333,7 +346,7 @@ async function checkReportPressure({ folder, claudeTurns }) {
 
 async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, claudeTurns, whileWaiting }) {
   const steerProject = await folder("steer-order");
-  await claudeTurns.run(steerProject, "@steer-order", {
+  const steered = await claudeTurns.run(steerProject, "@steer-order", {
     async during(control) {
       await control.firstText();
       const { _id: turnId, replyId } = await control.replyUntil("steer turn", () => true);
@@ -349,10 +362,21 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
       assert.deepEqual(await steers(), ["next"], "steer precedes the reaction, even before acknowledgement");
       await writeFile(join(steerProject, "go"), "");
       await sent;
-      assert.deepEqual(await steers(), ["next"], "acknowledging a steer leaves one delivered record");
+      assert.equal(await readFile(join(scratch, "steer-commits"), "utf8"), "next:1\nnext:2\n");
+      await control.steer("finish");
+      assert.deepEqual(
+        await steers(),
+        ["next", "finish"],
+        "a failed commit still shows the acknowledged steer",
+      );
       await writeFile(join(steerProject, "go-end"), "");
     },
   });
+  assert.deepEqual(
+    await client.query(ai.turns.replySteers, { replyId: steered.row.replyId }),
+    ["next", "finish"],
+    "finish promotes the acknowledged steer exactly once",
+  );
 
   const early = await folder("early-stop");
   await claudeTurns.run(early, "@stop-before-handler", {

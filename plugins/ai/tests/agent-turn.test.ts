@@ -129,7 +129,10 @@ test("a linked steer that crosses the turn end is not recorded", async () => {
     turn.send.mockRejectedValueOnce(new Error("This turn has ended"));
     await turn.message("report", { events: [{ kind: "steerReady" }] });
     await expect(turn.control.steer("too late", record)).resolves.toMatchObject({ kind: "NotRunning" });
-    expect(record.mock.calls).toEqual([["pending"], ["failed"]]);
+    expect(record.mock.calls).toEqual([
+      ["too late", "pending"],
+      ["too late", "failed"],
+    ]);
   } finally {
     await turn.end();
   }
@@ -139,7 +142,7 @@ test("early steers wait for provider readiness, then record and deliver in order
   const turn = linkedTurn("early-steer");
   try {
     const order: string[] = [];
-    const record = vi.fn(async (delivery?: string) => void order.push(delivery ?? ""));
+    const record = vi.fn(async (_text: string, delivery?: string) => void order.push(delivery ?? ""));
     turn.send.mockImplementation(async () => {
       order.push("reaction");
       return null;
@@ -163,13 +166,16 @@ test("early steers wait for provider readiness, then record and deliver in order
 test("a handler error withdraws the pending steer", async () => {
   const turn = linkedTurn("failed-steer");
   try {
-    const record = vi.fn(async (_delivery?: string) => null);
+    const record = vi.fn(async () => null);
     turn.send.mockRejectedValueOnce(new Error("The agent can no longer receive a steer"));
     await turn.message("report", { events: [{ kind: "steerReady" }] });
     await expect(turn.control.steer("follow-up", record)).resolves.toEqual({
       error: "The agent can no longer receive a steer",
     });
-    expect(record.mock.calls).toEqual([["pending"], ["failed"]]);
+    expect(record.mock.calls).toEqual([
+      ["follow-up", "pending"],
+      ["follow-up", "failed"],
+    ]);
   } finally {
     await turn.end();
   }

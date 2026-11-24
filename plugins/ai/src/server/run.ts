@@ -156,7 +156,13 @@ export const turn = local({
       if (hookNotice === undefined) hookNotice = await hooks.after();
       let state;
       try {
-        state = await ctx.runMutation(api.turns.finish, { turnId, ...ending, finishedAt: Date.now() });
+        const acknowledgedSteer = control.acknowledgedSteer();
+        state = await ctx.runMutation(api.turns.finish, {
+          turnId,
+          ...ending,
+          finishedAt: Date.now(),
+          ...(acknowledgedSteer === undefined ? {} : { acknowledgedSteer }),
+        });
       } catch {
         // The server cannot be reached or already ended the turn; the interrupt rule frees the thread.
         // `ended` says why in the person's words when this computer had to stop the agent.
@@ -184,8 +190,8 @@ export const steer = local({
     if (!control) return noRunningTurn(turnId);
     const steerText = text.trim();
     if (!steerText) return fail("EmptySteer", { turnId });
-    return control.steer(steerText, (delivery) =>
-      ctx.runMutation(api.turns.steer, { turnId, text: steerText, ...(delivery && { delivery }) }),
+    return control.steer(steerText, (text, delivery) =>
+      ctx.runMutation(api.turns.steer, { turnId, text, ...(delivery && { delivery }) }),
     );
   },
 });

@@ -48,7 +48,7 @@ impl LocalRuntime {
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
         #[cfg(not(windows))]
-        let child = super::spawn_child(&mut command);
+        let child = super::spawn_child(&mut command, None);
         #[cfg(windows)]
         let child = command.spawn();
         let child = child.map_err(|error| failure(&error.to_string()))?;

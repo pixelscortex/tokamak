@@ -1,4 +1,5 @@
 import { isServerCall, pluginOnly, v, type AuthContext, type DatabaseWriter, type Id } from "@tokamak/sdk";
+import { omittedHistoryNote } from "@tokamak/sdk/agent-turn";
 import { DEFAULT_TITLE, mutation, nonempty, query, thread, type Model } from "../_functions";
 import { jsonBytes } from "./parts";
 import { recentMessages } from "./_tail";
@@ -59,12 +60,7 @@ export const historyBefore = pluginOnly(
         if (remaining < 0) omitted++;
         else history.push(row);
       }
-      if (omitted)
-        history.push({
-          role: "note",
-          name: "Tokamak",
-          text: `${omitted} earlier ${omitted === 1 ? "message" : "messages"} of this thread ${omitted === 1 ? "is" : "are"} left out.`,
-        });
+      if (omitted) history.push(omittedHistoryNote(omitted));
       return history.reverse();
     },
   }),
