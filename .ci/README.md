@@ -95,18 +95,12 @@ Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 The installer is unsigned; Windows may require accepting its unknown-publisher
 prompt. No signing secrets are required.
 
-Plugin workers and local agents run on Windows with Bun installed. The server
-creates each worker inside a Job Object that ends the whole process tree when the
-server closes the job handle or exits. The app's server probes and sidecar, Bun
-workers and local agent launches do not open a console. Windows CI checks the
-build and server identity only; it does not run worker or real agent tests, launch the
-installer or desktop UI, or run real Claude or Codex adapters.
+Local functions and server actions are unavailable on Windows until TKM-234.
+Calls return `Plugin code is not supported on Windows yet.` Windows CI checks the
+build and server identity only. It does not launch the installer or desktop UI.
 
 On a Windows PC, install and open the bundle, then switch servers. No terminal
-should appear. With Bun and an authenticated adapter on `PATH`, check that the app
-offers the adapter, opens a session in a folder with spaces, streams a reply, and
-handles cancellation. When the local server stops, no worker or adapter processes
-should remain. Also check local server authentication, persistence, and upgrade
-behavior. The host uses graceful HTTP server shutdown; its Unix SIGTERM fallback
-is not available on Windows. Token files rely on the user's inherited Windows
-profile ACLs rather than Unix mode bits.
+should appear. Check local server authentication, persistence and upgrade
+behavior. The app contains its Runner in a Job Object. The host uses graceful
+HTTP server shutdown; its Unix SIGTERM fallback is not available on Windows.
+Token files rely on inherited Windows profile ACLs rather than Unix mode bits.

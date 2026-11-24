@@ -170,8 +170,8 @@ live clock and randomness. Clock-dependent queries do not automatically refresh
 as time passes; subscriptions rerun when their data dependencies change.
 
 Delegation evaluates self-contained modules in the same invocation world, heap
-and time budget; it never awaits a second worker from a bounded worker pool.
-One-worker operation is tested. Results cross as JSON-compatible values, not
+and time budget; it never awaits a second slot in the transaction engine.
+Delegation with a single slot is tested. Results cross as JSON-compatible values, not
 JavaScript capabilities. Call-path cycles fail; engine limits also cap delegation
 at 16 levels / 256 calls per root invocation. This shares a JS realm between
 trusted plugins and is not a realm-isolation security guarantee.
@@ -246,7 +246,7 @@ Legacy owner-issued invite keys still work.
 ## Evidence
 
 `cargo test --locked -p server --test plugins --jobs 2` builds real SDK plugins
-through the public artifact command. It tests one-worker nested calls, atomic
+through the public artifact command. It tests nested calls with one engine slot, atomic
 rollback after caught callee failure, scoped IDs, query-to-mutation denial, call
 cycles, two interface providers, transitive subscriptions, edited-code reload,
 failed-reload preservation, permission-change rejection and subscription refresh.
@@ -254,7 +254,7 @@ It also runs the real standalone binary/control CLI against isolated disk storag
 checking authentication, Origin rejection and backend-source non-exposure.
 
 `plugins::tests` covers static resolver failures, traversal/symlink/hash checks
-and immutable UI snapshots. Engine module tests cover shared-worker delegation
+and immutable UI snapshots. Engine module tests cover delegation in one invocation
 and caught/abandoned child error observation. These are self-authored tests,
 not an independent review or proof of hybrid sync/long-running AI.
 

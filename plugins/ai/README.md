@@ -114,7 +114,7 @@ export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
   agent session, and `run.onStop(() => …)` to send a graceful interrupt.
   Let `start` settle when the program ends. Force stop kills the process
   groups started through the scoped `ctx.proc` supplied to `start`.
-- `ctx.proc(argv, { env })` REPLACES the environment, and the local worker
+- `ctx.proc(argv, { env })` REPLACES the environment, and the plugin process
   starts with a short list (HOME, USER, LANG, PATH, …). Leave `env` out to pass
   that list on, or add what the program needs to find its login and settings.
 
@@ -134,7 +134,7 @@ never sent to windows. A queued row has no reply until it starts.
   `SignedOut`, `Busy` (one writer per thread) or `Answered` (the message already
   has a turn).
 - Local `run:steer`, `run:stop` and `run:forceStop` control a turn in its sender's
-  local worker. Steer returns `NoSteerHandler` without storing the draft if the
+  plugin process. Steer returns `NoSteerHandler` without storing the draft if the
   provider never registers a handler.
 - `turns:begin`, `turns:write`, `turns:steer`, `turns:requestStop` and
   `turns:finish` record the turn. The local part calls the server on the window's

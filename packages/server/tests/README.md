@@ -46,7 +46,7 @@ Runner, its full host and the lifecycle test binary as positive controls.
 
 `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` builds
 and installs the Codex provider in a real server and drives it through the
-client's local worker against sanitized app-server replays. It runs in CI and
+client's plugin process against sanitized app-server replays. It runs in CI and
 does not require a Codex executable or login. See the
 [Codex test instructions](../../../plugins/codex/README.md) for the separate
 opt-in real program check and the replay privacy scan.
