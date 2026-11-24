@@ -75,6 +75,19 @@ try {
       await unlink(keychain);
     }
     assert.deepEqual(readyState(await info()), [true, true]);
+    for (const probe of ["healthy", "invalid", "timeout"]) {
+      const started = performance.now();
+      try {
+        const failed = await run(`rate-limit-${probe}`, hello, { state: "failed" });
+        assert.equal(failed.row.error, "Rate limit reached", `${probe} setup probe`);
+        assert.equal(await Bun.file(join(h.home, "claude-replay-unexpected-models")).exists(), false);
+        if (probe === "timeout")
+          assert.ok(performance.now() - started < 4_500, "A timed-out setup probe must not hold the turn");
+      } finally {
+        await unlink(join(h.home, "claude-replay-start-failed")).catch(() => {});
+      }
+      assert.deepEqual(readyState(await info()), [true, true]);
+    }
   }
   passed("signed-in and signed-out discovery");
   await resume(turns, run);
@@ -173,7 +186,11 @@ async function discovery(client) {
   assert.deepEqual(readyState(await info()), [true, false]);
   for (const fixture of ["expired-iso", "expired-ms", "expired-seconds"]) {
     await writeFile(marker, fixture);
-    assert.deepEqual(readyState(await info()), [true, false], `Past loginExpiresAt: ${fixture}`);
+    assert.deepEqual(
+      readyState(await info()),
+      [true, true],
+      `Claude can refresh past loginExpiresAt: ${fixture}`,
+    );
   }
   await writeFile(marker, "old");
   const old = await info();

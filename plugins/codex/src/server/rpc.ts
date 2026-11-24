@@ -41,11 +41,15 @@ export class AppServer {
     this.closed = this.#read();
   }
 
-  async initialize() {
-    await this.call("initialize", {
-      clientInfo: { name: "tokamak", title: "Tokamak", version: "0.1.0" },
-      capabilities: { experimentalApi: true },
-    });
+  async initialize(timeout?: number) {
+    await this.call(
+      "initialize",
+      {
+        clientInfo: { name: "tokamak", title: "Tokamak", version: "0.1.0" },
+        capabilities: { experimentalApi: true },
+      },
+      timeout,
+    );
     this.#write({ method: "initialized" });
   }
 
@@ -76,6 +80,10 @@ export class AppServer {
 
   reject(id: RpcId, message: string) {
     this.#write({ id, error: { code: -32601, message } });
+  }
+
+  stop() {
+    this.#process.stop();
   }
 
   async close() {

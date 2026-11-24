@@ -11,11 +11,13 @@ export async function startRunner({
   plugins,
   directory,
   env,
+  onClosedFrame,
 }: {
   binary: string;
   plugins: string;
   directory: string;
   env?: NodeJS.ProcessEnv;
+  onClosedFrame?: Parameters<typeof runnerLauncher>[1];
 }) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const token = randomBytes(32).toString("hex");
@@ -58,7 +60,7 @@ export async function startRunner({
       }),
     ]);
     const endpoint = { ws, http: new URL(ws).origin.replace(/^ws:/, "http:"), token };
-    return { endpoint, launch: runnerLauncher(async () => endpoint), exited, stop };
+    return { endpoint, launch: runnerLauncher(async () => endpoint, onClosedFrame), exited, stop };
   } catch (error) {
     await stop().catch(() => {});
     throw error;

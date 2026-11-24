@@ -69,8 +69,8 @@ export interface Agent {
    * the paths' outlines are drawn. Without one, a neutral mark stands in.
    */
   readonly icon?: string;
-  /** Bypass discovery caches when a turn fails to start. */
-  info(options: { fresh?: boolean }): Promise<Info>;
+  /** With a setup deadline (Unix milliseconds), check install and login only. Throw if unknown. */
+  info(options: { setupDeadline?: number }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }

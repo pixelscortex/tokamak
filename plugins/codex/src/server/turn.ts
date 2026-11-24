@@ -19,14 +19,23 @@ function input(text: string) {
 export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult> {
   const app = new AppServer(ctx, run.folder);
   const controls = registerTurnControls(app, run);
+  let mustFlushSession = false;
   try {
     await app.initialize();
     const early: Event[] = [];
     app.listen((event) => early.push(event));
     const { thread, resumed } = await openThread(app, run);
     const sessionId = thread.thread.id;
+    // Injected history and turn items can be buffered in the session file.
+    // A failed handshake or start with no recorded work only needs a stop.
+    mustFlushSession = !resumed && run.history.length > 0;
+    const observe = ({ method, params }: Event) => {
+      if (params.threadId === sessionId && (method.startsWith("item/") || method === "turn/completed"))
+        mustFlushSession = true;
+    };
     run.sessionChanged(sessionId);
     app.listen((event) => {
+      observe(event);
       // A deployed app-server may notify turn/started before it answers turn/start.
       if (event.method === "turn/started" && event.params.threadId === sessionId) {
         const turn = event.params.turn;
@@ -36,10 +45,11 @@ export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult
     });
     const { turn } = await app.call<{ turn: Turn }>("turn/start", turnSettings(run, thread));
     controls.bind({ sessionId, turnId: turn.id });
-    return await waitForTurn(app, run, sessionId, turn, resumed, early, controls);
+    return await waitForTurn(app, run, sessionId, turn, resumed, early, controls, observe);
   } finally {
     controls.close();
-    await app.close();
+    if (mustFlushSession) await app.close();
+    else app.stop();
   }
 }
 
@@ -112,6 +122,7 @@ async function waitForTurn(
   resumed: boolean,
   early: Event[],
   controls: ReturnType<typeof registerTurnControls>,
+  observe: (event: Event) => void,
 ): Promise<TurnResult> {
   const reports = turnReports(run, resumed);
   const helpers = turnHelpers(app, sessionId, (helper) => run.helper(helper));
@@ -158,7 +169,10 @@ async function waitForTurn(
   };
   let result: Turn | undefined;
   try {
-    app.listen(dispatch);
+    app.listen((event) => {
+      observe(event);
+      dispatch(event);
+    });
     for (const event of early) dispatch(event);
     early.length = 0;
     result = await Promise.race([completed, permission.failed.then(raise), app.closed.then(raise)]);

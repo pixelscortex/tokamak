@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { local } from "@tokamak/sdk";
+import { local, TIMED_OUT, within } from "@tokamak/sdk";
 import { AGENT_INFO_MAX_AGE_MS, localProviderIdentity, localProviders } from "@tokamak/sdk/agent-turn";
 import { agent, type Agent, type Info } from "../contracts";
 import { MAX_ICON_LENGTH } from "../shared/icon";
@@ -47,14 +47,24 @@ export const list = local({
 });
 
 const turnInfo = new WeakMap<object, { info: Info; until: number }>();
-const refreshAfterFailure = new Set<string>();
+const SETUP_PROBE_MS = 3_000;
 
 export async function infoAfterStartFailure(provider: Agent): Promise<Info | undefined> {
   const key = localProviderIdentity(provider);
   if (key) turnInfo.delete(key);
-  refreshAfterFailure.add(provider.id);
-  // A failed probe must not turn an unrelated start error into "not installed".
-  return readInfo(provider, true).catch(() => undefined);
+  // This probe never updates the model cache. The provider invalidated its
+  // discovery cache when start failed; the next picker read fetches the catalog.
+  const setupDeadline = Date.now() + SETUP_PROBE_MS;
+  try {
+    const result = await within(provider.info({ setupDeadline }), SETUP_PROBE_MS);
+    if (
+      result !== TIMED_OUT &&
+      (result.installed === false || (result.installed === true && result.signedIn === false))
+    )
+      return result;
+  } catch {
+    // Inconclusive: leave the original error on the turn.
+  }
 }
 
 /** The picker probes for account changes; turns reuse only an opted-in, fresh answer for this build. */
@@ -62,15 +72,15 @@ export async function infoOf(provider: Agent, forTurn = false): Promise<Info> {
   const key = localProviderIdentity(provider);
   const cached = key && turnInfo.get(key);
   if (forTurn && cached && cached.until > Date.now()) return cached.info;
-  return readInfo(provider, !forTurn && refreshAfterFailure.delete(provider.id)).catch(() => {
+  return readInfo(provider).catch(() => {
     if (key) turnInfo.delete(key);
     return UNKNOWN;
   });
 }
 
-async function readInfo(provider: Agent, fresh = false): Promise<Info> {
+async function readInfo(provider: Agent): Promise<Info> {
   const key = localProviderIdentity(provider);
-  const { cacheUntil, ...answer } = await provider.info(fresh ? { fresh } : {});
+  const { cacheUntil, ...answer } = await provider.info({});
   const info = { ...answer, speeds: answer.speeds ?? [], modes: answer.modes ?? [] };
   if (key) {
     const now = Date.now();

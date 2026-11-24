@@ -67,9 +67,9 @@ are still being reaped. On QuickJS, every call and `withPrograms` can return
 before their remaining programs are gone. Those groups still count toward the
 256-program limit until reaped. Await programs that must finish before the
 handler returns. The Bun fallback on macOS and Linux uses a 250 ms grace
-period and waits for cleanup before returning. The launcher holds a separate liveness pipe for its guardian
-in the host group, so abrupt launcher exit also stops the host and its
-programs.
+period and waits for cleanup before returning. The launcher holds a separate
+liveness pipe for its guardian in the host group, so abrupt launcher exit also
+stops the host and its programs.
 
 The host reads program output on demand and delivers buffered lines in
 batches. An unread stream backs up into the program's pipe. Lines exceeding

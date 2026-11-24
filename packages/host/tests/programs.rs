@@ -182,6 +182,7 @@ async fn sigkill_of_the_host_kills_its_program_tree() {
 #[tokio::test]
 async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
     reap_orphans_on_linux();
+    let started = Instant::now();
     let mut parent = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "parent_fixture", "--ignored", "--nocapture"])
         .env("TOKAMAK_PROGRAM_PARENT_FIXTURE", "1")
@@ -194,20 +195,23 @@ async fn sigkill_of_the_launcher_kills_the_host_and_its_program_tree() {
         .kill_on_drop(true)
         .spawn()
         .unwrap();
+    eprintln!("Launcher fixture spawned at {:?}", started.elapsed());
     let mut output = BufReader::new(parent.stdout.take().unwrap()).lines();
     let pids = timeout(Duration::from_secs(12), async {
         while let Some(line) = output.next_line().await.unwrap() {
             if let Some(payload) = line.strip_prefix("PROGRAM_TREE ") {
+                eprintln!("PROGRAM_TREE received at {:?}", started.elapsed());
                 return pids(serde_json::from_str(payload).unwrap());
             }
         }
         panic!("launcher exited before the program tree was ready");
     })
     .await
-    .unwrap();
+    .expect("launcher fixture did not report PROGRAM_TREE");
 
     parent.kill().await.unwrap();
     assert_gone(&pids).await;
+    eprintln!("Launcher fixture tree reaped at {:?}", started.elapsed());
 }
 
 // Run in a separate process so the test can SIGKILL the real launcher.
@@ -218,6 +222,8 @@ async fn parent_fixture() {
         return;
     }
 
+    let started = Instant::now();
+    eprintln!("Launcher child entered");
     let bundle = fixture();
     let (mut worker, runtime) = Process::launch_local(
         &bundle,
@@ -227,12 +233,21 @@ async fn parent_fixture() {
         &[],
     )
     .unwrap();
+    eprintln!(
+        "Launcher child spawned plugin host at {:?}",
+        started.elapsed()
+    );
     assert_eq!(runtime, LocalRuntime::QuickJs);
     let (mut input, stdout, _stderr) = worker.pipes().unwrap();
     let mut output = BufReader::new(stdout).lines();
     support::invoke(&mut input, &mut output, 1, "parkTree", json!(tree_path())).await;
+    eprintln!(
+        "Launcher child authorized parkTree at {:?}",
+        started.elapsed()
+    );
+    // Serial libtest prints the test name without a trailing newline.
     println!(
-        "PROGRAM_TREE {}",
+        "\nPROGRAM_TREE {}",
         json!(logged_tree(support::receive(&mut output).await))
     );
     pending::<()>().await;

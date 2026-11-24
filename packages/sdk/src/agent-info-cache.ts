@@ -10,7 +10,7 @@ export function agentInfoCache<Context, Info extends { installed: boolean; signe
   return {
     async read(
       ctx: Context,
-      { fresh = false }: { fresh?: boolean },
+      { fresh = false }: { fresh?: boolean } = {},
     ): Promise<Info & { cacheUntil?: number }> {
       if (fresh) {
         generation++;

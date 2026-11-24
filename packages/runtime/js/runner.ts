@@ -21,7 +21,10 @@ function deferred<T>() {
 }
 
 /** The socket belongs to the local Runner, even if the window uses a shared workspace. */
-export function runnerLauncher(endpoint: () => Promise<RunnerEndpoint>): LaunchLocalWorker {
+export function runnerLauncher(
+  endpoint: () => Promise<RunnerEndpoint>,
+  onClosedFrame?: (event: Extract<WorkerEvent, { type: "closed" }>) => void,
+): LaunchLocalWorker {
   return async (artifact, receive, closed, workspace) => {
     const { ws, token } = await endpoint();
     if (!token) throw new Error("Missing Runner secret");
@@ -33,6 +36,7 @@ export function runnerLauncher(endpoint: () => Promise<RunnerEndpoint>): LaunchL
       receive,
       closed,
       workspace ?? origin.origin + origin.pathname,
+      onClosedFrame,
     );
     await worker.ready;
     return worker;
@@ -59,6 +63,7 @@ class RunnerWorker {
     private readonly receive: (message: JsonValue) => void,
     private readonly closed: (reason: string) => void,
     workspace: string | undefined,
+    private readonly onClosedFrame?: (event: Extract<WorkerEvent, { type: "closed" }>) => void,
   ) {
     socket.addEventListener("open", () => {
       try {
@@ -102,6 +107,7 @@ class RunnerWorker {
       }
       case "closed":
         this.finish(event.reason);
+        this.onClosedFrame?.(event);
         break;
       default:
         this.finish("Invalid Runner worker event");

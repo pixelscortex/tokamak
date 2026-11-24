@@ -18,7 +18,10 @@ const discovery = agentInfoCache(codexInfo, async () => {
   const stamp = await stat(path).catch(() => undefined);
   return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
 });
-const info = local({ handler: discovery.read });
+const info = local({
+  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
+    setupDeadline === undefined ? discovery.read(ctx) : codexInfo(ctx, setupDeadline),
+});
 const start = local({
   handler: async (ctx, run: ai.Run) => {
     try {

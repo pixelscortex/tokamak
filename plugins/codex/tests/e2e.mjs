@@ -380,10 +380,14 @@ async function missingCodexPath() {
   const bin = await h.folder("missing-codex-bin");
   if (h.selection.runtime === "bun") await symlink(bunPath(), join(bin, "bun"));
   // The temporary home hides user installs. If the machine also has a
-  // system-wide Codex, mask it with the exit status of a missing executable
+  // system-wide Codex, reproduce an exec failure in an empty search path
   // so the offline test never calls the real program.
   if (["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].some(existsSync)) {
-    await writeFile(join(bin, "codex"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
+    await writeFile(
+      join(bin, "codex"),
+      "#!/bin/sh\nPATH=/dev/null exec /bin/sh -c 'exec codex' tokamak-program\n",
+      { mode: 0o755 },
+    );
   }
   return bin;
 }

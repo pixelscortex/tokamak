@@ -60,10 +60,17 @@ fn local_user_ops() -> Arc<OpRegistry> {
     Arc::new(ops)
 }
 
+async fn until_stopped(process: &Process) {
+    tokio::time::timeout(Duration::from_secs(10), process.stopped.cancelled())
+        .await
+        .expect("worker did not stop and reap its process");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn deadline_and_dropped_invocation_kill_stuck_worker_then_restart() {
     let (_directory, worker) = fixture().await;
     let first = state(&worker).await;
+    let first_process = worker.process().await.unwrap();
     let error = worker
         .invoke_with_deadline(
             "actions:cpu".into(),
@@ -74,19 +81,31 @@ async fn deadline_and_dropped_invocation_kill_stuck_worker_then_restart() {
         .await
         .unwrap_err();
     assert!(error.contains("action deadline exceeded"), "{error}");
+    until_stopped(&first_process).await;
     let second = state(&worker).await;
     assert_ne!(first["pid"], second["pid"]);
     assert_eq!(second["count"], 1);
+    let second_process = worker.process().await.unwrap();
+    let entered = worker.directory.join("stuck-started");
     let running = worker.clone();
-    let call = tokio::spawn(async move {
+    let mut call = tokio::spawn(async move {
         running
             .invoke("actions:stuck".into(), json!({}), local_user_ops())
             .await
     });
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    let ready = async {
+        while !entered.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    tokio::select! {
+        result = &mut call => panic!("stuck call returned before cancellation: {result:?}"),
+        result = tokio::time::timeout(Duration::from_secs(10), ready) =>
+            result.expect("worker never entered the stuck call"),
+    }
     call.abort();
-    let _ = call.await;
-    tokio::time::sleep(GRACE + Duration::from_millis(100)).await;
+    assert!(call.await.unwrap_err().is_cancelled());
+    until_stopped(&second_process).await;
     let third = state(&worker).await;
     assert_ne!(second["pid"], third["pid"]);
     worker.stop().await;

@@ -251,6 +251,7 @@ export type AgentTurnSteer = TurnAddress & { text: string };
 
 export * from "./agent-reports";
 export { AGENT_INFO_MAX_AGE_MS, agentInfoCache } from "./agent-info-cache";
+export { agentCommand } from "./agent-command";
 export {
   hasLocalChannel,
   localProviderIdentity,

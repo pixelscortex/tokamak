@@ -179,11 +179,27 @@ await cloneProvider(beta);
 await cloneProvider(crash);
 await editBundle(distFor(crash), 'throw new Error("startup fixture crash");');
 
-const runner = await startRunner({ binary, plugins, directory, env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" } });
+// The Rust harness includes stderr on failure, alongside the Runner's stderr.
+const onClosedFrame = (frame) => console.error("Runner local worker:", JSON.stringify(frame));
+const runner = await startRunner({
+  binary,
+  plugins,
+  directory,
+  env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs" },
+  onClosedFrame,
+});
 const cleanup = [];
 
 try {
   const { ws, token } = runner.endpoint;
+  const connectWindow = () =>
+    connect(ws, {
+      token,
+      launch: runner.launch,
+      cleanup,
+      onClose: ({ code, reason }) =>
+        console.error("Runner workspace socket:", JSON.stringify({ code, reason })),
+    });
   const hosts = await inspectHosts(runner);
   const pids = () =>
     Object.fromEntries(
@@ -197,7 +213,7 @@ try {
       .trim();
     return state && !state.startsWith("Z");
   };
-  const client = await connect(ws, { token, launch: runner.launch, cleanup });
+  const client = await connectWindow();
   const api = createApi(owner).probe;
   const auth = await client.query(authCaller, {});
   assert.deepEqual(await client.local(api.identify, { id: "custom-alpha" }), auth);
@@ -274,7 +290,7 @@ try {
 
   // Disconnect one window and attach a new one without losing the idle processes.
   for (const close of cleanup.splice(0).reverse()) await close();
-  const next = await connect(ws, { token, launch: runner.launch, cleanup });
+  const next = await connectWindow();
   assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
   assert.deepEqual(pids(), afterCrash);
 
@@ -320,7 +336,15 @@ contractProviders[legacyRegistration] = {
   legacySpec.contractProviders[0].dataMethods = ["identify"];
   await writeFile(legacyManifest, JSON.stringify(legacySpec));
   await reload(runner, directory, legacyProvider);
-  const unavailable = await next.local(api.unavailable, {});
+  // The reload control reply and the window's catalog event travel on different sockets.
+  const catalog = Promise.withResolvers();
+  await until("window sees the reloaded legacy provider", async () => {
+    const value = await next.local(api.unavailable, {});
+    if (!value.failed.some(({ plugin }) => plugin === legacyProvider)) return false;
+    catalog.resolve(value);
+    return true;
+  });
+  const unavailable = await catalog.promise;
   assert.deepEqual(unavailable.ready, ["custom-alpha", "custom-beta"]);
   assert.match(
     unavailable.failed.find(({ plugin }) => plugin === legacyProvider)?.message ?? "",
@@ -606,6 +630,7 @@ const simulated = await startRunner({
   plugins: simulatedPlugins,
   directory: join(scratch, "impersonation"),
   env: { TOKAMAK_PLUGIN_RUNTIME: "quickjs", TOKAMAK_PLUGIN_HOST: fakeHost },
+  onClosedFrame,
 });
 try {
   const artifact = await installLocal(join(simulatedPlugins, alpha), alpha, "export const functions = {};");

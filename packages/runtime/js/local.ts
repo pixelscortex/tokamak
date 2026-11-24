@@ -77,6 +77,7 @@ export class LocalFunctions implements LocalTransport {
   private loaded = -1;
   /** The catalog read in flight, shared by every call that needs it. */
   private loading?: { generation: number; promise: Promise<void> };
+  private authRead?: Promise<JsonValue>;
   private closed = false;
   /**
    * Plugins looked up and not found, with the generation the catalog was
@@ -271,7 +272,13 @@ export class LocalFunctions implements LocalTransport {
   }
 
   private serverCall(catalog: Catalog, callerId: string, operation: string, payload: JsonValue) {
-    if (operation === "auth.current") return this.server.query(authCaller[functionName], {});
+    if (operation === "auth.current") {
+      // A burst of routed calls need the same caller. Share only the read in
+      // flight so the workspace queue is not filled with duplicate replies.
+      return (this.authRead ??= this.server.query(authCaller[functionName], {}).finally(() => {
+        this.authRead = undefined;
+      }));
+    }
     const { name, args } = payload as { name: string; args: JsonValue };
     const slash = typeof name === "string" ? name.indexOf("/") : -1;
     if (slash < 1) throw new Error("Expected a plugin-qualified server function");
