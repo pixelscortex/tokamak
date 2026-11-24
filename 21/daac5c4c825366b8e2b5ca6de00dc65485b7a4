@@ -1,0 +1,25 @@
+packages/server/tests/workers.rs
+  s_6573ca2d7bcce4::t_c32b5e6fc69a74 300
+packages/runner/tests/support/routing.mjs
+  s_6573ca2d7bcce4::t_c32b5e6fc69a74 42,74
+packages/server/tests/worker-lifecycle-driver.mjs
+  s_6573ca2d7bcce4::t_c32b5e6fc69a74 64
+packages/runner/tests/lifecycle.rs
+  s_6573ca2d7bcce4::t_c32b5e6fc69a74 895,897
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "21daac5c4c825366b8e2b5ca6de00dc65485b7a4",
+  "prompts": {},
+  "sessions": {
+    "s_6573ca2d7bcce4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20b36-dd70-7ac3-8e90-d121f8252052",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
