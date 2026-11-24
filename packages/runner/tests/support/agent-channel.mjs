@@ -110,11 +110,11 @@ async function turnGate(path) {
 const fixtureRegistration = Object.keys(contractProviders)[0];
 const fixtureProvider = contractProviders[fixtureRegistration];
 const realAgent = fixtureProvider.implementation;
-let discovery;
+let fixtureDiscovery;
 let releaseBurst;
 contractProviders[fixtureRegistration] = { ...fixtureProvider, implementation: {
   ...realAgent,
-  info: { ...realAgent.info, invokeLocal: (...args) => discovery ??= realAgent.info.invokeLocal(...args) },
+  info: { ...realAgent.info, invokeLocal: (...args) => fixtureDiscovery ??= realAgent.info.invokeLocal(...args) },
   start: { ...realAgent.start, async invokeLocal(run, bridge, auth) {
     const sessionId = ${JSON.stringify(id + "-fixture")};
     const last = () => ({ sessionId });
