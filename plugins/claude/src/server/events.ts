@@ -40,6 +40,7 @@ function textResult(content: unknown): string | undefined {
 
 export class ReplyEvents {
   readonly #run: Run;
+  readonly #stoppedTools: ReadonlySet<string>;
   readonly #tools = new Map<string, PendingTool>();
   readonly #helpers = new Map<string, Helper>();
   readonly #tasks = new Map<string, Task>();
@@ -50,8 +51,9 @@ export class ReplyEvents {
   #hasThinking = false;
   #usage: Usage = { inputTokens: 0, outputTokens: 0 };
 
-  constructor(run: Run) {
+  constructor(run: Run, stoppedTools: ReadonlySet<string>) {
     this.#run = run;
+    this.#stoppedTools = stoppedTools;
   }
 
   #delta(kind: TextKind, value: string) {
@@ -134,6 +136,7 @@ export class ReplyEvents {
   #toolResult(part: Block) {
     if (!part.tool_use_id) return;
     const id = part.tool_use_id;
+    if (part.is_error && this.#stoppedTools.has(id)) return;
     const state: StepState = part.is_error ? "failed" : "done";
     const pending = this.#tools.get(id);
     if (pending) {

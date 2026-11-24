@@ -1,24 +1,29 @@
 import type { LocalContext } from "@tokamak/sdk";
 import {
   AGENT_TURN_PROTOCOL,
+  ASK_FOR_TURN,
   checkedHelper,
   checkedTasks,
   checkedText,
   checkedTool,
   checkedUsage,
   openLocalChannel,
+  permissionAnswer,
 } from "@tokamak/sdk/agent-turn";
 import type {
   AgentTurnAsk,
   AgentTurnReport,
   AgentTurnStart,
+  Question,
   TurnAddress,
+  TurnAnswer,
   TurnResult,
+  TurnRun,
 } from "@tokamak/sdk/agent-turn";
 import { agent, type Agent, type Run } from "../contracts";
 import type { turnControl } from "./controls";
 
-type Questions = Pick<Run, "ask"> & { cancel(): Promise<void>; expire(): void };
+type Questions = { ask(question: Question): Promise<TurnAnswer>; cancel(): Promise<void>; expire(): void };
 type Control = ReturnType<typeof turnControl>;
 type Reports = Pick<
   Run,
@@ -43,18 +48,18 @@ export function runAgent(
 
   const { threadId: _thread, turnId: _turn, ...input } = request;
   return ctx.withPrograms((kill, scoped) =>
-    control.run(
-      () =>
-        // Bun gives the live Run to the provider in ai's worker.
-        agent.get(provider.id, scoped).start({
-          ...input,
-          ...reports,
-          ask: questions.ask,
-          onSteer: control.onSteer,
-          onStop: control.onStop,
-        }),
-      kill,
-    ),
+    control.run(() => {
+      const run: TurnRun = {
+        ...input,
+        ...reports,
+        [ASK_FOR_TURN]: questions.ask,
+        ask: async (question) => permissionAnswer(await questions.ask(question)),
+        onSteer: control.onSteer,
+        onStop: control.onStop,
+      };
+      // Bun gives the live Run to the provider in ai's worker.
+      return agent.get(provider.id, scoped).start(run);
+    }, kill),
   );
 }
 

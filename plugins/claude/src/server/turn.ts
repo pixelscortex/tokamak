@@ -107,7 +107,7 @@ class Turn {
     this.#wire = wire;
     const permissions = new Permissions(run, wire.send);
     this.#permissions = permissions;
-    const reports = new ReplyEvents(run);
+    const reports = new ReplyEvents(run, permissions.stoppedTools);
     const init = wire.control("initialize");
     // A CLI that cannot initialize should fail promptly.
     const cancelKill = killAfter(wire.proc, 15_000);
