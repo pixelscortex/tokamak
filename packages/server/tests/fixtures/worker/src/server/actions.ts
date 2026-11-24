@@ -1,5 +1,9 @@
+import type {} from "@tokamak/sdk/web";
 import { action, query, v } from "@tokamak/sdk";
 import { api } from "./_generated/api";
+
+// Probe an intentionally unsupported global without bringing in Node types.
+declare const process: { pid: number; cwd(): string; env: Record<string, string | undefined> } | undefined;
 
 let count = 0;
 export const state = action({
