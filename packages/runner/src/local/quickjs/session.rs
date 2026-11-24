@@ -272,6 +272,10 @@ async fn invoke_root(
         lease,
     };
     let name = frame["fn"].as_str().unwrap_or_default();
+    // Temporary: turns still hold live objects in `ai`'s realm, so follow-ups
+    // for a turn must reach the realm that started it, and the Runner has to
+    // know `ai`'s function names to do that. TKM-247 and TKM-248 move turns
+    // across processes and remove this block.
     if id == "ai" {
         if matches!(
             name,
