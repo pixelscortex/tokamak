@@ -121,7 +121,7 @@ A named agreement a plugin defines about what another plugin can provide.
 _Avoid_: Provider lookup, service name, interface (when referring to the agreement itself).
 
 **Plugin process**:
-A process the Runner starts on demand to run one installed build of a plugin's local part. While turns and turn hooks pass live objects, it can also load the provider code they need.
+A process the Runner starts on demand to run one installed build of a plugin's local part.
 _Avoid_: Worker (when referring to the QuickJS process), action process.
 
 **Plain-data method**:

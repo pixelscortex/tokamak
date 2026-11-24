@@ -8,12 +8,12 @@ plugin's ID and its two local bundle hashes. It also separates realms that
 need different builds of live providers. Windows that use the same build and
 live profile share a process. The window reports its workspace address
 without credentials so the Runner can tell which installation superseded a
-build. A live provider change or addition sends new calls to a fresh realm.
-The original realm retains the admitted calls and their verified provider
-files until those calls finish. Stop, force stop, steer and permission answers
-use the active turn's workspace and turn ID to find its original realm; host
-operations still use the window that made each control call. The quit controls
-include turns in draining realms.
+build. A live provider change sends new calls to a fresh realm. The original
+realm retains its admitted calls and verified provider files. For ai this
+now applies only to live turn hooks. Until hooks also move across processes
+(TKM-248), turn controls use the active turn's workspace and turn ID to find
+its original realm. Quit controls also include turns in draining realms.
+An agent build change does not change ai's realm.
 
 An idle build that the same workspace supersedes can stop as soon as the
 replacement is acquired. Otherwise the Runner sweeps known superseded builds
@@ -33,6 +33,15 @@ ID for which that process received a verified live snapshot. The provider
 checks its registration and re-checks that the requested method is declared
 for plain data. Workspace operations in the provider still go through the
 calling window, with that window's signed-in member and device.
+
+An agent turn opens one linked plain-data call from ai to its agent. It pins
+the two invocations that already know the window's identity. Reports and
+questions return to that exact ai invocation; steer, stop and force stop
+reach the agent invocation that owns the CLI, even while its build drains.
+Each host admits at most 32 linked starts in either role, within its normal
+128 calls. Messages use a bounded queue without admitting new invocations.
+When ai's host exits, the Runner drops and cancels the linked starts. When an
+agent host exits, only starts on that host fail, with the host's name.
 
 Install the Runner on desktops, real machines and sandboxes. For Docker or a
 cloud host, use the [Server build](../../README.md#build-for-a-machine-or-the-cloud).
@@ -103,7 +112,7 @@ maps. The marginal figure subtracts the one-host PSS from the 100-host PSS and
 divides by 99.
 
 A separate run starts the real `ai`, `claude` and `codex` bundles using replay
-executables on PATH. It opens the agent row so `ai` imports both live provider
-modules and the two provider processes each answer `info`. The script waits
+executables on PATH. It opens the agent row so the two provider processes
+each describe their provider and answer `info`. The script waits
 400 ms after the row returns and reports each host's PSS separately. Neither
 measurement includes the Runner or the agent executables.

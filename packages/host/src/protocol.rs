@@ -74,7 +74,9 @@ impl Output {
                 state.retire(call);
                 return Ok(());
             }
-            Some("log") => {}
+            // A request can cross the last result or cancel of its owning
+            // call. Let the dispatcher return a stale-channel error.
+            Some("peerResult" | "log") => {}
             _ => bail!("Invalid plugin host output frame"),
         }
         self.enqueue(&mut state, line)
@@ -138,6 +140,7 @@ impl Output {
                 *cancelled = true;
                 self.result(&mut state, id, CANCELLED)?;
             }
+            Some("peer") => {}
             Some("opResult") => {
                 if let Some(call) = state.contract_ops.remove(&id)
                     && state.calls.get(&call) == Some(&false)

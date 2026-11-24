@@ -12,12 +12,57 @@ use std::{
 };
 use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
 const MAX_DEPTH: usize = 16;
+
+#[derive(Clone)]
+struct Peer {
+    host: Arc<Host>,
+    call: u64,
+    channel: Option<u64>,
+}
+
+impl Peer {
+    async fn request(&self, payload: Value) -> Result<Value, String> {
+        let response = self.host.peer(self.call, self.channel, payload).await?;
+        if let Some(error) = response["error"].as_str() {
+            return Err(error.into());
+        }
+        Ok(json!({"value":response["value"]}))
+    }
+}
+
+struct Channel {
+    provider: watch::Sender<Option<Peer>>,
+    closed: CancellationToken,
+}
+
+type Channels = Mutex<HashMap<u64, Arc<Channel>>>;
+
+// The forwarding capability exists only while the original routed call is
+// active. It holds neither a new identity nor a route to another build.
+struct OpenChannel<'a> {
+    channels: &'a Channels,
+    id: u64,
+    channel: Arc<Channel>,
+}
+
+impl Drop for OpenChannel<'_> {
+    fn drop(&mut self) {
+        self.channel.closed.cancel();
+        lock(self.channels).remove(&self.id);
+    }
+}
+
+enum Invocation<'a> {
+    Root(Option<&'a Turn<'a>>),
+    Routed,
+    Linked { origin: Peer, channel: &'a Channel },
+}
 
 enum Reply {
     Result(Value),
@@ -189,7 +234,7 @@ pub(in crate::local) async fn connection(
                                 Ok(lease) => {
                                     let cancel = CancellationToken::new();
                                     active.insert(id, cancel.clone());
-                                    calls.spawn(root_call(pool.clone(), bridge.clone(), id, lease, message, cancel));
+                                calls.spawn(root_call(pool.clone(), bridge.clone(), id, lease, message, cancel));
                                 }
                                 Err(error) => send(socket, result(id, Some(&error), Value::Null)).await?,
                             }
@@ -272,10 +317,9 @@ async fn invoke_root(
         lease,
     };
     let name = frame["fn"].as_str().unwrap_or_default();
-    // Temporary: turns still hold live objects in `ai`'s realm, so follow-ups
-    // for a turn must reach the realm that started it, and the Runner has to
-    // know `ai`'s function names to do that. TKM-247 and TKM-248 move turns
-    // across processes and remove this block.
+    // Temporary (TKM-248): live turn hooks can still replace ai's realm.
+    // Follow-ups must reach a turn in its original, draining realm, even
+    // when the current realm no longer has any live hooks.
     if id == "ai" {
         if matches!(
             name,
@@ -287,7 +331,16 @@ async fn invoke_root(
                 .get(&(workspace.clone(), turn_id.to_owned()))
                 .cloned();
             if let Some(realm) = original {
-                return run(pool, bridge, root, &realm.host, frame, ancestors, None).await;
+                return run(
+                    pool,
+                    bridge,
+                    root,
+                    &realm.host,
+                    frame,
+                    ancestors,
+                    Invocation::Root(None),
+                )
+                .await;
             }
         }
         if matches!(name, "working:list" | "working:stopAll") {
@@ -296,6 +349,7 @@ async fn invoke_root(
         }
     }
     let host = pool.host(&lease.build, &lease.slot, false).await?;
+    // A live hook can be added while a turn is running in a hook-free realm.
     let binds_turn = id == "ai" && name == "run:turn";
     run(
         pool,
@@ -304,7 +358,7 @@ async fn invoke_root(
         &host,
         frame,
         ancestors,
-        binds_turn.then_some(&turn),
+        Invocation::Root(binds_turn.then_some(&turn)),
     )
     .await
 }
@@ -340,7 +394,7 @@ async fn working(
             &realm.host,
             frame.clone(),
             ancestors,
-            None,
+            Invocation::Root(None),
         )
     });
     let mut count = 0;
@@ -365,13 +419,28 @@ async fn run(
     host: &Arc<Host>,
     frame: Value,
     ancestors: &[String],
-    turn: Option<&Turn<'_>>,
+    invocation: Invocation<'_>,
 ) -> Result<Value, String> {
     let mut call = match host.begin(frame) {
         Ok(call) => call,
         Err(error) => return Err(host.call_error(error).await),
     };
+    let here = Peer {
+        host: host.clone(),
+        call: call.id,
+        channel: None,
+    };
+    let channels = Channels::default();
+    let route = CallRoute {
+        pool,
+        bridge,
+        root,
+        ancestors,
+    };
     let mut operations = FuturesUnordered::new();
+    if let Invocation::Linked { channel, .. } = &invocation {
+        channel.provider.send_replace(Some(here.clone()));
+    }
     loop {
         tokio::select! {
             frame = call.next() => {
@@ -380,7 +449,28 @@ async fn run(
                     return Ok(frame);
                 }
                 // A crashed or cancelled caller drops its nested work.
-                operations.push(operation(pool, bridge, root, ancestors, host, frame, turn));
+                let id = frame["id"].as_u64().unwrap_or_default();
+                let opening = if frame["name"] == "local.contract.call" && frame["channel"] == true
+                    && frame["plugin"].is_null() {
+                    let channel = Arc::new(Channel {
+                        provider: watch::channel(None).0,
+                        closed: CancellationToken::new(),
+                    });
+                    lock(&channels).insert(id, channel.clone());
+                    Some(OpenChannel { channels: &channels, id, channel })
+                } else {
+                    None
+                };
+                let (channels, invocation, here, route) = (&channels, &invocation, &here, &route);
+                operations.push(async move {
+                    let response = match frame["name"].as_str() {
+                        Some("local.contract.peer" | "local.contract.close") => {
+                            peer_operation(channels, invocation, frame).await
+                        }
+                        _ => route.operation(here, frame, invocation, opening).await,
+                    };
+                    (id, response)
+                });
             }
             Some((id, response)) = operations.next() => {
                 let mut reply = match response {
@@ -397,30 +487,81 @@ async fn run(
     }
 }
 
-async fn operation(
-    pool: &Pool,
-    bridge: &Bridge,
-    root: u64,
-    ancestors: &[String],
-    host: &Arc<Host>,
+async fn peer_operation(
+    channels: &Channels,
+    invocation: &Invocation<'_>,
     mut frame: Value,
-    turn: Option<&Turn<'_>>,
-) -> (u64, Result<Value, String>) {
-    let id = frame["id"].as_u64().unwrap_or_default();
-    let result = async {
+) -> Result<Value, String> {
+    if !frame["plugin"].is_null() {
+        return Err("A live provider cannot use the host's local contract channel".into());
+    }
+    let close = frame["name"] == "local.contract.close";
+    let mut payload = frame["payload"].take();
+    let fields = payload
+        .as_object_mut()
+        .ok_or("Invalid local contract channel request")?;
+    if !close
+        && (!fields.get("method").is_some_and(Value::is_string) || !fields.contains_key("args"))
+    {
+        return Err("Invalid local contract channel message".into());
+    }
+    let remote = fields.remove("channel").unwrap_or_default();
+    if remote.is_null()
+        && !close
+        && let Invocation::Linked { origin, .. } = invocation
+    {
+        return origin.request(payload).await;
+    }
+    let id = frame_id(&remote)?;
+    let channel = lock(channels)
+        .get(&id)
+        .cloned()
+        .ok_or("Local contract channel ended")?;
+    if close {
+        channel.closed.cancel();
+        return Ok(json!({"value":null}));
+    }
+    let mut provider = channel.provider.subscribe();
+    tokio::select! {
+        () = channel.closed.cancelled() => Err("Local contract channel ended".into()),
+        response = async {
+            let peer = provider.wait_for(Option::is_some).await
+                .map_err(|_| "Local contract channel ended")?.clone()
+                .ok_or("Local contract channel ended")?;
+            peer.request(payload).await
+        } => response,
+    }
+}
+
+struct CallRoute<'a> {
+    pool: &'a Pool,
+    bridge: &'a Bridge,
+    root: u64,
+    ancestors: &'a [String],
+}
+
+impl CallRoute<'_> {
+    async fn operation(
+        &self,
+        here: &Peer,
+        mut frame: Value,
+        invocation: &Invocation<'_>,
+        opening: Option<OpenChannel<'_>>,
+    ) -> Result<Value, String> {
+        let host = &here.host;
         host.authorize(&frame["plugin"])?;
-        if frame["plugin"].is_null() && ancestors.len() > 1 {
+        if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.id);
         }
         frame["host"] = json!(host.id);
-        let reply = bridge.request(frame.clone(), root).await?;
+        let reply = self.bridge.request(frame.clone(), self.root).await?;
         let lease = match reply {
             Reply::Route(lease) => lease,
             Reply::Result(mut value) => {
                 if frame["name"] == "local.contracts" && value["error"].is_null() {
                     host.prepare_providers(&mut value)?;
                 }
-                if let Some(turn) = turn
+                if let Invocation::Root(Some(turn)) = invocation
                     && frame["name"] == "local.runMutation"
                     && frame["payload"]["name"] == "ai/turns:begin"
                     && frame["plugin"].is_null()
@@ -432,6 +573,22 @@ async fn operation(
                 return Ok(value);
             }
         };
+        self.invoke(&lease, here, frame, opening).await
+    }
+
+    async fn invoke(
+        &self,
+        lease: &Lease,
+        here: &Peer,
+        mut frame: Value,
+        opening: Option<OpenChannel<'_>>,
+    ) -> Result<Value, String> {
+        let Self {
+            pool,
+            bridge,
+            root,
+            ancestors,
+        } = *self;
         let mut target = frame["payload"].take();
         let args = if frame["name"] == "local.contract.call" {
             target
@@ -442,6 +599,11 @@ async fn operation(
         } else {
             Value::Null
         };
+        if opening.is_some() {
+            target["channel"] = json!(true);
+        } else if let Some(target) = target.as_object_mut() {
+            target.remove("channel");
+        }
         let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
         let artifact = &lease.build.artifact;
         if ancestors.len() == MAX_DEPTH || ancestors.contains(&artifact.id) {
@@ -453,12 +615,34 @@ async fn operation(
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
         let other = pool.host(&lease.build, &lease.slot, true).await?;
-        let response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, None)).await?;
+        let response = if let Some(open) = &opening {
+            let origin = Peer {
+                channel: Some(open.id),
+                ..here.clone()
+            };
+            tokio::select! {
+                biased;
+                () = open.channel.closed.cancelled() => return Err("Local contract channel closed".into()),
+                response = Box::pin(run(pool, bridge, root, &other, frame, &ancestors, Invocation::Linked {
+                    origin,
+                    channel: &open.channel,
+                })) => response?,
+            }
+        } else {
+            Box::pin(run(
+                pool,
+                bridge,
+                root,
+                &other,
+                frame,
+                &ancestors,
+                Invocation::Routed,
+            ))
+            .await?
+        };
         if let Some(error) = response["error"].as_str() {
             return Err(format!("Plugin {}: {error}", lease.build.artifact.id));
         }
         Ok(json!({"value":response["value"]}))
     }
-    .await;
-    (id, result)
 }

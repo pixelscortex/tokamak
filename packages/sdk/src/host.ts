@@ -86,6 +86,11 @@ export interface HostOperations {
     args: { plugin: string; owner: string; name: string; registration: string };
     result: { data: JsonObject; methods: string[] };
   };
+  "local.contract.peer": {
+    args: { channel?: number; method: string; args: JsonValue };
+    result: JsonValue;
+  };
+  "local.contract.close": { args: { channel: number }; result: null };
   "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
   "local.runAction": { args: { name: string; args: JsonValue }; result: JsonValue };
@@ -119,11 +124,23 @@ export interface HostBridge {
   readonly signal?: ActionSignal;
   readonly proc?: import("./local").LocalProcess;
   readonly contracts?: import("./internal/contracts").ContractScope;
+  readonly channel?: {
+    open(payload: HostOperations["local.contract.call"]["args"], receive: ChannelHandler): LocalChannel;
+    receive(handler: ChannelHandler): void;
+    send: ChannelHandler;
+  };
   readonly withPrograms?: <T>(
     run: (forceStop: () => Promise<void>, host: HostBridge) => Promise<T>,
   ) => Promise<T>;
   /** Reject on errors. Values cross once, without an extra JSON string envelope. */
   op(name: HostOperation, payload: JsonValue): JsonValue | Promise<JsonValue>;
+}
+
+export type ChannelHandler = (method: string, args: JsonValue) => Promise<JsonValue> | JsonValue;
+export interface LocalChannel {
+  readonly result: Promise<JsonValue>;
+  send(method: string, args: JsonValue): Promise<JsonValue>;
+  close(): Promise<void>;
 }
 
 /** Keep operation call sites tied to the contract even though the bridge is erased. */

@@ -13,6 +13,7 @@ export function invocationHost(
   op: (plugin: string | undefined) => HostBridge["op"],
   createPrograms?: () => Programs,
   contracts?: (bridge: HostBridge, provider: (plugin?: string) => HostBridge) => ContractScope,
+  channel?: HostBridge["channel"],
 ) {
   const outer = createPrograms?.();
   const scopes = new Set<Programs>();
@@ -22,6 +23,7 @@ export function invocationHost(
     return {
       signal,
       proc: programs?.start,
+      channel: plugin === undefined ? channel : undefined,
       get contracts() {
         return contracts?.(this, (candidate) => host(candidate, programs));
       },

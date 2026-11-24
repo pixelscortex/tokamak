@@ -75,6 +75,7 @@ export function asking(
   const allows = carried !== undefined && kept?.sessionId === carried ? kept : { kinds: new Set<string>() };
   allowed.set(session, allows);
   let current = carried;
+  let expired = false;
   function sessionChanged(sessionId: string | undefined) {
     if (current !== undefined && current !== sessionId) allows.kinds.clear();
     current = sessionId;
@@ -83,7 +84,7 @@ export function asking(
   ctx.signal.addEventListener("abort", onAbort, { once: true });
 
   async function askNow(question: Question): Promise<Answer> {
-    if (ctx.signal.aborted || cancelled.has(turnId)) return "cancel";
+    if (expired || ctx.signal.aborted || cancelled.has(turnId)) return "cancel";
     if (access === "full" || allows.kinds.has(question.kind)) return "approve";
     const id = randomUUID();
     const token = randomBytes(32).toString("hex");
@@ -131,6 +132,11 @@ export function asking(
       return next;
     },
     sessionChanged,
+    /** The linked provider ended; no question can outlive its channel. */
+    expire() {
+      expired = true;
+      cancelQuestions(turnId);
+    },
     /** The turn ended: its allows belong to the session the agent returned, or to none. */
     end(sessionId: string | undefined): void {
       ctx.signal.removeEventListener("abort", onAbort);

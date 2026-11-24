@@ -1,5 +1,5 @@
 import type { FunctionDefinition, ServerFunctionKind, WireResult } from "../functions";
-import { callHost, type HostBridge } from "../host";
+import { callHost, type HostBridge, type LocalChannel, type ChannelHandler } from "../host";
 import { jsonSnapshot, type JsonValue } from "../values";
 
 export const contractName = /^[A-Za-z][A-Za-z0-9_-]*$/;
@@ -8,6 +8,20 @@ export const MEMBER_HOOK_RUN = "run";
 const contractBrand: unique symbol = Symbol.for("tokamak.contract");
 const providerBrand: unique symbol = Symbol.for("tokamak.contract.provider");
 export const contractScope = Symbol.for("tokamak.contract.scope");
+export const openChannel = Symbol.for("tokamak.contract.channel");
+
+/** Open a linked data call, when the provider runs in another QuickJS process. */
+export function openLocalChannel(
+  provider: object,
+  method: string,
+  args: unknown,
+  receive: ChannelHandler,
+): LocalChannel | undefined {
+  const entry = provider as {
+    [openChannel]?: (method: string, args: unknown, receive: ChannelHandler) => LocalChannel;
+  };
+  return entry[openChannel]?.(method, args, receive);
+}
 
 export type ContractPlace = "local" | "server";
 export interface ContractKey {

@@ -656,6 +656,14 @@ All local methods receive the calling member and device in their context. A
 matching provider build must be installed on the client. With the Bun
 fallback, all local contract methods keep running in the caller's worker.
 
+The `ai` agent contract keeps the author's `start(ctx, run)` API in both
+runtimes. On QuickJS, the provider SDK builds the `Run` in the agent's host.
+`run.text` and other reports are batched, `run.ask` waits for the sender's
+answer, and `run.onSteer` and `run.onStop` register handlers in that host.
+CLI programs opened by the agent's `ctx.proc` belong to the turn and are
+reaped on force stop or when its manager's call is cancelled. Agent authors
+do not implement the message transport.
+
 A server contract defaults to `place: "server"`. For each
 method provide a server function definition such as `internalAction` or
 `internalQuery`; calls obey the usual kind rules and cross the server function

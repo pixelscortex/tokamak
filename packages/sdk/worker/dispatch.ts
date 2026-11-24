@@ -1,13 +1,21 @@
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { JsonValue } from "../src/values";
-import type { HostBridge } from "../src/host";
+import { callHost, type ChannelHandler, type HostBridge, type HostOperation } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
 import type { ContractInvocation } from "./contracts";
+import { wireData } from "./wire-data";
 
 export type WorkerMessage =
   | { type: "invoke"; id: number; fn: string; args: JsonValue; contract?: ContractInvocation }
   | { type: "opResult"; id: number; value: JsonValue; error?: string }
+  | {
+      type: "peer";
+      id: number;
+      call: number;
+      channel: number | null;
+      payload: { method: string; args: JsonValue };
+    }
   | { type: "cancel"; id: number };
 
 export function workerDispatch(
@@ -28,13 +36,22 @@ export function workerDispatch(
     contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
   },
 ) {
-  const calls = new Map<number, { controller: AbortController; close(): Promise<void> }>();
+  const calls = new Map<
+    number,
+    {
+      controller: AbortController;
+      close(): Promise<void>;
+      receive?: Promise<ChannelHandler | undefined>;
+      endChannel(): void;
+    }
+  >();
   const pending = new Map<
     number,
-    { call: number; resolve(value: JsonValue): void; reject(error: Error): void }
+    { call: number; resolve(value: JsonValue): void; reject(error: Error): void; receive?: ChannelHandler }
   >();
 
   function retire(id: number) {
+    calls.get(id)?.endChannel();
     calls.delete(id);
     for (const [key, op] of pending)
       if (op.call === id) {
@@ -46,34 +63,80 @@ export function workerDispatch(
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Worker invocation capacity exceeded");
     const controller = new AbortController();
-    const call = { controller, close: (): Promise<void> => invocation.close() };
+    let receiveChannel: (handler?: ChannelHandler) => void = () => {};
+    const receive = target?.channel
+      ? new Promise<ChannelHandler | undefined>((resolve) => (receiveChannel = resolve))
+      : undefined;
+    const call = {
+      controller,
+      close: (): Promise<void> => invocation.close(),
+      receive,
+      endChannel: () => receiveChannel(),
+    };
     calls.set(id, call);
+    function operation(
+      op: number,
+      name: HostOperation,
+      payload: JsonValue,
+      plugin?: string,
+      receive?: ChannelHandler,
+    ) {
+      if (calls.get(id) !== call || controller.signal.aborted)
+        throw new Error("stale invocation: host operation refused");
+      if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
+      return new Promise<JsonValue>((resolve, reject) => {
+        pending.set(op, { call: id, resolve, reject, receive });
+        try {
+          send({
+            type: "op",
+            id: op,
+            call: id,
+            name,
+            payload,
+            ...(plugin === undefined ? {} : { plugin }),
+            ...(receive === undefined ? {} : { channel: true }),
+          });
+        } catch (error) {
+          pending.delete(op);
+          reject(error);
+        }
+      });
+    }
+    const direct: HostBridge = { op: (name, payload) => operation(allocateOp(), name, payload) };
     const invocation = invocationHost(
       controller.signal,
-      (plugin) => (name, payload) => {
-        if (calls.get(id) !== call || controller.signal.aborted)
-          throw new Error("stale invocation: host operation refused");
-        if (pending.size >= WORKER_CAPACITY) throw new Error("Worker operation capacity exceeded");
-        return new Promise<JsonValue>((resolve, reject) => {
-          const op = allocateOp();
-          pending.set(op, { call: id, resolve, reject });
-          try {
-            send({
-              type: "op",
-              id: op,
-              call: id,
-              name,
-              payload,
-              ...(plugin === undefined ? {} : { plugin }),
-            });
-          } catch (error) {
-            pending.delete(op);
-            reject(error);
-          }
-        });
-      },
+      (plugin) => (name, payload) => operation(allocateOp(), name, payload, plugin),
       createPrograms && (() => createPrograms(controller.signal, id)),
       contracts,
+      options?.contract && {
+        open(payload, handler) {
+          // Leave room for writes, question operations, and fresh invocations.
+          let linked = 0;
+          for (const op of pending.values()) if (op.receive) linked++;
+          if (linked >= WORKER_CAPACITY / 4)
+            throw new Error("Active local contract channel capacity exceeded");
+          const channel = allocateOp();
+          const result = operation(channel, "local.contract.call", payload, undefined, handler);
+          return {
+            result,
+            send: (method, args) =>
+              callHost(direct, "local.contract.peer", {
+                channel,
+                method,
+                args: wireData(args, "Local contract channel arguments"),
+              }),
+            async close() {
+              if (pending.has(channel)) await callHost(direct, "local.contract.close", { channel });
+            },
+          };
+        },
+        receive: receiveChannel,
+        send: (method, args) =>
+          callHost(direct, "local.contract.peer", {
+            method,
+            args: wireData(args, "Local contract channel arguments"),
+          }),
+      },
     );
     try {
       if (!(target && options?.contract) && functions[name]?.kind !== kind)
@@ -101,10 +164,28 @@ export function workerDispatch(
       if (calls.get(id) === call) retire(id);
     }
   }
+  async function peer(message: Extract<WorkerMessage, { type: "peer" }>) {
+    const { id, call, channel, payload } = message;
+    const active = calls.get(call);
+    const outbound = channel === null ? undefined : pending.get(channel);
+    const reply = { type: "peerResult", id, call };
+    try {
+      const handle =
+        channel === null ? await active?.receive : outbound?.call === call ? outbound.receive : undefined;
+      if (!handle || !active || calls.get(call) !== active || active.controller.signal.aborted)
+        throw new Error("Local contract channel ended");
+      const value = wireData(await handle(payload.method, payload.args), "Local contract channel result");
+      if (calls.get(call) === active) send({ ...reply, value });
+    } catch (error) {
+      send({ ...reply, error: (options?.errorMessage(error) ?? String(error)).slice(0, 8192) });
+    }
+  }
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
       const invocation = invoke(message.id, message.fn, message.args, message.contract);
       if (options?.observeInvocation) return invocation;
+    } else if (message.type === "peer" && options?.contract) {
+      void peer(message).catch(() => {});
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);
       pending.delete(message.id);
@@ -126,7 +207,7 @@ export function workerDispatch(
           pending.delete(id);
           op.reject(new Error(`Plugin ${kind} function cancelled`));
         }
-      if (options) calls.delete(message.id);
+      if (options) retire(message.id);
     } else throw new Error("Invalid worker message");
   };
 }

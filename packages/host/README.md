@@ -31,15 +31,18 @@ provider and returns its `result` as an `opResult`. The provider's host
 operations use the original window's workspace and identity. Cancelling an
 invocation cancels its child calls.
 
-For live methods the host still imports the verified provider bundle in the
-same realm. The agent contract mixes both kinds: `info` runs in the provider's
-process, and `start` still receives the live turn in `ai`'s process. The bundle
-is available there for provider discovery and live calls. Turn hooks also
-stay in that realm. The Runner reuses the same verified snapshot in that
-realm across windows. When its live providers change, new calls use a fresh
-process. The old realm keeps its original provider snapshots and finishes
-admitted calls before stopping. Turn controls still reach that realm by turn
-ID. Imports from other paths are refused.
+The agent contract uses plain data on QuickJS. The SDK recreates the author's
+`Run` in the agent host and the CLI belongs to that call's program scope.
+Reports are acknowledged in order before the final result, and an ask flushes
+earlier reports before waiting for an answer. Force stop kills only that
+scope, even if the author's handler never settles. An invocation can send
+messages only over its own authorized link; channels end with either peer.
+
+Turn hooks still import the verified provider bundle into ai's realm.
+Changes to those live providers start a new process for new calls. The old
+realm keeps its snapshots and admitted calls until they drain, and turn
+controls still reach it by turn ID (TKM-248). Imports from other paths are
+refused. Agent reloads leave ai's process and its permission grants in place.
 
 A process exit fails its active calls with the plugin's name. Its next start
 is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run

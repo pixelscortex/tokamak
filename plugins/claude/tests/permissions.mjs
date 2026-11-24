@@ -36,7 +36,13 @@ async function stopAsking({ run, live, parity, caseFolder }) {
     },
   );
   if (live) assert.doesNotMatch(waiting.text, /\bDONE\b/);
-  else assert.equal(waiting.text, "");
+  else {
+    assert.equal(waiting.text, "");
+    const interrupted = (await waiting.steps()).find(
+      ({ title }) => title === "touch stop-asking-fixture.txt",
+    );
+    assert.equal(interrupted?.state, "done", "Stop closes the interrupted step with the turn");
+  }
   assert.ok(waiting.reply.usage);
   if (!live) await parity.capture("stop-asking", waiting);
   if (live) assert.ok(!(await Bun.file(join(waiting.folder, "stop-asking-fixture.txt")).exists()));

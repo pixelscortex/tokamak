@@ -288,21 +288,22 @@ against the owner's. The declaring plugin can mark a local contract with
 For those methods, the window authorizes the provider and method using the
 catalog, and the QuickJS Runner routes the JSON arguments and result between
 the two plugin processes. The provider handles the call with the caller's
-signed-in member and device. Live methods, including turn start and turn
-hooks, run in the caller's realm and can pass objects with callbacks. Bun
-continues to use the caller's worker for all local contract methods.
+signed-in member and device. Bun continues to use the caller's worker for all
+local contract methods.
 
-The QuickJS Runner reuses one verified snapshot of each live provider per
-caller realm. If a live provider changes, is added, or is removed, new calls
-use a new realm. The old realm keeps its original provider files until its
-admitted calls finish. Stop, force stop, steer and permission answers still
-reach the original realm. A reload with identical local bytes and live
-providers keeps the existing process.
+On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
+author's live `Run` to plain-data messages over the link established by the
+routed start. The Runner cancels that call if ai's process dies. The agent
+host can fail independently; its in-flight turns report the failure in their
+threads. “Always allow this session” grants live in ai's module state and
+survive agent reloads.
 
-“Always allow this session” grants live in `ai`'s module state. They still apply
-to turns in the old realm, but new turns in a replacement realm ask again,
-even when they resume the same agent session. This limitation goes away when
-turns and turn hooks move across processes (TKM-247 and TKM-248).
+Live turn hooks still run in ai's realm. If a hook provider changes, is added
+or is removed, new calls use a fresh realm. The old realm keeps its snapshots
+until its admitted calls finish. Turn controls still reach the original realm
+during that drain. TKM-248 removes this remaining hook compatibility path.
+A reload with identical local bytes and live providers keeps the existing
+process.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

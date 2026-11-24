@@ -19,7 +19,7 @@ use tempfile::TempPath;
 use tokamak_worker::{Process, RestartBackoff, WORKER_CAPACITY, WORKER_FRAME_BYTES};
 use tokio::{
     io::BufReader,
-    sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore, mpsc},
+    sync::{Mutex as AsyncMutex, OwnedSemaphorePermit, Semaphore, mpsc, oneshot},
     time::Instant,
 };
 use tokio_util::{
@@ -63,6 +63,8 @@ impl Build {
 
 const IDLE_GRACE: Duration = Duration::from_secs(2);
 const RESTARTING: &str = "restarting after a crash; try again later";
+// Each linked invocation can hold one ask and one report open at once.
+const LINKED_CAPACITY: usize = WORKER_CAPACITY / 4;
 
 type Slots = HashMap<Build, Entry>;
 
@@ -483,6 +485,8 @@ impl SlotState {
 struct Calls {
     next: u64,
     active: HashMap<u64, mpsc::Sender<Value>>,
+    linked: HashSet<u64>,
+    peers: HashMap<u64, (u64, oneshot::Sender<Value>)>,
 }
 
 struct Host {
@@ -564,7 +568,9 @@ impl Host {
                 reason.push_str(&tail);
             }
             running.stop(reason);
-            lock(&running.calls).active.clear();
+            let mut calls = lock(&running.calls);
+            calls.active.clear();
+            calls.linked.clear();
             running.ended.cancel();
         });
         Ok(host)
@@ -618,6 +624,10 @@ impl Host {
         if calls.active.len() >= WORKER_CAPACITY {
             return Err(self.label("invocation capacity exceeded"));
         }
+        let linked = frame["contract"]["channel"] == true;
+        if linked && calls.linked.len() >= LINKED_CAPACITY {
+            return Err(self.label("active local contract channel capacity exceeded"));
+        }
         calls.next += 1;
         let id = calls.next;
         frame["id"] = json!(id);
@@ -625,6 +635,9 @@ impl Host {
         if let Err(error) = self.send(&frame) {
             calls.active.remove(&id);
             return Err(error);
+        }
+        if linked {
+            calls.linked.insert(id);
         }
         Ok(Call {
             host: self.clone(),
@@ -644,7 +657,24 @@ impl Host {
                 return Ok(());
             }
             Some("op") => calls.active.get(&frame_id(&frame["call"])?).cloned(),
-            Some("result") => calls.active.remove(&frame_id(&frame["id"])?),
+            Some("result") => {
+                let id = frame_id(&frame["id"])?;
+                calls.linked.remove(&id);
+                calls.active.remove(&id)
+            }
+            Some("peerResult") => {
+                let id = frame_id(&frame["id"])?;
+                let call = frame_id(&frame["call"])?;
+                if calls
+                    .peers
+                    .get(&id)
+                    .is_some_and(|(owner, _)| *owner == call)
+                    && let Some((_, send)) = calls.peers.remove(&id)
+                {
+                    let _ = send.send(frame);
+                }
+                return Ok(());
+            }
             _ => return Err("invalid plugin host message".into()),
         };
         if let Some(recipient) = recipient
@@ -653,6 +683,31 @@ impl Host {
             return Err("plugin host output queue full".into());
         }
         Ok(())
+    }
+
+    // Peer requests run inside an admitted call, with a separate bounded
+    // queue so a host full of turns can still receive reports and controls.
+    async fn peer(&self, call: u64, channel: Option<u64>, payload: Value) -> Result<Value, String> {
+        let (send, receive) = oneshot::channel();
+        let id = {
+            let mut calls = lock(&self.calls);
+            if !calls.active.contains_key(&call) {
+                return Err("Local contract channel ended".into());
+            }
+            if calls.peers.len() >= 2 * WORKER_CAPACITY {
+                return Err(self.label("local contract channel capacity exceeded"));
+            }
+            calls.next += 1;
+            let id = calls.next;
+            calls.peers.insert(id, (call, send));
+            id
+        };
+        let _pending = PeerRequest { host: self, id };
+        self.send(&json!({"type":"peer","id":id,"call":call,"channel":channel,"payload":payload}))?;
+        tokio::select! {
+            frame = receive => frame.map_err(|_| self.label("local contract channel ended")),
+            () = self.ended.cancelled() => Err(self.error()),
+        }
     }
 
     fn send(&self, frame: &Value) -> Result<(), String> {
@@ -697,6 +752,17 @@ struct Call {
     finished: bool,
 }
 
+struct PeerRequest<'a> {
+    host: &'a Host,
+    id: u64,
+}
+
+impl Drop for PeerRequest<'_> {
+    fn drop(&mut self) {
+        lock(&self.host.calls).peers.remove(&self.id);
+    }
+}
+
 impl Call {
     async fn next(&mut self) -> Result<Value, String> {
         let frame = self.receive.recv().await.ok_or_else(|| self.host.error())?;
@@ -707,8 +773,15 @@ impl Call {
 
 impl Drop for Call {
     fn drop(&mut self) {
-        if !self.finished
-            && lock(&self.host.calls).active.remove(&self.id).is_some()
+        if self.finished {
+            return;
+        }
+        let active = {
+            let mut calls = lock(&self.host.calls);
+            calls.linked.remove(&self.id);
+            calls.active.remove(&self.id).is_some()
+        };
+        if active
             && self
                 .host
                 .send(&json!({"type":"cancel", "id":self.id}))
