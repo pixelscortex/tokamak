@@ -201,7 +201,8 @@ signal. Use `turnId` to find anything saved for the turn.
 - Reloading AI on QuickJS interrupts its running turns, closes pending
   questions, and stops their programs. The thread is available again as soon
   as the interruption is saved. Reloading Code or an agent doesn't interrupt
-  a turn in AI.
+  a turn in AI. "Always allow this session" answers are held by AI's process,
+  so reloading AI forgets them and later turns ask again.
 
 ## Tests
 

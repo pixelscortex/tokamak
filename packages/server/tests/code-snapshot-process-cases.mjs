@@ -193,6 +193,7 @@ export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }
   for (let i = 0; i < 2; i++) {
     const result = await desk.local(ai.run.stop, { turnId: last._id });
     assert.equal(result.kind, "NotRunning", "Stop cannot change a turn whose agent has settled");
+    assert.equal(result.data.finishing, true, "the window shows no notice for a turn that is only finishing");
   }
   assert.ok(afterPids.every(alive), "Stop leaves the after hook's Git group alone");
   await final.write(".git/release-filter", "");

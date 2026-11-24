@@ -166,6 +166,7 @@ export const turn = local({
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
       control.close();
+      finishing.add(turnId);
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
@@ -204,6 +205,7 @@ export const turn = local({
     } finally {
       ctx.retiring?.removeEventListener("abort", reloaded);
       control.close();
+      finishing.delete(turnId);
       alive.stop();
       unregister();
     }
@@ -224,12 +226,17 @@ export const steer = local({
   },
 });
 
+/** Turns whose agent has settled and whose after hooks are still running. */
+const finishing = new Set<string>();
+
 /** Marks Stop on the server before asking the provider to end, so its final reply is stopped. */
 export const stop = local({
   args: { turnId: v.id("turns") },
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
-    if (!control) return noRunningTurn(turnId);
+    // The agent has settled and only after hooks remain: nothing is left to stop.
+    if (!control)
+      return finishing.has(turnId) ? fail("NotRunning", { turnId, finishing: true }) : noRunningTurn(turnId);
     return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
       ? null
       : noRunningTurn(turnId);
