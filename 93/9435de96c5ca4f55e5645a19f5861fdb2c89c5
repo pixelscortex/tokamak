@@ -1,0 +1,118 @@
+packages/worker/src/spawn.rs
+  s_d72ccb6f50b933::t_8259fe688a4a1b 158,160,253-257
+  s_d72ccb6f50b933::t_c705a6254f1b9a 33-36,114-157,159,161-182,252
+packages/runner/README.md
+  s_d72ccb6f50b933::t_541d754efab21a 22-24,38-40
+packages/host/tests/programs.rs
+  s_d72ccb6f50b933::t_8259fe688a4a1b 82,85-96
+  s_d72ccb6f50b933::t_83f7f4e119d151 83-84,97-102
+  s_d72ccb6f50b933::t_ddd9c1b16c0f24 81
+packages/sdk/src/client.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 11-23
+packages/sdk/src/internal/contracts.ts
+  s_d72ccb6f50b933::t_541d754efab21a 42
+  s_d72ccb6f50b933::t_ec571f996aeeed 11-17
+packages/host/src/programs.rs
+  s_d72ccb6f50b933::t_7c4af40299006b 17
+packages/runner/tests/support/agents.mjs
+  s_d72ccb6f50b933::t_16e6d666958b34 16
+  s_d72ccb6f50b933::t_09c27a8cfc7148 8-11,18
+packages/sdk/worker/dispatch.ts
+  s_d72ccb6f50b933::t_c8455b694f0fa4 60,209,211-217,225-226,232-233
+e2e/browser/ai.spec.ts
+  s_d72ccb6f50b933::t_fea11152e9c3fd 4,24,174-185,187-193,199-200
+packages/server/PLUGINS.md
+  s_d72ccb6f50b933::t_541d754efab21a 286-289
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_d72ccb6f50b933::t_2125b4beb82d0d 222,420,461-467,472-474,476
+  s_d72ccb6f50b933::t_5cea7ec22b3ad7 5-7,185-221,223-253,475
+plugins/ai/src/client/lib/local-turn.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 1-21
+plugins/ai/src/client/lib/turn.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 3,5,25,42
+plugins/ai/src/server/liveness.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 4,87-101,154,161,178
+plugins/code/README.md
+  s_d72ccb6f50b933::t_fea11152e9c3fd 26-27
+plugins/ai/src/shared/turn-timing.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 12-13
+packages/host/src/runtime.rs
+  s_d72ccb6f50b933::t_324d8626c7c917 221
+packages/host/src/programs/process.rs
+  s_d72ccb6f50b933::t_7c4af40299006b 7-8,18-19,235,238,244,257-335
+  s_d72ccb6f50b933::t_80ab6fd142bd76 336-348
+packages/sdk/worker/invocation-host.ts
+  s_d72ccb6f50b933::t_c8455b694f0fa4 18,43-45
+packages/sdk/tools/contracts.mjs
+  s_d72ccb6f50b933::t_2125b4beb82d0d 233
+packages/host/README.md
+  s_d72ccb6f50b933::t_2125b4beb82d0d 62-66
+packages/server/src/plugins/contracts.rs
+  s_d72ccb6f50b933::t_76ffb8bc5a6217 100-101
+plugins/code/src/server/hooks.ts
+  s_d72ccb6f50b933::t_fea11152e9c3fd 7
+packages/sdk/worker/quickjs.ts
+  s_d72ccb6f50b933::t_c8455b694f0fa4 64
+plugins/ai/src/server/run.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 32,46,61,67,85
+  s_d72ccb6f50b933::t_fea11152e9c3fd 93-94
+  s_d72ccb6f50b933::t_667af7301d99e7 10,163
+packages/runner/tests/measure-first-text.mjs
+  s_d72ccb6f50b933::t_2b50c107a77fd7 21-42,58-59,66-71,135
+  s_d72ccb6f50b933::t_09c27a8cfc7148 100-103
+  s_d72ccb6f50b933::t_16e6d666958b34 109-117,141
+packages/runner/src/local/quickjs/session.rs
+  s_d72ccb6f50b933::t_2125b4beb82d0d 139-146,148-150
+  s_d72ccb6f50b933::t_de8556e6e3a1ba 134-138,147
+packages/host/src/main.rs
+  s_d72ccb6f50b933::t_7c4af40299006b 61-62
+packages/runtime/js/local.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 4,324,422,426-427,535,572
+packages/sdk/src/index.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 97
+plugins/ai/src/server/turns.ts
+  s_d72ccb6f50b933::t_fea11152e9c3fd 332
+packages/host/tests/fixture.js
+  s_d72ccb6f50b933::t_8259fe688a4a1b 219-237,243
+plugins/ai/src/client/lib/queue.ts
+  s_d72ccb6f50b933::t_8ffc9f7bd6997a 4,59,70
+packages/runner/src/artifact.rs
+  s_d72ccb6f50b933::t_2125b4beb82d0d 32-35,38,40
+packages/runner/tests/local-routing.mjs
+  s_d72ccb6f50b933::t_324d8626c7c917 104-110,305-315,317-321,434-475,477-483,492,508-509,513-519,522-530,532
+  s_d72ccb6f50b933::t_37716e03871307 316,476
+packages/sdk/src/agent-info-cache.ts
+  s_d72ccb6f50b933::t_950fc51937fe62 1-27
+packages/sdk/src/agent-turn.ts
+  s_d72ccb6f50b933::t_3528f45c5b268f 253-259
+packages/sdk/worker/contracts.ts
+  s_d72ccb6f50b933::t_bd69afeeb0afb5 3,126,226-235,238
+packages/server/tests/code-snapshots-driver.mjs
+  s_d72ccb6f50b933::t_67b35f2d4e8a69 23,84
+plugins/ai/src/contracts.ts
+  s_d72ccb6f50b933::t_0afde48c849628 26-27
+plugins/ai/src/server/agents.ts
+  s_d72ccb6f50b933::t_1152099b24e0e0 3,49-61,65-71
+plugins/claude/src/server/agent.ts
+  s_d72ccb6f50b933::t_6ab75134439792 1,3-5,15-16,39-48,124-132
+plugins/code/contracts/ai.ts
+  s_d72ccb6f50b933::t_4e6760ef2233df 26-27
+plugins/codex/src/server/agent.ts
+  s_d72ccb6f50b933::t_5b47ef642b8a24 1,3-5,13-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "939435de96c5ca4f55e5645a19f5861fdb2c89c5",
+  "prompts": {},
+  "sessions": {
+    "s_d72ccb6f50b933": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20c91-b516-7112-aca4-902d2f8d47f9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
