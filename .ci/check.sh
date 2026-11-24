@@ -146,13 +146,13 @@ case "$1" in
     # Run the QuickJS replays through the Runner instead of adding a third pass.
     # The Bun supervisor units already ran in the Bun lane above.
     export TOKAMAK_TEST_RUNNER=1
-    # The data, index and SDK transport suites need no local runtime; the
-    # cloud build below runs them once.
+    # The data, index, identity and SDK transport suites need no local
+    # runtime; the cloud build below runs them once.
     echo "Timing Rust integration: QuickJS main group"
     time env -u TOKAMAK_PLUGIN_RUNTIME CI=1 cargo test --locked -p server --lib --bins \
       --test actions --test ai_threads --test ai_turns \
       --test chat_threads --test claude_turns \
-      --test codex_turns --test identity --test local_functions --test plugins \
+      --test codex_turns --test local_functions --test plugins \
       --test runner_routing --test service --test workers \
       -- --skip host::worker::tests::
     # These suites use real deadlines and Git/hook timing. Run them only
