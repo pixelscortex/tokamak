@@ -1,0 +1,92 @@
+packages/runner/tests/local-routing.mjs
+  s_e11e967c664e36::t_ef437996bce32c 82-97,228-229
+packages/server/tests/code-snapshots-driver.mjs
+  s_e11e967c664e36::t_33c533b9ad28f6 9,108
+  s_e11e967c664e36::t_9de966d16d4770 22,64,82,103-107,119-143
+  s_e11e967c664e36::t_c04d01d2a618c4 109-118
+  s_e11e967c664e36::t_06dfc74ab1e5a8 144-145
+packages/runtime/js/local.ts
+  s_e11e967c664e36::t_da49e51ad52871 483,611-612,623-632,670
+  s_e11e967c664e36::t_c6be9442671aec 409
+plugins/ai/src/server/run.ts
+  s_e11e967c664e36::t_c04d01d2a618c4 122-126,175-178
+  s_e11e967c664e36::t_afbe90d3eeb237 32-33,108-113,115,117-121,129-136,165,172,198-203,205,233-235
+plugins/code/src/server/hooks.ts
+  s_e11e967c664e36::t_188e2db39b6e7a 5,7,19,36-38
+e2e/browser/code.spec.ts
+  s_e11e967c664e36::t_c04d01d2a618c4 128-135,146-148
+  s_e11e967c664e36::t_ef437996bce32c 3,8,109-127,136-145,149-161
+  s_e11e967c664e36::t_1f26de868e3814 162
+plugins/code/src/local/snapshots.ts
+  s_e11e967c664e36::t_c04d01d2a618c4 7-14,99-104
+  s_e11e967c664e36::t_188e2db39b6e7a 3-4,16-17,44-45,51,59-88,91-92,95-98,105-111,115,117-118,121
+  s_e11e967c664e36::t_6a110f96096494 32-33,89-90,93-94
+plugins/ai/README.md
+  s_e11e967c664e36::t_c95086786dba84 187-189,196-204
+plugins/ai/src/server/turn-hooks.ts
+  s_e11e967c664e36::t_c6be9442671aec 8,14,17-19,23,65,68,77,83,103,111-113,115-119,121-124
+  s_e11e967c664e36::t_c04d01d2a618c4 20-22
+packages/sdk/src/host.ts
+  s_e11e967c664e36::t_b50d207e716524 132
+packages/sdk/worker/invocation-host.ts
+  s_e11e967c664e36::t_b50d207e716524 17,26
+plugins/ai/src/server/controls.ts
+  s_e11e967c664e36::t_c6be9442671aec 123-128,130-135,144
+plugins/code/src/local/git.ts
+  s_e11e967c664e36::t_188e2db39b6e7a 139,144,158,164-168
+  s_e11e967c664e36::t_c04d01d2a618c4 159-163
+  s_e11e967c664e36::t_b16b4dcfd0da23 169
+packages/runner/src/local/quickjs/session.rs
+  s_e11e967c664e36::t_f792a6273a5174 141-149,226
+  s_e11e967c664e36::t_9a8be6fb7074a9 62,83,127-132,134,136-139,181,290,369,375-378,408-412
+  s_e11e967c664e36::t_313e385136fc02 140,596-654
+  s_e11e967c664e36::t_97380182b20e89 135,655
+packages/server/tests/support/local_driver.rs
+  s_e11e967c664e36::t_940d42648ec958 11
+plugins/code/README.md
+  s_e11e967c664e36::t_c95086786dba84 8-11
+packages/sdk/src/functions.ts
+  s_e11e967c664e36::t_1aa957703bc1c2 482
+  s_e11e967c664e36::t_b50d207e716524 157-158,333
+packages/runner/README.md
+  s_e11e967c664e36::t_c95086786dba84 21-27
+packages/host/src/protocol.rs
+  s_e11e967c664e36::t_b50d207e716524 219
+packages/sdk/README.md
+  s_e11e967c664e36::t_822ddf1e6a76d4 424-428
+plugins/ai/src/server/turns.ts
+  s_e11e967c664e36::t_afbe90d3eeb237 612,620,654
+  s_e11e967c664e36::t_c04d01d2a618c4 628-630,642-645
+packages/runner/src/local/quickjs.rs
+  s_e11e967c664e36::t_940d42648ec958 874-879,881,883-902
+  s_e11e967c664e36::t_da49e51ad52871 494,499-513,644-646,667-670,673,682,717-718,811,828-832
+  s_e11e967c664e36::t_1c41fec3eb0e74 671-672,873,880,882
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_e11e967c664e36::t_c04d01d2a618c4 130-135,142-147,178-180
+  s_e11e967c664e36::t_95e8c7cbd436b6 177
+  s_e11e967c664e36::t_9de966d16d4770 118,125-129,136-141,148-176
+  s_e11e967c664e36::t_d699531749fde0 181-182
+packages/host/README.md
+  s_e11e967c664e36::t_0a7bfb639a8a41 34-35
+plugins/ai/src/server/working.ts
+  s_e11e967c664e36::t_c6be9442671aec 19,59-63
+  s_e11e967c664e36::t_80a05baf3937f7 49-52
+packages/sdk/worker/dispatch.ts
+  s_e11e967c664e36::t_b50d207e716524 25,67,116,119,154-156,208,263-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "09ffa16d2fe8675f82345a46092283f9cab3d63d",
+  "prompts": {},
+  "sessions": {
+    "s_e11e967c664e36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20aeb-0c88-7f10-9840-67eabb856bcf",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
