@@ -1,0 +1,19 @@
+packages/sdk/component-parts.tsx
+  s_7485715999886d::t_c5fd208b2d13af 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec3b31f91cc261b5c87e15bb41f0ff576ff06bc6",
+  "prompts": {},
+  "sessions": {
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
