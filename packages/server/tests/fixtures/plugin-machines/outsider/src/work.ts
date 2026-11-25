@@ -6,6 +6,17 @@ export const where = action({
   handler: (ctx) => ({ runner: typeof ctx.retiring !== "undefined" }),
 });
 
+export const hookedAction = action({ on: "caller", handler: (): string => "owner" });
+
+export const hookedPoint = action({
+  on: "caller",
+  args: { rejectOwner: v.boolean() },
+  handler(ctx, { rejectOwner }) {
+    if (rejectOwner) throw new Error("The owner started before checking its point hooks");
+    return ctx.point("gate", "owner" as string);
+  },
+});
+
 export const list = query({ handler: (ctx) => ctx.machines.list() });
 
 export const outsideProvider = action({

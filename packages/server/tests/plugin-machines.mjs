@@ -22,7 +22,7 @@ const serverStderr = [];
 const failure = (kind) => ({ failed: true, kind, data: null });
 
 async function install(name, id) {
-  const source = join(scratch, name === "sandbox" ? id : name);
+  const source = join(scratch, id);
   await cp(join(import.meta.dir, "fixtures/plugin-machines", name), source, { recursive: true });
   await symlink(join(workspace, "app/node_modules"), join(source, "node_modules"), "dir");
   await writeFile(
@@ -34,7 +34,10 @@ async function install(name, id) {
   );
   if (name === "provider") {
     await mkdir(join(source, "contracts"));
-    await cp(join(scratch, "outsider/src/contracts.ts"), join(source, "contracts/machine-outsider.ts"));
+    await cp(
+      join(scratch, "machine-outsider/src/contracts.ts"),
+      join(source, "contracts/machine-outsider.ts"),
+    );
   }
   build(source);
   await cp(join(source, "dist"), join(plugins, id), { recursive: true });
@@ -224,19 +227,6 @@ try {
     (await window.query(other.list, {})).some((entry) => entry.id === id),
     false,
   );
-  const hookUnavailable = { kind: "hookRunnerUnavailable", plugin: "machine-hooks" };
-  const beforeHooks = (await window.query(own.rows, {})).rows;
-  await assert.rejects(window.action(own.hookedAction, {}, { on: id }), {
-    ...hookUnavailable,
-    stage: "before",
-    hook: "policy:action",
-  });
-  await assert.rejects(window.action(own.hookedPoint, {}, { on: id }), {
-    ...hookUnavailable,
-    stage: "pointBefore",
-    point: "gate",
-  });
-  assert.deepEqual((await window.query(own.rows, {})).rows, beforeHooks);
   assert.deepEqual(await window.action(other.where, {}, { on: id }), forbidden);
   assert.deepEqual(await window.action(own.delegateOther, { id }), forbidden);
   assert.deepEqual(await alice.action(own.interrupted, {}, { on: id }), forbidden);
@@ -373,6 +363,19 @@ try {
   await writeFile(contractKey, contractMachine.key + "\n", { mode: 0o600 });
   startMachine(http, contractKey);
   assert.equal(await window.action(other.waitOnline, { id: contractMachine.id }), null);
+  const onMachine = { on: contractMachine.id };
+  const hookUnavailable = { kind: "hookRunnerUnavailable", plugin: "machine-hooks" };
+  assert.deepEqual(await window.action(other.where, {}, onMachine), { runner: true });
+  await assert.rejects(window.action(other.hookedAction, {}, onMachine), {
+    ...hookUnavailable,
+    stage: "before",
+    hook: "policy:action",
+  });
+  await assert.rejects(window.action(other.hookedPoint, { rejectOwner: true }, onMachine), {
+    ...hookUnavailable,
+    stage: "pointBefore",
+    point: "gate",
+  });
   await assert.rejects(
     window.action(other.outsideProvider, {}, { on: contractMachine.id }),
     /Contract provider machine-provider has no read method/,
@@ -424,7 +427,7 @@ try {
   unboundRunner.child.kill();
   await unboundRunner.child.exited;
 
-  await startServer(dir, ["--bundle", join(scratch, "outsider/dist/bundle.js")]);
+  await startServer(dir, ["--bundle", join(scratch, "machine-outsider/dist/bundle.js")]);
   await assertKeyRetained();
   await stopServer();
 

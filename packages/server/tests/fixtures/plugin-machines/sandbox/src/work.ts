@@ -149,13 +149,3 @@ export const interrupted = action({
     return child.exited;
   },
 });
-
-export const hookedAction = action({ on: "caller", handler: (): string => "owner" });
-
-export const hookedPoint = action({
-  on: "caller",
-  async handler(ctx) {
-    await ctx.runMutation(api.work.store, { text: "hooked point owner entered" });
-    return ctx.point("gate", "owner" as string);
-  },
-});
