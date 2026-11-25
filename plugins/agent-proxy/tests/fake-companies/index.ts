@@ -55,8 +55,11 @@ export async function startFakeCompanies({
       plan?: string;
       /** The models the models read lists, instead of the one fake model. */
       models?: { id: string; name: string }[];
-      /** `unavailable`: the profile and models reads answer HTTP 503. */
-      reads?: "ok" | "unavailable";
+      /**
+       * `unavailable`: the profile and models reads answer HTTP 503; `empty`: the
+       * profile read answers 200 with no plan, email or organisation in it.
+       */
+      reads?: "ok" | "unavailable" | "empty";
       authorization?: { challenge: string; state: string; redirect: string };
     }
   >();
@@ -292,6 +295,7 @@ export async function startFakeCompanies({
               ],
             },
       );
+    if (route === "/api/oauth/profile" && account.reads === "empty") return Response.json({});
     if (route === "/api/oauth/profile")
       return Response.json({
         account: { uuid: account.id, email: `${account.id}@example.test`, has_claude_pro: true },
@@ -444,7 +448,7 @@ export async function startFakeCompanies({
         answers: [] as Answer[],
         plan: undefined as string | undefined,
         models: undefined as { id: string; name: string }[] | undefined,
-        reads: "ok" as "ok" | "unavailable",
+        reads: "ok" as "ok" | "unavailable" | "empty",
       };
       accounts.set(id, account);
       return account;

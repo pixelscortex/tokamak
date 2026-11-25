@@ -27,7 +27,8 @@ export interface Read {
 }
 
 /** The plan to store, or undefined when the read does not know it. */
-export const knownPlan = (read: Read): string | undefined => (read.planKnown === false ? undefined : read.plan);
+export const knownPlan = (read: Read): string | undefined =>
+  read.planKnown === false ? undefined : read.plan;
 
 /** Whether an account on `plan` may join a subscription on `subscriptionPlan`: unknown on either side fits. */
 export const plansFit = (subscriptionPlan: string, read: Read): boolean => {

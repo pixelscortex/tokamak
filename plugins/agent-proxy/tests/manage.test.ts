@@ -32,12 +32,14 @@ const api = createApi<{
       SignIn | Failed
     >;
     finishSignIn: Ref<"action", { id: string; pasted: string }, Subscription | Failed>;
+    cancelSignIn: Ref<"mutation", Id, null | Failed>;
     setLabel: Ref<"mutation", { id: string; label: string }, null | Failed>;
     setEnabled: Ref<"mutation", { id: string; enabled: boolean }, null | Failed>;
     renew: Ref<"action", Record<string, never>, { renewed: number; signedOut: number; waiting: number }>;
   };
   manage: {
     addAccount: Ref<"action", Id, SignIn | Failed>;
+    signInAccount: Ref<"action", Id, SignIn | Failed>;
     signOut: Ref<"mutation", Id, null | Failed>;
     checkAgain: Ref<"action", Id, Subscription | Failed>;
     usedBy: Ref<"query", Id, unknown[]>;
@@ -47,10 +49,12 @@ const api = createApi<{
   "subscriptions:list",
   "subscriptions:startSignIn",
   "subscriptions:finishSignIn",
+  "subscriptions:cancelSignIn",
   "subscriptions:setLabel",
   "subscriptions:setEnabled",
   "subscriptions:renew",
   "manage:addAccount",
+  "manage:signInAccount",
   "manage:signOut",
   "manage:checkAgain",
   "manage:usedBy",
@@ -283,6 +287,114 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     await call("mutation", api.manage.remove, { id: subscription.id });
   });
 
+  // The one rule for reads (reads.ts): a read that failed never overwrites one
+  // that worked, and the subscription's models are the union of its accounts'.
+  test("a repair while Claude's reads fail keeps the plan and the models of every account", async () => {
+    const opus = { id: "claude-opus-4-6", name: "Fake Opus" };
+    const haiku = { id: "claude-haiku-4-5", name: "Fake Haiku" };
+    const a = fake.addAccount("anthropic", "keep-a");
+    const b = fake.addAccount("anthropic", "keep-b");
+    for (const account of [a, b]) account.plan = "claude_team";
+    a.models = [opus];
+    b.models = [haiku];
+    const subscription = await added("keep-a");
+    await finishAs(await addAccount(subscription.id), "keep-b");
+    expect(await find(subscription.id)).toMatchObject({ plan: "Team", models: [opus, haiku] });
+
+    const second = (await find(subscription.id))!.accounts[1]!;
+    await call("mutation", api.manage.signOut, { id: second.id });
+    b.reads = "unavailable";
+    const repaired = await finishAs(
+      await call("action", api.manage.signInAccount, { id: second.id }),
+      "keep-b",
+    );
+    expect(repaired).toMatchObject({ plan: "Team", status: "ok", models: [opus, haiku] });
+    b.reads = "ok";
+
+    // Check again with both answering: the union stays, even though the first account lacks Haiku.
+    expect(await call("action", api.manage.checkAgain, { id: subscription.id })).toMatchObject({
+      models: [opus, haiku],
+    });
+  });
+
+  test("an account's own Sign in takes that account only, and a repair takes only a signed-out one", async () => {
+    fake.addAccount("anthropic", "only-a");
+    fake.addAccount("anthropic", "only-b");
+    const subscription = await added("only-a");
+    await finishAs(await addAccount(subscription.id), "only-b");
+    const [a, b] = (await find(subscription.id))!.accounts;
+    await call("mutation", api.manage.signOut, { id: a!.id });
+
+    // "Sign in" on A, finished as B (still signed in): refused, and still waiting for A.
+    const forA = await call("action", api.manage.signInAccount, { id: a!.id });
+    expect(forA).toMatchObject({ repair: subscription.id, repairAccount: a!.id });
+    expect(await finishAs(forA, "only-b")).toMatchObject(plain("OtherAccount"));
+    expect((await list()).signIns.map((signIn) => signIn.id)).toContain((forA as SignIn).id);
+    expect(await finishAs(forA, "only-a")).toMatchObject({
+      accounts: [
+        { id: a!.id, status: "ok" },
+        { id: b!.id, status: "ok" },
+      ],
+    });
+
+    // A repair of the subscription with no account named refuses one that is signed in.
+    await call("mutation", api.manage.signOut, { id: a!.id });
+    const repair = await start(subscription.id);
+    expect(await finishAs(repair, "only-b")).toMatchObject(plain("OtherAccount"));
+    await call("mutation", api.subscriptions.cancelSignIn, { id: (repair as SignIn).id });
+  });
+
+  test("a plan Claude did not give is unknown, fits any account, and the first known read fills it in", async () => {
+    // A 200 with no plan in it is not "Free".
+    const blank = fake.addAccount("anthropic", "blank");
+    blank.reads = "empty";
+    const subscription = await added("blank");
+    expect(subscription).toMatchObject({ plan: "" });
+    const team = fake.addAccount("anthropic", "known-team");
+    team.plan = "claude_team";
+    expect(await finishAs(await addAccount(subscription.id), "known-team")).toMatchObject({
+      plan: "Team",
+      accounts: [{ email: "blank@example.test" }, { email: "known-team@example.test" }],
+    });
+
+    // Claude down at the first read: unknown until "Check again" reads it.
+    const down = fake.addAccount("anthropic", "first-down");
+    down.reads = "unavailable";
+    const later = await added("first-down");
+    expect(later).toMatchObject({ plan: "", models: [] });
+    down.reads = "ok";
+    expect(await call("action", api.manage.checkAgain, { id: later.id })).toMatchObject({
+      plan: "Pro",
+      models: [{ id: "claude-sonnet-4-6" }],
+    });
+  });
+
+  test("a renewal that Claude answers after the account was signed out, or removed, keeps nothing", async () => {
+    for (const [name, end] of [
+      ["race-out", "signOut"],
+      ["race-gone", "remove"],
+    ] as const) {
+      // Earlier tests leave logins due too; renew those first, so the count below is this one's.
+      await call("action", api.subscriptions.renew, {});
+      const account = fake.addAccount("anthropic", name, { signIn: "expired" });
+      const subscription = await added(name);
+      account.tokenDelayMs = 600;
+      const renewing = call("action", api.subscriptions.renew, {});
+      // Claude has the refresh token; the person signs out (or removes it) meanwhile.
+      while (!refreshes(name)) await new Promise((done) => setTimeout(done, 20));
+      if (end === "signOut") await call("mutation", api.manage.signOut, { id: subscription.accounts[0]!.id });
+      else await call("mutation", api.manage.remove, { id: subscription.id });
+      expect((await renewing).renewed).toBe(0);
+      account.tokenDelayMs = 0;
+      // Nothing was written back: no login to renew, and the account stays as it was left.
+      await call("action", api.subscriptions.renew, {});
+      expect(refreshes(name)).toBe(1);
+      const after = await find(subscription.id);
+      if (end === "signOut") expect(after).toMatchObject({ status: "signed-out" });
+      else expect(after).toBeUndefined();
+    }
+  });
+
   test("no login reaches any answer", () => {
     const secrets = fake.requests
       .flatMap(({ body }) => {
@@ -290,10 +402,24 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
         return [fields?.code_verifier, fields?.refresh_token];
       })
       .concat(
-        ["team-a", "team-b", "out-a", "out-b", "checked", "removed", "kept"].flatMap((id) => [
-          `fake-${id}-access`,
-          `fake-${id}-refresh`,
-        ]),
+        [
+          "team-a",
+          "team-b",
+          "out-a",
+          "out-b",
+          "checked",
+          "removed",
+          "kept",
+          "keep-a",
+          "keep-b",
+          "only-a",
+          "only-b",
+          "blank",
+          "known-team",
+          "first-down",
+          "race-out",
+          "race-gone",
+        ].flatMap((id) => [`fake-${id}-access`, `fake-${id}-refresh`]),
       )
       .filter((value): value is string => typeof value === "string");
     const answers = JSON.stringify(seen);
