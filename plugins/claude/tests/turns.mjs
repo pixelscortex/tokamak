@@ -314,19 +314,63 @@ async function steerTurns(run) {
       await turn.steer(steer);
     },
   });
-  assert.match(steered.text.trim(), live ? /STEERED$/ : /300STEERED$/);
+  assert.match(steered.text.trim(), /\S\n\nSTEERED$/);
+  assert.equal(steered.row.state, "done");
+  assert.equal(steered.row.error, undefined);
   assert.deepEqual(steered.reply.steers, [steer]);
-  if (!live)
+  if (live) {
+    assert.ok(steered.text.length < 200, "The steer cuts off the count well before 300");
+  } else {
+    assert.equal(steered.text, "1\n2\n3\n4\n5\n6\n7\n8\n\nSTEERED");
     assert.deepEqual(steered.reply.usage, {
-      inputTokens: 55481,
-      cachedInputTokens: 55475,
-      outputTokens: 607,
-      costUsd: 0.0116295,
+      inputTokens: 55554,
+      cachedInputTokens: 24302,
+      outputTokens: 6,
+      costUsd: 0.16711320000000002,
     });
-  if (!live) {
-    assert.equal(steered.text, Array.from({ length: 300 }, (_, i) => i + 1).join("\n") + "STEERED");
+    const raced = await run("steer-race", counting.replace("1000", "300"), {
+      async during(turn) {
+        await turn.firstText();
+        await turn.steer(steer);
+      },
+    });
+    assert.equal(raced.text, Array.from({ length: 300 }, (_, i) => i + 1).join("\n") + "\n\nSTEERED");
+    assert.deepEqual(raced.reply.steers, [steer]);
+    assert.deepEqual(raced.reply.usage, {
+      inputTokens: 110447,
+      cachedInputTokens: 24302,
+      outputTokens: 607,
+      costUsd: 0.16711320000000002,
+    });
+
+    const second = "One more correction: only say LAST.";
+    const twice = await run("steer-twice", counting.replace("1000", "300"), {
+      async during(turn) {
+        await turn.firstText();
+        await turn.steer(steer);
+        await turn.steer(second);
+      },
+    });
+    assert.equal(twice.text, steered.text + "\n\nLAST");
+    assert.deepEqual(twice.reply.steers, [steer, second]);
+    assert.deepEqual(
+      (await twice.steps()).map(({ title, state }) => ({ title, state })),
+      [{ title: "sleep 20", state: "done" }],
+    );
   }
   passed("steer while streaming");
+  const stopped = await run("steer-stop", counting.replace("1000", "300"), {
+    state: "stopped",
+    async during(turn) {
+      await turn.firstText();
+      await turn.steer(steer);
+      await turn.stop();
+    },
+  });
+  assert.deepEqual(stopped.reply.steers, [steer]);
+  if (live) assert.ok(stopped.text.trim() && !/\b(?:300|STEERED)\b/.test(stopped.text));
+  else assert.equal(stopped.text, "1\n2\n3\n4\n5\n6\n7\n8");
+  passed("stop right after steer");
   const correction = "Correction: only say STEERED. Do not use tools.";
   const merged = await run(
     "steer-tools",
