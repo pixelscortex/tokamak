@@ -246,6 +246,12 @@ code can dispatch its own actions to it with `ctx.runAction`. A signed-in
 creator does not implicitly bind the machine. Binding is fixed at creation.
 A person's device is available only to calls started by that person.
 
+An unbound machine is only reachable through the owning plugin's server code,
+so if a server action accepts a machine id from a window, check `ctx.auth` and
+the plugin's own records before passing the id through.
+Bind a machine with `member` when a window should target it directly.
+`create({ member })` returns `machineForbidden` if the id is not an active member.
+
 Unknown, removed and unauthorized ids all return `machineForbidden`.
 An authorized machine without a Runner returns `machineOffline` immediately.
 If its Runner disconnects or its key is removed during an action, that action
@@ -254,8 +260,8 @@ returns `machineLost`. Calls are never queued or replayed.
 `ctx.machines.list()` returns the plugin's machines bound to the caller and
 that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
 milliseconds or `null`). Bound plugin entries also carry the member id in
-`member`. Without a person, the ordinary list is empty. Internal server
-actions can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
+`member`. Without a person, the ordinary list is empty. Server actions
+can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
 Lists are snapshots; presence does not refresh query subscriptions.
 
 `create`, `waitOnline`, and `remove` run only in server actions. The credential
@@ -265,6 +271,9 @@ and returns `machineLimit` when the plugin already has 100 active machines.
 out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
 sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
 container with your provider. Uninstalling a plugin revokes its machine keys.
+
+A per-call override can move a server action to a Runner, where machine
+management methods and `ctx.server.url()` fail with the typed `serverOnly` error.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`

@@ -180,7 +180,6 @@ impl Destination {
                 note,
                 runner,
                 lifetime,
-                internal: false,
             },
             guard,
         )
@@ -254,7 +253,6 @@ pub(crate) struct ActionContext {
     pub note: CallNote,
     pub runner: Arc<Machines>,
     pub lifetime: Option<CancellationToken>,
-    pub internal: bool,
 }
 
 pub(crate) struct NestedCall {
@@ -289,18 +287,14 @@ pub(crate) fn operations(
         );
     }
     environment.register(&mut ops)?;
-    if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+    if let (Some(_), Some(owner)) = (&generation, &owner) {
         context
             .runner
             .register_list(&mut ops, owner.clone(), &context.note)?;
         if context.lifetime.is_none() {
-            context.runner.register_management(
-                &mut ops,
-                owner.clone(),
-                loaded.clone(),
-                context.internal,
-                context.note.clone(),
-            )?;
+            context
+                .runner
+                .register_management(&mut ops, owner.clone(), context.note.clone())?;
         }
     }
     register_nested_calls(
@@ -488,7 +482,6 @@ fn register_plugin_call(
                     note,
                     runner,
                     lifetime,
-                    internal: false,
                 },
                 args,
                 (owner, on),
@@ -526,9 +519,7 @@ async fn run_nested_action(
         Some(&target.owner),
     ));
     let source = loaded.action_sources.get(&target.owner).cloned();
-    let (mut context, _guard) = destination.context(parent.note, parent.runner);
-    context.internal =
-        caller == target.owner && target.visibility == crate::service::Visibility::Internal;
+    let (context, _guard) = destination.context(parent.note, parent.runner);
     let ops = operations(
         commands,
         Some(loaded),

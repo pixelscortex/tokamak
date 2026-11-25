@@ -4,5 +4,5 @@ export default definePlugin({
   id: "sandbox-test",
   name: "Test sandbox",
   version: "1.0.0",
-  depends: ["machine-outsider"],
+  depends: ["auth", "machine-outsider"],
 });

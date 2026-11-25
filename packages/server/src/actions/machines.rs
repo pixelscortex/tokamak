@@ -59,11 +59,7 @@ impl Machines {
         url: Option<String>,
     ) -> std::io::Result<()> {
         let plugins = self.plugins.lock().expect("machine plugins");
-        identities.revoke_plugin_machines(|id, _| {
-            plugins
-                .as_ref()
-                .is_none_or(|loaded| !loaded.catalog.plugins.contains_key(id))
-        })?;
+        revoke_removed(&identities, plugins.as_deref())?;
         let _ = self.identities.set(identities);
         let _ = self.url.set(url);
         Ok(())
@@ -72,10 +68,7 @@ impl Machines {
     pub fn update_plugins(&self, next: Option<Arc<super::Loaded>>) -> std::io::Result<()> {
         let mut plugins = self.plugins.lock().expect("machine plugins");
         if let Some(identities) = self.identities.get() {
-            identities.revoke_plugin_machines(|id, _| {
-                next.as_ref()
-                    .is_none_or(|loaded| !loaded.catalog.plugins.contains_key(id))
-            })?;
+            revoke_removed(identities, next.as_deref())?;
         }
         *plugins = next;
         if let Some(identities) = self.identities.get() {
@@ -200,8 +193,6 @@ impl Machines {
         self: &Arc<Self>,
         ops: &mut OpRegistry,
         plugin: String,
-        generation: Arc<super::Loaded>,
-        internal: bool,
         note: CallNote,
     ) -> Result<(), engine::Error> {
         let url = self.url.get().cloned().flatten();
@@ -210,27 +201,24 @@ impl Machines {
             async move { Ok(json!(url)) }
         })?;
 
-        if internal {
-            let machines = self.clone();
-            let owner = plugin.clone();
-            ops.register_call("machines.listAll", move |_| {
-                let entries = machines.list(&owner, None, true);
-                async move { Ok(entries) }
-            })?;
-        }
+        let machines = self.clone();
+        let owner = plugin.clone();
+        ops.register_call("machines.listAll", move |_| {
+            let entries = machines.list(&owner, None, true);
+            async move { Ok(entries) }
+        })?;
 
         let machines = self.clone();
         let owner = plugin.clone();
         ops.register_call("machines.create", move |payload| {
-            let (machines, owner, generation) =
-                (machines.clone(), owner.clone(), generation.clone());
+            let (machines, owner) = (machines.clone(), owner.clone());
             async move {
                 let (label, member) = creation_args(&payload)?;
-                Ok(tokio::task::spawn_blocking(move || {
-                    machines.create(&generation, &owner, &label, member)
-                })
-                .await
-                .map_err(|error| error.to_string())??)
+                Ok(
+                    tokio::task::spawn_blocking(move || machines.create(&owner, &label, member))
+                        .await
+                        .map_err(|error| error.to_string())??,
+                )
             }
         })?;
 
@@ -279,17 +267,11 @@ impl Machines {
         })
     }
 
-    fn create(
-        &self,
-        generation: &Arc<super::Loaded>,
-        owner: &str,
-        label: &str,
-        member: Option<String>,
-    ) -> Result<Value, String> {
+    fn create(&self, owner: &str, label: &str, member: Option<String>) -> Result<Value, String> {
         let plugins = self.plugins.lock().expect("machine plugins");
         if !plugins
             .as_ref()
-            .is_some_and(|current| Arc::ptr_eq(current, generation))
+            .is_some_and(|current| current.catalog.plugins.contains_key(owner))
         {
             return Ok(MachineFailure::Forbidden.value());
         }
@@ -382,4 +364,19 @@ fn creation_args(payload: &Value) -> Result<(String, Option<String>), String> {
         })
         .transpose()?;
     Ok((name.to_owned(), member))
+}
+
+fn revoke_removed(identities: &Identities, loaded: Option<&super::Loaded>) -> std::io::Result<()> {
+    if let Some(loaded) = loaded
+        && !loaded.catalog.removed_plugins.is_empty()
+    {
+        identities.revoke_plugin_machines(|id, _| {
+            loaded
+                .catalog
+                .removed_plugins
+                .iter()
+                .any(|removed| removed == id)
+        })?;
+    }
+    Ok(())
 }

@@ -41,7 +41,7 @@ interface MachineList {
 
 interface MachineManagement extends MachineList {
   create(options: { name: string; member?: string }): Promise<MachineCreation>;
-  /** Available in an internal server action. Lists all machines owned by this plugin. */
+  /** Available in a server action. Lists all machines owned by this plugin. */
   listAll(): Promise<MachineEntry[]>;
   remove(id: MachineId): Promise<null | Failure<"machineForbidden", null>>;
   waitOnline(
@@ -63,6 +63,7 @@ export type MachineFailure =
   | Failure<"machineOffline", null>
   | Failure<"machineForbidden", null>
   | Failure<"machineLimit", null>
+  | Failure<"serverOnly", { message: string }>
   | Failure<"runnerArtifactMismatch", { plugin: string; message: string }>
   | Failure<"runnerCapabilityUnavailable", RunnerCapability>;
 export interface ActionOptions {
@@ -325,7 +326,23 @@ export type FunctionBuilder<
   definition: FunctionOptions<K, M, F, R, S>,
 ) => BuiltFunction<K, ObjectValue<F>, R, V, S>;
 
-function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallContext): CallerActionContext {
+const serverOnlyMessage = "Machine management and the server address are only available beside the server";
+class ServerOnlyError extends Error {
+  constructor() {
+    super(serverOnlyMessage);
+  }
+}
+
+function actionContext(
+  bridge: HostBridge,
+  auth: AuthContext | null,
+  call: CallContext,
+  on?: ActionTarget,
+): CallerActionContext {
+  const besideServer = async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (bridge.proc) throw new ServerOnlyError();
+    return operation();
+  };
   const machine = requireActionMachine;
   const run =
     (expected: ServerFunctionKind) =>
@@ -338,22 +355,24 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
       });
   return Object.freeze({
     call,
-    ...(bridge.proc
+    ...(on !== undefined && on !== "server"
       ? { machines: Object.freeze(machineList(bridge)) }
       : {
           machines: Object.freeze({
             ...machineList(bridge),
             create: (options: { name: string; member?: string }) =>
-              callHost(bridge, "machines.create", options),
-            listAll: () => callHost(bridge, "machines.listAll", {}),
-            remove: (id: MachineId) => callHost(bridge, "machines.remove", { id }),
+              besideServer(() => callHost(bridge, "machines.create", options)),
+            listAll: () => besideServer(() => callHost(bridge, "machines.listAll", {})),
+            remove: (id: MachineId) => besideServer(() => callHost(bridge, "machines.remove", { id })),
             waitOnline: (id: MachineId, options?: { timeoutMs?: number }) =>
-              callHost(bridge, "machines.waitOnline", {
-                id,
-                ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-              }),
+              besideServer(() =>
+                callHost(bridge, "machines.waitOnline", {
+                  id,
+                  ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+                }),
+              ),
           }),
-          server: Object.freeze({ url: () => callHost(bridge, "server.url", {}) }),
+          server: Object.freeze({ url: () => besideServer(() => callHost(bridge, "server.url", {})) }),
         }),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
@@ -370,7 +389,7 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
     retiring: bridge.retiring,
     proc: bridge.proc ?? machine,
     withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
-      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call))) ?? machine(),
+      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call, on))) ?? machine(),
     crypto: Object.freeze({
       hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
       verifyPassword: (password: string, hash: string) =>
@@ -421,7 +440,7 @@ function builder<
               handler(
                 (kind === "local"
                   ? localContext(host, auth, call)
-                  : actionContext(host, auth, call)) as Parameters<typeof handler>[0],
+                  : actionContext(host, auth, call, definition.on)) as Parameters<typeof handler>[0],
                 input as Parameters<typeof handler>[1],
               ),
           }
@@ -466,7 +485,7 @@ function builder<
           kind === "local"
             ? localContext(host, caller(), call)
             : kind === "action"
-              ? actionContext(host, auth, call)
+              ? actionContext(host, auth, call, definition.on)
               : {
                   call,
                   machines: Object.freeze(machineList(host)),
@@ -496,6 +515,7 @@ function builder<
           return snapshot;
         } catch (error) {
           if (error instanceof NoMachineError) return fail("noMachine", null);
+          if (error instanceof ServerOnlyError) return fail("serverOnly", { message: error.message });
           if (
             kind === "action" &&
             isRemoteFunctionError(error) &&
