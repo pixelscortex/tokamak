@@ -60,3 +60,22 @@ test("ChatGPT: an ID token without chatgpt_plan_type leaves the plan unknown", a
     await company.stop();
   }
 });
+
+test("ChatGPT, later from a stored login: no ID token, the workspace from the account, the plan from the accounts check", async () => {
+  // The map form of /wham/accounts/check, one of the two Codex reads.
+  const company = await answering({
+    accounts: { "ws-1": { account: { account_id: "ws-1", name: "Acme", plan_type: "business" } } },
+    account_ordering: ["ws-1"],
+  });
+  try {
+    expect(
+      await openai.details(company.addresses, { login: { access: "a" }, identity: { workspace: "ws-1" } }),
+    ).toMatchObject({
+      plan: "Business",
+      planKnown: true,
+      identity: { workspace: "ws-1", organization: "Acme" },
+    });
+  } finally {
+    await company.stop();
+  }
+});
