@@ -1,0 +1,19 @@
+packages/server/src/data/README.md
+  s_62d8de3fec7e8a::t_ec805e81c8c3fb 66-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "564333ae66c863f529b4a0ce777967b8c5d86137",
+  "prompts": {},
+  "sessions": {
+    "s_62d8de3fec7e8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68ee70d4-9653-4451-880a-97d966f1069a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
