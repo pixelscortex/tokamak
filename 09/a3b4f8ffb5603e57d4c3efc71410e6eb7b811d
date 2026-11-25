@@ -1,0 +1,21 @@
+plugins/codex/src/server/reports.ts
+  s_bead5d35bc54c0::t_40c34906f11865 9-15,30,79
+plugins/codex/tests/e2e.mjs
+  s_bead5d35bc54c0::t_417eb23318074a 223-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "09a3b4f8ffb5603e57d4c3efc71410e6eb7b811d",
+  "prompts": {},
+  "sessions": {
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
