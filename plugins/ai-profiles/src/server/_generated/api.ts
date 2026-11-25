@@ -5,6 +5,7 @@ type References = {
     readonly "addAccount": ReferenceFromDefinition<typeof import("../manage")["addAccount"]>;
     readonly "checkAgain": ReferenceFromDefinition<typeof import("../manage")["checkAgain"]>;
     readonly "remove": ReferenceFromDefinition<typeof import("../manage")["remove"]>;
+    readonly "signInAccount": ReferenceFromDefinition<typeof import("../manage")["signInAccount"]>;
     readonly "signOut": ReferenceFromDefinition<typeof import("../manage")["signOut"]>;
     readonly "usedBy": ReferenceFromDefinition<typeof import("../manage")["usedBy"]>;
   };
@@ -22,6 +23,7 @@ export const api: References = createApi("ai-profiles", [
   "manage:addAccount",
   "manage:checkAgain",
   "manage:remove",
+  "manage:signInAccount",
   "manage:signOut",
   "manage:usedBy",
   "subscriptions:cancelSignIn",

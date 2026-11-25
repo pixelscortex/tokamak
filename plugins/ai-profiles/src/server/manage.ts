@@ -22,6 +22,13 @@ export const addAccount = action({
     isIdOf("subscriptions", args.id) ? ctx.use(proxy).addAccount(args) : gone("subscription"),
 });
 
+/** Starts a sign-in for one signed-out account (`id` of an account); any other account is refused. */
+export const signInAccount = action({
+  args: { id: v.string() },
+  handler: async (ctx, args) =>
+    isIdOf("accounts", args.id) ? ctx.use(proxy).signInAccount(args) : gone("account"),
+});
+
 /** Signs one provider account out; its login is deleted on the server. */
 export const signOut = mutation({
   args: { id: v.string() },
@@ -45,8 +52,9 @@ export const usedBy = query({
 
 /**
  * Removes the subscription, its accounts and logins (agent-proxy), then takes
- * it out of the profiles that held it, in the same transaction: a failure in
- * either leaves both as they were.
+ * it out of the profiles that held it, in the same transaction. The seam must
+ * throw on failure: a throw rolls back the removal in agent-proxy too, while a
+ * returned failure might not. One returned anyway is passed on, not dropped.
  */
 export const remove = mutation({
   args: { id: v.string() },
@@ -54,7 +62,8 @@ export const remove = mutation({
     if (!isIdOf("subscriptions", id)) return gone("subscription");
     const removed = await ctx.use(proxy).removeSubscription({ id });
     if (isFailure(removed)) return removed;
-    await subscriptionRemoved(ctx, id);
+    const done: unknown = await subscriptionRemoved(ctx, id);
+    if (isFailure(done)) return done;
     return null;
   },
 });

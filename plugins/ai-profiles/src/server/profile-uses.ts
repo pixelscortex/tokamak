@@ -22,7 +22,11 @@ export interface ProfileUse {
   readonly threads: number;
 }
 
-/** The caller's profiles that hold `subscription` (an agent-proxy subscription id). None yet. */
+/**
+ * The caller's profiles that hold `subscription` (an agent-proxy subscription
+ * id). None yet. It must filter by the calling member (`ctx.auth.user.id`):
+ * profiles belong to one person, and another member's must never show.
+ */
 export async function profilesUsing<C extends { db: unknown }>(
   _ctx: C,
   _subscription: string,
@@ -30,7 +34,12 @@ export async function profilesUsing<C extends { db: unknown }>(
   return [];
 }
 
-/** Takes a removed subscription out of the caller's profiles. Nothing to do yet. */
+/**
+ * Takes a removed subscription out of the caller's profiles. Nothing to do yet.
+ * It runs inside `manage:remove`'s transaction and must throw when it fails:
+ * a throw rolls back the removal in agent-proxy as well, a returned failure
+ * would not.
+ */
 export async function subscriptionRemoved<C extends { db: unknown }>(
   _ctx: C,
   _subscription: string,
