@@ -2,7 +2,7 @@
 import ts from "typescript";
 import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import type { PluginDefinition } from "../src/plugin";
+import type { PluginDefinition } from "../src/plugin.ts";
 
 export function readDescriptor(root: string): PluginDefinition | undefined {
   const path = resolve(root, "plugin.ts");
