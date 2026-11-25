@@ -1,0 +1,21 @@
+packages/server/src/actions/runner_upstream.rs
+  s_419b7bad57fe38::t_c6e9160f0acd26 184-185
+packages/server/src/websocket/machine.rs
+  s_419b7bad57fe38::t_17d79506bf01b4 320,324-335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "501a4a1cc0132afe8745a1023295ac67cb25d827",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
