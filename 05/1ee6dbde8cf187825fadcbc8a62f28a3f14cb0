@@ -1,0 +1,19 @@
+packages/server/tests/action-placement.mjs
+  s_419b7bad57fe38::t_e66e12e51cf5c9 217-224,226-233,245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "051ee6dbde8cf187825fadcbc8a62f28a3f14cb0",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
