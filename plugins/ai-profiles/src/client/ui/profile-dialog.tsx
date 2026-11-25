@@ -21,16 +21,25 @@ export function ProfileDialog(props: {
   const [name, setName] = createSignal("");
   const [code, setCode] = createSignal("");
   const [problem, setProblem] = createSignal<{ field?: string; message: string }>();
+  /** Create is off while the call runs, so one press makes one profile. */
+  const [saving, setSaving] = createSignal(false);
   const close = () => {
     setName("");
     setCode("");
     setProblem(undefined);
     props.onClose();
   };
+  /** A refusal or a failed call keeps the dialog and its fields, and says why. */
   async function submit() {
-    const made = await props.create(name(), code());
-    if (failed(made)) setProblem(made.data);
-    else close();
+    if (saving()) return;
+    setSaving(true);
+    try {
+      const made = await props.create(name(), code());
+      if (failed(made)) setProblem(made.data);
+      else close();
+    } finally {
+      setSaving(false);
+    }
   }
   return (
     <Dialog.Root open={props.open} onOpenChange={(open: boolean) => !open && close()}>
@@ -95,7 +104,7 @@ export function ProfileDialog(props: {
           </Show>
           <div class="flex justify-end gap-2">
             <Dialog.Close variant="ghost">Cancel</Dialog.Close>
-            <Button variant="brand" type="submit">
+            <Button variant="brand" type="submit" disabled={saving()}>
               Create
             </Button>
           </div>
