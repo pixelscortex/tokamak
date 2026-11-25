@@ -100,6 +100,18 @@ which need the proxy, TKM-263). The remove confirmation is not drawn: a
 `Dialog` titled "Remove Claude Team, Acme?", what is deleted, the profiles
 that lose it (or "No profile uses it."), "Cancel" and a destructive "Remove".
 
+After review: an account's own "Sign in" signs in that one account
+(`manage:signInAccount`); signing in as another is refused and the dialog keeps
+waiting. Each account's buttons are named with it ("Sign out you@acme.com",
+built from the two texts by id, since `Button`'s `aria-label` is its icon
+label). A failed "Sign out" says why in the details' alert line. An
+add-account sign-in on the cards reads "Awaiting another account". While no
+read of the plan has worked, the title is the product alone ("Claude") and the
+plan line ends "plan unknown"; the card's Check again reads it. The page and
+the details share one watcher (`lib/sign-in-watch.ts`) that tells a sign-in
+finished in another window (a new account, or the named account turning OK)
+from one cancelled there.
+
 ## Where profiles come in (TKM-264)
 
 `src/server/profile-uses.ts` is the one seam: `profilesUsing(ctx, id)` answers
@@ -162,10 +174,20 @@ for the card with the action row. Matched to `feature/tkm-265`.
 
 ## Open questions
 
-- **The details are not a page of their own.** A plugin cannot read a route
-  parameter or navigate, so the details replace the cards on the same page and
-  the shell's Back does not leave them. A `view` route with a parameter and a
-  way to open it would let the details be `/p/ai-profiles/subscription/<id>`.
+- **The details are not a page of their own.** They are window state on the
+  Profiles page (`openSubscription`) until plugins get route parameters: a
+  plugin cannot read one or navigate. So the shell's Back does not leave them,
+  and a reload loses the place (the page opens on the cards). A `view` route
+  with a parameter and a way to open it would let the details be
+  `/p/ai-profiles/subscription/<id>`.
+- **The card's second button is drawn "Refresh usage"** (the layer
+  `Refresh usage · icon sm`) and built as "Check again": it reads the plan,
+  the accounts and the models again. Usage numbers are out of scope (TKM-256);
+  the name follows what it does until usage exists.
+- **Card spacing the drawing does not list:** the drawn action row has a 2 px
+  top offset (`pt-0.5`) on top of the card's gap, and the card's rows are 14
+  apart (`gap-3.5`). Both are off the 4 px scale; the build keeps the card's
+  12 px gap and no extra offset.
 - A second account on another plan is refused (`OtherPlan`). If the owner
   wants mixed plans under one card, the card needs a plan per account.
 - **The sign-in step differs from the drawing.** The drawing puts the paste

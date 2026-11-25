@@ -24,6 +24,7 @@ table; a malformed id, an id of another table, or another member's gets
 | `setEnabled`         | mutation | `{ id, enabled }`                                           | `null`, or `fail("NotFound")`                                  |
 | `renewLogins`        | action   | none                                                        | `{ renewed, signedOut, waiting }`                              |
 | `addAccount`         | action   | `{ id }` of a subscription                                  | `SignInView` with `addTo`, or `fail("NotFound")`               |
+| `signInAccount`      | action   | `{ id }` of an account                                      | `SignInView` with `repairAccount`, or `fail("NotFound")`       |
 | `signOutAccount`     | mutation | `{ id }` of an account                                      | `null`, or `fail("NotFound")`                                  |
 | `checkAgain`         | action   | `{ id }` of a subscription                                  | `SubscriptionView`, or `fail("Unreachable" \| "SignedOut")`    |
 | `removeSubscription` | mutation | `{ id }` of a subscription                                  | `null`, or `fail("NotFound")`                                  |
@@ -44,27 +45,39 @@ account to it. It is refused (`AlreadyAdded`, the sign-in ends) when the
 account is already signed in under this subscription or is under another of
 the member's subscriptions, and (`OtherPlan`, the sign-in keeps waiting) when
 Claude reports another plan for it: the subscription is one plan, so that
-account is added as a subscription of its own. When Claude does not answer the
-plan read, the account is taken and the subscription keeps its plan. An
-account of this subscription that was signed out is signed in again in place.
-New models of the added account join the subscription's list.
+account is added as a subscription of its own. An account of this
+subscription that was signed out is signed in again in place.
+
+**Reads** (`src/server/reads.ts`), one rule for a new subscription, a repair,
+another account and `checkAgain`: a read that failed never overwrites one that
+worked. The plan is stored only when Claude's answer carried a plan field; until
+then it is empty, the plan is unknown, and an unknown plan fits any account
+(the first known read fills it in). Each account keeps the models its own read
+returned (stored only when the read returned some); the subscription's
+`models` is the union of its accounts' lists, recomputed whenever one changes,
+and signing an account out does not shrink it. The per-account lists stay
+internal, for the proxy (TKM-263) to skip an account that lacks a model.
 
 `SubscriptionView.status` is `ok` while at least one account is signed in (the
 proxy can still use the subscription) and `signed-out` only when every account
 is; each entry of `accounts` has its own `id`, `status` and `reason`.
 
-`signOutAccount` deletes the account's login and marks it "Signed out"; the
-row stays and `startSignIn` with `repair` (or `addAccount` with the same
-account) signs it in again in place. `setEnabled(false)` keeps every login and
-keeps renewing them; the proxy (TKM-263) will skip a subscription that is off
-and an account that is signed out when it chooses one. `checkAgain` takes a
-fresh login of each signed-in account (`logins:fresh`, with its renewal rules)
-and reads the plan, the email and organisation, and the models again; only
-what Claude answered replaces what is stored, and when it answered nothing the
-result is `Unreachable` and nothing changes. `removeSubscription` deletes the
+`signOutAccount` deletes the account's login here and marks it "Signed out"
+(the login is not revoked at Claude); the row stays. `signInAccount` starts a
+sign-in that names that one account (`repairAccount`): finishing it as any
+other account is refused with `OtherAccount` and it keeps waiting. A
+`startSignIn` with `repair` and no account named takes only an account of the
+subscription that is signed out, and refuses one that is signed in.
+`setEnabled(false)` keeps every login and keeps renewing them; the proxy
+(TKM-263) will skip a subscription that is off and an account that is signed
+out when it chooses one. `checkAgain` takes a fresh login of each signed-in
+account (`logins:fresh`, with its renewal rules) and reads the plan, the email
+and organisation, and the models again; when Claude answered nothing the result
+is `Unreachable` and nothing changes. `removeSubscription` deletes the
 subscription, its accounts, their logins and any sign-in waiting to repair it
-or add to it, in one transaction. It knows nothing of profiles: the caller
-updates its own.
+or add to it, in one transaction. Anything that held it is the caller's to
+update. A renewal that Claude answers after the login was deleted (signed out
+or removed meanwhile) keeps nothing, and `logins:fresh` returns null.
 
 ## Sign-in
 
