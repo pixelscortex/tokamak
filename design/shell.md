@@ -69,6 +69,13 @@ TKM-295), which `ai-profiles` uses for both companies' returns:
 IPv4 and, when supported, IPv6 loopback (ports 54545 for Claude and 1455 for
 ChatGPT only, up to 15 minutes). `sign_in_return_cancel` takes `port` and
 `requestId`, so cleanup cannot cancel a replacement listener.
+Other connections to the port (a browser's preconnect that sends nothing, a
+wrong path or state, a failed accept) never end the wait: each gets a 404 or is
+dropped, and one the browser did not close first is closed with a reset, since
+a close started by the listener leaves the port in TIME_WAIT (30 s on macOS)
+and the next listen without `SO_REUSEADDR` would answer `busy`. `busy` means
+only that another program, or such a leftover, holds the port; the caller tries
+again later.
 `sign_in_open_browser` takes an HTTPS `url` and opens it in the system
 browser; the Windows opener is unverified. Every installed plugin's code in the
 main window can use all three commands to open any HTTPS page, listen on

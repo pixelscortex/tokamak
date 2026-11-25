@@ -17,6 +17,9 @@ use tokio::{
 
 const LIFETIME: Duration = Duration::from_secs(15 * 60);
 const REQUEST_LIMIT: Duration = Duration::from_secs(1);
+// After a failed accept (a connection reset before it was taken, no free descriptor), keep the
+// port and try again shortly instead of ending the wait.
+const ACCEPT_PAUSE: Duration = Duration::from_millis(50);
 const HEADER_LIMIT: usize = 8192;
 const PAGE: &str = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Tokamak</title><p>Signed in. You can close this tab and go back to Tokamak.</p></html>";
 
@@ -194,8 +197,13 @@ async fn receive(
     state: &str,
 ) -> io::Result<(TcpStream, String)> {
     loop {
-        let mut stream = accept(ipv4, ipv6).await?;
+        let Ok(mut stream) = accept(ipv4, ipv6).await else {
+            tokio::time::sleep(ACCEPT_PAUSE).await;
+            continue;
+        };
         let Ok(Ok(line)) = timeout(REQUEST_LIMIT, request_line(&mut stream)).await else {
+            // A connection that sent nothing in time, such as a browser's preconnect, or a broken one.
+            abandon(&stream);
             continue;
         };
         if let Some(target) = matching_target(&line, path, state) {
@@ -236,12 +244,23 @@ async fn reply(stream: &mut TcpStream, matched: bool) {
         "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    let _ = timeout(REQUEST_LIMIT, async {
+    let closed = timeout(REQUEST_LIMIT, async {
         stream.write_all(response.as_bytes()).await?;
         // Let the browser close first so the local port can be reused without SO_REUSEADDR.
         tokio::io::copy(stream, &mut tokio::io::sink()).await
     })
     .await;
+    if !matches!(closed, Ok(Ok(_))) {
+        abandon(stream);
+    }
+}
+
+/// Closes a connection the browser did not close first with a reset instead of a FIN. A close
+/// started here leaves the connection in TIME_WAIT on this port for 2 × MSL (30 s on macOS), and
+/// while it lasts the next bind without SO_REUSEADDR fails with "address in use": the page's next
+/// listen for the same sign-in would be told "busy" although nothing else holds the port.
+fn abandon(stream: &TcpStream) {
+    let _ = stream.set_zero_linger();
 }
 
 fn matching_target<'a>(line: &'a str, path: &str, state: &str) -> Option<&'a str> {
@@ -597,5 +616,77 @@ mod tests {
             "expired"
         );
         assert!(bind_loopback(port).is_ok());
+    }
+
+    /// Connections the listener gives up on: one that sends nothing (a browser's preconnect),
+    /// one that sends half a request, and a 404 whose client keeps the connection open.
+    async fn strays(port: u16) {
+        let idle = connect_when_ready(port).await;
+        let mut partial = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        partial.write_all(b"GET /call").await.unwrap();
+        assert_dropped(idle).await;
+        assert_dropped(partial).await;
+        let mut open = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        open.write_all(b"GET /favicon.ico HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        // Read the 404 but never close: the listener closes after its wait.
+        let mut answer = vec![0; 12];
+        open.read_exact(&mut answer).await.unwrap();
+        assert_eq!(&answer, b"HTTP/1.1 404");
+        // The rest of the answer, then the listener's close (a reset now).
+        // Within the wait, whether as a FIN or a reset.
+        let _ = timeout(Duration::from_secs(3), open.read_to_end(&mut Vec::new()))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_listener_stays_up_across_stray_connections_and_time() {
+        let returns = Returns::default();
+        let port = available_port();
+        let clients = async {
+            strays(port).await;
+            // Minutes pass in the real sign-in; here, longer than every wait inside the listener.
+            sleep(REQUEST_LIMIT * 2).await;
+            strays(port).await;
+            let address = (Ipv4Addr::LOCALHOST, port).into();
+            assert!(
+                request(address, "GET", TARGET)
+                    .await
+                    .starts_with("HTTP/1.1 200")
+            );
+        };
+        let (result, ()) = tokio::join!(returns.listen(port, PATH, STATE, "one", WAIT), clients);
+        assert_eq!(result.unwrap()["status"], "returned");
+    }
+
+    #[tokio::test]
+    async fn a_listen_after_the_listener_dropped_strays_is_not_busy() {
+        // Each connection the listener gave up on used to stay in TIME_WAIT on the port, so the
+        // page's next listen for the same sign-in was "busy" for 30 s on macOS.
+        let returns = Returns::default();
+        let port = available_port();
+        let restart = async {
+            strays(port).await;
+            returns.stop(port, "one".into());
+        };
+        let (first, ()) = tokio::join!(returns.listen(port, PATH, STATE, "one", WAIT), restart);
+        assert_eq!(first.unwrap()["status"], "cancelled");
+        let clients = async {
+            let address = (Ipv4Addr::LOCALHOST, port).into();
+            connect_when_ready(port).await;
+            assert!(
+                request(address, "GET", TARGET)
+                    .await
+                    .starts_with("HTTP/1.1 200")
+            );
+        };
+        let (second, ()) = tokio::join!(returns.listen(port, PATH, STATE, "two", WAIT), clients);
+        assert_eq!(second.unwrap()["status"], "returned");
     }
 }
