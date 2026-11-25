@@ -28,7 +28,9 @@ const pro: Subscription = {
   plan: "Pro",
   enabled: true,
   status: "ok",
-  accounts: [{ email: "you@example.test", organization: "Fake Org", status: "ok" }],
+  accounts: [
+    { id: "agent-proxy/accounts:a1", email: "you@example.test", organization: "Fake Org", status: "ok" },
+  ],
   models: [{ id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" }],
   createdAt: 1,
 };
