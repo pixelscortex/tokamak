@@ -72,7 +72,12 @@ function mount() {
     async mutation(name, args) {
       return name.endsWith(":cancelSignIn") ? cancel(args) : null;
     },
-    subscribe(_name, _args, onEvent) {
+    subscribe(name, _args, onEvent) {
+      // The Profiles section's own list (TKM-264): none here.
+      if (name === "ai-profiles/profiles:list") {
+        queueMicrotask(() => onEvent({ value: [] }));
+        return () => {};
+      }
       publish = () => onEvent({ value: structuredClone(listed) as unknown as JsonValue });
       queueMicrotask(publish);
       return () => {};
