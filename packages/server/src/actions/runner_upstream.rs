@@ -1,4 +1,6 @@
-use super::{ActionContext, Loaded, OpRegistry, RunnerSlot, Supervisor, operations};
+use super::{
+    ActionContext, Loaded, OpRegistry, RunnerSlot, Supervisor, current_plugins, operations,
+};
 use crate::{
     identity::CallNote,
     plugins::{
@@ -31,6 +33,7 @@ struct Scope {
     process: Arc<Supervisor>,
     note: CallNote,
     runner: Arc<RunnerSlot>,
+    lifetime: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl ActionOperations {
@@ -51,6 +54,7 @@ impl ActionOperations {
                 process,
                 note: context.note,
                 runner: context.runner,
+                lifetime: context.lifetime,
             })
         });
         Self {
@@ -138,6 +142,7 @@ impl RunnerActionUpstream {
             ActionContext {
                 note,
                 runner: scope.runner.clone(),
+                lifetime: scope.lifetime.clone(),
             },
         )
         .map_err(|error| error.to_string())?;
@@ -151,15 +156,11 @@ impl RunnerActionUpstream {
 
 impl Scope {
     async fn current(&self) -> Result<Arc<Loaded>, String> {
-        let (reply, wait) = tokio::sync::oneshot::channel();
-        self.commands
-            .upgrade()
-            .ok_or("Server closed")?
-            .try_send(Command::CurrentPlugins(reply))
-            .map_err(|error| error.to_string())?;
-        wait.await
-            .map_err(|_| "Server closed")?
-            .ok_or_else(|| "Plugin catalog unavailable".into())
+        current_plugins(
+            &self.commands,
+            self.lifetime.as_ref().ok_or("Missing Runner scope")?,
+        )
+        .await
     }
 
     fn compatible_declaration(&self, current: &Loaded, declaration: &ContractDeclaration) -> bool {

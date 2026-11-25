@@ -1,5 +1,5 @@
 use super::*;
-use crate::actions::{ActionContext, Placement, resolve};
+use crate::actions::{Placement, resolve};
 use crate::identity::CallNote;
 
 pub(super) struct ActionCall {
@@ -70,16 +70,14 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
+        let (context, guard) = destination.context(note, self.runner.clone());
         let ops = match crate::actions::operations(
             self.commands.clone(),
             self.plugins.clone(),
             owner.clone(),
             environment.clone(),
             process.clone(),
-            ActionContext {
-                note,
-                runner: self.runner.clone(),
-            },
+            context,
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -88,6 +86,7 @@ impl Coordinator {
             }
         };
         let invocation = async move {
+            let _guard = guard;
             destination
                 .invoke(&process, source, local_name, args, ops)
                 .await
@@ -186,9 +185,16 @@ impl Coordinator {
         &self,
         call: &crate::actions::NestedCall,
     ) -> Result<crate::identity::CallNote, String> {
+        // An attached invocation owns this capability through its retirement grace.
+        let attached = match &call.lifetime {
+            Some(lifetime) if lifetime.is_cancelled() => return Err("Action cancelled".into()),
+            Some(_) => true,
+            None => false,
+        };
         let (kind, validator) = match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner))
-                if Arc::ptr_eq(current, generation)
+                if (attached && current.catalog.plugins.contains_key(owner))
+                    || Arc::ptr_eq(current, generation)
                     || current.same_action_source(generation, owner) =>
             {
                 let target = current.target(
@@ -198,7 +204,8 @@ impl Coordinator {
                     call.contract.as_deref(),
                 )?;
 
-                if !Arc::ptr_eq(current, generation)
+                if !attached
+                    && !Arc::ptr_eq(current, generation)
                     && !current.same_plugin(generation, &target.owner)
                 {
                     return Err(
