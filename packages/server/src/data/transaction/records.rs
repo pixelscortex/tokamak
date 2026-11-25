@@ -113,16 +113,16 @@ impl Transaction {
 
             let rid = id.record();
 
-            let core = &tx.state.storage;
-            tx.inner
-                .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
-                .await?;
-
             let row = Document {
                 id: id.clone(),
                 creation_time: millis,
                 fields,
             };
+            Box::pin(tx.validate_references(&row)).await?;
+            let core = &tx.state.storage;
+            tx.inner
+                .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
+                .await?;
             tx.indexes(None, Some(&row)).await?;
             tx.inner
                 .put_record(
@@ -186,6 +186,7 @@ impl Transaction {
                 fields,
             };
 
+            Box::pin(tx.validate_references(&persisted)).await?;
             let rid = id.record();
 
             let core = &tx.state.storage;
@@ -217,24 +218,32 @@ impl Transaction {
         let result = async {
             tx.ready(true)?;
 
-            let Some(old) = tx.get(id).await? else {
-                return Ok(());
-            };
             tx.catalog(false)?;
-
-            let rid = id.record();
-
-            let core = &tx.state.storage;
-            tx.indexes(Some(&old), None).await?;
-            tx.inner
-                .del_record(core.ns, core.db, &rid.table, &rid.key)
-                .await?;
-            tx.written.insert(id.table().clone());
-            tx.record(Some(&old), None);
+            let mut pending = vec![id.clone()];
+            while let Some(id) = pending.pop() {
+                if Box::pin(tx.delete_record(&id)).await? {
+                    pending.extend(Box::pin(tx.referring_rows(&id)).await?);
+                }
+            }
 
             Ok(())
         }
         .await;
         mutation.finish(result)
+    }
+
+    async fn delete_record(&mut self, id: &Id) -> Result<bool> {
+        let Some(old) = self.get(id).await? else {
+            return Ok(false);
+        };
+        let rid = id.record();
+        let core = &self.state.storage;
+        self.indexes(Some(&old), None).await?;
+        self.inner
+            .del_record(core.ns, core.db, &rid.table, &rid.key)
+            .await?;
+        self.written.insert(id.table().clone());
+        self.record(Some(&old), None);
+        Ok(true)
     }
 }

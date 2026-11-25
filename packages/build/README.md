@@ -86,6 +86,11 @@ named imports also carry references. No runtime helpers or handlers cross the
 boundary. Public APIs are inspected
 statically and are never executed by the builder.
 
+`plugin:<id>/tables` exposes generated handles for the tables in a sibling
+plugin's server schema. Add the owner to `depends` to use one in `v.ref`. The
+builder makes a local type copy in `.tokamak/types/<id>/tables.d.ts` and emits
+only qualified table names at runtime. Do not check in or hand edit the copy.
+
 Within a plugin, use `src/server/_generated/api.ts` from the window. Its runtime
 references contain only public names. The window build refuses imports of other
 server code, including `_generated/internal.ts`. Internal definitions cannot be

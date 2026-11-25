@@ -1,5 +1,5 @@
-// Schemas install index metadata and provide authoring types. Field validation
-// and migrations remain deferred; declaring fields does not validate writes.
+// Schemas provide authoring types and install index and reference metadata.
+// General field validation and migrations remain deferred.
 import { assertTable } from "./values";
 import type { Fields, ObjectValue, ValidatorDescription } from "./validators";
 import { v } from "./validators";

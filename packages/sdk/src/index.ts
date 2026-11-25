@@ -6,7 +6,15 @@ export type { Contract, ContractPlace, Provider } from "./internal/contracts";
 
 export { definePlugin } from "./plugin";
 export type { PluginDefinition } from "./plugin";
-export type { Validator, ValidatorDescription, Fields, Infer, ObjectValue } from "./validators";
+export type {
+  Validator,
+  ValidatorDescription,
+  TableReference,
+  TableDocument,
+  Fields,
+  Infer,
+  ObjectValue,
+} from "./validators";
 
 export { defineSchema, defineTable, schemaMetadata } from "./schema";
 export type {

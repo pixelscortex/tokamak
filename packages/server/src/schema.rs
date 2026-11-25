@@ -1,7 +1,7 @@
-//! Bundle schema registry. Field descriptions are metadata, not write validators.
+//! Bundle schema registry. Indexes and typed references are enforced by the data layer.
 use crate::{
     Error,
-    data::{DataSpace, Table, Transaction},
+    data::{DataSpace, Reference, Table, Transaction},
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -133,6 +133,7 @@ impl Schema {
         space: &DataSpace,
         startup: bool,
     ) -> Result<Option<String>, Error> {
+        self.apply_references(tx, space)?;
         let Some(reason) = self.apply_indexes(tx, space).await? else {
             return Ok(None);
         };
@@ -149,6 +150,53 @@ impl Schema {
             return Err(invalid(incompatibility));
         }
         Ok(Some(reason))
+    }
+
+    fn apply_references(&self, tx: &mut Transaction, space: &DataSpace) -> Result<(), Error> {
+        let map_error = |error: crate::data::Error| invalid(error.to_string());
+        let mut references = Vec::new();
+        for (table, definition) in &self.tables {
+            let Some(fields) = definition.description["fields"].as_object() else {
+                continue;
+            };
+            for (field, description) in fields {
+                let optional = description["kind"] == "optional";
+                let description = if optional {
+                    &description["inner"]
+                } else {
+                    description
+                };
+                if description["kind"] != "ref" && contains_ref(description) {
+                    return Err(invalid(format!(
+                        "Ref {table}.{field} must be a top-level table field"
+                    )));
+                }
+                if description["kind"] != "ref" {
+                    continue;
+                }
+                let (owner, target) = description["table"]
+                    .as_str()
+                    .and_then(|table| table.rsplit_once('.'))
+                    .ok_or_else(|| {
+                        invalid(format!(
+                            "Invalid ref {table}.{field}: expected plugin.table"
+                        ))
+                    })?;
+                let target_space = DataSpace::plugin(owner).map_err(map_error)?;
+                references.push(Reference {
+                    source: space
+                        .table(&Table::new(table).map_err(map_error)?)
+                        .map_err(map_error)?,
+                    field: field.clone(),
+                    target: target_space
+                        .table(&Table::new(target).map_err(map_error)?)
+                        .map_err(map_error)?,
+                    space: target_space,
+                    optional,
+                });
+            }
+        }
+        tx.set_references(space, references).map_err(map_error)
     }
 
     async fn apply_indexes(
@@ -192,6 +240,21 @@ impl Schema {
         // Index edits never request a reset. Keep the startup reset path for
         // schema incompatibilities that cannot be applied to the stored data.
         Ok(None)
+    }
+}
+
+fn contains_ref(description: &Value) -> bool {
+    match description["kind"].as_str() {
+        Some("ref") => true,
+        Some("array") => contains_ref(&description["item"]),
+        Some("optional") => contains_ref(&description["inner"]),
+        Some("object") => description["fields"]
+            .as_object()
+            .is_some_and(|fields| fields.values().any(contains_ref)),
+        Some("union") => description["members"]
+            .as_array()
+            .is_some_and(|members| members.iter().any(contains_ref)),
+        _ => false,
     }
 }
 

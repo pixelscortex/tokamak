@@ -33,7 +33,7 @@ Reads track whole tables, exact IDs (including missing IDs), or conjunctions of
 JSON equality clauses (including empty query results). Post-commit footprints
 contain both old/new row images, so moves and deletes invalidate correctly.
 Numeric equality and missing-versus-null follow the SDK's existing semantics.
-Field schema assertions are not evaluated. Plugin schemas install declared
+Plugin schemas install declared
 ordinary/unique indexes on physical tables in the plugin's DataSpace. Indexed
 JS queries track whole tables conservatively, including empty/limited results;
 unindexed equality queries retain their existing precise dependencies.
@@ -61,7 +61,12 @@ The loader validates declarations and installs indexes before publishing a
 plugin generation, in the same transaction as grant records. Aggregate metadata
 keys schemas by plugin ID, keeping logical table names separate. The legacy
 single-bundle loader applies the same registry in its selected DataSpace.
-Field descriptions travel as metadata; writes do not enforce them (TKM-92).
+General field descriptions travel as metadata (TKM-92). For a typed ref,
+inserts and updates check the target ID and confirm the row exists. Deleting a
+target uses the normal indexed record delete path for every matching source row
+in the same transaction. The reference registry is staged alongside indexes.
+Reference writes and target deletes take the catalog write gate to prevent a
+concurrent snapshot from leaving a dangling ref.
 
 Repeated identical declarations are no-ops. At startup and reload, the server
 fills new indexes from stored rows, replaces changed definitions under the same

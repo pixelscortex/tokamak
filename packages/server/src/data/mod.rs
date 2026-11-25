@@ -20,6 +20,7 @@ pub use changes::{ReadSet, RecordChange, json_equal};
 pub use query::Query;
 pub use space::{DataSpace, json_object};
 pub use surrealdb_types::{Object, SurrealValue, Value};
+pub(crate) use transaction::Reference;
 pub use transaction::Transaction;
 pub use types::{Document, Error, Id, Order, Result, Table};
 

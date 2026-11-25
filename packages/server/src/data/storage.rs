@@ -2,7 +2,7 @@
 //! Catalog IDs are resolved once at open; every application operation afterwards
 //! shares its caller's storage transaction and snapshot.
 use std::sync::{
-    Arc,
+    Arc, RwLock as SyncRwLock,
     atomic::{AtomicU64, Ordering},
 };
 use surrealdb_datastore::{
@@ -23,6 +23,7 @@ pub(super) struct StorageCore {
     pub catalog_gate: Arc<RwLock<()>>,
     pub catalog_epoch: AtomicU64,
     pub write_epoch: AtomicU64,
+    pub references: SyncRwLock<super::transaction::References>,
 }
 
 impl StorageCore {
@@ -78,6 +79,7 @@ impl StorageCore {
                 catalog_gate: Arc::new(RwLock::new(())),
                 catalog_epoch: AtomicU64::new(0),
                 write_epoch: AtomicU64::new(0),
+                references: SyncRwLock::default(),
             }),
             Err(error) => {
                 // A failed open must release the disk lock too. Retain both

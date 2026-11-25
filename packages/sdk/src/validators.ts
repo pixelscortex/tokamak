@@ -7,11 +7,20 @@ import type { Id, JsonValue } from "./values";
 export type ValidatorDescription =
   | { kind: "string" | "number" | "boolean" | "null" | "any" }
   | { kind: "literal"; value: string | number | boolean | null }
-  | { kind: "id"; table: string }
+  | { kind: "id" | "ref"; table: string }
   | { kind: "array"; item: ValidatorDescription }
   | { kind: "optional"; inner: ValidatorDescription }
   | { kind: "object"; fields: Record<string, ValidatorDescription> }
   | { kind: "union"; members: ValidatorDescription[] };
+
+declare const tableReference: unique symbol;
+
+/** Generated table handle. Its document type is erased at runtime. */
+export interface TableReference<Table extends string, Fields extends object = object> {
+  readonly qualifiedName: Table;
+  readonly [tableReference]: Fields & { _id: Id<Table>; _creationTime: number };
+}
+export type TableDocument<T extends TableReference<string>> = T[typeof tableReference];
 
 export interface Validator<T, Optional extends boolean = false> {
   readonly description: ValidatorDescription;
@@ -69,6 +78,9 @@ export const v = {
   id<T extends string>(table: T): Validator<Id<T>> {
     assertTable(table);
     return validator({ kind: "id", table });
+  },
+  ref<T extends string>(table: TableReference<T>): Validator<Id<T>> {
+    return validator({ kind: "ref", table: table.qualifiedName });
   },
   array<T>(item: Validator<T>): Validator<T[]> {
     return validator({ kind: "array", item: item.description });
@@ -165,6 +177,9 @@ function validateScalar(description: ValidatorDescription, value: unknown, path:
     case "literal":
       if (value !== description.value) fail(JSON.stringify(description.value));
       return;
+    case "ref":
+      validateRef(description.table, value, path);
+      return;
     case "id":
       try {
         assertId(value, description.table);
@@ -173,4 +188,17 @@ function validateScalar(description: ValidatorDescription, value: unknown, path:
       }
       return;
   }
+}
+
+function validateRef(qualified: string, value: unknown, path: string): void {
+  const dot = qualified.lastIndexOf(".");
+  const owner = qualified.slice(0, dot);
+  const table = qualified.slice(dot + 1);
+  try {
+    assertId(value, table);
+    if (value.startsWith(`${owner}/`)) return;
+  } catch {
+    // Report the fully qualified table for invalid and mismatched IDs.
+  }
+  throw new Error(`${path}: expected id of table ${qualified}`);
 }

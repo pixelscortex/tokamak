@@ -19,7 +19,9 @@ import { generated, definitionInfo, pluginCompilerOptions, runtimeExportNames } 
 
 import { contractDeclarations, importedContractEntry } from "./contracts.mjs";
 
-const specifier = /^plugin:([a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)(?:\/(server|client|contracts))?$/;
+import { tableDeclarations, tableReferences, tableReferenceSource } from "./table-references.mjs";
+
+const specifier = /^plugin:([a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)(?:\/(server|client|contracts|tables))?$/;
 export function parsePluginSpecifier(text) {
   const match = specifier.exec(text);
   if (!match) return;
@@ -109,6 +111,8 @@ function provider(root, id) {
             folder,
             existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
           );
+  if (side === "tables")
+    return { folder, entry: resolve(serverDirectory(folder), "schema.ts"), side, id: reference.id };
   if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);
   return { folder, entry, side, id: reference.id };
 }
@@ -156,6 +160,10 @@ function publicReferences(folder, entry) {
 
 export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   const target = provider(root, id);
+  if (target.side === "tables")
+    return tableReferenceSource(
+      tableReferences(target.folder, target.id, configuration(target.entry).options),
+    );
   if (target.side === "contracts")
     return (
       'import { contractReference } from "@tokamak/sdk/internal/contracts";\n' +
@@ -182,12 +190,17 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   );
 }
 
-function declarePlugin(root, id, declared) {
+function declarePlugin(root, id, declared, depends) {
   if (declared.has(id)) return;
   declared.add(id);
   const target = provider(root, id);
   const path = resolve(generated(root), target.id, `${target.side}.d.ts`);
   mkdirSync(dirname(path), { recursive: true });
+  if (target.side === "tables") {
+    const tables = tableReferences(target.folder, target.id, configuration(target.entry).options);
+    writeFileSync(path, tableDeclarations(target.id, tables, Object.hasOwn(depends ?? {}, target.id)));
+    return;
+  }
   const parts = resolve(dirname(target.entry), "_generated/components.d.ts");
   const entry = JSON.stringify(target.side === "client" && existsSync(parts) ? parts : target.entry);
   if (target.side === "contracts") {
@@ -219,11 +232,11 @@ function declarePlugin(root, id, declared) {
   );
   // Public API types can themselves depend on other sanctioned public types.
   // Materialize that type graph in the consumer; no provider code is emitted.
-  for (const dependency of imports) declarePlugin(root, dependency, declared);
+  for (const dependency of imports) declarePlugin(root, dependency, declared, depends);
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root) {
+export function checkPluginImports(root, depends) {
   root = resolve(root);
   const declared = new Set();
   function checkFile(path) {
@@ -237,7 +250,7 @@ export function checkPluginImports(root) {
         assertWindowSide(path, id);
       if (id.startsWith("plugin:")) {
         try {
-          declarePlugin(root, id, declared);
+          declarePlugin(root, id, declared, depends);
         } catch (error) {
           throw new Error(`${diagnostic(path, id).message} ${error.message}`);
         }

@@ -14,6 +14,9 @@ use surrealdb_datastore::Transaction as StorageTransaction;
 
 mod indexes;
 mod records;
+mod references;
+pub(crate) use references::Reference;
+pub(super) use references::References;
 mod savepoints;
 
 // Hold the catalog stable from a writer's first mutation through its outcome.
@@ -68,6 +71,7 @@ pub struct Transaction {
     epochs: (u64, u64),
     catalog_guard: Option<CatalogGuard>,
     catalog_changed: bool,
+    references: Option<References>,
 }
 
 impl Transaction {
@@ -88,6 +92,7 @@ impl Transaction {
             epochs,
             catalog_guard: None,
             catalog_changed: false,
+            references: None,
         }
     }
 
@@ -215,6 +220,9 @@ impl Transaction {
         // gate, without an await, so snapshots cannot miss committed changes.
         let core = &self.state.storage;
 
+        if let Some(references) = self.references {
+            *core.references.write().expect("references") = references;
+        }
         if self.catalog_changed {
             core.catalog_epoch.fetch_add(1, Ordering::Release);
         }
