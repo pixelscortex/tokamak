@@ -213,3 +213,155 @@ fn rejects_asset_symlinks_outside_artifact() {
             .contains("symlink")
     );
 }
+
+fn reference_generation(catalog: Catalog, target: &str) -> Loaded {
+    let inspected = [
+        ("owner", json!({"tables":{"items":{}}})),
+        (
+            "dependent",
+            json!({"tables":{"links":{"description":{
+                "kind":"object", "fields":{"item":{"kind":"ref","table":target}}
+            }}}}),
+        ),
+    ]
+    .into_iter()
+    .filter(|(id, _)| catalog.plugins.contains_key(*id))
+    .map(|(id, schema)| {
+        (
+            id.to_owned(),
+            crate::service::InspectedBundle {
+                descriptor: json!({"schema":schema}),
+                kinds: BTreeMap::new(),
+                visibility: BTreeMap::new(),
+            },
+        )
+    })
+    .collect();
+
+    Loaded {
+        catalog,
+        inspected,
+        targets: BTreeMap::new(),
+        descriptor: Value::Null,
+        catalog_text: String::new(),
+        skipped: BTreeMap::new(),
+        action_sources: BTreeMap::new(),
+        contracts: BTreeMap::new(),
+    }
+}
+
+fn reference_catalog(root: &Path, depends: Value) -> Catalog {
+    write(root, "owner", json!({"id":"owner","version":"1.0.0"}));
+    write(
+        root,
+        "dependent",
+        json!({"id":"dependent","version":"1.0.0","depends":depends}),
+    );
+    Catalog::read(root).unwrap()
+}
+
+#[tokio::test]
+async fn installed_schemas_cannot_reference_undeclared_targets() {
+    use crate::data::{Database, Storage};
+
+    let root = scratch();
+    let mut database = Database::open(Storage::Memory).await.unwrap();
+    for (depends, target, reason) in [
+        (json!({}), "owner.items", "the owner must be in depends"),
+        (json!({}), "tokamak.host.grants", "the host is reserved"),
+        (
+            json!({"owner":"*"}),
+            "owner.missing",
+            "the owner does not declare that table",
+        ),
+    ] {
+        let mut loaded = reference_generation(reference_catalog(&root.0, depends), target);
+        let error = loaded
+            .record_startup_grants(&database)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!(
+                "Plugin dependent cannot reference {target}: {reason}"
+            )),
+            "{error}"
+        );
+    }
+    database.close().await.unwrap();
+}
+
+async fn seed_ref_rows(database: &crate::data::Database) -> (crate::data::Id, crate::data::Id) {
+    use crate::data::{Table, json_object};
+
+    let owner = DataSpace::plugin("owner").unwrap();
+    let items = owner.table(&Table::new("items").unwrap()).unwrap();
+    let dependent = DataSpace::plugin("dependent").unwrap();
+    let links = dependent.table(&Table::new("links").unwrap()).unwrap();
+
+    let mut tx = database.begin().await.unwrap();
+    let item = tx.insert(&items, Default::default()).await.unwrap();
+    let value = json_object(&json!({"item": owner.present_id(&item).unwrap()})).unwrap();
+    let link = tx.insert(&links, value).await.unwrap();
+    tx.commit().await.unwrap();
+
+    (item, link)
+}
+
+#[tokio::test]
+async fn resetting_schema_cascades_through_the_normal_delete_path() {
+    use crate::data::{Database, Storage};
+
+    let root = scratch();
+    let store = tempfile::tempdir().unwrap();
+    let storage = || Storage::Disk(store.path().join("store"));
+    let mut database = Database::open(storage()).await.unwrap();
+    let (item, link) = seed_ref_rows(&database).await;
+    database.close().await.unwrap();
+
+    let mut database = Database::open(storage()).await.unwrap();
+    let mut loaded = reference_generation(
+        reference_catalog(&root.0, json!({"owner":"*"})),
+        "owner.items",
+    );
+    assert_eq!(loaded.catalog.order, ["owner", "dependent"]);
+    loaded.record_startup_grants(&database).await.unwrap();
+    loaded
+        .reset_startup_schema(&database, "owner", "incompatible owner schema")
+        .await
+        .unwrap();
+
+    let mut read = database.read_only().await.unwrap();
+    assert!(read.get(&item).await.unwrap().is_none());
+    assert!(read.get(&link).await.unwrap().is_none());
+    read.commit().await.unwrap();
+    database.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn reload_clears_references_of_a_removed_plugin() {
+    use crate::data::{Database, Storage};
+
+    let root = scratch();
+    let mut database = Database::open(Storage::Memory).await.unwrap();
+    let mut previous = reference_generation(
+        reference_catalog(&root.0, json!({"owner":"*"})),
+        "owner.items",
+    );
+    previous.record_startup_grants(&database).await.unwrap();
+    let (item, link) = seed_ref_rows(&database).await;
+
+    std::fs::rename(root.0.join("dependent"), root.0.join(".disabled")).unwrap();
+    let mut current = reference_generation(Catalog::read(&root.0).unwrap(), "owner.items");
+    assert_eq!(current.catalog.order, ["owner"]);
+    current
+        .record_grants(&database, Some(&previous))
+        .await
+        .unwrap();
+
+    let mut tx = database.begin().await.unwrap();
+    tx.delete(&item).await.unwrap();
+    assert!(tx.get(&link).await.unwrap().is_some());
+    tx.commit().await.unwrap();
+    database.close().await.unwrap();
+}

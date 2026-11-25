@@ -69,6 +69,7 @@ try {
   assert.deepEqual(await linked(id), [first, second].sort());
 
   assert.deepEqual(await leafIds(), [deletedLeaf, keptLeaf].sort());
+  await assert.rejects(client.query(leaves.hiddenIndex, {}), /the requested index does not exist/);
 
   await client.mutation(items.remove, { id, undo: false });
   assert.deepEqual(await ownerIds(), [unrelated]);

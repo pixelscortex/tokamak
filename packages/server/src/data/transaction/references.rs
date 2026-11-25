@@ -103,17 +103,24 @@ impl Transaction {
             return Err(Error::Invalid("referenced row does not exist"));
         }
 
-        // A same-value write makes a concurrent delete conflict on this key.
-        self.inner
-            .set_record(core.ns, core.db, &rid.table, &rid.key, record)
-            .await?;
+        self.write_ref_guard(id).await
+    }
+
+    async fn write_ref_guard(&self, id: &Id) -> Result<()> {
+        // Keep this key outside the datastore's catalog and record keyspaces.
+        let key = format!("tokamak/ref-guard/v1\0{id}");
+        self.inner.set(key.as_bytes().into(), vec![0]).await?;
         Ok(())
     }
 
     pub(super) async fn referring_rows(&mut self, id: &Id) -> Result<Vec<Id>> {
         let incoming = self.references_matching(|reference| &reference.target == id.table());
-        let mut ids = Vec::new();
+        if incoming.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.write_ref_guard(id).await?;
 
+        let mut ids = Vec::new();
         for reference in incoming {
             let value = reference.space.present_id(id)?;
             let rows = self

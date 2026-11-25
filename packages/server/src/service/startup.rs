@@ -307,7 +307,21 @@ async fn initialize_standalone_schema(
         .await
         .map_err(|e| Error::Invalid(e.to_string()))?;
 
-    match Box::pin(schema.apply(&mut tx, space, true)).await {
+    let result = async {
+        let empty = std::collections::BTreeMap::new();
+        let targets = || crate::schema::RefTargets {
+            depends: &empty,
+            declares: &|_, _| false,
+        };
+        let reset = Box::pin(schema.apply(&mut tx, space, targets(), true)).await?;
+        if let Some(reason) = &reset {
+            Box::pin(schema.reset(&mut tx, space, reason)).await?;
+            Box::pin(schema.apply(&mut tx, space, targets(), false)).await?;
+        }
+        Ok::<_, Error>(reset)
+    }
+    .await;
+    match result {
         Ok(reset) => {
             Box::pin(tx.commit())
                 .await

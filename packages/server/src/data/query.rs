@@ -156,6 +156,7 @@ impl<'tx> Query<'tx> {
         .await;
         self.tx.finish(result)
     }
+
     pub(super) async fn matching_index(
         self,
         name: &str,

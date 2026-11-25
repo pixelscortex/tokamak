@@ -33,10 +33,10 @@ Reads track whole tables, exact IDs (including missing IDs), or conjunctions of
 JSON equality clauses (including empty query results). Post-commit footprints
 contain both old/new row images, so moves and deletes invalidate correctly.
 Numeric equality and missing-versus-null follow the SDK's existing semantics.
-Plugin schemas install declared
-ordinary/unique indexes on physical tables in the plugin's DataSpace. Indexed
-JS queries track whole tables conservatively, including empty/limited results;
-unindexed equality queries retain their existing precise dependencies.
+Plugin schemas install declared ordinary and unique indexes on physical tables
+in the plugin's DataSpace. Indexed JS queries track whole tables conservatively,
+including empty or limited results. Unindexed equality queries retain their
+existing precise dependencies.
 
 Record notifications retain at most 64 changes / 32 KiB encoded images. Larger
 transactions fall back to broad changed-table invalidation. Read tracking falls
@@ -63,8 +63,9 @@ keys schemas by plugin ID, keeping logical table names separate. The legacy
 single-bundle loader applies the same registry in its selected DataSpace.
 Field schema assertions are not evaluated for ordinary fields. Inserting or
 changing a typed ref checks the target ID and confirms the row exists. The
-reference write stages an unchanged write of the target key so a concurrent
-delete conflicts on that key, while writes to unrelated rows can proceed.
+reference write and target delete write a separate guard key for that target.
+Ordinary updates to the target row do not touch this key. Concurrent ref writes
+to the same target conflict on the guard key and the losing mutation retries.
 
 Deleting a target looks up referring rows by index and deletes them through the
 same record path in the same transaction. The server reuses an author index
