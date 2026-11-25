@@ -26,7 +26,11 @@ export function CardProfiles(props: { subscription: Subscription; builder: Build
           </span>
         )}
       </For>
-      <span class="opacity-0 transition group-hover/card:opacity-100 group-focus-within/card:opacity-100 has-data-open:opacity-100">
+      {/* Hidden during a drag: the carried card holds the pointer, so it counts as pointed at. */}
+      <span
+        data-dragging={props.builder.drag.carry() ? "" : undefined}
+        class="opacity-0 transition group-hover/card:opacity-100 group-focus-within/card:opacity-100 has-data-open:opacity-100 data-dragging:invisible"
+      >
         <Menu.Root
           // The menu calls these from its own effects: read the id without tracking it.
           onOpenChange={(open: boolean) => props.builder.setOffered(open ? untrack(id) : undefined)}
