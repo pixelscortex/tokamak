@@ -369,6 +369,43 @@ test("profiles screens", async ({ browser }) => {
     await expect(subscriptions.getByRole("article", { name: "Claude, awaiting sign-in" })).toBeVisible();
     await rest();
     await shot(page, "profiles-awaiting");
+
+    // The subscription details (TKM-265): one account, then a second added
+    // through the same sign-in, then that one signed out.
+    await subscriptions.getByRole("button", { name: "Claude Pro details" }).click();
+    const details = page.getByRole("region", { name: "Claude Pro details" });
+    await expect(details.getByText("personal@example.test")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details");
+    fake.addAccount("anthropic", "work");
+    await details.getByRole("button", { name: "Add account" }).click();
+    const another = dialog.getByRole("link", { name: "Open sign-in page" });
+    await expect(another).toBeVisible();
+    fake.nextSignIn("work");
+    const added = await fetch((await another.getAttribute("href"))!, { redirect: "manual" });
+    await dialog
+      .getByRole("textbox", { name: /Address the sign-in ended on/ })
+      .fill(added.headers.get("location")!);
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(details.getByText("work@example.test")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-two-accounts");
+    await details.getByRole("listitem").filter({ hasText: "work@example.test" }).getByRole("button").click();
+    await expect(details.getByText("Signed out")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-signed-out");
+
+    // Back to the cards, and the remove confirmation (no profile uses it yet).
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("button", { name: "Profiles" })
+      .click();
+    await subscriptions.getByRole("button", { name: "Remove Claude Pro" }).click();
+    await expect(dialog.getByText("No profile uses it.")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-remove");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
   } finally {
     await context.close();
     await fake.stop();
