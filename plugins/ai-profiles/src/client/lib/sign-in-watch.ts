@@ -1,0 +1,102 @@
+import { createEffect } from "solid-js";
+import type { SignIn, Subscription } from "./api";
+import type { Step } from "../ui/add-dialog";
+
+/** Failures after which a sign-in no longer exists on the server. */
+export const ENDING = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
+
+type Listed = { subscriptions: readonly Subscription[]; signIns: readonly SignIn[] };
+/** A subscription's accounts by id, with the status each had. */
+type Snapshot = ReadonlyMap<string, string>;
+
+/**
+ * How a sign-in that left the list ended: the subscription it connected, or
+ * undefined when it was cancelled. Each kind of sign-in has its own sign that
+ * it finished, since a subscription that is already "OK" says nothing:
+ *
+ * - a new subscription: one created after the sign-in started;
+ * - another account (`addTo`): an account that was not there when it started;
+ * - one account (`repairAccount`): that account turning "OK";
+ * - a subscription (`repair`): an account that was signed out turning "OK".
+ */
+export function endedAs(
+  signIn: SignIn,
+  before: Snapshot | undefined,
+  data: Listed,
+): Subscription | undefined {
+  const target = signIn.repair ?? signIn.addTo;
+  if (!target) return data.subscriptions.find((item) => item.createdAt >= signIn.startedAt);
+  const subscription = data.subscriptions.find((item) => item.id === target);
+  if (!subscription || !before) return undefined;
+  const done = subscription.accounts.some((account) =>
+    signIn.addTo
+      ? !before.has(account.id)
+      : account.status === "ok" &&
+        (signIn.repairAccount
+          ? account.id === signIn.repairAccount
+          : before.get(account.id) === "signed-out"),
+  );
+  return done ? subscription : undefined;
+}
+
+/**
+ * Lets an open dialog notice its sign-in ending in another window: finished
+ * there (go on to "Connected", or close when there is nothing to label) or
+ * cancelled there (close and say so). Sign-ins this window is finishing or
+ * cancelling, and ones it ended, are left to the call that answers for them:
+ * wrap those calls in `local`. The Profiles page and the details use one each.
+ */
+export function createSignInWatch(options: {
+  data: () => Listed | undefined;
+  step: () => Step | undefined;
+  setStep: (step: Step | undefined) => void;
+  onCancelled: (message: string) => void;
+}) {
+  const busy = new Set<string>();
+  const endedHere = new Set<string>();
+  /** Every sign-in listed so far, with its subscription's accounts as they were then. */
+  const seen = new Map<string, Snapshot | undefined>();
+
+  async function local<T>(id: string, call: () => Promise<T>, ended: (result: T) => boolean): Promise<T> {
+    busy.add(id);
+    try {
+      const result = await call();
+      if (ended(result)) endedHere.add(id);
+      return result;
+    } finally {
+      busy.delete(id);
+    }
+  }
+
+  createEffect(
+    () => ({ data: options.data(), open: options.step() }),
+    ({ data, open }) => {
+      if (!data) return;
+      for (const signIn of data.signIns) {
+        if (seen.has(signIn.id)) continue;
+        const target = data.subscriptions.find((item) => item.id === (signIn.repair ?? signIn.addTo));
+        seen.set(
+          signIn.id,
+          target && new Map(target.accounts.map((account) => [account.id, account.status])),
+        );
+      }
+      if (open?.kind !== "sign-in") return;
+      const id = open.signIn.id;
+      if (!seen.has(id) || busy.has(id) || endedHere.has(id)) return;
+      const still = data.signIns.find((signIn) => signIn.id === id);
+      if (still) {
+        if (still.expired !== open.signIn.expired) options.setStep({ kind: "sign-in", signIn: still });
+        return;
+      }
+      endedHere.add(id);
+      const added = endedAs(open.signIn, seen.get(id), data);
+      if (added) options.setStep({ kind: "connected", subscription: added });
+      else {
+        options.setStep(undefined);
+        options.onCancelled("That sign-in was cancelled in another window.");
+      }
+    },
+  );
+
+  return { local };
+}

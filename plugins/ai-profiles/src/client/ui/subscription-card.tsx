@@ -106,7 +106,11 @@ export function AwaitingCard(props: {
           >
             <span class="flex items-center gap-2 text-data text-ink-3">
               <Icon path={icons.running} size={12} />
-              {props.signIn.repair ? "Awaiting sign-in again" : "Awaiting sign-in"}
+              {props.signIn.addTo
+                ? "Awaiting another account"
+                : props.signIn.repair
+                  ? "Awaiting sign-in again"
+                  : "Awaiting sign-in"}
             </span>
           </Show>
         </div>

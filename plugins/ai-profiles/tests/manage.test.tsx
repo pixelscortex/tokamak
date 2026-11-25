@@ -51,14 +51,22 @@ const waiting: SignIn = {
 
 let listed: { subscriptions: Subscription[]; signIns: SignIn[] } = { subscriptions: [team], signIns: [] };
 let uses: JsonValue = acme;
-const answers: Record<string, JsonValue> = {};
+/** Each call's answer: a value, or a function that may throw (a call that fails on the way). */
+const answers: Record<string, JsonValue | (() => JsonValue)> = {};
+const listeners = new Set<() => void>();
+/** What another window did: the list changes and every open subscription hears it. */
+function update(next: typeof listed) {
+  listed = next;
+  for (const send of listeners) send();
+}
 const calls: [string, JsonValue][] = [];
 const named = (name: string) => calls.filter(([called]) => called === `ai-profiles/${name}`);
 
 function client(): TokamakClient {
   const call = async (name: string, args: JsonValue) => {
     calls.push([name, args]);
-    return answers[name] ?? null;
+    const answer = answers[name];
+    return typeof answer === "function" ? answer() : (answer ?? null);
   };
   const transport: ClientTransport = {
     query: call,
@@ -66,9 +74,15 @@ function client(): TokamakClient {
     action: call,
     subscribe(name, args, onEvent) {
       calls.push([name, args]);
-      const value = name === "ai-profiles/manage:usedBy" ? uses : (listed as unknown as JsonValue);
-      queueMicrotask(() => onEvent({ value: structuredClone(value) }));
-      return () => {};
+      const send = () =>
+        onEvent({
+          value: structuredClone(
+            name === "ai-profiles/manage:usedBy" ? uses : (listed as unknown as JsonValue),
+          ),
+        });
+      listeners.add(send);
+      queueMicrotask(send);
+      return () => listeners.delete(send);
     },
   };
   return new TokamakClient(transport);
@@ -107,6 +121,7 @@ afterEach(async () => {
   uses = acme;
   for (const key of Object.keys(answers)) delete answers[key];
   calls.length = 0;
+  listeners.clear();
 });
 
 test("a card's actions are sm icon buttons with names and tooltips; Check again says why it failed", async () => {
@@ -163,10 +178,25 @@ test("the details show each account with its status, the models and the profiles
   const usedBy = within(details).getByRole("region", { name: "Used by" });
   expect((await within(usedBy).findByRole("listitem")).textContent).toMatch(/ACME.*Acme.*3 threads/);
 
-  // Each account has its own Sign out; the signed-out one offers Sign in instead.
-  await user.click(within(first!).getByRole("button", { name: "Sign out" }));
+  // Each account's buttons are named with it; the signed-out one signs that one account in.
+  await user.click(within(first!).getByRole("button", { name: "Sign out you@acme.test" }));
   expect(named("manage:signOut")).toEqual([["ai-profiles/manage:signOut", { id: "agent-proxy/accounts:a" }]]);
-  expect(within(second!).getByRole("button", { name: "Sign in" })).toBeTruthy();
+  const { addTo: _addTo, ...oneAccount } = waiting;
+  answers["ai-profiles/manage:signInAccount"] = {
+    ...oneAccount,
+    repair: team.id,
+    repairAccount: "agent-proxy/accounts:b",
+  } as unknown as JsonValue;
+  await user.click(within(second!).getByRole("button", { name: "Sign in you2@acme.test" }));
+  expect(named("manage:signInAccount")).toEqual([
+    ["ai-profiles/manage:signInAccount", { id: "agent-proxy/accounts:b" }],
+  ]);
+  await user.click(
+    within(await screen.findByRole("dialog", { name: "Sign in to Claude" })).getByRole("button", {
+      name: "Close",
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
   // Add account: the same sign-in step, for this subscription; it closes when the account is in.
   await user.click(within(accounts).getByRole("button", { name: "Add account" }));
@@ -215,4 +245,71 @@ test("with no profile using it, the confirmation says so", async () => {
   await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(named("manage:remove")).toEqual([]);
+});
+
+test("an add-account sign-in cancelled in another window is said so, not shown as connected", async () => {
+  const user = userEvent.setup({ document });
+  answers["ai-profiles/manage:addAccount"] = waiting as unknown as JsonValue;
+  mount();
+  const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
+  await user.click(within(card).getByRole("button", { name: "Claude Team details" }));
+  const details = await screen.findByRole("region", { name: "Claude Team details" });
+  await user.click(within(details).getByRole("button", { name: "Add account" }));
+  await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  // The cards say what is waiting: another account, not a new subscription.
+  update({ subscriptions: [team], signIns: [waiting] });
+  await waitFor(() =>
+    expect(document.querySelector('section[aria-label="Subscriptions"]')!.textContent).toMatch(
+      /Awaiting another account/,
+    ),
+  );
+  // Cancelled elsewhere: the subscription is still "OK", which says nothing about this sign-in.
+  update({ subscriptions: [team], signIns: [] });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect((await within(details).findByRole("alert")).textContent).toMatch(/cancelled in another window/);
+});
+
+test("an add-account sign-in finished in another window closes the dialog quietly", async () => {
+  const user = userEvent.setup({ document });
+  answers["ai-profiles/manage:addAccount"] = waiting as unknown as JsonValue;
+  mount();
+  await user.click(
+    within(await screen.findByRole("article", { name: "Claude Team, Acme" })).getByRole("button", {
+      name: "Claude Team details",
+    }),
+  );
+  const details = await screen.findByRole("region", { name: "Claude Team details" });
+  await user.click(within(details).getByRole("button", { name: "Add account" }));
+  await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  update({ subscriptions: [team], signIns: [waiting] });
+  await waitFor(() => expect(listeners.size).toBeGreaterThan(0));
+  const third = { id: "agent-proxy/accounts:c", email: "you3@acme.test", status: "ok" as const };
+  update({ subscriptions: [{ ...team, accounts: [...team.accounts, third] }], signIns: [] });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(within(details).queryByRole("alert")).toBeNull();
+  expect(within(details).getByText("you3@acme.test")).toBeTruthy();
+});
+
+test("a sign out that fails on the way says so", async () => {
+  const user = userEvent.setup({ document });
+  answers["ai-profiles/manage:signOut"] = () => {
+    throw new Error("connection lost");
+  };
+  mount();
+  await user.click(
+    within(await screen.findByRole("article", { name: "Claude Team, Acme" })).getByRole("button", {
+      name: "Claude Team details",
+    }),
+  );
+  const details = await screen.findByRole("region", { name: "Claude Team details" });
+  await user.click(within(details).getByRole("button", { name: "Sign out you@acme.test" }));
+  expect((await within(details).findByRole("alert")).textContent).toMatch(/could not be signed out/);
+});
+
+test("a subscription whose plan is unknown is titled by its product and says so", async () => {
+  listed = { subscriptions: [{ ...team, plan: "", label: "" }], signIns: [] };
+  mount();
+  const card = await screen.findByRole("article", { name: "Claude" });
+  expect(card.textContent).toMatch(/acme inc · plan unknown/);
+  expect(within(card).getByRole("button", { name: "Check Claude again" })).toBeTruthy();
 });
