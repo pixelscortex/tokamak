@@ -1,0 +1,67 @@
+packages/sdk/src/internal/contracts.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 1,111
+packages/sdk/src/functions.ts
+  s_467911d521291f::t_69910c2a400bb1 323-327,341
+  s_467911d521291f::t_e3adbd1bfd17e8 23,168,264,370,459,474,518
+  s_467911d521291f::t_83c9d349836272 371-373,375-376,400
+packages/sdk/tools/bundle.mjs
+  s_467911d521291f::t_e3adbd1bfd17e8 192
+packages/sdk/worker/program-scope.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 21
+packages/host/tests/protocol.rs
+  s_467911d521291f::t_e3adbd1bfd17e8 144
+packages/sdk/src/host.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 104
+packages/sdk/worker/quickjs.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 27
+packages/build/tests/local.test.mjs
+  s_467911d521291f::t_e3adbd1bfd17e8 396-407,431-445
+README.md
+  s_467911d521291f::t_e3adbd1bfd17e8 7,79
+wiki/content/docs/api/contracts.mdx
+  s_467911d521291f::t_e3adbd1bfd17e8 23
+packages/sdk/worker/invocation-host.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 35
+packages/runtime/js/local.ts
+  s_467911d521291f::t_e3adbd1bfd17e8 186-187
+packages/server/src/plugin-skill.md
+  s_467911d521291f::t_e3adbd1bfd17e8 3
+packages/runner/src/local/quickjs/session.rs
+  s_467911d521291f::t_e3adbd1bfd17e8 289
+packages/server/tests/caller-actions-driver.mjs
+  s_467911d521291f::t_e3adbd1bfd17e8 344
+.ci/README.md
+  s_467911d521291f::t_e3adbd1bfd17e8 98
+packages/server/src/plugins/catalog.rs
+  s_467911d521291f::t_e3adbd1bfd17e8 174
+packages/build/tests/contracts.test.mjs
+  s_467911d521291f::t_e5eec1d76a53ca 84,95-96,98
+  s_467911d521291f::t_79a8886c2fdcfb 97
+packages/sdk/tools/contracts.mjs
+  s_467911d521291f::t_e5eec1d76a53ca 27-54,101-107
+packages/sdk/tools/plugin-boundary.mjs
+  s_467911d521291f::t_e3adbd1bfd17e8 231-241,244,248,251,261,299-302,304-308,310-312,314-315,324-328,332,338-352
+  s_467911d521291f::t_ec13d1614fd5a9 242-243,245-247,249-250,303,309,313
+packages/sdk/tools/placement.mjs
+  s_467911d521291f::t_e3adbd1bfd17e8 44,132,144,357-359,408
+packages/runner/tests/local-routing.mjs
+  s_467911d521291f::t_a69ca544ed80e7 468-471
+packages/runtime/tests/local.test.mjs
+  s_467911d521291f::t_b93f0490f4ef87 192-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2bdb3a61c78e07e3436817b37d2be84c7d8da7a4",
+  "prompts": {},
+  "sessions": {
+    "s_467911d521291f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21439-c6af-76f3-b7f1-72ea8b30d1b6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
