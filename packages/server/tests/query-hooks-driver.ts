@@ -113,7 +113,11 @@ async function validates_profiles_and_preserves_nested_call_budget() {
       },
     );
   }
-  assert.equal(await client.query(moderation.policy.fanout, {}), 70);
+  assert.equal(await client.query(moderation.policy.fanout, { count: 64 }), 64);
+  await assert.rejects(client.query(moderation.policy.fanout, { count: 65 }), {
+    plugin: "moderation",
+    kind: "hookDepthLimit",
+  });
   const rows = [{ name: "Alice", detail: "Ali|member-1|member||2" }];
   assert.deepEqual(await client.mutation(moderation.policy.fromMutation, {}), rows);
   const failure = { kind: "forbidden", plugin: "moderation", data: { reason: "members" } };
@@ -182,13 +186,56 @@ async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
   close();
 }
 
+async function mutation_hooks_transform_and_share_the_save() {
+  assert.equal(await client.mutation(team.users.guarded, { name: "  saved " }), "SAVED");
+  await client.mutation(team.users.useHidden, { name: "private" });
+  const names = async () => (await client.query(list, { text: "" })).map(({ name }) => name).sort();
+  const audit = async () => client.query(moderation.policy.audit, {});
+  const saved = await names();
+  assert.ok(saved.includes("saved"));
+  assert.ok(saved.includes("private-hooked"));
+  const entries = await audit();
+  assert.ok(entries.includes("audit:  saved "));
+  assert.ok(entries.includes("after:saved"));
+
+  await assert.rejects(client.mutation(team.users.guarded, { name: "blocked", mode: "before-fails" }), {
+    plugin: "moderation",
+    hook: "policy:logSave",
+    stage: "before",
+    kind: "limitReached",
+    data: { maximum: 100 },
+  });
+  await assert.rejects(
+    client.mutation(team.users.guarded, { name: "owner", mode: "owner-fails" }),
+    /owner failed/,
+  );
+  await assert.rejects(client.mutation(team.users.guarded, { name: "after", mode: "after-fails" }), {
+    plugin: "moderation",
+    stage: "after",
+    kind: "hookException",
+  });
+  await assert.rejects(client.mutation(team.users.catchGuarded, {}), {
+    plugin: "moderation",
+    stage: "after",
+    kind: "hookException",
+  });
+  assert.deepEqual(await names(), saved);
+  assert.deepEqual(await audit(), entries);
+}
+
 try {
-  await transforms_arguments_and_results_with_identity();
-  await names_policy_errors_and_enforces_read_only_scope();
-  await chains_two_plugins_and_hooks_server_calls();
-  await validates_profiles_and_preserves_nested_call_budget();
-  await accepts_structural_rows_and_bounds_hook_fanout();
-  await live_query_tracks_owner_and_hook_tables_then_uninstalls();
+  if (process.env.TOKAMAK_HOOK_BENCHMARK === "1") {
+    const { measureHooks } = await import("./hook-measurement");
+    await measureHooks(client);
+  } else {
+    await transforms_arguments_and_results_with_identity();
+    await names_policy_errors_and_enforces_read_only_scope();
+    await chains_two_plugins_and_hooks_server_calls();
+    await validates_profiles_and_preserves_nested_call_budget();
+    await accepts_structural_rows_and_bounds_hook_fanout();
+    await live_query_tracks_owner_and_hook_tables_then_uninstalls();
+    await mutation_hooks_transform_and_share_the_save();
+  }
   send({ done: true });
 } finally {
   lines.close();

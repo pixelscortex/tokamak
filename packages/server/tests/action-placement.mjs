@@ -40,7 +40,7 @@ await writeFile(
   join(hook, "plugin.ts"),
   `
   import { definePlugin } from "@tokamak/sdk";
-  export default definePlugin({ id: "fixture-hooks", version: "1.0.0", depends: ["ai"] });
+  export default definePlugin({ id: "fixture-hooks", version: "1.0.0", depends: ["ai"], permissions: ["net:127.0.0.1"] });
 `,
 );
 await writeFile(
@@ -48,8 +48,20 @@ await writeFile(
   `
   import { action, hook, provide } from "@tokamak/sdk";
   import { localPlace } from "plugin:ai/contracts";
-  import { marker } from "plugin:ai/server";
+  import { audited, marker, rows, store } from "plugin:ai/server";
   export const policy = hook(marker, { after: () => "hooked" });
+  export const audit = hook(audited, {
+    async before(ctx, args) {
+      const response = await fetch(args.url);
+      const marker = await response.text();
+      await ctx.runQuery(rows, {});
+      await ctx.runMutation(store, { text: marker + ":" + args.text });
+      return { ...args, text: marker + ":" + ctx.call.depth + ":" + args.text };
+    },
+    after(_ctx, result) {
+      return typeof result === "string" ? result.toUpperCase() : result;
+    },
+  });
   export const provider = provide(localPlace, {
     id: "external",
     location: action({ on: "caller", handler: () => 1 }),
@@ -237,6 +249,21 @@ async function assertProviderRefresh(client, gate, install) {
   assert.deepEqual(await within(result, "call rebuilt provider", 5000), [1, 2]);
 }
 
+const http = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("network") });
+cleanup.push(() => http.stop(true));
+const auditArgs = { url: http.url.href, text: "audit" };
+
+async function action_hooks_run_with_network_and_database(client, reference, expectedDepth, options) {
+  const before = (await client.query(api.work.rows, {})).rows.length;
+  assert.equal(await client.action(reference, auditArgs, options), `NETWORK:${expectedDepth}:AUDIT`);
+  const after = (await client.query(api.work.rows, {})).rows;
+  assert.equal(after.length, before + 1);
+  assert.deepEqual(
+    after.slice(before).map(({ text }) => text),
+    ["network:audit"],
+  );
+}
+
 try {
   const local = await startRunner({
     binary: runner,
@@ -252,6 +279,7 @@ try {
   cleanup.push(local.stop);
   const embedded = await connect(local.endpoint.ws, { token: local.endpoint.token, cleanup });
   await assertProgram(embedded, api.delegate.program, 1);
+  await action_hooks_run_with_network_and_database(embedded, api.delegate.audit, 2);
   assert.deepEqual(await embedded.action(api.provider.contractCall, {}), { runner: true, depth: 1 });
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "caller" }), { runner: true, depth: 1 });
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "server" }), { runner: false, depth: 1 });
@@ -314,6 +342,8 @@ try {
   assert.equal(await window.action(api.work.read, { file }), "text on the caller");
   assert.deepEqual(await window.action(api.work.read, { file }, { on: "server" }), noMachine);
   assert.equal((await browser.query(api.work.rows, {})).rows.length, 1);
+  await action_hooks_run_with_network_and_database(window, api.work.audited, 1);
+  await action_hooks_run_with_network_and_database(browser, api.work.audited, 1, { on: "server" });
   assert.deepEqual(await window.action(api.work.serverDefault, {}), { runner: false, depth: 0 });
   assert.deepEqual(await window.action(api.work.serverDefault, {}, { on: "caller" }), {
     runner: true,
@@ -344,6 +374,19 @@ try {
   });
   await cp(oldProvider, join(plugins, "fixture-hooks"), { recursive: true });
   await reloadProvider(local.endpoint.http, local.endpoint.token);
+  if (mode === "--cloud") {
+    const staged = join(scratch, "unavailable-hook");
+    await stageServerPlugin(newProvider, staged);
+    await cp(staged, join(serverPlugins, "fixture-hooks"), { recursive: true });
+    await reloadProvider(address, sharedToken);
+    await assert.rejects(window.action(api.work.audited, auditArgs), {
+      plugin: "fixture-hooks",
+      stage: "before",
+      kind: "hookRunnerUnavailable",
+    });
+    await cp(oldProvider, join(serverPlugins, "fixture-hooks"), { recursive: true });
+    await reloadProvider(address, sharedToken);
+  }
   await assertProviderRefresh(window, "window-refresh", async () => {
     await cp(newProvider, join(plugins, "fixture-hooks"), { recursive: true });
     if (mode === "--cloud") {

@@ -22,3 +22,8 @@ export const caller = action({
       ? ctx.runAction(api.work.serverDefault, {}, { on: "caller" })
       : ctx.runAction(api.work.callerDefault, {}),
 });
+
+export const audit = action({
+  args: { url: v.string(), text: v.string() },
+  handler: (ctx, args) => ctx.runAction(api.work.audited, args),
+});

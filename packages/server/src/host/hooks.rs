@@ -15,6 +15,20 @@ pub(crate) struct HookTarget {
     pub derived_result_warning: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
+impl HookTarget {
+    pub fn load(plugins: &Loaded, name: &str) -> Option<Self> {
+        let chain = plugins.hooks.get(name)?.clone();
+        let target = &plugins.targets[name];
+        Some(Self {
+            name: name.to_owned(),
+            args: target.args.clone(),
+            result: target.result.clone(),
+            chain,
+            derived_result_warning: target.derived_result_warning.clone(),
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum Stage {
     Before,
@@ -37,11 +51,11 @@ impl Stage {
     }
 }
 
-pub(crate) async fn run_before(
+pub(crate) async fn run_before<F: Future<Output = Result<Json, engine::CallError>>>(
     target: &HookTarget,
     note: &CallNote,
     args: Json,
-    execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+    execute: impl FnMut(Hook, Stage, CallNote, Json) -> F,
 ) -> Result<Json, engine::CallError> {
     validate(&target.args, &args, "args")?;
     run_chain(
@@ -58,12 +72,12 @@ pub(crate) async fn run_before(
     .await
 }
 
-pub(crate) async fn run_after(
+pub(crate) async fn run_after<F: Future<Output = Result<Json, engine::CallError>>>(
     target: &HookTarget,
     note: &CallNote,
     result: Json,
     args: &Json,
-    execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+    execute: impl FnMut(Hook, Stage, CallNote, Json) -> F,
 ) -> Result<Json, engine::CallError> {
     let mut validation = target.result.as_deref();
     if let (Some(warning), Some(schema)) = (&target.derived_result_warning, validation)
@@ -97,13 +111,13 @@ struct ChainStage<'a> {
     validation: Option<&'a Json>,
 }
 
-async fn run_chain(
+async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
     target: &HookTarget,
     note: &CallNote,
     ChainStage { stage, validation }: ChainStage<'_>,
     mut value: Json,
     args: &Json,
-    mut execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+    mut execute: impl FnMut(Hook, Stage, CallNote, Json) -> F,
 ) -> Result<Json, engine::CallError> {
     for hook in target.chain.iter().filter(|hook| stage.enabled(hook)) {
         let stage_args = if matches!(stage, Stage::Before) {
@@ -124,32 +138,47 @@ async fn run_chain(
         let note = note
             .enter(&target.name, Some(&target.args), stage_args)
             .map_err(|_| make_error("hookDepthLimit", json!("plugin call cycle or depth limit")))?;
+        if !note.take_hook_stage() {
+            return Err(make_error(
+                "hookDepthLimit",
+                json!("delegated module count budget exceeded"),
+            ));
+        }
         let input = match stage {
-            Stage::Before => json!({"name":hook.name,"stage":"before","args":value}),
-            Stage::After => json!({"name":hook.name,"stage":"after","args":args,"result":value}),
+            Stage::Before => {
+                json!({"name":hook.name,"target":target.name,"stage":"before","args":value})
+            }
+            Stage::After => {
+                json!({"name":hook.name,"target":target.name,"stage":"after","args":args,"result":value})
+            }
         };
-        value = execute(hook, stage, note, input).await.map_err(|error| {
-            if error.details.is_some() {
-                error
-            } else {
-                match error.limit {
-                    Some(engine::CallLimit::Depth) => {
-                        make_error("hookDepthLimit", json!("plugin call cycle or depth limit"))
-                    }
-                    Some(engine::CallLimit::Modules) => make_error(
-                        "hookDepthLimit",
-                        json!("delegated module count budget exceeded"),
-                    ),
-                    None => {
-                        let message = error.message.split("\n    at ").next().unwrap_or_default();
-                        make_error("hookException", json!(message))
+        value = execute(hook.clone(), stage, note, input)
+            .await
+            .map_err(|error| {
+                if error.details.is_some() {
+                    error
+                } else if error.message == crate::RUNNER_ACTION_ARTIFACT_UNAVAILABLE {
+                    make_error("hookRunnerUnavailable", Json::Null)
+                } else {
+                    match error.limit {
+                        Some(engine::CallLimit::Depth) => {
+                            make_error("hookDepthLimit", json!("plugin call cycle or depth limit"))
+                        }
+                        Some(engine::CallLimit::Modules) => make_error(
+                            "hookDepthLimit",
+                            json!("delegated module count budget exceeded"),
+                        ),
+                        None => {
+                            let message = error.message.lines().next().unwrap_or_default();
+                            make_error("hookException", json!(message))
+                        }
                     }
                 }
-            }
-        })?;
+            })?;
 
-        if matches!(stage, Stage::Before)
-            && let Some(kind) = failure_kind(&value)
+        if let Some(kind) = failure_kind(&value)
+            && (matches!(stage, Stage::Before)
+                || matches!(kind, "runnerCapabilityUnavailable" | "noMachine"))
         {
             return Err(make_error(kind, value["data"].clone()));
         }
@@ -167,14 +196,15 @@ async fn run_chain(
     Ok(value)
 }
 
-pub(super) struct QueryHooks {
+pub(super) struct TransactionHooks {
     target: HookTarget,
     plugins: Arc<Loaded>,
     note: CallNote,
     tx: TransactionContext,
+    writable: bool,
 }
 
-impl QueryHooks {
+impl TransactionHooks {
     pub(super) fn for_target(
         plugins: &Arc<Loaded>,
         name: Option<String>,
@@ -182,36 +212,30 @@ impl QueryHooks {
         tx: &TransactionContext,
     ) -> Option<Self> {
         let name = name?;
-        let chain = plugins.query_hooks.get(&name)?.clone();
-        let target = &plugins.targets[&name];
         Some(Self {
-            target: HookTarget {
-                name,
-                args: target.args.clone(),
-                result: target.result.clone(),
-                chain,
-                derived_result_warning: target.derived_result_warning.clone(),
-            },
+            target: HookTarget::load(plugins, &name)?,
             plugins: plugins.clone(),
             note: note.clone(),
             tx: tx.clone(),
+            writable: plugins.targets[&name].mutation,
         })
     }
 
     async fn execute(
         &self,
         executor: &dyn StageExecutor,
-        hook: &Hook,
+        hook: Hook,
         stage: Stage,
         note: CallNote,
         input: Json,
     ) -> Result<Json, engine::CallError> {
         let scope = CallScope::default();
         let tx = self.tx.hook_scope();
+        let space = DataSpace::plugin(&hook.owner).map_err(|error| error.to_string())?;
         let ops = operations(
             tx.clone(),
-            hook.space.clone(),
-            false,
+            space,
+            self.writable,
             Some((self.plugins.clone(), hook.owner.clone())),
             CallContext {
                 determinism: None,
@@ -228,7 +252,8 @@ impl QueryHooks {
             Json::Null,
             &self.target.name,
         ));
-        let call = ModuleCall::new(hook.bundle.clone(), "invoke_hook", input, ops, |_| {});
+        let bundle = self.plugins.transaction_bundles[&hook.owner].clone();
+        let call = ModuleCall::new(bundle, "invoke_hook", input, ops, |_| {});
         let active = &self.tx.active_hooks;
         active
             .lock()
@@ -241,6 +266,10 @@ impl QueryHooks {
             .retain(|entry| !Arc::ptr_eq(entry, &label));
         scope.close().await;
         let observed = tx.observations.lock().await;
+        if observed.conflict {
+            self.tx.observations.lock().await.conflict = true;
+        }
+
         let failure = tx.failure.lock().expect("failure lock");
         if let Some(error) = &observed.error {
             Err(error.clone().into())
@@ -250,20 +279,28 @@ impl QueryHooks {
             value
         }
     }
+
+    fn finish(&self, result: Result<Json, engine::CallError>) -> Result<Json, engine::CallError> {
+        if self.tx.mutation
+            && let Err(error) = &result
+        {
+            self.tx.poison(error.clone());
+        }
+        result
+    }
 }
 
-impl CallTransforms for QueryHooks {
+impl CallTransforms for TransactionHooks {
     fn before<'a>(&'a self, executor: &'a dyn StageExecutor, mut input: Json) -> CallFuture<'a> {
         Box::pin(async move {
-            input["args"] = run_before(
+            let args = run_before(
                 &self.target,
                 &self.note,
                 input["args"].take(),
-                async |hook, stage, note, input| {
-                    self.execute(executor, hook, stage, note, input).await
-                },
+                |hook, stage, note, input| self.execute(executor, hook, stage, note, input),
             )
-            .await?;
+            .await;
+            input["args"] = self.finish(args)?;
             Ok(input)
         })
     }
@@ -275,16 +312,18 @@ impl CallTransforms for QueryHooks {
         value: Json,
     ) -> CallFuture<'a> {
         Box::pin(async move {
-            run_after(
+            if self.writable && failure_kind(&value).is_some() {
+                return Ok(value);
+            }
+            let result = run_after(
                 &self.target,
                 &self.note,
                 value,
                 &input["args"],
-                async |hook, stage, note, input| {
-                    self.execute(executor, hook, stage, note, input).await
-                },
+                |hook, stage, note, input| self.execute(executor, hook, stage, note, input),
             )
-            .await
+            .await;
+            self.finish(result)
         })
     }
 }

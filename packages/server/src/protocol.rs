@@ -182,6 +182,12 @@ pub enum Request {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         depth: usize,
         thread: Option<String>,
+        #[serde(default, rename = "hookScope", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookScope", optional, type = "number")
+        )]
+        hook_scope: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(
             feature = "protocol-codegen",
@@ -191,6 +197,15 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
         window: Option<bool>,
+    },
+    HookStage {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        scope: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        done: Option<bool>,
     },
     CancelAction {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -235,6 +250,7 @@ impl Request {
             | Self::Mutation { id, .. }
             | Self::Action { id, .. }
             | Self::LocalCall { id, .. }
+            | Self::HookStage { id, .. }
             | Self::CancelAction { id }
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id }

@@ -84,3 +84,9 @@ export const useFailureValue = action({
   on: "caller",
   handler: async (ctx) => isFailure(await ctx.runAction(api.work.failureValue, {})),
 });
+
+export const audited = action({
+  on: "caller",
+  args: { url: v.string(), text: v.string() },
+  handler: (_ctx, { text }): string => text,
+});

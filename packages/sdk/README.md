@@ -819,11 +819,15 @@ defining plugin, use the generated `_generated/plugin.ts` references. These
 functions are excluded from the window API, local-to-server transport and
 subscriptions. `internal*` remains private to its own plugin.
 
-## Hook another plugin's query
+## Hook another plugin's function
 
-Export a hook from a server module and target a public query from a plugin
-dependency. Installing your plugin registers the hook automatically; the owner
-doesn't have to change its code or grant permission.
+Export a hook from a server module and target a query, mutation, or action
+in another plugin. Installing your plugin registers the hook automatically.
+Public and plugin-only references come from `plugin:<id>/server`; the same
+module's `internal` namespace provides typed references such as
+`team.internal.users.saveHidden`. An internal hook runs when the owner calls
+the function. The reference does not let other plugins call it or make it
+visible to the window. You cannot hook an `httpAction`.
 
 ```ts
 import { createHook, fail } from "@tokamak/sdk";
@@ -845,10 +849,10 @@ export const moderateUsers = hook(team.api.list, {
 ```
 
 Either stage can be omitted. `before` returns valid arguments for the target
-or stops the query with `fail(kind, data?)`. `after` receives the query's
+or stops the call with `fail(kind, data?)`. `after` receives the function's
 result and the final arguments and returns a result of the same type. The
 server checks both stages' output against the target validators and rejects
-extra fields on validated objects. The result validator comes from the query's
+extra fields on validated objects. The result validator comes from the function's
 `returns` option or its TypeScript result type. Open values such as `unknown`
 remain unchecked inside otherwise validated results. For older bundles without
 a result validator, the server accepts after-hook results and warns on load.
@@ -868,7 +872,18 @@ caller in `ctx.auth` and shares the call note in `ctx.call` at one greater
 depth. Calling the hooked query again is subject to the same depth limit as
 any nested call. The hooks also run on server calls and live window queries;
 a change to data read by either the query or a hook can refresh a live result.
-Removing the hooking plugin removes its hooks. A hook whose target is gone
-is skipped with a server warning.
+A mutation hook can write its own tables as part of the target's save. A failure
+in the hook or handler rolls back all those writes, even if a caller catches a
+nested hook error. A write conflict retries the whole mutation and its hooks.
 
-Hooks currently target public queries only. Mutations, actions, internal functions, and plugin-only functions are not supported.
+An action hook runs with its own plugin's network grants and environment. It can
+use `ctx.runQuery`, `ctx.runMutation`, and `ctx.runAction`. The selected placement,
+including a per-call `on` override, applies to both stages. A caller action and its
+hooks run on the same Runner. On the shared-server window route, stages can only
+call public functions; attempts to call private functions fail with
+`runnerCapabilityUnavailable`. If the Runner lacks the hook's build, the call
+fails with `hookRunnerUnavailable` and names the plugin.
+
+Removing the hooking plugin removes its hooks. When a target is renamed or
+removed, the owner's build warns and names the hooking plugin. The hooking
+plugin still loads; the server skips that hook and logs a warning.

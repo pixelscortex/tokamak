@@ -4,6 +4,7 @@ import { installConsole } from "./quickjs-console";
 import { invocationProcesses } from "./program-scope";
 import { quickJsPrograms, type NativeSpawn } from "./quickjs-process";
 import { dataContracts, workerContracts } from "./contracts";
+import type { HookRegistry } from "../src/hooks";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
 
@@ -51,9 +52,11 @@ export async function initialize(
 
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
+    hooks?: HookRegistry;
     contractProviders?: Record<string, Provider<"local">>;
   };
   const dispatch = workerDispatch("local", root.functions, emit, nextOp, {
+    hooks: root.hooks,
     createPrograms: (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     contracts: workerContracts(),
     contract: dataContracts(root),

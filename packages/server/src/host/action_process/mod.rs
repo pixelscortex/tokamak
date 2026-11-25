@@ -99,8 +99,24 @@ impl Source {
         Ok(())
     }
 
+    pub(crate) fn hooks(&self) -> Option<&Value> {
+        self.validators.get()?.get("hooks")
+    }
+
+    pub(crate) fn result_validator(&self, name: &str) -> Option<&Value> {
+        self.validators
+            .get()?
+            .get("functions")?
+            .get(name)?
+            .get("returns")
+    }
+
     pub(crate) fn validator(&self, name: &str) -> Option<&Value> {
-        self.validators.get()?.get(name)
+        self.validators
+            .get()?
+            .get("functions")?
+            .get(name)?
+            .get("args")
     }
 
     fn path(&self) -> &Path {
@@ -122,7 +138,7 @@ struct Call {
     source: Arc<Source>,
     frame: Value,
     ops: Arc<OpRegistry>,
-    reply: oneshot::Sender<Result<Value, String>>,
+    reply: oneshot::Sender<Result<Value, engine::CallError>>,
     active: CancellationToken,
     _permit: OwnedSemaphorePermit,
     _plugin_permit: Option<OwnedSemaphorePermit>,
@@ -256,6 +272,7 @@ impl Supervisor {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn invoke(
         &self,
         source: Arc<Source>,
@@ -264,6 +281,17 @@ impl Supervisor {
         ops: Arc<OpRegistry>,
     ) -> Result<Value, String> {
         self.invoke_with(source, name, args, ops, InvocationOptions::default())
+            .await
+    }
+
+    pub(crate) async fn invoke_typed(
+        &self,
+        source: Arc<Source>,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+    ) -> Result<Value, engine::CallError> {
+        self.invoke_typed_with(source, name, args, ops, InvocationOptions::default())
             .await
     }
 
@@ -302,11 +330,10 @@ impl Supervisor {
         &self,
         source: &Source,
         run: impl FnOnce(CancellationToken) -> crate::RunnerFuture,
-    ) -> Result<Value, crate::protocol::CallError> {
+    ) -> Result<Value, engine::CallError> {
         use crate::protocol::{
             CallError, CallErrorDetails, LOCAL_RELOAD_GRACE_MS, StructuredCallError,
         };
-
         if source.retired.is_cancelled() {
             return Err("Plugin action cancelled by reload".into());
         }
@@ -317,7 +344,7 @@ impl Supervisor {
         tokio::select! {
             biased;
             () = self.closed.cancelled() => Err("Server closed".into()),
-            result = run(source.retired.clone()) => result.map_err(Into::into),
+            result = run(source.retired.clone()) => result,
             () = reload_deadline => Err(CallError::Structured(Box::new(StructuredCallError {
                 message: "Local plugin build retired".into(),
                 details: CallErrorDetails {
@@ -327,7 +354,7 @@ impl Supervisor {
                     kind: "LocalReloadTimeout".into(),
                     data: Value::Null,
                 },
-            }))),
+            })).into()),
         }
     }
 
@@ -339,6 +366,19 @@ impl Supervisor {
         ops: Arc<OpRegistry>,
         options: InvocationOptions,
     ) -> Result<Value, String> {
+        self.invoke_typed_with(source, name, args, ops, options)
+            .await
+            .map_err(|error| error.message)
+    }
+
+    async fn invoke_typed_with(
+        &self,
+        source: Arc<Source>,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+        options: InvocationOptions,
+    ) -> Result<Value, engine::CallError> {
         let (permit, plugin_permit) = self.admit(&source, options.anonymous.is_some())?;
         let end = Instant::now() + options.timeout;
         let process = tokio::select! {

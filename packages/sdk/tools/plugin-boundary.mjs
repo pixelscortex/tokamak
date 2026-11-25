@@ -115,14 +115,17 @@ function provider(root, id) {
 
 function publicReferences(folder, entry) {
   const options = pluginCompilerOptions(folder, configuration(entry).options);
-  const program = ts.createProgram([entry], options);
+  const backend = serverDirectory(folder);
+  const authored = ts.sys
+    .readDirectory(backend, [".ts"])
+    .filter((file) => isServerModule(backend, relative(backend, file).split(sep).join("/")));
+  const program = ts.createProgram([entry, ...authored], options);
   const checker = program.getTypeChecker();
   const file = program.getSourceFile(entry);
   const module = checker.getSymbolAtLocation(file);
   const original = (symbol) =>
     symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const targets = new Map();
-  const backend = serverDirectory(folder);
   for (const source of program.getSourceFiles()) {
     const local = relative(backend, source.fileName).split(sep).join("/");
     if (!isServerModule(backend, local)) continue;
@@ -132,18 +135,25 @@ function publicReferences(folder, entry) {
       if (!runtime.has(exported.name)) continue;
       const target = original(exported);
       const definition = definitionInfo(checker, target, source);
-      if (!definition || definition.visibility === Visibility.Internal || definition.kind === "local")
-        continue;
+      if (!definition) continue;
       const moduleName = isServerRoot(backend) ? basename(local, ".ts") : local.slice(0, -3);
       if (!targets.has(target) || target.valueDeclaration?.getSourceFile() === source)
-        targets.set(target, [moduleName, exported.name, definition.visibility]);
+        targets.set(target, [
+          moduleName,
+          exported.name,
+          definition.visibility,
+          definition.kind,
+          source.fileName,
+        ]);
     }
   }
   const runtime = module ? runtimeExportNames(checker, module) : new Set();
   const refs = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
     if (!runtime.has(exported.name)) return [];
     const target = targets.get(original(exported));
-    return target ? [[exported.name, target]] : [];
+    return target && target[2] !== Visibility.Internal && target[3] !== "local"
+      ? [[exported.name, target]]
+      : [];
   });
   const imports = new Set();
   for (const source of program.getSourceFiles()) {
@@ -151,7 +161,8 @@ function publicReferences(folder, entry) {
     for (const imported of ts.preProcessFile(source.text, true, true).importedFiles)
       if (imported.fileName.startsWith("plugin:")) imports.add(imported.fileName);
   }
-  return { refs, imports };
+  const internal = [...targets.values()].filter(([, , visibility]) => visibility === Visibility.Internal);
+  return { refs, imports, internal };
 }
 
 export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
@@ -167,11 +178,19 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
         .join("\n")
     );
   if (target.side === "client") throw new Error(`Use ${id} in a client bundle through the client registry`);
-  const { refs: all } = publicReferences(target.folder, target.entry);
+  const { refs: all, internal } = publicReferences(target.folder, target.entry);
   const refs = publicOnly ? all.filter(([, [, , visibility]]) => visibility === Visibility.Public) : all;
+  const internalRefs = publicOnly ? [] : internal;
+  const kinds = Object.fromEntries(
+    [...refs.map(([, target]) => target), ...internalRefs].map(([module, method, , kind]) => [
+      `${module}:${method}`,
+      kind,
+    ]),
+  );
   return (
     'import { createApi } from "@tokamak/sdk";\n' +
-    `const references = createApi(${JSON.stringify(target.id)});\n` +
+    `const references = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(Object.keys(kinds))}, ${JSON.stringify(kinds)});\n` +
+    `export const internal = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(internalRefs.map(([module, method]) => `${module}:${method}`))}, ${JSON.stringify(kinds)});\n` +
     refs
       .map(
         ([name, [module, method]]) =>
@@ -204,14 +223,31 @@ function declarePlugin(root, id, declared) {
     );
     return;
   }
-  const { refs, imports } = publicReferences(target.folder, target.entry);
+  const { refs, imports, internal } = publicReferences(target.folder, target.entry);
+  const referenceType = ([module, method, , , source]) =>
+    `import("@tokamak/sdk").ReferenceFromDefinition<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }`;
+  const internalTree = {};
+  for (const ref of internal) {
+    let branch = internalTree;
+    for (const segment of ref[0].split("/")) branch = branch[segment] ??= Object.create(null);
+    branch[ref[1]] = referenceType(ref);
+  }
+  const declaration = (tree) =>
+    `{${Object.entries(tree)
+      .map(
+        ([key, value]) =>
+          `readonly ${JSON.stringify(key)}: ${typeof value === "string" ? value : declaration(value)};`,
+      )
+      .join("")}}`;
   writeFileSync(
     path,
     `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
       (target.side === "client"
         ? `export * from ${entry};\n`
-        : `export type * from ${entry};\n` +
-          `type PublicApi = Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry}), ${JSON.stringify(target.id)}> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry}), ${JSON.stringify(target.id)}>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>;\n` +
+        : 'import { functionName } from "@tokamak/sdk";\n' +
+          `export type * from ${entry};\n` +
+          `type PublicApi = ${declaration(Object.fromEntries(refs.map(([name, ref]) => [name, referenceType(ref)])))};\n` +
+          `export declare const internal: ${declaration(internalTree)};\n` +
           `export declare const api: PublicApi;\n` +
           refs
             .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)

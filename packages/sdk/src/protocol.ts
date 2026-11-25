@@ -19,9 +19,11 @@ export type Request =
       kind: "query" | "mutation" | "action";
       depth: number;
       thread: string | null;
+      hookScope?: number;
       on?: "server" | "caller";
       window?: boolean;
     }
+  | { type: "hookstage"; id: number; scope: number; done?: boolean }
   | { type: "cancelaction"; id: number }
   | { type: "subscribe"; id: number; name: string; args: JsonValue }
   | { type: "plugins"; id: number }

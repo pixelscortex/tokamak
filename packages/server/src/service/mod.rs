@@ -65,7 +65,7 @@ impl Visibility {
 }
 
 impl FunctionKind {
-    fn from_wire(value: &Json) -> Option<Self> {
+    pub(crate) fn from_wire(value: &Json) -> Option<Self> {
         match value.as_str()? {
             "query" => Some(Self::Query),
             "mutation" => Some(Self::Mutation),
@@ -207,6 +207,11 @@ pub(crate) enum Command {
 pub(crate) enum Action {
     Plugins(u64),
     Cancel(u64),
+    HookStage {
+        id: u64,
+        scope: u64,
+        done: bool,
+    },
     PluginsPage {
         id: u64,
         revision: String,
@@ -224,7 +229,7 @@ pub(crate) enum Action {
         name: String,
         args: Json,
         kind: Option<FunctionKind>,
-        local_parent: Option<(usize, Option<String>)>,
+        local_parent: Option<LocalParent>,
         placement: crate::actions::Placement,
     },
     Subscribe {
@@ -233,6 +238,12 @@ pub(crate) enum Action {
         args: Json,
     },
     Unsubscribe(u64),
+}
+
+pub(crate) struct LocalParent {
+    depth: usize,
+    thread: Option<String>,
+    hook_scope: Option<u64>,
 }
 
 struct Subscription {
@@ -256,6 +267,7 @@ struct Client {
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
+    hook_scopes: BTreeMap<u64, crate::identity::HookBudget>,
 }
 
 struct Coordinator {

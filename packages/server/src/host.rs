@@ -17,6 +17,7 @@ type Failure = Arc<std::sync::Mutex<Option<engine::CallError>>>;
 
 #[derive(Clone)]
 struct TransactionContext {
+    mutation: bool,
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
@@ -25,8 +26,9 @@ struct TransactionContext {
 }
 
 impl TransactionContext {
-    fn new(tx: Transaction) -> Self {
+    fn new(tx: Transaction, mutation: bool) -> Self {
         Self {
+            mutation,
             shared: Arc::new(Mutex::new(Some(tx))),
             observations: Arc::default(),
             failure: Arc::default(),
@@ -36,7 +38,10 @@ impl TransactionContext {
     }
 
     fn poison(&self, error: engine::CallError) {
-        *self.failure.lock().expect("failure lock") = Some(error);
+        self.failure
+            .lock()
+            .expect("failure lock")
+            .get_or_insert(error);
     }
 
     fn hook_scope(&self) -> Self {
@@ -133,7 +138,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         }
     };
 
-    let context = TransactionContext::new(tx);
+    let context = TransactionContext::new(tx, mutation);
 
     let ops = operations(
         context.clone(),
@@ -162,17 +167,21 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
     let mut observed = context.observations.lock().await;
 
-    let result = result.and_then(|value| {
-        let nested = context.failure.lock().expect("failure lock");
-
-        if let Some(error) = &observed.error {
-            Err(error.clone().into())
-        } else if let Some(error) = nested.as_ref() {
+    let nested = context.failure.lock().expect("failure lock").clone();
+    let result =
+        if mutation && let Some(error) = nested.as_ref().filter(|error| error.details.is_some()) {
             Err(error.clone().into())
         } else {
-            Ok(value)
-        }
-    });
+            result.and_then(|value| {
+                if let Some(error) = &observed.error {
+                    Err(error.clone().into())
+                } else if let Some(error) = nested {
+                    Err(error.into())
+                } else {
+                    Ok(value)
+                }
+            })
+        };
 
     let result = finish_transaction(tx, result, mutation, &mut observed).await;
     Call {
@@ -276,7 +285,7 @@ fn operations(
     if let Some((plugins, owner)) = graph {
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
             .expect("unique operation");
-        if let Some(hooks) = hooks::QueryHooks::for_target(&plugins, qualified, &note, &tx) {
+        if let Some(hooks) = hooks::TransactionHooks::for_target(&plugins, qualified, &note, &tx) {
             ops = ops.with_transforms(hooks);
         }
         ops.register_module_call("plugin.call", move |payload| {

@@ -5,6 +5,8 @@ import type { Visibility } from "./visibility";
 
 const referenceTypes: unique symbol = Symbol("tokamak.reference.types");
 
+export const functionKind: unique symbol = Symbol("tokamak.function.kind");
+
 export const functionName: unique symbol = Symbol("tokamak.function.name");
 
 export interface FunctionReference<
@@ -15,6 +17,7 @@ export interface FunctionReference<
   Owner extends string = string,
 > {
   readonly [functionName]: string;
+  readonly [functionKind]?: K;
   readonly [referenceTypes]: { kind: K; args: A; result: R; visibility: V; owner: Owner };
 }
 
@@ -54,7 +57,11 @@ export type ResultOf<R> = R extends FunctionReference<FunctionKind, unknown, inf
  * retained for existing hand-written references.
  * A reference must be at least module.export; folders add module path segments.
  */
-export function createApi<T>(namespace?: string, names?: readonly string[]): T {
+export function createApi<T>(
+  namespace?: string,
+  names?: readonly string[],
+  kinds?: Readonly<Record<string, FunctionKind>>,
+): T {
   const qualify = (name: string) => (namespace ? `${namespace}/${name}` : name);
   if (names) {
     type Branch = Record<string, object>;
@@ -73,7 +80,7 @@ export function createApi<T>(namespace?: string, names?: readonly string[]): T {
         }
         branch = branch[segment] as Branch;
       }
-      branch[method] = Object.freeze({ [functionName]: qualify(name) });
+      branch[method] = Object.freeze({ [functionName]: qualify(name), [functionKind]: kinds?.[name] });
     }
     branches.forEach(Object.freeze);
     return root as T;

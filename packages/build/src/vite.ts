@@ -9,7 +9,13 @@ import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { contractDeclarations, contractEntry } from "../../sdk/tools/contracts.mjs";
 import { serverDirectory } from "../../sdk/tools/server-files.mjs";
-import { functionPlacement, lanes, runnerFunction, runnerProvider } from "../../sdk/tools/placement.mjs";
+import {
+  functionPlacement,
+  lanes,
+  moduleName,
+  runnerFunction,
+  runnerProvider,
+} from "../../sdk/tools/placement.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
 import { artifactBundle, stripSourcesContent } from "./artifact-bundle.ts";
 import solid from "@solidjs/vite-plugin";
@@ -17,6 +23,7 @@ import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
 import { exportedFunctions } from "./exports.ts";
 import { readDescriptor, clientEntry } from "./descriptor.ts";
+import { warnMissingHookTargets } from "./hook-targets.ts";
 import { signInDependency } from "./auth-dependencies.ts";
 
 export const PLUGIN_UI_BUILD_ENABLED = true;
@@ -195,6 +202,19 @@ export function tokamak(
           }
         }
         const functions = exportedFunctions(root, plugin.exports);
+        const hookTargets = new Set<string>();
+        const hookable = new Set<string>();
+        for (const [path, definitions] of placement?.modules ?? []) {
+          const module = moduleName(server, path, server === resolve(root, "src/server"));
+          for (const [name, definition] of definitions) {
+            if (definition.target) hookTargets.add(definition.target);
+            if (["query", "mutation", "action"].includes(definition.kind))
+              hookable.add(`${plugin.id}/${module}:${name}`);
+          }
+        }
+        warnMissingHookTargets(root, plugin.id, hookable, options.pluginCatalog, (message) =>
+          this.warn(message),
+        );
         this.emitFile({
           type: "asset",
           fileName: "manifest.json",
@@ -206,6 +226,7 @@ export function tokamak(
                 entries,
                 publicFunctions: functions.publicFunctions,
                 ...(functions.pluginFunctions.length ? { pluginFunctions: functions.pluginFunctions } : {}),
+                ...(hookTargets.size ? { hookTargets: [...hookTargets].sort() } : {}),
                 ...contracts,
               },
               null,

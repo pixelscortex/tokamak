@@ -80,8 +80,9 @@ impl Realm {
                         Module::declare(ctx.clone(), BUNDLE, source.as_bytes())?.eval()?;
                     evaluated.into_future::<()>().await?;
                     let functions: Object = module.get("functions")?;
+                    let hooks = module.get::<_, Object>("hooks").ok();
                     let validators = if bridge.is_none() {
-                        Some(validators.call::<_, String>((functions.clone(),))?)
+                        Some(validators.call::<_, String>((functions.clone(), hooks.clone()))?)
                     } else {
                         None
                     };
@@ -91,7 +92,7 @@ impl Realm {
                             .map_or(0, |bridge| bridge.next.fetch_add(1, Ordering::Relaxed) + 1)
                             as f64
                     });
-                    let dispatch: Function = initialize.call((send, next_op, functions))?;
+                    let dispatch: Function = initialize.call((send, next_op, functions, hooks))?;
                     Ok::<_, rquickjs::Error>((Persistent::save(&ctx, dispatch), validators))
                 }
                 .await;

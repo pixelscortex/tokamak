@@ -25,6 +25,11 @@ impl Coordinator {
         let determinism = engine::Determinism::default();
 
         for attempt in 0..ATTEMPTS {
+            let note = if mutation {
+                note.mutation_attempt()
+            } else {
+                note.clone()
+            };
             let call = host::invoke(
                 &self.database,
                 &self.pool,
@@ -42,6 +47,7 @@ impl Coordinator {
             .await;
 
             if mutation && call.conflict {
+                note.retry_hooks();
                 if attempt + 1 == ATTEMPTS {
                     break;
                 }

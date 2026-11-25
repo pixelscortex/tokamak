@@ -249,7 +249,7 @@ type ReturnValidator = Validator<unknown> | undefined;
 
 type FunctionOptions<K extends FunctionKind, M extends DataModel, F extends Fields, R, S> = {
   args?: F;
-  returns?: K extends "query" ? S : never;
+  returns?: K extends "local" ? never : S;
   on?: K extends "action" ? ActionTarget : never;
   handler: (
     ctx: K extends "query"
@@ -541,6 +541,7 @@ export const mutation = builder<"mutation", LooseModel>("mutation", Visibility.P
 type ActionBuilder<V extends Visibility> = {
   <F extends Fields = Record<never, never>, R = unknown>(definition: {
     on: "caller";
+    returns?: Validator<unknown>;
     args?: F;
     handler: (ctx: CallerActionContext, args: ObjectValue<F>) => R;
   }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R | MachineFailure>, V> & {
@@ -548,11 +549,13 @@ type ActionBuilder<V extends Visibility> = {
   };
   <A = any, R = unknown>(definition: {
     on: "caller";
+    returns?: Validator<unknown>;
     args?: undefined;
     handler: (ctx: CallerActionContext, args: A) => R;
   }): FunctionDefinition<"action", A, WireResult<R | MachineFailure>, V> & { readonly on: "caller" };
   <F extends Fields = Record<never, never>, R = unknown>(definition: {
     on?: "server";
+    returns?: Validator<unknown>;
     args?: F;
     handler: (ctx: ActionContext, args: ObjectValue<F>) => R;
   }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R>, V>;

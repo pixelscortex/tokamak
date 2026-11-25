@@ -20,7 +20,7 @@ impl Coordinator {
             .plugins
             .as_ref()
             .and_then(|loaded| loaded.targets.get(&name));
-        let note = match target {
+        let mut note = match target {
             Some(target) => note.with_root_args(&target.args, &args),
             None => note,
         };
@@ -35,8 +35,9 @@ impl Coordinator {
             self.respond(session, id, Ok(placement.response(error.value())));
             return;
         }
-        if let Some(reply) = destination.immediate_reply(&note) {
-            self.respond(session, id, Ok(reply));
+        let owner = target.map(|target| (target.local_name.clone(), target.owner.clone()));
+        if let Some(reply) = self.window_action_reply(session, id, &name, &destination, &mut note) {
+            self.respond(session, id, reply);
             return;
         }
 
@@ -58,10 +59,8 @@ impl Coordinator {
                 return;
             }
         };
-        let (local_name, owner) = target.map_or_else(
-            || (name, None),
-            |target| (target.local_name.clone(), Some(target.owner.clone())),
-        );
+        let (local_name, owner) =
+            owner.map_or_else(|| (name, None), |(local, owner)| (local, Some(owner)));
         let source = match (&self.plugins, &owner) {
             (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
             _ => self.legacy_action_source.clone(),
@@ -95,6 +94,52 @@ impl Coordinator {
                 .map_err(|error| error.map_text(|text| environment.redact(text)))
         };
         self.spawn_action_job(session, id, output, invocation);
+    }
+
+    fn window_action_reply(
+        &mut self,
+        session: u64,
+        id: u64,
+        name: &str,
+        destination: &crate::actions::Destination,
+        note: &mut CallNote,
+    ) -> Option<Result<Json, String>> {
+        match self.prepare_hook_scope(session, id, destination, note) {
+            Ok(owns) => destination
+                .immediate_reply(note, self.plugins.as_deref(), name, owns)
+                .map(Ok),
+            Err(error) => Some(Err(error.into())),
+        }
+    }
+
+    fn prepare_hook_scope(
+        &mut self,
+        session: u64,
+        id: u64,
+        destination: &crate::actions::Destination,
+        note: &mut CallNote,
+    ) -> Result<bool, &'static str> {
+        if !matches!(
+            destination,
+            crate::actions::Destination::CallerWindowRunner { .. }
+        ) || note.hook_scope.is_some()
+            || self
+                .plugins
+                .as_ref()
+                .is_none_or(|plugins| plugins.hooks.is_empty())
+        {
+            return Ok(false);
+        }
+
+        let client = self.sessions.get_mut(&session).ok_or("Session closed")?;
+        if client.hook_scopes.len() >= 1024 || client.hook_scopes.contains_key(&id) {
+            return Err("Window action hook capacity exceeded");
+        }
+
+        let budget = crate::identity::HookBudget::default();
+        client.hook_scopes.insert(id, budget.clone());
+        note.scope_hooks(id, budget);
+        Ok(true)
     }
 
     fn spawn_action_job(

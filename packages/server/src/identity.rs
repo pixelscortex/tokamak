@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 mod accounts;
 mod call;
 mod cli;
-pub(crate) use call::CallNote;
+pub(crate) use call::{CallNote, HookBudget};
 mod devices;
 pub(crate) use accounts::AccountBinding;
 pub use cli::command;

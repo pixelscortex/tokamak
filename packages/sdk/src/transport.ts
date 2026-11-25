@@ -111,7 +111,7 @@ export class InProcessTransport implements ClientTransport {
     kind: "query" | "mutation" | "action",
     name: string,
     args: JsonValue,
-    parent: { depth: number; thread: string | null },
+    parent: { depth: number; thread: string | null; hookScope?: number },
     on?: ActionTarget,
     window?: boolean,
     signal?: ActionSignal,
@@ -129,6 +129,10 @@ export class InProcessTransport implements ClientTransport {
       }),
       signal,
     );
+  }
+
+  hookStage(scope: number, done?: boolean): Promise<JsonValue> {
+    return this.control((id) => ({ type: "hookstage", id, scope, done }));
   }
 
   async plugins(): Promise<JsonValue> {

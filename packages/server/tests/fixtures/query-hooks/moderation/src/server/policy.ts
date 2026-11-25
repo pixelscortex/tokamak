@@ -1,4 +1,13 @@
-import { createFunctions, createHook, fail, provide, v, type Id } from "@tokamak/sdk";
+import {
+  createApi,
+  type FunctionReference,
+  createFunctions,
+  createHook,
+  fail,
+  provide,
+  v,
+  type Id,
+} from "@tokamak/sdk";
 import { directory } from "plugin:team/contracts";
 import * as team from "plugin:team/server";
 import schema from "./schema";
@@ -68,9 +77,10 @@ export const editProfile = hook(team.api.profile, {
 });
 
 export const fanout = query({
-  async handler(ctx) {
+  args: { count: v.number() },
+  async handler(ctx, { count: calls }) {
     let count = 0;
-    for (let i = 0; i < 70; i++) count += (await ctx.runQuery(team.api.list, { text: " Ali " })).length;
+    for (let i = 0; i < calls; i++) count += (await ctx.runQuery(team.api.list, { text: " Ali " })).length;
     return count;
   },
 });
@@ -136,5 +146,39 @@ export const stallsAfterCaughtHook = query({
     } catch {
       await new Promise(() => {});
     }
+  },
+});
+
+export const logSave = hook(team.guarded, {
+  async before(ctx, args) {
+    await ctx.db.insert("bans", { name: `audit:${args.name}` });
+    if (args.mode === "before-fails") return fail("limitReached", { maximum: 100 });
+    return { ...args, name: args.name.trim() };
+  },
+  async after(ctx, result, args) {
+    await ctx.db.insert("bans", { name: `after:${result}` });
+    if (args.mode === "after-fails") throw new Error("after failed");
+    return result.toUpperCase();
+  },
+});
+
+export const hookHidden = hook(team.internal.users.saveHidden, {
+  before(_ctx, args) {
+    return { name: `${args.name}-hooked` };
+  },
+});
+
+export const audit = query({
+  async handler(ctx) {
+    return (await ctx.db.query("bans").collect()).map(({ name }) => name).sort();
+  },
+});
+
+const oldTeam = createApi<{ users: { renamed: FunctionReference<"query", {}, null, "public", "team"> } }>(
+  "team",
+);
+export const staleTarget = hook(oldTeam.users.renamed, {
+  after: () => {
+    throw new Error("Removed hook ran");
   },
 });

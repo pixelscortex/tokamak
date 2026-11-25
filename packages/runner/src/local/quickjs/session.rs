@@ -337,7 +337,7 @@ pub(in crate::local) async fn action(
     pool: Pool,
     leases: Arc<Leases>,
     action: server::RunnerAction,
-) -> Result<Value, String> {
+) -> Result<Value, engine::CallError> {
     let _slot = pool
         .actions
         .try_acquire()
@@ -347,7 +347,13 @@ pub(in crate::local) async fn action(
         entry_hash: action.entry_hash,
         code_hash: action.code_hash,
     };
-    let lease = leases.get(&artifact)?;
+    let lease = leases.get(&artifact).map_err(|error| {
+        if action.name.starts_with("@hook/") {
+            server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE.to_owned()
+        } else {
+            error
+        }
+    })?;
     let bridge = Bridge {
         leases,
         retiring: lease.retiring.clone(),
@@ -362,11 +368,7 @@ pub(in crate::local) async fn action(
         () = pool.stopping.cancelled() => return Err("Runner stopped".into()),
         result = run(&pool, &bridge, 1, &host, frame, std::slice::from_ref(&artifact.id), Invocation::Root) => result?,
     };
-    if let Some(error) = result["error"].as_str() {
-        Err(error.to_owned())
-    } else {
-        Ok(result["value"].clone())
-    }
+    action_value(result)
 }
 
 async fn root_call(
@@ -397,13 +399,18 @@ async fn invoke_root(
     lease: &Arc<Lease>,
     mut frame: Value,
 ) -> Result<Value, String> {
+    let plan = frame["hooks"].take();
+    let continuation = frame["note"].clone();
     if let Some(fields) = frame.as_object_mut() {
+        fields.remove("hooks");
+        fields.remove("hookScope");
         fields.remove("threadId");
         fields.remove("admittedAction");
         if fields.get("action") == Some(&Value::Bool(true))
             && let Some(note) = fields.remove("note")
         {
             fields.insert("actionDepth".into(), note["depth"].clone());
+            fields.insert("hookScope".into(), note["hookScope"].clone());
             fields.insert("threadId".into(), note["thread"].clone());
         } else {
             fields.remove("actionDepth");
@@ -421,16 +428,132 @@ async fn invoke_root(
     let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
-    run(
-        pool,
-        bridge,
-        root,
-        &host,
-        frame,
-        ancestors,
-        Invocation::Root,
+    if frame["action"] != true || plan.is_null() {
+        return run(
+            pool,
+            bridge,
+            root,
+            &host,
+            frame,
+            ancestors,
+            Invocation::Root,
+        )
+        .await;
+    }
+
+    let plan: server::RunnerHookPlan =
+        serde_json::from_value(plan).map_err(|error| error.to_string())?;
+    let name = format!(
+        "{id}/{}",
+        frame["fn"].as_str().ok_or("Missing action name")?
+    );
+    let args = frame["args"].take();
+    let value = plan
+        .invoke(
+            &name,
+            args,
+            &continuation,
+            |artifact, name, input, note| {
+                window_hook(pool, bridge, root, id, artifact, name, input, note)
+            },
+            |args| async {
+                frame["args"] = args;
+                let result = run(
+                    pool,
+                    bridge,
+                    root,
+                    &host,
+                    frame,
+                    ancestors,
+                    Invocation::Root,
+                )
+                .await?;
+                action_value(result)
+            },
+        )
+        .await;
+    Ok(match value {
+        Ok(value) => json!({"type":"result","value":value}),
+        Err(error) => json!({"type":"result","error":error.message,"details":error.details}),
+    })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The stage runs on the root action's Runner connection"
+)]
+async fn window_hook(
+    pool: &Pool,
+    bridge: &Bridge,
+    root: u64,
+    owner: &str,
+    artifact: Value,
+    name: String,
+    input: Value,
+    note: Value,
+) -> Result<Value, engine::CallError> {
+    let unavailable = |_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE;
+    let artifact: Artifact =
+        serde_json::from_value(artifact).map_err(|_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
+    let lease = bridge.leases.get(&artifact).map_err(unavailable)?;
+    if let Some(scope) = note["hookScope"].as_u64()
+        && let Upstream::Window(window) = &bridge.upstream
+    {
+        let reply = window
+            .request(
+                json!({"type":"op","name":"hook.stage","payload":scope}),
+                root,
+                &artifact,
+            )
+            .await?;
+        match reply {
+            Reply::Result(value) if value["value"] == true => {}
+            Reply::Result(value) if value["value"] == false => {
+                return Err(engine::CallError {
+                    message: "delegated module count budget exceeded".into(),
+                    details: None,
+                    limit: Some(engine::CallLimit::Modules),
+                });
+            }
+            _ => return Err("Runner hook scope unavailable".into()),
+        }
+    }
+    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let ancestors = [owner.to_owned(), artifact.id];
+    let frame = json!({
+        "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
+        "threadId":note["thread"],"hookScope":note["hookScope"],"actionDepth":note["depth"].as_u64().unwrap_or(1).saturating_sub(1),
+    });
+    action_value(
+        run(
+            pool,
+            bridge,
+            root,
+            &host,
+            frame,
+            &ancestors,
+            Invocation::Root,
+        )
+        .await?,
     )
-    .await
+}
+
+fn action_value(mut result: Value) -> Result<Value, engine::CallError> {
+    if let Some(error) = result["error"].as_str().map(str::to_owned) {
+        let mut details = result
+            .get_mut("details")
+            .filter(|v| v.is_object())
+            .map(Value::take);
+        if let Some(details) = &mut details {
+            details["message"] = json!(error);
+        }
+        return Err(engine::CallError {
+            message: error,
+            details,
+            limit: None,
+        });
+    }
+    Ok(result["value"].take())
 }
 
 fn open_channel<'a>(channels: &'a Channels, id: u64, frame: &Value) -> Option<OpenChannel<'a>> {
@@ -685,6 +808,7 @@ struct CallRoute<'a> {
     ancestors: &'a [String],
     thread: OnceLock<String>,
     action_depth: usize,
+    hook_scope: Option<u64>,
     args: &'a Value,
     upstream: CallUpstream<'a>,
 }
@@ -729,6 +853,7 @@ impl<'a> CallRoute<'a> {
                 .as_str()
                 .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned())),
             args: &frame["args"],
+            hook_scope: frame["hookScope"].as_u64(),
             action_depth: frame["actionDepth"]
                 .as_u64()
                 .and_then(|depth| usize::try_from(depth).ok())
@@ -924,13 +1049,14 @@ impl<'a> CallRoute<'a> {
             fields.get("name").and_then(Value::as_str),
             Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
         ) {
-            fields.insert(
-                "continuation".into(),
-                json!({
-                    "depth": self.action_depth + self.ancestors.len() - 1,
-                    "thread": self.thread.get(),
-                }),
-            );
+            let mut continuation = json!({
+                "depth": self.action_depth + self.ancestors.len() - 1,
+                "thread": self.thread.get(),
+            });
+            if let Some(scope) = self.hook_scope {
+                continuation["hookScope"] = json!(scope);
+            }
+            fields.insert("continuation".into(), continuation);
         }
     }
 
@@ -975,7 +1101,7 @@ impl<'a> CallRoute<'a> {
             ));
         }
         let frame = json!({
-            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "actionDepth":self.action_depth,
+            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "hookScope":self.hook_scope, "actionDepth":self.action_depth,
         });
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
@@ -1074,6 +1200,7 @@ mod tests {
             ancestors: &["first".into(), "second".into()],
             thread: OnceLock::new(),
             action_depth: 0,
+            hook_scope: None,
             args: &json!({"selection": "chat/threads:admitted"}),
             upstream: CallUpstream::Window {
                 connection: &window,

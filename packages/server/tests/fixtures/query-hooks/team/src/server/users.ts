@@ -1,8 +1,11 @@
 import { directory } from "../contracts";
 import { createFunctions, v } from "@tokamak/sdk";
 import schema from "./schema";
+import { api } from "./_generated/api";
+import { internal } from "./_generated/internal";
 
-const { query, mutation } = createFunctions(schema);
+const functions = createFunctions(schema);
+const { query, mutation } = functions;
 
 export const list = query({
   args: { text: v.string(), mode: v.optional(v.string()), thread: v.optional(v.id("threads")) },
@@ -48,5 +51,36 @@ export const viaContract = query({
   async handler(ctx): Promise<{ name: string; detail: string }[]> {
     const [provider] = await directory.list(ctx);
     return provider.list({ text: " Ali " });
+  },
+});
+
+export const guarded = mutation({
+  args: { name: v.string(), mode: v.optional(v.string()) },
+  returns: v.string(),
+  async handler({ db }, { name, mode }) {
+    await db.insert("users", { name });
+    if (mode === "owner-fails") throw new Error("owner failed");
+    return name;
+  },
+});
+
+export const saveHidden = functions.internalMutation({
+  args: { name: v.string() },
+  handler: ({ db }, { name }) => db.insert("users", { name }),
+});
+
+export const useHidden = mutation({
+  args: { name: v.string() },
+  handler: (ctx, args) => ctx.runMutation(internal.users.saveHidden, args),
+});
+
+export const catchGuarded = mutation({
+  async handler(ctx) {
+    try {
+      await ctx.runMutation(api.users.guarded, { name: "hidden-error", mode: "after-fails" });
+    } catch {
+      await ctx.db.insert("users", { name: "caught" });
+    }
+    return null;
   },
 });

@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 pub(crate) struct ActionOperations {
     pub ops: Arc<OpRegistry>,
-    scope: Option<Box<Scope>>,
+    pub(super) scope: Option<Box<Scope>>,
     environment: Arc<crate::ActionEnvironment>,
 }
 
@@ -24,13 +24,14 @@ pub struct RunnerContractRoute {
     pub upstream: RunnerActionUpstream,
 }
 
-struct Scope {
-    owner: String,
-    generation: Arc<Loaded>,
-    commands: mpsc::WeakSender<Command>,
-    process: Arc<Supervisor>,
-    note: CallNote,
-    runner: Arc<RunnerSlot>,
+#[derive(Clone)]
+pub(super) struct Scope {
+    pub(super) owner: String,
+    pub(super) generation: Arc<Loaded>,
+    pub(super) commands: mpsc::WeakSender<Command>,
+    pub(super) process: Arc<Supervisor>,
+    pub(super) note: CallNote,
+    pub(super) runner: Arc<RunnerSlot>,
 }
 
 impl ActionOperations {

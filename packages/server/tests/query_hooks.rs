@@ -134,7 +134,12 @@ async fn run_driver(workspace: &Path, installation: &Path, server: &Server, sess
         }
     });
 
-    tokio::time::timeout(Duration::from_secs(30), async {
+    let timeout = if std::env::var("TOKAMAK_HOOK_BENCHMARK").as_deref() == Ok("1") {
+        Duration::from_secs(120)
+    } else {
+        Duration::from_secs(30)
+    };
+    tokio::time::timeout(timeout, async {
         loop {
             tokio::select! {
                 line = lines.recv() => {

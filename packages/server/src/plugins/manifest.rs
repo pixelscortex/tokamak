@@ -83,6 +83,8 @@ pub struct Manifest {
     pub public_functions: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub plugin_functions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub hook_targets: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contracts: Vec<ContractDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

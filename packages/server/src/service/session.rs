@@ -63,6 +63,7 @@ impl SessionSender {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "exhaustive wire request mapping")]
 fn request_action(request: Request) -> Result<Action, Error> {
     if request.id() > 9_007_199_254_740_991 {
         return Err(Error::Invalid(
@@ -109,6 +110,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             kind,
             depth,
             thread,
+            hook_scope,
             on,
             window,
         } => Action::Call {
@@ -116,8 +118,17 @@ fn request_action(request: Request) -> Result<Action, Error> {
             name,
             args,
             kind: Some(kind),
-            local_parent: Some((depth, thread)),
+            local_parent: Some(LocalParent {
+                depth,
+                thread,
+                hook_scope,
+            }),
             placement: crate::actions::Placement::new(on, window),
+        },
+        Request::HookStage { id, scope, done } => Action::HookStage {
+            id,
+            scope,
+            done: done.unwrap_or_default(),
         },
         Request::CancelAction { id } => Action::Cancel(id),
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },

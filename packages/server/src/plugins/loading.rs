@@ -73,7 +73,7 @@ impl Loaded {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
-            query_hooks: BTreeMap::new(),
+            hooks: BTreeMap::new(),
             transaction_bundles: BTreeMap::new(),
             descriptor: Value::Null,
             catalog_text: String::new(),
@@ -194,6 +194,7 @@ impl Loaded {
                 .kinds
                 .values()
                 .any(|kind| *kind == FunctionKind::Action)
+                || inspected.descriptor["actionHooks"] == true
             {
                 let prior = unchanged
                     .filter(|_| !reloaded)
@@ -258,6 +259,10 @@ impl Loaded {
                 let local_name = function["name"].as_str().expect("inspected");
                 let kind = inspected.kinds[local_name];
                 let name = format!("{id}/{local_name}");
+                let declared_result = source
+                    .as_ref()
+                    .and_then(|source| source.result_validator(local_name))
+                    .or_else(|| function.get("returns"));
                 self.targets.insert(
                     name,
                     Target {
@@ -270,14 +275,10 @@ impl Loaded {
                                 .unwrap_or(&function["args"])
                                 .clone(),
                         ),
-                        result: function
-                            .get("returns")
+                        result: declared_result
                             .or_else(|| inspected.descriptor["results"].get(local_name))
                             .map(|validator| Arc::new(validator.clone())),
-                        derived_result_warning: function
-                            .get("returns")
-                            .is_none()
-                            .then(Arc::default),
+                        derived_result_warning: declared_result.is_none().then(Arc::default),
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind,
@@ -355,20 +356,24 @@ impl Loaded {
         let mut registry = BTreeMap::<String, Vec<Hook>>::new();
 
         for (owner, inspected) in &self.inspected {
-            let Some(hooks) = inspected.descriptor.get("hooks") else {
-                continue;
-            };
-            let hooks = hooks
-                .as_array()
-                .ok_or_else(|| invalid("Expected a list of hooks"))?;
-            if hooks.is_empty() {
-                continue;
+            let mut registrations = Vec::new();
+            for hooks in [
+                inspected.descriptor.get("hooks"),
+                self.action_sources
+                    .get(owner)
+                    .and_then(|source| source.hooks()),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                registrations.extend(
+                    hooks
+                        .as_array()
+                        .ok_or_else(|| invalid("Expected a list of hooks"))?,
+                );
             }
 
-            let bundle = &self.transaction_bundles[owner];
-            let space = DataSpace::plugin(owner).map_err(|error| invalid(error.to_string()))?;
-
-            for hook in hooks {
+            for hook in registrations {
                 let name = hook["name"]
                     .as_str()
                     .ok_or_else(|| invalid("Missing hook name"))?;
@@ -396,10 +401,12 @@ impl Loaded {
                     continue;
                 };
 
-                if function.kind != FunctionKind::Query || function.visibility != Visibility::Public
-                {
+                let kind = hook
+                    .get("kind")
+                    .map_or(Some(FunctionKind::Query), FunctionKind::from_wire);
+                if kind != Some(function.kind) {
                     eprintln!(
-                        "Skipping hook {owner}/{name}: target {target} is no longer a public query"
+                        "Skipping hook {owner}/{name}: target {target} has a different function kind"
                     );
                     continue;
                 }
@@ -419,13 +426,11 @@ impl Loaded {
                     name: name.to_owned(),
                     before,
                     after,
-                    bundle: bundle.clone(),
-                    space: space.clone(),
                 });
             }
         }
 
-        self.query_hooks = registry
+        self.hooks = registry
             .into_iter()
             .map(|(name, chain)| (name, chain.into()))
             .collect();

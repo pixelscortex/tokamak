@@ -27,6 +27,19 @@ impl Coordinator {
                 }
             }
 
+            Action::HookStage { id, scope, done } => {
+                let client = self.sessions.get_mut(&session).expect("checked session");
+                let allowed = if done {
+                    client.hook_scopes.remove(&scope).is_some()
+                } else {
+                    client
+                        .hook_scopes
+                        .get(&scope)
+                        .is_some_and(|budget| budget.take())
+                };
+                self.respond(session, id, Ok(serde_json::json!(allowed)));
+            }
+
             Action::Plugins(id) => {
                 let result = self.catalog_page(None, 0);
                 self.respond(session, id, result);
@@ -55,7 +68,7 @@ impl Coordinator {
                 kind: expected,
                 local_parent,
                 placement,
-            } => match self.request_caller(auth, &name, &args, local_parent, placement) {
+            } => match self.request_caller(session, auth, &name, &args, local_parent, placement) {
                 Ok(caller) => self.call(session, id, name, args, expected, caller).await,
                 Err(error) => self.respond(session, id, Err(error)),
             },
@@ -75,10 +88,11 @@ impl Coordinator {
 
     fn request_caller(
         &self,
+        session_id: u64,
         session: SessionAuth,
         name: &str,
         args: &Json,
-        local_parent: Option<(usize, Option<String>)>,
+        local_parent: Option<LocalParent>,
         placement: Placement,
     ) -> Result<RequestCaller, String> {
         // A socket may already have admitted a write when its member
@@ -87,14 +101,27 @@ impl Coordinator {
             return Err("Session has been revoked".into());
         }
         let auth = session.caller.read().expect("auth lock").clone();
-        let note = if let Some((depth, thread)) = local_parent {
+        let note = if let Some(LocalParent {
+            depth,
+            thread,
+            hook_scope,
+        }) = local_parent
+        {
             let validator = self
                 .plugins
                 .as_ref()
                 .and_then(|loaded| loaded.targets.get(name))
                 .map(|target| target.args.as_ref());
-            CallNote::from_local_parent(&auth, depth, thread)?
-                .enter(name, validator, args)
+            let mut note = CallNote::from_local_parent(&auth, depth, thread)?;
+            if let Some(scope) = hook_scope {
+                let budget = self
+                    .sessions
+                    .get(&session_id)
+                    .and_then(|client| client.hook_scopes.get(&scope))
+                    .ok_or("Runner hook scope is no longer active")?;
+                note.scope_hooks(scope, budget.clone());
+            }
+            note.enter(name, validator, args)
                 .map_err(|error| error.to_string())?
         } else {
             Some(auth.clone()).into()

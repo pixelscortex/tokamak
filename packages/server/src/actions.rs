@@ -1,7 +1,12 @@
 //! Actions receive command capabilities, never a database handle or transaction.
 //! A nested call rejoins the ordered coordinator and gets its own normal world.
 
-use crate::host::action_process::Supervisor;
+use crate::host::{
+    action_process::Supervisor,
+    hooks::{HookTarget, Stage, run_after, run_before},
+};
+use crate::plugins::Hook;
+use crate::protocol::CallError;
 use crate::{identity::CallNote, protocol::ActionTarget};
 use crate::{
     plugins::Loaded,
@@ -16,12 +21,14 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 
+mod runner_hooks;
+pub use runner_hooks::RunnerHookPlan;
 mod runner_upstream;
 use runner_upstream::ActionOperations;
 pub use runner_upstream::RunnerActionUpstream;
 pub(crate) use runner_upstream::runner_hashes;
 
-pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
+pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, engine::CallError>> + Send>>;
 type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
 pub(crate) type RunnerSlot = OnceLock<RunnerDispatch>;
 
@@ -132,7 +139,13 @@ pub(crate) fn resolve(
 }
 
 impl Destination {
-    pub fn immediate_reply(&self, note: &CallNote) -> Option<Json> {
+    pub fn immediate_reply(
+        &self,
+        note: &CallNote,
+        loaded: Option<&Loaded>,
+        name: &str,
+        owns_hook_scope: bool,
+    ) -> Option<Json> {
         match self {
             Self::CallerWindowRunner {
                 plugin,
@@ -141,7 +154,9 @@ impl Destination {
             } => Some(serde_json::json!({
                 "destination":"callerWindowRunner",
                 "note":note.continuation(),
+                "ownsHookScope": owns_hook_scope,
                 "artifact":{"id":plugin,"entryHash":entry_hash,"codeHash":code_hash},
+                "hooks": loaded.and_then(|loaded| RunnerHookPlan::load(loaded, name)),
             })),
             _ => None,
         }
@@ -154,17 +169,61 @@ impl Destination {
         name: String,
         args: Json,
         upstream: ActionOperations,
-    ) -> Result<Json, crate::protocol::CallError> {
-        match self {
-            Self::Server => process
-                .invoke(
-                    source.ok_or("Plugin action has no action process bundle")?,
-                    name,
-                    args,
-                    upstream.ops,
-                )
+    ) -> Result<Json, CallError> {
+        let Some(scope) = upstream.scope.clone() else {
+            return self
+                .invoke_owner(process, source, name, args, upstream)
                 .await
-                .map_err(Into::into),
+                .map_err(Into::into);
+        };
+        let Some(target) = HookTarget::load(&scope.generation, &format!("{}/{name}", scope.owner))
+        else {
+            return self
+                .invoke_owner(process, source, name, args, upstream)
+                .await
+                .map_err(Into::into);
+        };
+        let note = scope.note.clone();
+        let stages = ActionStageExecutor {
+            generation: &scope.generation,
+            commands: &scope.commands,
+            process: &scope.process,
+            runner: &scope.runner,
+            dispatch: match &self {
+                Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
+                _ => None,
+            },
+        };
+        run_action(
+            &target,
+            &note,
+            args,
+            |hook, _, note, input| stages.execute(hook, note, input),
+            |args| self.invoke_owner(process, source, name, args, upstream),
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn invoke_owner(
+        self,
+        process: &Supervisor,
+        source: Option<Arc<crate::host::action_process::Source>>,
+        name: String,
+        args: Json,
+        upstream: ActionOperations,
+    ) -> Result<Json, engine::CallError> {
+        match self {
+            Self::Server => {
+                process
+                    .invoke_typed(
+                        source.ok_or("Plugin action has no action process bundle")?,
+                        name,
+                        args,
+                        upstream.ops,
+                    )
+                    .await
+            }
             Self::AttachedRunner {
                 dispatch,
                 plugin,
@@ -193,6 +252,98 @@ impl Destination {
         }
     }
 }
+
+struct ActionStageExecutor<'a> {
+    generation: &'a Arc<Loaded>,
+    commands: &'a mpsc::WeakSender<Command>,
+    process: &'a Arc<Supervisor>,
+    runner: &'a Arc<RunnerSlot>,
+    dispatch: Option<RunnerDispatch>,
+}
+
+impl ActionStageExecutor<'_> {
+    async fn execute(
+        &self,
+        hook: Hook,
+        note: CallNote,
+        input: Json,
+    ) -> Result<Json, engine::CallError> {
+        let environment = Arc::new(crate::environment::Snapshot::new(
+            Some(self.generation),
+            Some(&hook.owner),
+        ));
+        let ops = operations(
+            self.commands.clone(),
+            Some(self.generation.clone()),
+            Some(hook.owner.clone()),
+            environment.clone(),
+            self.process.clone(),
+            ActionContext {
+                note,
+                runner: self.runner.clone(),
+            },
+        )
+        .map_err(|error| error.to_string())?;
+        let source = self
+            .generation
+            .action_sources
+            .get(&hook.owner)
+            .cloned()
+            .ok_or("Missing hook action bundle")?;
+        let name = format!("@hook/{}", hook.name);
+        let result = if let Some(dispatch) = &self.dispatch {
+            let (entry_hash, code_hash) =
+                runner_hashes(&self.generation.catalog.plugins[&hook.owner].manifest)
+                    .ok_or(RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
+            self.process
+                .invoke_runner(&source, |retiring| {
+                    dispatch(RunnerAction {
+                        plugin: hook.owner,
+                        entry_hash: entry_hash.to_owned(),
+                        code_hash: code_hash.to_owned(),
+                        name,
+                        args: input,
+                        upstream: RunnerActionUpstream(ops),
+                        retiring,
+                    })
+                })
+                .await
+        } else {
+            self.process
+                .invoke_typed(source, name, input, ops.ops)
+                .await
+        };
+        result.map_err(|mut error| {
+            let limit = std::mem::take(&mut error.limit);
+            let mut error = engine::CallError::from(
+                CallError::from(error).map_text(|text| environment.redact(text)),
+            );
+            error.limit = limit;
+            error
+        })
+    }
+}
+
+async fn run_action<S, O>(
+    target: &HookTarget,
+    note: &CallNote,
+    args: Json,
+    mut stage: impl FnMut(Hook, Stage, CallNote, Json) -> S,
+    owner: impl FnOnce(Json) -> O,
+) -> Result<Json, engine::CallError>
+where
+    S: Future<Output = Result<Json, engine::CallError>>,
+    O: Future<Output = Result<Json, engine::CallError>>,
+{
+    let args = run_before(target, note, args, &mut stage).await?;
+    let result = owner(args.clone()).await?;
+    if crate::protocol::failure_kind(&result).is_some() {
+        return Ok(result);
+    }
+    run_after(target, note, result, &args, stage).await
+}
+
+pub const RUNNER_ACTION_ARTIFACT_UNAVAILABLE: &str = "Runner action artifact unavailable";
 
 pub(crate) struct ActionContext {
     pub note: CallNote,

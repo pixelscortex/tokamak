@@ -1,9 +1,13 @@
-import { functionName, type ArgsOf, type FunctionReference, type ResultOf } from "./api";
+import { functionKind, functionName, type ArgsOf, type FunctionReference, type ResultOf } from "./api";
 import {
+  action,
+  mutation,
   query,
   createFunctions,
   invokeFunction,
+  type CallerActionContext,
   type Failure,
+  type MutationContext,
   type FunctionKind,
   type QueryContext,
 } from "./functions";
@@ -15,20 +19,27 @@ import { Visibility } from "./visibility";
 const hookBrand = Symbol("tokamak.hook");
 
 type Reference = FunctionReference<FunctionKind, unknown, unknown>;
-type PublicQuery = FunctionReference<"query", unknown, unknown, typeof Visibility.Public>;
+type HookKind = "query" | "mutation" | "action";
+type Context<T extends Reference, M extends DataModel> =
+  T extends FunctionReference<"action", unknown, unknown>
+    ? CallerActionContext
+    : T extends FunctionReference<"mutation", unknown, unknown>
+      ? MutationContext<M>
+      : QueryContext<M>;
 type OwnerOf<T> =
   T extends FunctionReference<FunctionKind, unknown, unknown, Visibility, infer Owner> ? Owner : never;
 type HookStage = "before" | "after";
 type MaybePromise<T> = T | Promise<T>;
 
 type HookHandlers<T extends Reference, M extends DataModel> = {
-  before?: (ctx: QueryContext<M>, args: ArgsOf<T>) => MaybePromise<ArgsOf<T> | Failure<string, JsonValue>>;
-  after?: (ctx: QueryContext<M>, result: ResultOf<T>, args: ArgsOf<T>) => MaybePromise<ResultOf<T>>;
+  before?: (ctx: Context<T, M>, args: ArgsOf<T>) => MaybePromise<ArgsOf<T> | Failure<string, JsonValue>>;
+  after?: (ctx: Context<T, M>, result: ResultOf<T>, args: ArgsOf<T>) => MaybePromise<ResultOf<T>>;
 };
 
 interface HookDefinition<T extends Reference = Reference> {
   readonly [hookBrand]: true;
   readonly reference: T;
+  readonly kind: HookKind;
   readonly target: string;
   readonly before: boolean;
   readonly after: boolean;
@@ -37,33 +48,41 @@ interface HookDefinition<T extends Reference = Reference> {
 
 type HookBuilder<M extends DataModel> = <T extends Reference>(
   target: T &
-    (T extends PublicQuery
+    (T extends FunctionReference<HookKind, unknown, unknown>
       ? string extends OwnerOf<T>
-        ? { readonly error: "hooks must target a public query of another plugin" }
+        ? { readonly error: "hooks must target another plugin" }
         : unknown
-      : T extends FunctionReference<"query", unknown, unknown>
-        ? { readonly error: "hooks on internal and plugin-only functions are not supported yet" }
-        : { readonly error: "hooks on mutations and actions are not supported yet" }),
+      : { readonly error: "only queries, mutations and actions can be hooked" }),
   handlers: HookHandlers<NoInfer<T>, M>,
 ) => HookDefinition<T>;
 
 function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilder<M> {
   return (reference, handlers) => {
     const target = reference[functionName];
-    const build = schema ? createFunctions(schema).query : query;
-    // Use the normal query context, with the hooking plugin's schema and host.
+    const kind = reference[functionKind] ?? "query";
+    if (kind === "local") throw new Error("Only queries, mutations and actions can be hooked");
+    const functions = schema ? createFunctions(schema) : { query, mutation, action };
     return Object.freeze({
       [hookBrand]: true as const,
       reference,
+      kind,
       target,
       before: !!handlers.before,
       after: !!handlers.after,
       invoke(stage: HookStage, input: JsonObject, host: HostBridge) {
-        const run =
-          stage === "before"
-            ? (ctx: QueryContext<M>) => handlers.before!(ctx, input.args as never)
-            : (ctx: QueryContext<M>) => handlers.after!(ctx, input.result as never, input.args as never);
-        const definition = build({ handler: (ctx) => run(ctx as unknown as QueryContext<M>) });
+        const handler = (context: unknown) => {
+          type Ctx = Parameters<NonNullable<typeof handlers.before>>[0];
+          const ctx = context as Ctx;
+          return stage === "before"
+            ? handlers.before!(ctx, input.args as never)
+            : handlers.after!(ctx, input.result as never, input.args as never);
+        };
+        const definition =
+          kind === "action"
+            ? functions.action({ handler })
+            : kind === "mutation"
+              ? functions.mutation({ handler })
+              : functions.query({ handler });
         return invokeFunction({ hook: definition }, { name: "hook", args: {} }, host);
       },
     });
@@ -89,16 +108,23 @@ export function createHookRegistry(modules: Record<string, object>) {
 export type HookRegistry = ReturnType<typeof createHookRegistry>;
 
 export function hookMetadata(hooks: HookRegistry) {
-  return Object.entries(hooks).map(([name, { target, before, after }]) => ({ name, target, before, after }));
+  return Object.entries(hooks).map(([name, { target, kind, before, after }]) => ({
+    name,
+    target,
+    kind,
+    before,
+    after,
+  }));
 }
 
 export function invokeHook(
   hooks: HookRegistry,
-  request: { name: string; stage: HookStage; args: JsonValue; result?: JsonValue },
+  request: { name: string; target?: string; stage: HookStage; args: JsonValue; result?: JsonValue },
   host: HostBridge,
 ) {
-  if (!Object.hasOwn(hooks, request.name) || !hooks[request.name][request.stage]) {
+  const hook = Object.hasOwn(hooks, request.name) ? hooks[request.name] : undefined;
+  if (!hook?.[request.stage] || (request.target !== undefined && request.target !== hook.target)) {
     throw new Error(`Unknown hook stage: ${request.name}`);
   }
-  return hooks[request.name].invoke(request.stage, request, host);
+  return hook.invoke(request.stage, request, host);
 }

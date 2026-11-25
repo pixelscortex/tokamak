@@ -138,7 +138,7 @@ test("server and transaction bundles contain only host references and public typ
       }
     }
     const code = await output(path, "bundle.js");
-    expect(code).toContain('createApi("other")');
+    expect(code).toContain('createApi("other", ["x:read"]');
     expect(code).toContain('["x"]["read"]');
   });
 }, 60_000);
@@ -301,7 +301,7 @@ test("client rejects erased peer source imports and internal module spelling", a
   });
 }, 30_000);
 
-test("query hook stages use the target's types and reject unsupported targets", async () => {
+test("hook stages use the target's argument and result types", async () => {
   await scratch(async (root) => {
     const owner = await backend(root, "owner");
     await file(
@@ -321,24 +321,68 @@ test("query hook stages use the target's types and reject unsupported targets", 
     await file(
       consumer,
       "src/server/policy.ts",
-      `import {hook, internalQuery} from "@tokamak/sdk";
+      `import {hook} from "@tokamak/sdk";
        import * as owner from "plugin:owner/server";
-       import {internal} from "./_generated/internal";
-       export const privateRead = internalQuery({handler: () => 1});
        export const badBefore = hook(owner.api.read, {before: (_ctx, args) => ({text: args.text.length})});
        export const badAfter = hook(owner.api.read, {after: (_ctx, result, args) => args.text + result});
-       export const badWrite = hook(owner.api.write, {});
-       export const badInternal = hook(internal.policy.privateRead, {});`,
+       export const write = hook(owner.api.write, {});`,
     );
     const result = build(consumer);
     expect(result.status).not.toBe(0);
     const diagnostics = result.stdout + result.stderr;
     expect(diagnostics).toContain("Type 'number' is not assignable to type 'string'");
     expect(diagnostics).toContain("Type 'string' is not assignable to type 'MaybePromise<number>'");
-    expect(
-      diagnostics.match(
-        /hooks on (?:mutations and actions|internal and plugin-only functions) are not supported yet/g,
-      )?.length,
-    ).toBeGreaterThanOrEqual(2);
+  });
+}, 30_000);
+
+test("build rejects local functions as hook targets", async () => {
+  await scratch(async (root) => {
+    const consumer = await backend(root, "consumer");
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
+       const refs = createApi<{functions: {run: FunctionReference<"local", {}, null, never, "owner">}}>("owner");
+       export const invalid = hook(refs.functions.run, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Only queries, mutations and actions can be hooked");
+  });
+}, 30_000);
+
+test("owner build names an installed plugin that hooks a removed function", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    const definition =
+      'import {mutation} from "@tokamak/sdk"; export const save = mutation({handler: () => null});';
+    await file(owner, "src/server/functions.ts", definition);
+    await file(owner, "src/server/api.ts", 'export {save} from "./functions";');
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `
+      import {hook} from "@tokamak/sdk";
+      import {save} from "plugin:owner/server";
+      export const policy = hook(save, {before: (_ctx, args) => args});
+    `,
+    );
+    built(consumer);
+    const manifest = JSON.parse(await readFile(resolve(consumer, "dist/manifest.json"), "utf8"));
+    expect(manifest.hookTargets).toEqual(["owner/functions:save"]);
+
+    await file(owner, "src/server/functions.ts", definition.replace("const save", "const update"));
+    await file(owner, "src/server/api.ts", 'export {update} from "./functions";');
+    const result = build(owner);
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      'Plugin "consumer" hooks owner/functions:save, which no longer exists',
+    );
   });
 }, 30_000);

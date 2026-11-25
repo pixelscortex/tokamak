@@ -34,13 +34,13 @@ pub struct Catalog {
 pub(crate) struct Loaded {
     pub catalog: Catalog,
     pub targets: BTreeMap<String, Target>,
-    pub query_hooks: crate::host::hooks::HookRegistry,
+    pub hooks: crate::host::hooks::HookRegistry,
     pub descriptor: Value,
     pub catalog_text: String,
     pub(crate) skipped: BTreeMap<String, String>,
     pub(crate) action_sources: BTreeMap<String, Arc<crate::host::action_process::Source>>,
     contracts: Contracts,
-    transaction_bundles: BTreeMap<String, Arc<Bundle>>,
+    pub(crate) transaction_bundles: BTreeMap<String, Arc<Bundle>>,
     inspected: BTreeMap<String, crate::service::InspectedBundle>,
 }
 
@@ -59,14 +59,12 @@ pub(crate) struct Target {
     pub space: DataSpace,
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub(crate) struct Hook {
     pub owner: String,
     pub name: String,
     pub before: bool,
     pub after: bool,
-    pub bundle: Arc<Bundle>,
-    pub space: DataSpace,
 }
 
 impl Target {

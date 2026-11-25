@@ -1,6 +1,10 @@
 use super::AuthContext;
 use crate::data::Id;
 use serde_json::{Value, json};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 #[derive(Debug)]
 pub(crate) struct CallDepthLimit(String);
@@ -27,6 +31,22 @@ pub(crate) struct CallNote {
     thread_id: Option<String>,
     depth: usize,
     window_continuation: bool,
+    hooks: HookBudget,
+    pub hook_scope: Option<u64>,
+    attempt_stages: Option<Arc<AtomicUsize>>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct HookBudget(Arc<AtomicUsize>);
+
+impl HookBudget {
+    pub fn take(&self) -> bool {
+        self.0
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                (count < 256).then_some(count + 1)
+            })
+            .is_ok()
+    }
 }
 
 impl From<Option<AuthContext>> for CallNote {
@@ -58,7 +78,50 @@ impl CallNote {
             thread_id,
             depth,
             window_continuation: true,
+            ..Self::default()
         })
+    }
+
+    pub(crate) fn runner_note(value: &Value) -> Self {
+        Self {
+            depth: value["depth"]
+                .as_u64()
+                .unwrap_or_default()
+                .min(tokamak_worker::MAX_CALL_DEPTH as u64) as usize,
+            thread_id: value["thread"].as_str().map(str::to_owned),
+            hook_scope: value["hookScope"].as_u64(),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn scope_hooks(&mut self, id: u64, budget: HookBudget) {
+        self.hook_scope = Some(id);
+        self.hooks = budget;
+    }
+
+    pub(crate) fn take_hook_stage(&self) -> bool {
+        if !self.hooks.take() {
+            return false;
+        }
+        if let Some(attempt) = &self.attempt_stages {
+            attempt.fetch_add(1, Ordering::Relaxed);
+        }
+        true
+    }
+
+    pub(crate) fn mutation_attempt(&self) -> Self {
+        Self {
+            attempt_stages: Some(Arc::default()),
+            ..self.clone()
+        }
+    }
+
+    pub(crate) fn retry_hooks(&self) {
+        if let Some(attempt) = &self.attempt_stages {
+            self.hooks
+                .0
+                .fetch_sub(attempt.swap(0, Ordering::Relaxed), Ordering::Relaxed);
+        }
     }
 
     pub fn enter(
@@ -95,7 +158,11 @@ impl CallNote {
     }
 
     pub fn continuation(&self) -> Value {
-        json!({"depth": self.depth, "thread": self.thread_id})
+        let mut value = json!({"depth": self.depth, "thread": self.thread_id});
+        if let Some(scope) = self.hook_scope {
+            value["hookScope"] = json!(scope);
+        }
+        value
     }
 
     pub fn register(&self, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {

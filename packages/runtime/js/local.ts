@@ -87,8 +87,14 @@ export type LaunchLocalWorker = (
   retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
-type Continuation = { depth: number; thread: string | null };
-type WindowInvocation = { destination: "callerWindowRunner"; note: Continuation; artifact: LocalArtifact };
+type Continuation = { depth: number; thread: string | null; hookScope?: number };
+type WindowInvocation = {
+  destination: "callerWindowRunner";
+  note: Continuation;
+  artifact: LocalArtifact;
+  ownsHookScope?: boolean;
+  hooks?: JsonValue & { artifacts: Record<string, LocalArtifact> };
+};
 type WorkerCallContext = {
   continuation?: Continuation;
   signal?: ActionSignal;
@@ -110,6 +116,7 @@ type ServerConnection = ClientTransport & {
     window?: boolean,
     signal?: ActionSignal,
   ): Promise<JsonValue>;
+  hookStage?(scope: number, done?: boolean): Promise<JsonValue>;
   plugins(): Promise<JsonValue>;
   onPluginsChanged(callback: () => void): () => void;
 };
@@ -176,6 +183,9 @@ export class LocalFunctions implements LocalTransport {
     } catch (error) {
       if (error instanceof RunnerUnavailable) return fail("noMachine", null);
       throw error;
+    } finally {
+      if (dispatch.ownsHookScope && dispatch.note.hookScope !== undefined)
+        void this.server.hookStage?.(dispatch.note.hookScope, true).catch(() => {});
     }
   }
 
@@ -386,6 +396,11 @@ export class LocalFunctions implements LocalTransport {
     payload: JsonValue,
     { continuation, signal, action }: WorkerCallContext,
   ) {
+    if (operation === "hook.stage") {
+      if (!action || !this.server.hookStage || typeof payload !== "number")
+        throw new Error("Runner hook scope unavailable");
+      return this.server.hookStage(payload);
+    }
     if (operation === "auth.current") {
       // A burst of routed calls need the same caller. Share only the read in
       // flight so the workspace queue is not filled with duplicate replies.
@@ -565,7 +580,7 @@ class LocalWorker {
       id,
       fn: name,
       args,
-      ...(action ? { action: true, note: action.note } : {}),
+      ...(action ? { action: true, note: action.note, hooks: action.hooks } : {}),
     };
     if (new TextEncoder().encode(JSON.stringify(invocation)).length >= WORKER_FRAME_BYTES)
       throw new Error("Local function arguments exceed 1 MiB");
@@ -584,7 +599,7 @@ class LocalWorker {
         cancelled: false,
         signal,
         action: action !== undefined,
-        providers: new Set<string>(),
+        providers: new Set(Object.keys(action?.hooks?.artifacts ?? {})),
         routes: new Map<string, LocalArtifact>(),
         catalog,
         finish: (error: Error | string | undefined, value?: JsonValue) => {
@@ -613,10 +628,12 @@ class LocalWorker {
       payload: JsonValue;
       continuation?: Continuation;
       error?: string;
+      details?: ConstructorParameters<typeof RemoteFunctionError>[0] | null;
       value: JsonValue;
     };
     if (frame.type === "result") {
-      this.calls.get(frame.id)?.finish(frame.error, frame.value);
+      const error = frame.details ? new RemoteFunctionError(frame.details) : frame.error;
+      this.calls.get(frame.id)?.finish(error, frame.value);
     } else if (frame.type === "op") {
       const call = this.calls.get(frame.call);
       if (!call || call.cancelled) return;

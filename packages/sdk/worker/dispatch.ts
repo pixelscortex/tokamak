@@ -1,5 +1,6 @@
-import { RemoteFunctionError, type CallError } from "../src/call-error";
+import { isRemoteFunctionError, RemoteFunctionError, type CallError } from "../src/call-error";
 import { Visibility } from "../src/visibility";
+import { invokeHook, type HookRegistry } from "../src/hooks";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
@@ -49,6 +50,7 @@ export function workerDispatch(
   send: (message: object) => void,
   allocateOp: () => number,
   options: {
+    hooks?: HookRegistry;
     createPrograms?: (
       signal: AbortSignal,
       call: number,
@@ -228,7 +230,9 @@ export function workerDispatch(
       void invocation.close().catch(() => {});
     }
     try {
+      const hook = name.startsWith("@hook/") && options.hooks && (kind === "action" || admittedAction);
       if (
+        !hook &&
         !(target && options.contract) &&
         (functions[name]?.kind !== (action && kind === "local" ? "action" : kind) ||
           (action &&
@@ -237,8 +241,9 @@ export function workerDispatch(
             !admittedAction))
       )
         throw new Error(`Unknown local ${kind} function: ${name}`);
-      const value =
-        target && options.contract
+      const value = hook
+        ? await invokeHook(options.hooks!, args as Parameters<typeof invokeHook>[1], invocation.host())
+        : target && options.contract
           ? await options.contract(target, args, invocation.host(), recordThread)
           : await invokeFunction(
               functions,
@@ -265,6 +270,17 @@ export function workerDispatch(
           type: "result",
           id,
           error: message,
+          ...(isRemoteFunctionError(error) &&
+            error.kind && {
+              details: {
+                message,
+                plugin: error.plugin ?? "",
+                hook: error.hook ?? "",
+                stage: error.stage ?? "",
+                kind: error.kind,
+                data: error.data ?? null,
+              },
+            }),
           ...(stack === undefined ? {} : { stack }),
         });
         if (sending) await sending;

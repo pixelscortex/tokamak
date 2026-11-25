@@ -1,4 +1,5 @@
 export {
+  audited,
   store,
   rows,
   run,
@@ -14,4 +15,4 @@ export {
 } from "./work";
 export { stream, liveSignal, signalCount } from "./channel";
 export { contractCall, callLocalContract, callServerContract, refreshedProvider } from "./provider";
-export { program, choose, caller } from "./delegate";
+export { audit, program, choose, caller } from "./delegate";
