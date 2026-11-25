@@ -781,12 +781,15 @@ extra fields on validated objects. The result validator comes from the query's
 `returns` option or its TypeScript result type. Open values such as `unknown`
 remain unchecked inside otherwise validated results. For older bundles without
 a result validator, the server accepts after-hook results and warns on load.
+If the owner's value falls outside a derived validator, the server warns and
+accepts after-hook values for that call. An explicit `returns` validator remains strict.
 
 A hook's `fail("forbidden", data)` rejects the window call or nested
 `ctx.runQuery` with an error whose `kind` is `"forbidden"` and whose `data`
 is the supplied value (or `null`). The error also exposes `plugin`, `hook`,
-and `stage`. An exception or invalid return has the same fields, with kind
-`hookException` or `invalidHookResult`. Hook order across plugins is unspecified;
+and `stage`. Built-in kinds are `hookException` for a thrown error,
+`invalidHookResult` for an invalid return, `hookDepthLimit` for a depth or
+delegation budget limit, and `hookTimeout` for a timed-out stage. Hook order across plugins is unspecified;
 each stage receives the previous stage's value.
 
 A query hook can only read its own plugin's database. It has the original
@@ -797,4 +800,4 @@ a change to data read by either the query or a hook can refresh a live result.
 Removing the hooking plugin removes its hooks. A hook whose target is gone
 is skipped with a server warning.
 
-Hooks on mutations, actions and internal functions are not supported yet.
+Hooks currently target public queries only. Mutations, actions, internal functions, and plugin-only functions are not supported.

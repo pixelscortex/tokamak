@@ -41,9 +41,9 @@ type HookBuilder<M extends DataModel> = <T extends Reference>(
       ? string extends OwnerOf<T>
         ? { readonly error: "hooks must target a public query of another plugin" }
         : unknown
-      : {
-          readonly error: "hooks on mutations, actions and internal functions are not supported yet";
-        }),
+      : T extends FunctionReference<"query", unknown, unknown>
+        ? { readonly error: "hooks on internal and plugin-only functions are not supported yet" }
+        : { readonly error: "hooks on mutations and actions are not supported yet" }),
   handlers: HookHandlers<NoInfer<T>, M>,
 ) => HookDefinition<T>;
 

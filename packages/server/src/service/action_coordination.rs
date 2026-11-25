@@ -152,5 +152,6 @@ impl Coordinator {
         call.kind.check_nested(kind)?;
         call.note
             .enter(&call.name, validator.as_deref(), &call.args)
+            .map_err(|error| error.to_string())
     }
 }

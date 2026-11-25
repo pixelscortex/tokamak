@@ -348,9 +348,11 @@ impl Client {
         self.next_id += 1;
         self.session.call(id, name, args).unwrap();
         match next(&mut self.session).await {
-            Event::Response { id: actual, result } => {
+            Event::Response {
+                id: actual, result, ..
+            } => {
                 assert_eq!(actual, id);
-                result.map_err(|error| error.to_string())
+                result
             }
             event => panic!("unexpected {event:?}"),
         }
@@ -1640,6 +1642,7 @@ async fn until(reader: &mut Session, id: u64, expected: &[String]) {
             Event::Subscription {
                 id: actual,
                 result: Ok(value),
+                ..
             } if actual == id => {
                 if ids(&value) == expected {
                     return;

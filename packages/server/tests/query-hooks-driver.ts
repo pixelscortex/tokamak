@@ -68,7 +68,15 @@ async function names_policy_errors_and_enforces_read_only_scope() {
       assert.match(error.message, /Hook moderation\/policy:moderate \(team\/users:list/);
       assert.equal(error.plugin, "moderation");
       assert.match(error.message, expected);
-      if (mode === "recursive") assert.equal(error.message.match(/team\/users:list/g)?.length, 1);
+      if (mode === "recursive") {
+        assert.equal(error.kind, "hookDepthLimit");
+        assert.equal(error.message.match(/team\/users:list/g)?.length, 1);
+      }
+      if (mode === "throw") {
+        assert.equal(error.kind, "hookException");
+        assert.equal(error.data, "policy threw: depth limit is just text");
+        assert.doesNotMatch(JSON.stringify(error), / at |policy\.ts|tokamak-module/);
+      }
       return true;
     });
   }
@@ -113,6 +121,31 @@ async function validates_profiles_and_preserves_nested_call_budget() {
   assert.deepEqual(await client.action(moderation.policy.fromAction, {}), { rows, ...failure });
 }
 
+async function accepts_structural_rows_and_bounds_hook_fanout() {
+  const rows = await client.query(team.users.rows, {});
+  assert.deepEqual(
+    rows.map(({ name }) => name),
+    ["Alice"],
+  );
+  assert.equal((rows[0] as { _id?: string })._id, alice);
+  assert.deepEqual(await client.query(team.users.viaContract, {}), [
+    { name: "Alice", detail: "Ali|member-1|member||3" },
+  ]);
+  await assert.rejects(client.query(moderation.policy.hookBudget, {}), {
+    plugin: "moderation",
+    kind: "hookDepthLimit",
+    data: "delegated module count budget exceeded",
+  });
+  await assert.rejects(
+    client.query(moderation.policy.stallsAfterCaughtHook, {}),
+    (error: RemoteFunctionError) => {
+      assert.equal(error.plugin, undefined);
+      assert.match(error.message, /timeout|deadline|exceeded/i);
+      return true;
+    },
+  );
+}
+
 async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
   type Row = { name: string; detail: string };
   const updates: Row[][] = [];
@@ -141,6 +174,11 @@ async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
   // hook stops trimming them and stops filtering the ban on subsequent calls.
   assert.deepEqual(await next(), []);
   assert.deepEqual(await client.query(list, { text: "Mal" }), [{ name: "Mal", detail: "" }]);
+  await new Promise<void>((resolve) => {
+    reloaded = resolve;
+    send({ reinstall: true });
+  });
+  assert.ok((await names()).includes("Alice"));
   close();
 }
 
@@ -149,6 +187,7 @@ try {
   await names_policy_errors_and_enforces_read_only_scope();
   await chains_two_plugins_and_hooks_server_calls();
   await validates_profiles_and_preserves_nested_call_budget();
+  await accepts_structural_rows_and_bounds_hook_fanout();
   await live_query_tracks_owner_and_hook_tables_then_uninstalls();
   send({ done: true });
 } finally {

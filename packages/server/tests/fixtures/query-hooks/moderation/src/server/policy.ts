@@ -1,8 +1,9 @@
-import { createFunctions, createHook, fail, v, type Id } from "@tokamak/sdk";
+import { createFunctions, createHook, fail, provide, v, type Id } from "@tokamak/sdk";
+import { directory } from "plugin:team/contracts";
 import * as team from "plugin:team/server";
 import schema from "./schema";
 
-const { query, mutation, action } = createFunctions(schema);
+const { query, mutation, action, internalQuery } = createFunctions(schema);
 const hook = createHook(schema);
 
 export const ban = mutation({
@@ -17,7 +18,10 @@ export const moderate = hook(team.api.list, {
     if (args.mode === "wrong-args") return { ...args, text: 3 as unknown as string };
     if (args.mode === "added-arg") return { ...args, additional: true };
     if (args.mode === "stalled") await new Promise(() => {});
-    if (args.mode === "throw") throw new Error("policy threw");
+    if (args.mode === "throw") throw new Error("policy threw: depth limit is just text");
+    if (args.mode === "budget") {
+      for (let i = 0; i < 129; i++) await ctx.runQuery(team.api.ping, {});
+    }
     if (args.mode === "recursive") await ctx.runQuery(team.api.list, args);
     if (args.mode === "foreign") await ctx.db.get(args.text as Id<"bans">);
     if (args.mode === "write") {
@@ -106,4 +110,31 @@ export const fromAction = action({
 
 export const editExplicit = hook(team.api.explicit, {
   after: () => ({ status: "active" }),
+});
+
+export const filterRows = hook(team.api.rows, {
+  after: (_ctx, rows) => rows.filter(({ name }) => name === "Alice"),
+});
+
+export const directoryProvider = provide(directory, {
+  list: internalQuery({
+    args: { text: v.string() },
+    handler: (ctx, args) => ctx.runQuery(team.api.list, args),
+  }),
+});
+
+export const hookBudget = query({
+  async handler(ctx) {
+    for (let i = 0; i < 2; i++) await ctx.runQuery(team.api.list, { text: "", mode: "budget" });
+  },
+});
+
+export const stallsAfterCaughtHook = query({
+  async handler(ctx) {
+    try {
+      await ctx.runQuery(team.api.list, { text: "", mode: "throw" });
+    } catch {
+      await new Promise(() => {});
+    }
+  },
 });

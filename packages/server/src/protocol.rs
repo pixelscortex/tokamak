@@ -14,7 +14,6 @@ pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS), ts(untagged))]
 #[serde(untagged)]
 pub enum CallError {
     Message(String),
@@ -22,9 +21,15 @@ pub enum CallError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
 pub struct StructuredCallError {
     pub message: String,
+    #[serde(flatten)]
+    pub details: CallErrorDetails,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
+pub struct CallErrorDetails {
     pub plugin: String,
     pub hook: String,
     pub stage: String,
@@ -48,13 +53,20 @@ impl CallError {
         engine::CallError {
             message,
             details: Some(details),
+            limit: None,
         }
     }
 
-    pub(crate) fn message_mut(&mut self) -> &mut String {
+    pub(crate) fn map_text(self, mut map: impl FnMut(String) -> String) -> Self {
         match self {
-            Self::Message(message) => message,
-            Self::Structured(error) => &mut error.message,
+            Self::Message(message) => Self::Message(map(message)),
+            Self::Structured(mut error) => {
+                error.message = map(error.message);
+                if let Json::String(data) = &mut error.details.data {
+                    *data = map(std::mem::take(data));
+                }
+                Self::Structured(error)
+            }
         }
     }
 }
@@ -66,6 +78,7 @@ impl From<CallError> for engine::CallError {
             CallError::Structured(error) => Self {
                 message: error.message.clone(),
                 details: Some(serde_json::json!(error)),
+                limit: None,
             },
         }
     }
@@ -217,15 +230,43 @@ pub enum Event {
     Response {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
-        result: Result<Json, CallError>,
+        result: Result<Json, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        error: Option<CallErrorDetails>,
     },
     Subscription {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
-        result: Result<Json, CallError>,
+        result: Result<Json, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        error: Option<CallErrorDetails>,
     },
     Unsubscribed {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
     },
+}
+
+impl Event {
+    pub(crate) fn response(id: u64, result: Result<Json, CallError>) -> Self {
+        let (result, error) = Self::outcome(result);
+        Self::Response { id, result, error }
+    }
+
+    pub(crate) fn subscription(id: u64, result: Result<Json, CallError>) -> Self {
+        let (result, error) = Self::outcome(result);
+        Self::Subscription { id, result, error }
+    }
+
+    fn outcome(
+        result: Result<Json, CallError>,
+    ) -> (Result<Json, String>, Option<CallErrorDetails>) {
+        match result {
+            Ok(value) => (Ok(value), None),
+            Err(CallError::Message(message)) => (Err(message), None),
+            Err(CallError::Structured(error)) => (Err(error.message), Some(error.details)),
+        }
+    }
 }

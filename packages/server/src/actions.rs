@@ -123,10 +123,7 @@ pub(crate) fn register_nested_calls(
                 // commit. The coordinator owns finalization and the writer barrier.
                 wait.await
                     .map_err(|_| "server closed before nested call completed".to_owned())?
-                    .map_err(|mut error| {
-                        *error.message_mut() = environment.redact(error.to_string());
-                        error.into()
-                    })
+                    .map_err(|error| error.map_text(|text| environment.redact(text)).into())
             }
         })?;
     }
@@ -182,7 +179,9 @@ fn register_plugin_call(
                     .map_err(|_| "server closed before plugin call completed")?
                     .map_err(Into::into);
             }
-            let note = note.enter(name, Some(&target.args), &args)?;
+            let note = note
+                .enter(name, Some(&target.args), &args)
+                .map_err(|error| error.to_string())?;
             let environment = Arc::new(crate::environment::Snapshot::new(
                 Some(&loaded),
                 Some(&target.owner),

@@ -7,7 +7,7 @@ impl Coordinator {
     }
 
     pub(super) fn respond_call(&mut self, session: u64, id: u64, result: Result<Json, CallError>) {
-        self.emit(session, Event::Response { id, result });
+        self.emit(session, Event::response(id, result));
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
@@ -23,7 +23,7 @@ impl Coordinator {
             })
         {
             // Interpreter stack frames can contain the server's source paths.
-            error.message_mut().truncate(stack_start);
+            error.truncate(stack_start);
         }
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.
@@ -49,6 +49,7 @@ impl Coordinator {
                 Event::Response { id, .. } => Event::Response {
                     id,
                     result: Err("result too large (1 MiB limit)".into()),
+                    error: None,
                 },
                 Event::Subscription { id, .. } => {
                     if let Some(client) = self.sessions.get_mut(&session) {
@@ -59,6 +60,7 @@ impl Coordinator {
                     Event::Response {
                         id,
                         result: Err("result too large (1 MiB limit); subscription ended".into()),
+                        error: None,
                     }
                 }
                 Event::PluginChanged { catalog, .. } => {

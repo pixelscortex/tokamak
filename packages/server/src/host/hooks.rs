@@ -12,6 +12,7 @@ pub(crate) struct HookTarget {
     pub args: Arc<Json>,
     pub result: Option<Arc<Json>>,
     pub chain: Arc<[Hook]>,
+    pub derived_result_warning: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 #[derive(Clone, Copy)]
@@ -43,7 +44,18 @@ pub(crate) async fn run_before(
     execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
 ) -> Result<Json, engine::CallError> {
     validate(&target.args, &args, "args")?;
-    run_chain(target, note, Stage::Before, args, &Json::Null, execute).await
+    run_chain(
+        target,
+        note,
+        ChainStage {
+            stage: Stage::Before,
+            validation: Some(&target.args),
+        },
+        args,
+        &Json::Null,
+        execute,
+    )
+    .await
 }
 
 pub(crate) async fn run_after(
@@ -53,13 +65,42 @@ pub(crate) async fn run_after(
     args: &Json,
     execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
 ) -> Result<Json, engine::CallError> {
-    run_chain(target, note, Stage::After, result, args, execute).await
+    let mut validation = target.result.as_deref();
+    if let (Some(warning), Some(schema)) = (&target.derived_result_warning, validation)
+        && target.chain.iter().any(|hook| hook.after)
+        && validate(schema, &result, "result").is_err()
+    {
+        validation = None;
+        if !warning.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            eprintln!(
+                "Hook target {} returned a result outside its derived validator; accepting its after-hook results for this call",
+                target.name
+            );
+        }
+    }
+    run_chain(
+        target,
+        note,
+        ChainStage {
+            stage: Stage::After,
+            validation,
+        },
+        result,
+        args,
+        execute,
+    )
+    .await
+}
+
+struct ChainStage<'a> {
+    stage: Stage,
+    validation: Option<&'a Json>,
 }
 
 async fn run_chain(
     target: &HookTarget,
     note: &CallNote,
-    stage: Stage,
+    ChainStage { stage, validation }: ChainStage<'_>,
     mut value: Json,
     args: &Json,
     mut execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
@@ -91,17 +132,19 @@ async fn run_chain(
             if error.details.is_some() {
                 error
             } else {
-                let kind = if error.message.contains("depth limit")
-                    || error.message.contains("depth/count budget")
-                {
-                    "hookDepthLimit"
-                } else {
-                    "hookException"
-                };
-                make_error(
-                    kind,
-                    json!(error.message.replace(&format!(" at {}", target.name), "")),
-                )
+                match error.limit {
+                    Some(engine::CallLimit::Depth) => {
+                        make_error("hookDepthLimit", json!("plugin call cycle or depth limit"))
+                    }
+                    Some(engine::CallLimit::Modules) => make_error(
+                        "hookDepthLimit",
+                        json!("delegated module count budget exceeded"),
+                    ),
+                    None => {
+                        let message = error.message.split("\n    at ").next().unwrap_or_default();
+                        make_error("hookException", json!(message))
+                    }
+                }
             }
         })?;
 
@@ -111,14 +154,15 @@ async fn run_chain(
             return Err(make_error(kind, value["data"].clone()));
         }
 
-        let validation = match stage {
-            Stage::Before => validate(&target.args, &value, "args"),
-            Stage::After => target
-                .result
-                .as_ref()
-                .map_or(Ok(()), |schema| validate(schema, &value, "result")),
-        };
-        validation.map_err(|message| make_error("invalidHookResult", json!(message)))?;
+        if let Some(schema) = validation {
+            let path = if matches!(stage, Stage::Before) {
+                "args"
+            } else {
+                "result"
+            };
+            validate(schema, &value, path)
+                .map_err(|message| make_error("invalidHookResult", json!(message)))?;
+        }
     }
     Ok(value)
 }
@@ -146,6 +190,7 @@ impl QueryHooks {
                 args: target.args.clone(),
                 result: target.result.clone(),
                 chain,
+                derived_result_warning: target.derived_result_warning.clone(),
             },
             plugins: plugins.clone(),
             note: note.clone(),
@@ -175,25 +220,34 @@ impl QueryHooks {
                 qualified: None,
             },
         );
-        let caller = self.tx.clone();
-        let label = CallError::hook(
+        let label = Arc::new(CallError::hook(
             &hook.owner,
             &hook.name,
             stage.name(),
             "hookTimeout",
             Json::Null,
             &self.target.name,
-        );
-        let call = ModuleCall::new(hook.bundle.clone(), "invoke_hook", input, ops, move |_| {
-            *caller.failed_hook.lock().expect("hook failure lock") = Some(label.clone());
-        });
+        ));
+        let call = ModuleCall::new(hook.bundle.clone(), "invoke_hook", input, ops, |_| {});
+        let active = &self.tx.active_hooks;
+        active
+            .lock()
+            .expect("active hooks lock")
+            .push(label.clone());
         let value = executor.run(call).await;
+        active
+            .lock()
+            .expect("active hooks lock")
+            .retain(|entry| !Arc::ptr_eq(entry, &label));
         scope.close().await;
         let observed = tx.observations.lock().await;
         let failure = tx.failure.lock().expect("failure lock");
-        match observed.error.as_ref().or(failure.as_ref()) {
-            Some(error) => Err(error.clone().into()),
-            None => value,
+        if let Some(error) = &observed.error {
+            Err(error.clone().into())
+        } else if let Some(error) = failure.as_ref() {
+            Err(error.clone())
+        } else {
+            value
         }
     }
 }
@@ -220,24 +274,19 @@ impl CallTransforms for QueryHooks {
         input: Json,
         value: Json,
     ) -> CallFuture<'a> {
-        Box::pin(run_after_owned(self, executor, input, value))
+        Box::pin(async move {
+            run_after(
+                &self.target,
+                &self.note,
+                value,
+                &input["args"],
+                async |hook, stage, note, input| {
+                    self.execute(executor, hook, stage, note, input).await
+                },
+            )
+            .await
+        })
     }
-}
-
-async fn run_after_owned(
-    hooks: &QueryHooks,
-    executor: &dyn StageExecutor,
-    input: Json,
-    value: Json,
-) -> Result<Json, engine::CallError> {
-    run_after(
-        &hooks.target,
-        &hooks.note,
-        value,
-        &input["args"],
-        async |hook, stage, note, input| hooks.execute(executor, hook, stage, note, input).await,
-    )
-    .await
 }
 
 fn validate(schema: &Json, value: &Json, path: &str) -> Result<(), String> {

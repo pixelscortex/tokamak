@@ -197,13 +197,16 @@ test("WebSocket SDK preserves structured errors on calls and live queries", asyn
     kind: "forbidden",
     data: { reason: "members" },
   };
+  const { message, ...details } = error;
   const pending = transport.query("team/users:list", {});
-  wire.emit(JSON.stringify({ type: "response", id: 1, result: { Err: error } }));
+  const frame = JSON.stringify({ type: "response", id: 1, result: { Err: message }, error: details });
+  expect(JSON.parse(frame).result).toEqual({ Err: message });
+  wire.emit(frame);
   await expect(pending).rejects.toMatchObject(error);
 
   const events = [];
   const stop = transport.subscribe("team/users:list", {}, (event) => events.push(event));
-  wire.emit(JSON.stringify({ type: "subscription", id: 2, result: { Err: error } }));
+  wire.emit(JSON.stringify({ type: "subscription", id: 2, result: { Err: message }, error: details }));
   expect(events).toEqual([{ error: expect.objectContaining(error), terminal: false }]);
   stop();
   transport.close();

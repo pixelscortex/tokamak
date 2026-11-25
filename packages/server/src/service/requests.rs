@@ -54,7 +54,9 @@ impl Coordinator {
                                     .as_ref()
                                     .and_then(|loaded| loaded.targets.get(&name))
                                     .map(|target| target.args.as_ref());
-                                parent.enter(&name, validator, &args)
+                                parent
+                                    .enter(&name, validator, &args)
+                                    .map_err(|error| error.to_string())
                             }) {
                             Ok(note) => note,
                             Err(error) => {

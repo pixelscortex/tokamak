@@ -28,8 +28,7 @@ export function resultValidator(checker, definition, location) {
       const members = type.types
         .filter((member) => !optional || !(member.flags & ts.TypeFlags.Undefined))
         .map((member) => visit(member, nested));
-      if (members.every(Boolean)) return { kind: "union", members };
-      return;
+      return { kind: "union", members };
     }
     if (checker.isTupleType(type)) {
       return {
@@ -46,8 +45,7 @@ export function resultValidator(checker, definition, location) {
     }
     if (checker.isArrayType(type)) {
       const item = visit(checker.getTypeArguments(type)[0], nested);
-      if (item) return { kind: "array", item };
-      return;
+      return { kind: "array", item };
     }
     if (type.isIntersection() && type.types.some((member) => member.flags & ts.TypeFlags.String)) {
       const brand = type.getProperty("__table");
@@ -67,10 +65,9 @@ export function resultValidator(checker, definition, location) {
       const fieldType = checker.getTypeOfSymbolAtLocation(field, location);
       const optional = field.flags & ts.SymbolFlags.Optional;
       const inner = visit(fieldType, nested, Boolean(optional));
-      if (!inner) return;
       fields.push([field.name, optional ? { kind: "optional", inner } : inner]);
     }
-    return { kind: "object", fields: Object.fromEntries(fields) };
+    return fields.length ? { kind: "object", fields: Object.fromEntries(fields) } : { kind: "any" };
   };
   return visit(checker.getTypeOfSymbolAtLocation(result, location), []);
 }

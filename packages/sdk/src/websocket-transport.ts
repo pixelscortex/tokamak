@@ -31,6 +31,8 @@ function decode(data: unknown): Event {
   if (type === "unsubscribed") return event as Event;
   if (type !== "response" && type !== "subscription") throw new Error("invalid event result");
   validateResult(result);
+  if ("error" in event && (!("Err" in result) || !isStructuredCallError(event.error)))
+    throw new Error("invalid event error details");
   return event as Event;
 }
 
@@ -45,12 +47,11 @@ function validatePluginChange(event: Record<string, unknown>): void {
     throw new Error("invalid plugin change");
 }
 
-function validateResult(result: unknown): void {
+function validateResult(result: unknown): asserts result is object {
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("invalid event result");
   if (
     Object.keys(result).length !== 1 ||
-    (!("Ok" in result) &&
-      !("Err" in result && (typeof result.Err === "string" || isStructuredCallError(result.Err))))
+    (!("Ok" in result) && !("Err" in result && typeof result.Err === "string"))
   )
     throw new Error("invalid event outcome");
 }

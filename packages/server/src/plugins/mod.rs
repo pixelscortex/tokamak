@@ -50,6 +50,7 @@ pub(crate) struct Target {
     pub local_name: String,
     pub args: Arc<Value>,
     pub result: Option<Arc<Value>>,
+    pub derived_result_warning: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub mutation: bool,
     pub visibility: Visibility,
     pub kind: crate::service::FunctionKind,

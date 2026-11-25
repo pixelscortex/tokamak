@@ -2,6 +2,15 @@ use super::AuthContext;
 use crate::data::Id;
 use serde_json::{Value, json};
 
+#[derive(Debug)]
+pub(crate) struct CallDepthLimit(String);
+
+impl std::fmt::Display for CallDepthLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct CallNote {
     pub auth: Option<AuthContext>,
@@ -45,8 +54,8 @@ impl CallNote {
         name: &str,
         validator: Option<&Value>,
         args: &Value,
-    ) -> Result<Self, String> {
-        let depth = tokamak_worker::next_call_depth(self.depth, name)?;
+    ) -> Result<Self, CallDepthLimit> {
+        let depth = tokamak_worker::next_call_depth(self.depth, name).map_err(CallDepthLimit)?;
         let mut note = self.clone();
         note.depth = depth;
         Ok(note.with_args(validator, args))

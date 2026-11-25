@@ -270,7 +270,10 @@ export class InProcessTransport implements ClientTransport {
       if (pending) {
         this.pending.delete(event.id);
         if ("Ok" in result) pending.resolve(result.Ok);
-        else pending.reject(new RemoteFunctionError(result.Err));
+        else
+          pending.reject(
+            new RemoteFunctionError(event.error ? { ...event.error, message: result.Err } : result.Err),
+          );
         return;
       }
     }
@@ -282,7 +285,12 @@ export class InProcessTransport implements ClientTransport {
         observer,
         "Ok" in result
           ? { value: result.Ok }
-          : { error: new RemoteFunctionError(result.Err), terminal: event.type === "response" },
+          : {
+              error: new RemoteFunctionError(
+                event.error ? { ...event.error, message: result.Err } : result.Err,
+              ),
+              terminal: event.type === "response",
+            },
       );
     }
   }

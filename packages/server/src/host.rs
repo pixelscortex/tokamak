@@ -13,14 +13,14 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 pub(crate) use crate::data::ReadSet;
 
 type SharedTransaction = Arc<Mutex<Option<Transaction>>>;
-type Failure = Arc<std::sync::Mutex<Option<String>>>;
+type Failure = Arc<std::sync::Mutex<Option<engine::CallError>>>;
 
 #[derive(Clone)]
 struct TransactionContext {
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
-    failed_hook: Arc<std::sync::Mutex<Option<engine::CallError>>>,
+    active_hooks: Arc<std::sync::Mutex<Vec<Arc<engine::CallError>>>>,
     reads: Arc<Mutex<ReadSet>>,
 }
 
@@ -30,12 +30,12 @@ impl TransactionContext {
             shared: Arc::new(Mutex::new(Some(tx))),
             observations: Arc::default(),
             failure: Arc::default(),
-            failed_hook: Arc::default(),
+            active_hooks: Arc::default(),
             reads: Arc::default(),
         }
     }
 
-    fn poison(&self, error: String) {
+    fn poison(&self, error: engine::CallError) {
         *self.failure.lock().expect("failure lock") = Some(error);
     }
 
@@ -49,9 +49,9 @@ impl TransactionContext {
 
     fn call_error(&self, error: engine::Error) -> CallError {
         if matches!(error, engine::Error::Timeout { phase: "call" })
-            && let Some(hook) = self.failed_hook.lock().expect("hook failure lock").as_ref()
+            && let Some(hook) = self.active_hooks.lock().expect("active hooks lock").last()
         {
-            return hook.clone().into();
+            return (**hook).clone().into();
         }
         engine::CallError::from(error).into()
     }
@@ -165,9 +165,12 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
     let result = result.and_then(|value| {
         let nested = context.failure.lock().expect("failure lock");
 
-        match observed.error.as_ref().or(nested.as_ref()) {
-            Some(error) => Err(error.clone().into()),
-            None => Ok(value),
+        if let Some(error) = &observed.error {
+            Err(error.clone().into())
+        } else if let Some(error) = nested.as_ref() {
+            Err(error.clone().into())
+        } else {
+            Ok(value)
         }
     });
 
@@ -276,10 +279,10 @@ fn operations(
         if let Some(hooks) = hooks::QueryHooks::for_target(&plugins, qualified, &note, &tx) {
             ops = ops.with_transforms(hooks);
         }
-        ops.register_module("plugin.call", move |payload| {
-            let resolved = (|| {
+        ops.register_module_call("plugin.call", move |payload| {
+            let resolved = (|| -> Result<_, engine::CallError> {
                 if tx.failure.lock().expect("failure lock").is_some() {
-                    return Err("An earlier plugin operation failed".to_string());
+                    return Err("An earlier plugin operation failed".into());
                 }
 
                 let name = text(&payload, "name").map_err(|e| e.to_string())?;
@@ -297,7 +300,13 @@ fn operations(
                     target.check_anonymous_scope(&owner)?;
                 }
 
-                let child_note = note.enter(name, Some(&target.args), &args)?;
+                let child_note = note
+                    .enter(name, Some(&target.args), &args)
+                    .map_err(|error| engine::CallError {
+                        message: error.to_string(),
+                        details: None,
+                        limit: Some(engine::CallLimit::Depth),
+                    })?;
 
                 let child_scope = CallScope::default();
                 let ops = operations(

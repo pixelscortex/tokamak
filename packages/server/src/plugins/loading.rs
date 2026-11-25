@@ -274,6 +274,10 @@ impl Loaded {
                             .get("returns")
                             .or_else(|| inspected.descriptor["results"].get(local_name))
                             .map(|validator| Arc::new(validator.clone())),
+                        derived_result_warning: function
+                            .get("returns")
+                            .is_none()
+                            .then(Arc::default),
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind,

@@ -322,7 +322,7 @@ async fn assert_transactions_during_dns(session: &mut server::Session, first: u6
     let mut seen = [false; 2];
     tokio::time::timeout(Duration::from_millis(200), async {
         while !seen.iter().all(|seen| *seen) {
-            if let Event::Response { id, result } = session.recv().await.unwrap().unwrap() {
+            if let Event::Response { id, result, .. } = session.recv().await.unwrap().unwrap() {
                 if id == first {
                     assert_eq!(result.unwrap(), json!("public"));
                     seen[0] = true;

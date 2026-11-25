@@ -1,5 +1,4 @@
-import type { CallError } from "../src/protocol";
-import { RemoteFunctionError } from "../src/call-error";
+import { RemoteFunctionError, type CallError } from "../src/call-error";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";

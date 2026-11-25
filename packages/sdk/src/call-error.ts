@@ -1,4 +1,6 @@
-import type { CallError, StructuredCallError } from "./protocol";
+import type { CallErrorDetails } from "./protocol";
+
+export type CallError = string | ({ message: string } & CallErrorDetails);
 import type { JsonValue } from "./values";
 
 export class RemoteFunctionError extends Error {
@@ -14,11 +16,11 @@ export class RemoteFunctionError extends Error {
   }
 }
 
-export function isStructuredCallError(value: unknown): value is StructuredCallError {
+export function isStructuredCallError(value: unknown): value is CallErrorDetails {
   return (
     value !== null &&
     typeof value === "object" &&
-    ["message", "plugin", "hook", "stage", "kind"].every(
+    ["plugin", "hook", "stage", "kind"].every(
       (key) => typeof (value as Record<string, unknown>)[key] === "string",
     ) &&
     Object.hasOwn(value, "data")

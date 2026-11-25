@@ -142,11 +142,14 @@ async fn run_driver(workspace: &Path, installation: &Path, server: &Server, sess
                     if message["done"] == true {
                         break;
                     }
-                    if message["uninstall"] == true {
-                        fs::rename(
-                            installation.join("moderation"),
-                            installation.join(".removed-moderation"),
-                        ).unwrap();
+                    if message["uninstall"] == true || message["reinstall"] == true {
+                        let installed = installation.join("moderation");
+                        let removed = installation.join(".removed-moderation");
+                        if message["uninstall"] == true {
+                            fs::rename(installed, removed).unwrap();
+                        } else {
+                            fs::rename(removed, installed).unwrap();
+                        }
                         server.reload_plugin("moderation".into()).await.unwrap();
                         writeln!(input, "{}", json!({"reloaded":true})).unwrap();
                     } else {

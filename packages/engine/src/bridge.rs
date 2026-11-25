@@ -21,9 +21,16 @@ use std::{
 pub type CallFuture<'a> = Pin<Box<dyn Future<Output = Result<Json, CallError>> + 'a>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallLimit {
+    Depth,
+    Modules,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallError {
     pub message: String,
     pub details: Option<Json>,
+    pub limit: Option<CallLimit>,
 }
 
 impl From<&str> for CallError {
@@ -37,6 +44,7 @@ impl From<String> for CallError {
         Self {
             message,
             details: None,
+            limit: None,
         }
     }
 }
@@ -81,7 +89,7 @@ enum Op {
     Sync(Box<dyn Fn(Json) -> OpResult + Send + Sync>),
     Async(Box<dyn Fn(Json) -> OpFuture + Send + Sync>),
     Call(Box<dyn Fn(Json) -> StructuredOpFuture + Send + Sync>),
-    Module(Box<dyn Fn(Json) -> Result<ModuleCall, String> + Send + Sync>),
+    Module(Box<dyn Fn(Json) -> Result<ModuleCall, CallError> + Send + Sync>),
 }
 
 /// Native-resolved module delegation in the same world and invocation lease.
@@ -91,7 +99,7 @@ pub struct ModuleCall {
     export: String,
     args: Json,
     ops: Arc<OpRegistry>,
-    on_error: Box<dyn Fn(String) + Send + Sync>,
+    on_error: Box<dyn Fn(CallError) + Send + Sync>,
     scope: Option<OpenModule>,
     finished: bool,
     catch_structured: bool,
@@ -102,7 +110,7 @@ impl ModuleCall {
         export: impl Into<String>,
         args: Json,
         ops: Arc<OpRegistry>,
-        on_error: impl Fn(String) + Send + Sync + 'static,
+        on_error: impl Fn(CallError) + Send + Sync + 'static,
     ) -> Self {
         Self {
             bundle,
@@ -141,7 +149,7 @@ impl ModuleCall {
         self
     }
 
-    fn finish(&mut self, error: Option<String>) {
+    fn finish(&mut self, error: Option<CallError>) {
         self.finished = true;
         if let Some(error) = error {
             (self.on_error)(error);
@@ -241,6 +249,14 @@ impl OpRegistry {
         name: impl Into<String>,
         resolver: impl Fn(Json) -> Result<ModuleCall, String> + Send + Sync + 'static,
     ) -> Result<(), crate::Error> {
+        self.register_module_call(name, move |args| resolver(args).map_err(Into::into))
+    }
+
+    pub fn register_module_call(
+        &mut self,
+        name: impl Into<String>,
+        resolver: impl Fn(Json) -> Result<ModuleCall, CallError> + Send + Sync + 'static,
+    ) -> Result<(), crate::Error> {
         self.insert(name.into(), Op::Module(Box::new(resolver)))
     }
 
@@ -324,6 +340,8 @@ struct Lease {
     active: Arc<AtomicBool>,
     deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
+    hook_modules: Arc<AtomicU64>,
+    in_hook: bool,
     sequence: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
@@ -335,6 +353,8 @@ impl Lease {
             active: invocation.active.clone(),
             deadline: invocation.deadline,
             modules: Arc::default(),
+            hook_modules: Arc::default(),
+            in_hook: false,
             sequence: Arc::default(),
             depth: 0,
             determinism: invocation.determinism,
@@ -350,7 +370,7 @@ struct Executor<'js> {
 impl StageExecutor for Executor<'_> {
     fn run(&self, call: ModuleCall) -> CallFuture<'_> {
         let mut lease = self.lease.clone();
-        lease.modules = Arc::default();
+        lease.in_hook = true;
         Box::pin(invoke_module(self.ctx.clone(), call, lease, false))
     }
 }
@@ -435,8 +455,7 @@ fn install_leased<'js>(
                         encode(&ctx, result)
                     }
                     Op::Module(resolve) => {
-                        let call = resolve(args)
-                            .map_err(|error| Exception::throw_message(&ctx, &error))?;
+                        let call = resolve(args).map_err(|error| throw_call(&ctx, error))?;
                         let lease = lease.clone();
                         let ctx = ctx.clone();
                         Ok(Promise::wrap_future(&ctx.clone(), async move {
@@ -472,10 +491,27 @@ async fn invoke_module<'js>(
     mut lease: Lease,
     delegated: bool,
 ) -> Result<Json, CallError> {
-    if lease.depth >= 16 || (delegated && lease.modules.fetch_add(1, Ordering::Relaxed) >= 256) {
+    let modules = if lease.in_hook {
+        &lease.hook_modules
+    } else {
+        &lease.modules
+    };
+    let limit = if lease.depth >= 16 {
+        Some(CallLimit::Depth)
+    } else if delegated && modules.fetch_add(1, Ordering::Relaxed) >= 256 {
+        Some(CallLimit::Modules)
+    } else {
+        None
+    };
+    if let Some(limit) = limit {
         let message = "delegated module depth/count budget exceeded".to_owned();
-        call.finish(Some(message.clone()));
-        return Err(message.into());
+        let error = CallError {
+            message,
+            details: None,
+            limit: Some(limit),
+        };
+        call.finish(Some(error.clone()));
+        return Err(error);
     }
 
     let number = lease.sequence.fetch_add(1, Ordering::Relaxed);
@@ -490,13 +526,15 @@ async fn invoke_module<'js>(
             Some(open) => Some(open.await.map_err(CallError::from)?),
             None => None,
         };
+        check(&ctx, &lease.active, lease.deadline)
+            .map_err(|error| module_error(&ctx, error, &call.bundle, &name))?;
+        let module = Module::declare(
+            ctx.clone(),
+            name.as_str(),
+            source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
+        )
+        .map_err(|error| crate::engine::js_error_named(&ctx, error, &call.bundle, true, &name))?;
         let function = async {
-            check(&ctx, &lease.active, lease.deadline)?;
-            let module = Module::declare(
-                ctx.clone(),
-                name.as_str(),
-                source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
-            )?;
             let (module, evaluated) = module.eval()?;
             evaluated.into_future::<()>().await?;
             module.namespace()?.get::<_, Function>(call.export.as_str())
@@ -524,7 +562,7 @@ async fn invoke_module<'js>(
         .as_ref()
         .err()
         .filter(|error| !call.catch_structured || error.details.is_none())
-        .map(|error| error.message.clone());
+        .cloned();
     call.finish(poison);
     result
 }
@@ -546,10 +584,6 @@ fn throw_call(ctx: &Ctx<'_>, error: CallError) -> rquickjs::Error {
     let result = Exception::from_message(ctx.clone(), &error.message).and_then(|exception| {
         if let Some(details) = &error.details {
             let value = encode(ctx, details.clone())?;
-            exception.as_object().set(
-                "callDetails",
-                Class::instance(ctx.clone(), NativeCallError { error })?,
-            )?;
             if let Some(fields) = value.as_object() {
                 for key in ["plugin", "hook", "stage", "kind", "data"] {
                     exception
@@ -557,6 +591,12 @@ fn throw_call(ctx: &Ctx<'_>, error: CallError) -> rquickjs::Error {
                         .set(key, fields.get::<_, Value>(key)?)?;
                 }
             }
+        }
+        if error.details.is_some() || error.limit.is_some() {
+            exception.as_object().set(
+                "callDetails",
+                Class::instance(ctx.clone(), NativeCallError { error })?,
+            )?;
         }
         Ok(exception.throw())
     });

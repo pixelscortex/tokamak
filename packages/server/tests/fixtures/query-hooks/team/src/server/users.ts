@@ -1,3 +1,4 @@
+import { directory } from "../contracts";
 import { createFunctions, v } from "@tokamak/sdk";
 import schema from "./schema";
 
@@ -35,4 +36,17 @@ export const profile = query({
 export const explicit = query({
   returns: v.object({ status: v.union(v.literal("active"), v.literal("pending")) }),
   handler: () => ({ status: "pending" }),
+});
+
+export const rows = query({
+  handler: async (ctx): Promise<{ name: string }[]> => ctx.db.query("users").collect(),
+});
+
+export const ping = query({ handler: () => null });
+
+export const viaContract = query({
+  async handler(ctx): Promise<{ name: string; detail: string }[]> {
+    const [provider] = await directory.list(ctx);
+    return provider.list({ text: " Ali " });
+  },
 });

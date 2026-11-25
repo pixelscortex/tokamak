@@ -125,7 +125,7 @@ async fn call_result(
     else {
         panic!("missing action response for {name}")
     };
-    result.map_err(|error| error.to_string())
+    result
 }
 
 async fn verify_plugin_callers(session: &mut server::Session, id: &str, name: &str) {
@@ -325,7 +325,7 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
                         .unwrap()
                     {
                         Event::PluginChanged { .. } => changed = true,
-                        Event::Response { id: 1, result } => cancelled = Some(result),
+                        Event::Response { id: 1, result, .. } => cancelled = Some(result),
                         event => panic!("unexpected event: {event:?}"),
                     }
                 }
@@ -335,7 +335,7 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
                 );
                 session.sender().request(action(2, 1)).unwrap();
                 match session.recv().await.unwrap().unwrap() {
-                    Event::Response { id: 2, result } => assert_eq!(result, Ok(json!("slept"))),
+                    Event::Response { id: 2, result, .. } => assert_eq!(result, Ok(json!("slept"))),
                     event => panic!("unexpected event: {event:?}"),
                 }
                 drop(session);
@@ -371,7 +371,8 @@ async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
         session.recv().await.unwrap(),
         Some(Event::Response {
             id: 1,
-            result: Ok(_)
+            result: Ok(_),
+            ..
         })
     ));
     session
@@ -409,7 +410,7 @@ async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
     let results = tokio::time::timeout(Duration::from_secs(6), async {
         let mut results = BTreeMap::new();
         while results.len() < 3 {
-            if let Some(Event::Response { id, result }) = session.recv().await.unwrap() {
+            if let Some(Event::Response { id, result, .. }) = session.recv().await.unwrap() {
                 results.insert(id, result);
             }
         }

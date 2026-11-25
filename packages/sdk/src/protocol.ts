@@ -4,16 +4,7 @@ import type { JsonValue } from "./values";
 
 export const MAX_WIRE_MESSAGE_BYTES = 1048576;
 
-export type StructuredCallError = {
-  message: string;
-  plugin: string;
-  hook: string;
-  stage: string;
-  kind: string;
-  data: JsonValue;
-};
-
-export type CallError = string | StructuredCallError;
+export type CallErrorDetails = { plugin: string; hook: string; stage: string; kind: string; data: JsonValue };
 
 export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }
@@ -36,6 +27,11 @@ export type Request =
 
 export type Event =
   | { type: "pluginchanged"; plugins: Array<string>; catalog: JsonValue }
-  | { type: "response"; id: number; result: { Ok: JsonValue } | { Err: CallError } }
-  | { type: "subscription"; id: number; result: { Ok: JsonValue } | { Err: CallError } }
+  | { type: "response"; id: number; result: { Ok: JsonValue } | { Err: string }; error?: CallErrorDetails }
+  | {
+      type: "subscription";
+      id: number;
+      result: { Ok: JsonValue } | { Err: string };
+      error?: CallErrorDetails;
+    }
   | { type: "unsubscribed"; id: number };

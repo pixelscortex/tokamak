@@ -76,6 +76,8 @@ SDK IDs are monotonic and never reused. Requests are tagged `query`, `mutation`,
 `subscribe`, `unsubscribe`, with `{id,name,args}` (unsubscribe has only id).
 Events are tagged `response`, `subscription`, `unsubscribed`. The first two have
 `result: {Ok: value} | {Err: string}`: null success cannot be confused with error.
+Structured failures add an optional top-level `error: {plugin, hook, stage, kind, data}`
+field. Older clients continue to receive the string in `result.Err`.
 A mismatched query/mutation kind is rejected without executing the function.
 
 `SessionSender` implements `tower::Service<Request, Response=()>`; this response

@@ -336,7 +336,9 @@ test("query hook stages use the target's types and reject unsupported targets", 
     expect(diagnostics).toContain("Type 'number' is not assignable to type 'string'");
     expect(diagnostics).toContain("Type 'string' is not assignable to type 'MaybePromise<number>'");
     expect(
-      diagnostics.match(/hooks on mutations, actions and internal functions are not supported yet/g)?.length,
+      diagnostics.match(
+        /hooks on (?:mutations and actions|internal and plugin-only functions) are not supported yet/g,
+      )?.length,
     ).toBeGreaterThanOrEqual(2);
   });
 }, 30_000);
