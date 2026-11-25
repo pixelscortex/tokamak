@@ -88,6 +88,7 @@ export function CompanyMark(props: {
       viewBox={markOf(props.company).viewBox}
       class={["block shrink-0", sizes[props.size], props.class]}
       aria-hidden="true"
+      data-mark={markOf(props.company) === NEUTRAL ? "neutral" : "agent"}
     >
       <For each={markOf(props.company).paths}>
         {(path) => <path d={path.d} fill="currentColor" fill-rule={path.fillRule} />}
