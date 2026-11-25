@@ -1,0 +1,21 @@
+packages/runner/tests/local-routing.mjs
+  s_cf69c1ffa229c9::t_6311955ab06f98 41-44,92-94,287-292
+plugins/claude/tests/turns.mjs
+  s_cf69c1ffa229c9::t_c807f5d7e281e9 25,194-197,199-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83bc2e56adf037c5370c412e99f686132cdbf823",
+  "prompts": {},
+  "sessions": {
+    "s_cf69c1ffa229c9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-350f-70e1-88e9-c5c55e08e7ad",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
