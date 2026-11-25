@@ -139,10 +139,10 @@ test("a card's actions are sm icon buttons with names and tooltips; Check again 
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
   const names = [
-    "Claude Team models",
-    "Check Claude Team again",
-    "Claude Team details",
-    "Remove Claude Team",
+    "Claude Team, Acme models",
+    "Check Claude Team, Acme again",
+    "Claude Team, Acme details",
+    "Remove Claude Team, Acme",
   ];
   for (const name of names) {
     const button = within(card).getByRole("button", { name });
@@ -151,10 +151,10 @@ test("a card's actions are sm icon buttons with names and tooltips; Check again 
     expect(button.className).toMatch(/\bw-6\b/);
   }
   // The models button's tooltip lists the models by the names people know.
-  await user.hover(within(card).getByRole("button", { name: "Claude Team models" }));
+  await user.hover(within(card).getByRole("button", { name: "Claude Team, Acme models" }));
   expect(await screen.findByText("Opus 4.6 · Sonnet 4.6")).toBeTruthy();
 
-  await user.click(within(card).getByRole("button", { name: "Check Claude Team again" }));
+  await user.click(within(card).getByRole("button", { name: "Check Claude Team, Acme again" }));
   expect(named("manage:checkAgain")).toEqual([["ai-profiles/manage:checkAgain", { id: team.id }]]);
   expect((await within(card).findByRole("alert")).textContent).toMatch(/did not answer/);
 });
@@ -165,7 +165,7 @@ test("the details show each account with its status, the models and the profiles
   answers["ai-profiles/subscriptions:finishSignIn"] = team as unknown as JsonValue;
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
-  await user.click(within(card).getByRole("button", { name: "Claude Team details" }));
+  await user.click(within(card).getByRole("button", { name: "Claude Team, Acme details" }));
 
   const details = await screen.findByRole("region", { name: "Claude Team details" });
   const cards = document.querySelector<HTMLElement>('section[aria-label="Subscriptions"]')!;
@@ -226,7 +226,7 @@ test("Remove asks once, names the profiles that lose it, and removes it on the s
   const user = userEvent.setup({ document });
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
-  await user.click(within(card).getByRole("button", { name: "Remove Claude Team" }));
+  await user.click(within(card).getByRole("button", { name: "Remove Claude Team, Acme" }));
 
   const dialog = await screen.findByRole("dialog", { name: "Remove Claude Team, Acme?" });
   expect(named("manage:remove")).toEqual([]);
@@ -244,7 +244,7 @@ test("with no profile using it, the confirmation says so", async () => {
   uses = [];
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
-  await user.click(within(card).getByRole("button", { name: "Remove Claude Team" }));
+  await user.click(within(card).getByRole("button", { name: "Remove Claude Team, Acme" }));
   const dialog = await screen.findByRole("dialog", { name: "Remove Claude Team, Acme?" });
   expect(await within(dialog).findByText("No profile uses it.")).toBeTruthy();
   await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -257,7 +257,7 @@ test("an add-account sign-in cancelled in another window is said so, not shown a
   answers["ai-profiles/manage:addAccount"] = waiting as unknown as JsonValue;
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
-  await user.click(within(card).getByRole("button", { name: "Claude Team details" }));
+  await user.click(within(card).getByRole("button", { name: "Claude Team, Acme details" }));
   const details = await screen.findByRole("region", { name: "Claude Team details" });
   await user.click(within(details).getByRole("button", { name: "Add account" }));
   await screen.findByRole("dialog", { name: "Sign in to Claude" });
@@ -280,7 +280,7 @@ test("an add-account sign-in finished in another window closes the dialog quietl
   mount();
   await user.click(
     within(await screen.findByRole("article", { name: "Claude Team, Acme" })).getByRole("button", {
-      name: "Claude Team details",
+      name: "Claude Team, Acme details",
     }),
   );
   const details = await screen.findByRole("region", { name: "Claude Team details" });
@@ -303,7 +303,7 @@ test("a sign out that fails on the way says so", async () => {
   mount();
   await user.click(
     within(await screen.findByRole("article", { name: "Claude Team, Acme" })).getByRole("button", {
-      name: "Claude Team details",
+      name: "Claude Team, Acme details",
     }),
   );
   const details = await screen.findByRole("region", { name: "Claude Team details" });
@@ -316,9 +316,11 @@ test("a subscription whose plan is unknown is titled by its product and says so 
   mount();
   const card = await screen.findByRole("article", { name: "Claude" });
   // The line under the emails names the organisation alone; the hint sits by the action that reads the plan.
-  expect(within(card).getByText("acme inc")).toBeTruthy();
-  const check = within(card).getByRole("button", { name: "Check Claude again" });
-  expect(check.parentElement?.parentElement?.textContent).toMatch(/plan unknown/);
+  expect(within(card).getByText("Acme Inc")).toBeTruthy();
+  // The hint sits in the action row, beside the Check again that reads the plan.
+  const actions = within(card).getByRole("toolbar", { name: "Claude actions" });
+  expect(within(actions).getByRole("button", { name: "Check Claude again" })).toBeTruthy();
+  expect(within(actions).getByText("plan unknown")).toBeTruthy();
 });
 
 test("the Profiles section goes with the cards while a subscription's details are open", async () => {
@@ -326,7 +328,7 @@ test("the Profiles section goes with the cards while a subscription's details ar
   mount();
   const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
   expect(await screen.findByRole("region", { name: "Profiles" })).toBeTruthy();
-  await user.click(within(card).getByRole("button", { name: "Claude Team details" }));
+  await user.click(within(card).getByRole("button", { name: "Claude Team, Acme details" }));
   await screen.findByRole("region", { name: "Claude Team details" });
   expect(screen.queryByRole("region", { name: "Profiles" })).toBeNull();
   const header = screen.getByRole("banner", { name: "Page header" });

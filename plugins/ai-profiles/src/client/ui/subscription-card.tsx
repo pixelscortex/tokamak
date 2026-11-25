@@ -2,7 +2,7 @@ import { For, Show, Switch as Choose, Match } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Icon, Switch, icons } from "@tokamak/ui";
 import { productOf, type SignIn, type Subscription } from "../lib/api";
-import { countOf, lastUse, planLine, titleOf } from "../lib/format";
+import { countOf, lastUse, nameOf, titleOf, workspaceLine } from "../lib/format";
 import { glyphs } from "../lib/icons";
 import { CompanyMark } from "./company-mark";
 
@@ -30,9 +30,11 @@ export function SubscriptionCard(props: {
 }): JSX.Element {
   const subscription = () => props.subscription;
   const name = () => titleOf(subscription());
+  /** Title and label: what the card and each of its controls are called. */
+  const called = () => nameOf(subscription());
   return (
     <article
-      aria-label={[name(), subscription().label].filter(Boolean).join(", ")}
+      aria-label={called()}
       class="group/card flex flex-col gap-3 rounded-md p-4 surface-tray transition data-dimmed:opacity-40"
       data-dimmed={props.dimmed || undefined}
       onPointerDown={(event: PointerEvent) => props.onPointerDown?.(event)}
@@ -46,7 +48,7 @@ export function SubscriptionCard(props: {
           </Show>
         </div>
         <Switch
-          aria-label={`${name()} enabled`}
+          aria-label={`${called()} enabled`}
           checked={subscription().enabled}
           onCheckedChange={(checked: boolean) => props.onEnabled(checked)}
         />
@@ -59,7 +61,9 @@ export function SubscriptionCard(props: {
             </Show>
           )}
         </For>
-        <span class="truncate text-data text-ink-3">{planLine(subscription())}</span>
+        <Show when={workspaceLine(subscription())}>
+          {(line) => <span class="truncate text-data text-ink-3">{line()}</span>}
+        </Show>
       </div>
       <Choose>
         <Match when={subscription().status === "signed-out"}>
@@ -78,9 +82,10 @@ export function SubscriptionCard(props: {
           </div>
         </Match>
       </Choose>
-      {/* The model line ends with the profile codes; the action row, last, holds "Add to profile". */}
-      <div class="flex h-4 items-center gap-2">
-        <span class="min-w-0 flex-1 truncate text-data text-ink-3">
+      {/* The model line ends with the profile codes, as drawn; when they do not fit beside the
+          text, they wrap to a line of their own rather than cut the text short. */}
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span class="min-w-fit flex-1 text-data whitespace-nowrap text-ink-3">
           {countOf(subscription().models.length, "model")} · {lastUse(subscription().lastUsedAt, props.now)}
         </span>
         {props.profiles}

@@ -436,7 +436,7 @@ test("Add to profile sits in the card's action row, always shown, with a tooltip
   });
   // In the action row beside Remove, not hidden until hover.
   const row = button.closest("div")!;
-  expect(within(row).getByRole("button", { name: "Remove Claude Pro" })).toBeTruthy();
+  expect(within(row).getByRole("button", { name: "Remove Claude Pro, Personal" })).toBeTruthy();
   expect(button.closest("[class*='opacity-0']")).toBeNull();
   // A press on it is not a drag: moved and released over the profile, it adds nothing.
   document.elementFromPoint = () => box("PERS");
@@ -446,4 +446,20 @@ test("Add to profile sits in the card's action row, always shown, with a tooltip
   expect(changes()).toEqual([]);
   await user.hover(button);
   expect((await screen.findByRole("tooltip")).textContent).toBe("Add to profile");
+});
+
+test("a card shows up to three profile codes; with more, two and +N", async () => {
+  const codes = ["PERS", "SBOX", "ACME", "WORK"];
+  await mount(codes.slice(0, 3).map((code, i) => profile(`p${i}`, code, code, [personal.id])));
+  const line = () => within(article("Claude Pro, Personal"));
+  for (const code of codes.slice(0, 3)) expect(line().getByText(code)).toBeTruthy();
+  expect(line().queryByText(/^\+/)).toBeNull();
+  // A fourth profile takes it in: two codes stay, and "+2" stands for the rest.
+  profiles = codes.map((code, i) => profile(`p${i}`, code, code, [personal.id]));
+  push();
+  await waitFor(() => expect(line().getByText("+2")).toBeTruthy());
+  expect(line().getByText("PERS")).toBeTruthy();
+  expect(line().getByText("SBOX")).toBeTruthy();
+  expect(line().queryByText("ACME")).toBeNull();
+  expect(line().getByText("+2")).toBeTruthy();
 });

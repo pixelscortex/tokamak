@@ -8,13 +8,30 @@ export const titleOf = (subscription: Pick<Subscription, "company" | "plan">) =>
   [productOf[subscription.company], subscription.plan].filter(Boolean).join(" ");
 
 /**
- * The data line under the emails: "fake organization · pro" (Paper sets it in
- * lower case). An unknown plan adds no word here, as in the title: the quiet
- * "plan unknown" sits beside the card's "Check again" (`card-actions.tsx`).
+ * "Claude Pro, Personal": the title and the label, the name every control of a
+ * card is called by ("Remove Claude Pro, Personal"), so two cards with the
+ * same title never share one.
  */
-export function planLine(subscription: Subscription): string {
-  const organization = subscription.accounts.find((account) => account.organization)?.organization;
-  return [organization, subscription.plan].filter(Boolean).join(" · ").toLowerCase();
+export const nameOf = (subscription: Pick<Subscription, "company" | "plan" | "label">) =>
+  [titleOf(subscription), subscription.label].filter(Boolean).join(", ");
+
+/**
+ * The data line under the emails: the organisation or workspace, as the
+ * company names it, and nothing for an account with neither. The plan is not
+ * repeated here: it is in the title ("ChatGPT Pro").
+ */
+export function workspaceLine(subscription: Subscription): string {
+  return subscription.accounts.find((account) => account.organization)?.organization ?? "";
+}
+
+/** How many profile codes a card shows before the rest become "+N". */
+export const CODES_SHOWN = 3;
+
+/** The codes a card shows, and how many more there are. */
+export function shownCodes(codes: readonly string[]): { shown: readonly string[]; more: number } {
+  const fits = codes.length <= CODES_SHOWN;
+  const shown = fits ? codes : codes.slice(0, CODES_SHOWN - 1);
+  return { shown, more: codes.length - shown.length };
 }
 
 /** A model as people know it: Claude's own names lead with "Claude ", which the logo already says. */

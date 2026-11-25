@@ -186,10 +186,10 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
 
   update({ subscriptions: [{ ...pro, label: "Home" }], signIns: [] });
   const card = await screen.findByRole("article", { name: "Claude Pro, Home" });
-  for (const text of ["you@example.test", "fake org · pro", "OK", "1 model · not used yet"])
+  for (const text of ["you@example.test", "Fake Org", "OK", "1 model · not used yet"])
     expect(within(card).getByText(text)).toBeTruthy();
   // The Enabled switch tells the server.
-  await user.click(within(card).getByRole("switch", { name: "Claude Pro enabled" }));
+  await user.click(within(card).getByRole("switch", { name: "Claude Pro, Home enabled" }));
   expect(named("setEnabled")).toEqual([
     ["ai-profiles/subscriptions:setEnabled", { id: pro.id, enabled: false }],
   ]);

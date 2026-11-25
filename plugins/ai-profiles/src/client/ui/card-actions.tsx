@@ -4,7 +4,7 @@ import { isFailure } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/client";
 import { Tooltip, icons } from "@tokamak/ui";
 import { api, type Subscription } from "../lib/api";
-import { modelName, titleOf } from "../lib/format";
+import { modelName, nameOf } from "../lib/format";
 import { manageGlyphs, openSubscription, removing } from "../lib/manage";
 
 /**
@@ -24,7 +24,8 @@ export function CardActions(props: {
   const client = useClient();
   const [checking, setChecking] = createSignal(false);
   const [problem, setProblem] = createSignal<string>();
-  const name = () => titleOf(props.subscription);
+  // Title and label, so two cards with the same title never share a control's name.
+  const name = () => nameOf(props.subscription);
   async function check() {
     if (checking()) return;
     setChecking(true);
@@ -62,7 +63,7 @@ export function CardActions(props: {
   };
   return (
     <div class="flex flex-col gap-1">
-      <div class="flex items-center gap-hair">
+      <div role="toolbar" aria-label={`${name()} actions`} class="flex items-center gap-hair">
         {button({ label: () => `${name()} models`, icon: manageGlyphs.models, tip: models, run: open })}
         {button({
           label: () => `Check ${name()} again`,

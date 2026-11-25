@@ -181,7 +181,7 @@ test("a ChatGPT card sits beside a Claude one, shows its workspace, and signs in
   const max = screen.getByRole("article", { name: "Claude Max, Personal" });
   expect(markIn(chatgpt)).toBe("M2 2h20v20H2z");
   expect(markIn(max)).toBe("M1 1h22v22H1z");
-  for (const text of ["you@acme.test", "acme · business", "Signed out", "2 models · not used yet"])
+  for (const text of ["you@acme.test", "Acme", "Signed out", "2 models · not used yet"])
     expect(within(chatgpt).getByText(text)).toBeTruthy();
 
   await user.click(within(chatgpt).getByRole("button", { name: "Sign in" }));
@@ -210,11 +210,48 @@ test("a plan the company did not name is left out of the title, never shown as F
   mount();
   const card = await screen.findByRole("article", { name: "ChatGPT, Work" });
   // The line under the email names the workspace alone.
-  expect(within(card).getByText("acme")).toBeTruthy();
+  expect(within(card).getByText("Acme")).toBeTruthy();
   expect(within(card).queryByText(/free/i)).toBeNull();
 });
 
 test("each company's return address is written once; its port and path come from it", () => {
   expect([returnPort("anthropic"), returnPath("anthropic")]).toEqual([54545, "/callback"]);
   expect([returnPort("openai"), returnPath("openai")]).toEqual([1455, "/auth/callback"]);
+});
+
+test("the line under the email is the workspace or organisation alone, and nothing for a personal account", async () => {
+  // The owner's personal ChatGPT Pro showed "pro" there: the plan, already in the title, repeated.
+  const personal = (company: "anthropic" | "openai", id: string, plan: string): Subscription => ({
+    ...business,
+    id: `agent-proxy/subscriptions:${id}`,
+    company,
+    plan,
+    label: id,
+    accounts: [{ id: `agent-proxy/accounts:${id}`, email: `${id}@example.test`, status: "ok" }],
+  });
+  const inWorkspace = (subscription: Subscription, organization: string): Subscription => ({
+    ...subscription,
+    accounts: [{ ...subscription.accounts[0]!, organization }],
+  });
+  listed = {
+    subscriptions: [
+      personal("openai", "gpt-home", "Pro"),
+      inWorkspace(personal("openai", "gpt-work", "Business"), "Acme"),
+      personal("anthropic", "claude-home", "Max"),
+      inWorkspace(personal("anthropic", "claude-work", "Team"), "Acme Inc"),
+    ],
+    signIns: [],
+  };
+  mount();
+  const lineOf = async (name: string, email: string) => {
+    const card = await screen.findByRole("article", { name });
+    // The element after the email: the workspace line, or the status when there is none.
+    return within(card).getByText(email).nextElementSibling?.textContent ?? "";
+  };
+  expect(await lineOf("ChatGPT Pro, gpt-home", "gpt-home@example.test")).toBe("");
+  expect(await lineOf("ChatGPT Business, gpt-work", "gpt-work@example.test")).toBe("Acme");
+  expect(await lineOf("Claude Max, claude-home", "claude-home@example.test")).toBe("");
+  expect(await lineOf("Claude Team, claude-work", "claude-work@example.test")).toBe("Acme Inc");
+  for (const card of screen.getAllByRole("article"))
+    expect(card.textContent).not.toMatch(/\b(pro|business|max|team)\b/);
 });

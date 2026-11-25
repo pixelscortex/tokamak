@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { Icon, Menu, Tooltip, icons } from "@tokamak/ui";
 import type { Subscription } from "../lib/api";
 import type { Builder } from "../lib/builder";
+import { shownCodes } from "../lib/format";
 import { profileGlyph } from "../lib/profile-icons";
 
 /** The row's other buttons are glyphs of their own; this one is the plain add. */
@@ -10,21 +11,26 @@ const profileAddGlyph = icons.add;
 
 /**
  * The end of a subscription card's model line (Paper "1 · Profiles · screen"):
- * the codes of the profiles that use it.
+ * the codes of the profiles that use it. Up to three show; with more, two show
+ * and "+N" stands for the rest. The model line wraps them to a line of their
+ * own when they do not fit beside its text.
  */
 export function CardProfiles(props: { subscription: Subscription; builder: Builder }): JSX.Element {
-  const codes = () => props.builder.codesOf(props.subscription.id);
+  const codes = () => shownCodes(props.builder.codesOf(props.subscription.id));
   return (
-    <span class="flex shrink-0 items-center gap-2">
-      <For each={codes()}>
-        {(code) => (
-          <span class="flex items-center gap-1 text-data text-ink-3">
-            <Icon path={profileGlyph} size={12} />
-            {code}
-          </span>
-        )}
-      </For>
-    </span>
+    <Show when={codes().shown.length}>
+      <span class="flex shrink-0 items-center gap-2">
+        <For each={codes().shown}>
+          {(code) => (
+            <span class="flex items-center gap-1 text-data text-ink-3">
+              <Icon path={profileGlyph} size={12} />
+              {code}
+            </span>
+          )}
+        </For>
+        <Show when={codes().more}>{(more) => <span class="text-data text-ink-3">+{more()}</span>}</Show>
+      </span>
+    </Show>
   );
 }
 
