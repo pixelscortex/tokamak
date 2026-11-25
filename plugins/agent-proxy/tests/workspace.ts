@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
@@ -48,14 +48,40 @@ export function builds(): Build[] {
 }
 
 let built: Promise<void> | undefined;
-/** Builds the five plugins once per test run. */
+/**
+ * Builds the five plugins once per test run. Test runs of other plugins (such
+ * as ai-profiles') use this too and may run at the same time, and two builds
+ * of one plugin folder trip over each other's scratch files: a lock folder in
+ * `target/` lets one run build at a time. A lock older than ten minutes is
+ * from a run that died and is taken over.
+ */
 export function buildPlugins() {
   built ??= (async () => {
-    for (const id of plugins)
-      await execute("proto", ["run", "bun", "--", "packages/build/src/build.ts", `plugins/${id}`], {
-        cwd: root,
-        timeout: 120_000,
-      });
+    const lock = join(root, "target/plugin-tests-build.lock");
+    await mkdir(join(root, "target"), { recursive: true });
+    for (const started = Date.now(); ;) {
+      try {
+        await mkdir(lock);
+        break;
+      } catch {
+        const stale = await stat(lock).then(
+          (info) => Date.now() - info.mtimeMs > 600_000,
+          () => false,
+        );
+        if (stale) await rmdir(lock).catch(() => {});
+        else if (Date.now() - started > 600_000) throw new Error(`Plugin build lock held too long: ${lock}`);
+        else await new Promise((done) => setTimeout(done, 250));
+      }
+    }
+    try {
+      for (const id of plugins)
+        await execute("proto", ["run", "bun", "--", "packages/build/src/build.ts", `plugins/${id}`], {
+          cwd: root,
+          timeout: 120_000,
+        });
+    } finally {
+      await rmdir(lock).catch(() => {});
+    }
   })();
   return built;
 }
