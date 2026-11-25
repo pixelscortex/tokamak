@@ -45,7 +45,7 @@ export function idIn<T extends Table>(table: T, value: string): Id<T> | null {
 }
 
 /** The plain answer for an id that is malformed, of another table, gone, or another member's. */
-export const notFound = (what: "subscription" | "sign-in") =>
+export const notFound = (what: "subscription" | "account" | "sign-in") =>
   fail("NotFound", { message: `That ${what} is gone.` });
 
 /** What the window and other plugins may learn of a subscription: never the login. */
@@ -56,10 +56,22 @@ export interface SubscriptionView {
   readonly label: string;
   readonly plan: string;
   readonly enabled: boolean;
-  /** Signed out when any of its accounts is; the card then offers "Sign in". */
+  /**
+   * OK while at least one of its accounts is signed in: the proxy can still use
+   * it. Signed out only when every account is (or it has none); the card then
+   * offers "Sign in". A mix shows on each account's own `status`.
+   */
   readonly status: "ok" | "signed-out";
+  /** Why the subscription is signed out: the first signed-out account's reason. */
   readonly reason?: string;
-  readonly accounts: readonly { email?: string; organization?: string; status: "ok" | "signed-out" }[];
+  /** Oldest first. `id` is the account row's, for signing that one account out. */
+  readonly accounts: readonly {
+    id: string;
+    email?: string;
+    organization?: string;
+    status: "ok" | "signed-out";
+    reason?: string;
+  }[];
   readonly models: readonly { id: string; name: string }[];
   readonly lastUsedAt?: number;
   readonly createdAt: number;
@@ -75,6 +87,8 @@ export interface SignInView {
   readonly startedAt: number;
   /** The subscription it repairs in place. */
   readonly repair?: string;
+  /** The subscription it adds another provider account to. */
+  readonly addTo?: string;
   /** Older than 15 minutes: it can no longer finish; the person starts again. */
   readonly expired: boolean;
 }
@@ -87,6 +101,7 @@ export function signInViewOf(row: Doc<Model, "signIns">, now: number): SignInVie
     link: row.link,
     startedAt: row.startedAt,
     ...(row.repair !== undefined && { repair: row.repair }),
+    ...(row.addTo !== undefined && { addTo: row.addTo }),
     expired: isExpired(row, now),
   };
 }
@@ -95,7 +110,8 @@ export function viewOf(
   subscription: Doc<Model, "subscriptions">,
   accounts: readonly Doc<Model, "accounts">[],
 ): SubscriptionView {
-  const out = accounts.find((account) => account.status === "signed-out");
+  const signedIn = accounts.some((account) => account.status === "ok");
+  const out = signedIn ? undefined : accounts.find((account) => account.status === "signed-out");
   return {
     id: subscription._id,
     company: subscription.company,
@@ -103,13 +119,17 @@ export function viewOf(
     label: subscription.label,
     plan: subscription.plan,
     enabled: subscription.enabled,
-    status: out ? "signed-out" : "ok",
+    status: signedIn ? "ok" : "signed-out",
     ...(out?.reason !== undefined && { reason: out.reason }),
-    accounts: accounts.map(({ email, organization, status }) => ({
-      ...(email !== undefined && { email }),
-      ...(organization !== undefined && { organization }),
-      status,
-    })),
+    accounts: [...accounts]
+      .sort((a, b) => a._creationTime - b._creationTime)
+      .map(({ _id, email, organization, status, reason }) => ({
+        id: _id,
+        ...(email !== undefined && { email }),
+        ...(organization !== undefined && { organization }),
+        status,
+        ...(status === "signed-out" && reason !== undefined && { reason }),
+      })),
     models: subscription.models,
     ...(subscription.lastUsedAt !== undefined && { lastUsedAt: subscription.lastUsedAt }),
     createdAt: subscription.createdAt,

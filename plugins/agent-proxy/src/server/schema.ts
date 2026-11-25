@@ -75,6 +75,8 @@ export default defineSchema({
     startedAt: v.number(),
     /** The subscription this sign-in repairs in place; absent for a new one. */
     repair: v.optional(v.id("subscriptions")),
+    /** The subscription this sign-in adds a second provider account to (TKM-265). */
+    addTo: v.optional(v.id("subscriptions")),
     /** Set while one call finishes it, so a second paste cannot race the first. */
     finishingUntil: v.optional(v.number()),
   }).index("by_owner", ["owner"]),

@@ -1,0 +1,316 @@
+import {
+  fail,
+  pluginOnly,
+  v,
+  type DatabaseReader,
+  type Doc,
+  type Id,
+  type MutationContext,
+} from "@tokamak/sdk";
+import type {} from "@tokamak/sdk/web";
+import { internal } from "./_generated/internal";
+import {
+  action,
+  idIn,
+  internalMutation,
+  internalQuery,
+  mutation,
+  notFound,
+  ownerOf,
+  viewOf,
+  type Model,
+  type SignInView,
+  type SubscriptionView,
+} from "./_functions";
+import { companyAddresses } from "./addresses";
+import { accountDetails, models, signInLink } from "./claude";
+import { randomToken } from "./pkce";
+
+/**
+ * Managing a subscription once it exists: another provider account under it,
+ * signing one account out, reading plan and models again, and removing it.
+ * Like the rest of the plugin these answer for the calling member only, check
+ * every id's table, and never put a login in an answer. The internal ones take
+ * the member as `owner`, as `logins.ts` does.
+ *
+ * Several accounts: a team plan can have two logins of one company under one
+ * subscription. The subscription is "OK" while at least one account is signed
+ * in, since the proxy (TKM-263) can still use it; each account carries its own
+ * status, and the subscription turns "Signed out" only when every account is.
+ * A second account must be on the subscription's plan: one on another plan is
+ * refused (add it as a subscription of its own), unless Claude did not say
+ * which plan it is, in which case the subscription keeps the plan it has.
+ */
+
+type Failed = { failed: true; kind: string; data: { message: string } };
+const SIGNED_OUT = "You signed this account out. Sign in again to use it.";
+
+/**
+ * Starts a sign-in that adds another provider account to subscription `id`.
+ * The same sign-in as a new subscription (link, paste, `finishSignIn`); only
+ * its end differs, in `attachAccount` below. Starting again for the same
+ * subscription replaces the one still waiting.
+ */
+export const addAccount = pluginOnly(
+  action({
+    args: { id: v.string() },
+    handler: async (ctx, { id }): Promise<SignInView | Failed> => {
+      const target = idIn("subscriptions", id);
+      if (!target) return notFound("subscription");
+      const verifier = randomToken();
+      const state = randomToken();
+      const link = signInLink(await companyAddresses(ctx), verifier, state);
+      return ctx.runMutation(internal.signins.begin, {
+        owner: ownerOf(ctx.auth),
+        verifier,
+        state,
+        link,
+        addTo: target,
+      });
+    },
+  }),
+);
+
+/**
+ * The end of an `addAccount` sign-in, inside `signins:connect`'s transaction
+ * (the sign-in row is already deleted there; a failure rolls that back too).
+ * Refuses an account of another company, one already under another of the
+ * member's subscriptions or signed in under this one, and one on another plan.
+ * An account of this subscription that was signed out is signed in again in
+ * place, so "Add account" with that account also repairs it.
+ */
+export async function attachAccount(
+  ctx: MutationContext<Model>,
+  args: {
+    owner: string;
+    signIn: Doc<Model, "signIns">;
+    subscription: Id<"subscriptions">;
+    access: string;
+    refresh: string;
+    expiresAt: number;
+    found: {
+      accountId: string;
+      email?: string;
+      organization?: string;
+      plan: string;
+      planKnown?: boolean;
+      models: { id: string; name: string }[];
+    };
+  },
+): Promise<SubscriptionView | Failed> {
+  const { owner, found } = args;
+  const subscription = await ctx.db.get(args.subscription);
+  if (!subscription || subscription.owner !== owner)
+    return fail("Gone", { message: "That subscription was removed meanwhile. Nothing was added." });
+  if (subscription.company !== args.signIn.company)
+    return fail("OtherCompany", { message: "That account is of another company. Nothing was added." });
+  const who = found.email ?? "This account";
+  const same = await ctx.db
+    .query("accounts")
+    .withIndex("by_owner_account", (q) => q.eq("owner", owner).eq("accountId", found.accountId))
+    .first();
+  if (same && same.subscription !== subscription._id) {
+    const other = await ctx.db.get(same.subscription);
+    return fail("AlreadyAdded", {
+      message: `${who} is already added${other?.label ? ` as "${other.label}"` : " to another subscription"}.`,
+    });
+  }
+  if (same?.status === "ok")
+    return fail("AlreadyAdded", { message: `${who} is already in this subscription.` });
+  if (found.planKnown !== false && found.plan !== subscription.plan)
+    return fail("OtherPlan", {
+      message: `${who} is on Claude ${found.plan}, not ${subscription.plan}. Add it as a subscription of its own.`,
+    });
+  const identity = {
+    ...(found.email !== undefined && { email: found.email }),
+    ...(found.organization !== undefined && { organization: found.organization }),
+  };
+  let account: Id<"accounts">;
+  if (same) {
+    // Signed out under this subscription: signed in again in place, its old login gone.
+    account = same._id;
+    const { reason: _reason, _id, _creationTime, ...fields } = same;
+    await ctx.db.replace(_id, { ...fields, ...identity, status: "ok" });
+    for (const old of await loginsOf(ctx, _id)) await ctx.db.delete(old._id);
+  } else {
+    account = await ctx.db.insert("accounts", {
+      owner,
+      subscription: subscription._id,
+      accountId: found.accountId,
+      ...identity,
+      status: "ok",
+    });
+  }
+  await ctx.db.insert("logins", {
+    owner,
+    account,
+    access: args.access,
+    refresh: args.refresh,
+    expiresAt: args.expiresAt,
+  });
+  // Models the new login may use join the list; none is dropped for an account that lacks it.
+  const known = new Set(subscription.models.map((model) => model.id));
+  const added = found.models.filter((model) => !known.has(model.id));
+  if (added.length) await ctx.db.patch(subscription._id, { models: [...subscription.models, ...added] });
+  return viewOf((await ctx.db.get(subscription._id))!, await accountsOf(ctx, subscription._id));
+}
+
+const accountsOf = (ctx: { db: DatabaseReader<Model> }, subscription: Id<"subscriptions">) =>
+  ctx.db
+    .query("accounts")
+    .withIndex("by_subscription", (q) => q.eq("subscription", subscription))
+    .collect();
+const loginsOf = (ctx: { db: DatabaseReader<Model> }, account: Id<"accounts">) =>
+  ctx.db
+    .query("logins")
+    .withIndex("by_account", (q) => q.eq("account", account))
+    .collect();
+
+/**
+ * Signs one provider account out: its login is deleted here, so nothing can
+ * use or renew it again. The account stays, "Signed out", and a sign-in with
+ * `repair` (or "Add account" with the same account) signs it in again in
+ * place. With every account signed out the subscription shows "Signed out".
+ */
+export const signOutAccount = pluginOnly(
+  mutation({
+    args: { id: v.string() },
+    handler: async (ctx, { id }) => {
+      const ref = idIn("accounts", id);
+      const account = ref && (await ctx.db.get(ref));
+      if (!account || account.owner !== ownerOf(ctx.auth)) return notFound("account");
+      for (const login of await loginsOf(ctx, account._id)) await ctx.db.delete(login._id);
+      await ctx.db.patch(account._id, { status: "signed-out", reason: SIGNED_OUT });
+      return null;
+    },
+  }),
+);
+
+/**
+ * Removes a subscription with everything under it, in one transaction: its
+ * accounts, their logins, and any sign-in still waiting to repair it or add
+ * an account to it. A sign-in that finishes later finds it gone and adds
+ * nothing. Profiles that held it are the caller's to update (agent-proxy does
+ * not know them).
+ */
+export const removeSubscription = pluginOnly(
+  mutation({
+    args: { id: v.string() },
+    handler: async (ctx, { id }) => {
+      const ref = idIn("subscriptions", id);
+      const subscription = ref && (await ctx.db.get(ref));
+      const owner = ownerOf(ctx.auth);
+      if (!subscription || subscription.owner !== owner) return notFound("subscription");
+      for (const account of await accountsOf(ctx, subscription._id)) {
+        for (const login of await loginsOf(ctx, account._id)) await ctx.db.delete(login._id);
+        await ctx.db.delete(account._id);
+      }
+      const signIns = await ctx.db
+        .query("signIns")
+        .withIndex("by_owner", (q) => q.eq("owner", owner))
+        .collect();
+      for (const row of signIns)
+        if (row.repair === subscription._id || row.addTo === subscription._id) await ctx.db.delete(row._id);
+      await ctx.db.delete(subscription._id);
+      return null;
+    },
+  }),
+);
+
+/** The subscription's accounts, oldest first; null when it is gone or another member's. */
+export const accounts = internalQuery({
+  args: { owner: v.string(), subscription: v.id("subscriptions") },
+  handler: async (ctx, { owner, subscription }) => {
+    const row = await ctx.db.get(subscription);
+    if (!row || row.owner !== owner) return null;
+    return (await accountsOf(ctx, subscription))
+      .sort((a, b) => a._creationTime - b._creationTime)
+      .map((account) => ({ id: account._id, status: account.status }));
+  },
+});
+
+const model = v.object({ id: v.string(), name: v.string() });
+
+/**
+ * Keeps what "Check again" read. Only what Claude answered replaces what is
+ * stored: an account it did not answer for keeps its email and organisation,
+ * and the plan and models stay when no account answered for them.
+ */
+export const checked = internalMutation({
+  args: {
+    owner: v.string(),
+    subscription: v.id("subscriptions"),
+    read: v.array(
+      v.object({
+        account: v.id("accounts"),
+        known: v.boolean(),
+        plan: v.string(),
+        email: v.optional(v.string()),
+        organization: v.optional(v.string()),
+        models: v.array(model),
+      }),
+    ),
+  },
+  handler: async (ctx, { owner, subscription: id, read }) => {
+    const subscription = await ctx.db.get(id);
+    if (!subscription || subscription.owner !== owner) return notFound("subscription");
+    for (const answer of read) {
+      const account = await ctx.db.get(answer.account);
+      if (!answer.known || !account || account.subscription !== id) continue;
+      await ctx.db.patch(account._id, {
+        ...(answer.email !== undefined && { email: answer.email }),
+        ...(answer.organization !== undefined && { organization: answer.organization }),
+      });
+    }
+    const plan = read.find((answer) => answer.known)?.plan;
+    const found = read.find((answer) => answer.models.length)?.models;
+    if (plan !== undefined || found) {
+      await ctx.db.patch(id, { ...(plan !== undefined && { plan }), ...(found && { models: found }) });
+    }
+    return viewOf((await ctx.db.get(id))!, await accountsOf(ctx, id));
+  },
+});
+
+/**
+ * Reads the plan, each account's email and organisation, and the models
+ * again, with a fresh login of each signed-in account (renewed first when it
+ * runs out soon, by the usual rules in `logins.ts`). When Claude answers none
+ * of it, nothing changes and the answer says so; when no account has a login,
+ * it says to sign in.
+ */
+export const checkAgain = pluginOnly(
+  action({
+    args: { id: v.string() },
+    handler: async (ctx, { id }): Promise<SubscriptionView | Failed> => {
+      const subscription = idIn("subscriptions", id);
+      if (!subscription) return notFound("subscription");
+      const owner = ownerOf(ctx.auth);
+      const list = await ctx.runQuery(internal.manage.accounts, { owner, subscription });
+      if (!list) return notFound("subscription");
+      const addresses = await companyAddresses(ctx);
+      const read = [];
+      for (const account of list) {
+        if (account.status !== "ok") continue;
+        const login = await ctx.runAction(internal.logins.fresh, { owner, account: account.id });
+        if (!login) continue;
+        const [about, found] = await Promise.all([
+          accountDetails(addresses, login.access),
+          models(addresses, login.access),
+        ]);
+        read.push({
+          account: account.id,
+          known: about.known,
+          plan: about.plan,
+          ...(about.identity.email !== undefined && { email: about.identity.email }),
+          ...(about.identity.organization !== undefined && { organization: about.identity.organization }),
+          models: found,
+        });
+      }
+      if (!read.length)
+        return fail("SignedOut", { message: "No account of this subscription is signed in. Sign in first." });
+      if (!read.some((answer) => answer.known || answer.models.length))
+        return fail("Unreachable", { message: "Claude did not answer. Nothing changed; try again." });
+      return ctx.runMutation(internal.manage.checked, { owner, subscription, read });
+    },
+  }),
+);

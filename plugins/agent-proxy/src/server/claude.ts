@@ -247,11 +247,15 @@ const PLANS: Record<string, string> = {
   claude_enterprise: "Enterprise",
 };
 
-/** The plan, email and organisation Claude reports for the login (`/api/oauth/profile`). */
+/**
+ * The plan, email and organisation Claude reports for the login (`/api/oauth/profile`).
+ * `known` is false when Claude did not answer: the plan then reads "Free" and
+ * must not replace one read before ("Check again" keeps the old one).
+ */
 export async function accountDetails(
   addresses: Addresses,
   access: string,
-): Promise<{ plan: string; identity: Partial<Identity> }> {
+): Promise<{ plan: string; identity: Partial<Identity>; known: boolean }> {
   const answer = (await get(`${addresses.anthropic.api}/api/oauth/profile`, access)) as
     | {
         account?: { uuid?: unknown; email?: unknown; has_claude_max?: unknown; has_claude_pro?: unknown };
@@ -273,6 +277,7 @@ export async function accountDetails(
       email: text(answer?.account?.email),
       organization: text(answer?.organization?.name),
     },
+    known: answer !== undefined,
   };
 }
 

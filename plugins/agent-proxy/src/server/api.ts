@@ -4,4 +4,5 @@
  */
 export { listSubscriptions, setLabel, setEnabled, renewLogins } from "./subscriptions";
 export { startSignIn, finishSignIn, cancelSignIn } from "./signins";
+export { addAccount, signOutAccount, checkAgain, removeSubscription } from "./manage";
 export type { SignInView, SubscriptionView } from "./_functions";
