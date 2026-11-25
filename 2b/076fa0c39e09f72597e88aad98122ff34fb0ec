@@ -1,0 +1,73 @@
+packages/server/tests/refs-driver.mjs
+  s_ba25387409099f::t_3b9327ba0886b0 14-17
+  s_ba25387409099f::t_2debd2bf5eea52 1-13,18-70
+packages/sdk/tools/table-references.mjs
+  s_ba25387409099f::t_6063390a53f430 1-20,53-58,61-72,78-84,88
+  s_ba25387409099f::t_3b9327ba0886b0 21-35,37-52,59-60
+  s_ba25387409099f::t_d89e810b74036a 36,73-77,85-87
+packages/sdk/tools/plugin-boundary.mjs
+  s_ba25387409099f::t_6063390a53f430 22-24,114-115,163-166,193,199-200
+  s_ba25387409099f::t_8017a035e6fc81 201-203,235,239,253
+packages/build/src/vite.ts
+  s_ba25387409099f::t_6063390a53f430 48,145
+packages/sdk/src/schema.ts
+  s_ba25387409099f::t_3b9327ba0886b0 1-2
+packages/server/src/data/README.md
+  s_ba25387409099f::t_3b9327ba0886b0 36,64-69
+packages/sdk/README.md
+  s_ba25387409099f::t_3b9327ba0886b0 592-609,612-620
+  s_ba25387409099f::t_d491529ca9dd8a 95-96,610-611
+packages/server/src/schema.rs
+  s_ba25387409099f::t_6aec3d540813bd 1,4,136,155-201,246-258
+  s_ba25387409099f::t_79058406029a2f 259-260
+packages/sdk/src/validators.ts
+  s_ba25387409099f::t_3b9327ba0886b0 16-17,21,23
+  s_ba25387409099f::t_6063390a53f430 10,18-20,22,24,82-84,180,204
+  s_ba25387409099f::t_89bbe425a20e56 181-182,192-203
+packages/sdk/tools/bundle.mjs
+  s_ba25387409099f::t_6063390a53f430 164,168,306
+  s_ba25387409099f::t_eee4dbcf3f5431 307-309,317
+packages/build/tests/ref-fixtures.mjs
+  s_ba25387409099f::t_3b9327ba0886b0 11-42,68
+  s_ba25387409099f::t_5afd9883bc01d4 1-10,43-67,69-103
+packages/sdk/src/index.ts
+  s_ba25387409099f::t_3b9327ba0886b0 9-17
+packages/sdk/tools/plugin-compiler.mjs
+  s_ba25387409099f::t_6063390a53f430 20
+packages/build/README.md
+  s_ba25387409099f::t_941647d9a119e3 89-93
+packages/build/tests/refs.test.mjs
+  s_ba25387409099f::t_c094e39184af7e 1-38
+packages/build/tests/run.sh
+  s_ba25387409099f::t_bc4333c0e0783b 3
+packages/server/src/data/mod.rs
+  s_ba25387409099f::t_f81d4432c18d6f 23
+packages/server/src/data/space.rs
+  s_ba25387409099f::t_37d0142b18c51f 13
+packages/server/src/data/storage.rs
+  s_ba25387409099f::t_59621ce186d0be 5,26,82
+packages/server/src/data/transaction.rs
+  s_ba25387409099f::t_da462f924711d6 17-19,74,95,223-225
+packages/server/src/data/transaction/records.rs
+  s_ba25387409099f::t_1462e959143682 121-125,189,222-227,234-248
+packages/server/src/data/transaction/references.rs
+  s_ba25387409099f::t_99432049a2d7e0 1-139
+packages/server/tests/sdk_transport.rs
+  s_ba25387409099f::t_4a63a5fd9b41fa 611-623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b076fa0c39e09f72597e88aad98122ff34fb0ec",
+  "prompts": {},
+  "sessions": {
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
