@@ -23,4 +23,4 @@ export const ai = createApi<{
 export const agentOf: Record<Company | "openai", string> = { anthropic: "claude", openai: "codex" };
 
 /** "Claude Pro": the product a company sells its subscription as, then the plan. */
-export const productOf: Record<Company, string> = { anthropic: "Claude" };
+export const productOf: Record<Company, string> = { anthropic: "Claude", openai: "ChatGPT" };

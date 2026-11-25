@@ -19,7 +19,11 @@ export interface SignInCompany {
   /** What the person pasted, read into a code and the state it came back with. */
   readPasted(text: string): Pasted;
   /** Trades the code for a login with the verifier only the server holds. Throws `SignInError`. */
-  exchange(addresses: Addresses, pasted: { code: string; state: string }, verifier: string): Promise<SignedIn>;
+  exchange(
+    addresses: Addresses,
+    pasted: { code: string; state: string },
+    verifier: string,
+  ): Promise<SignedIn>;
   /** A new login for `refresh`; only a definite refusal is `refused`. Never throws. */
   renew(addresses: Addresses, refresh: string): Promise<Renewal>;
   /**

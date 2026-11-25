@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { isFailure } from "@tokamak/sdk";
 import { useClient, useQuery, view } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
-import { api, type SignIn, type Subscription } from "../lib/api";
+import { api, type Company, type SignIn, type Subscription } from "../lib/api";
 import { profilesIcon } from "../lib/icons";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
@@ -39,17 +39,17 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   }, RENEW_EVERY_MS);
   onCleanup(() => clearInterval(timer));
 
-  const start = (repair?: string) =>
+  const start = (company: Company, repair?: string) =>
     client.action(api.subscriptions.startSignIn, {
-      company: "anthropic",
+      company,
       method: "subscription",
       ...(repair !== undefined && { repair }),
     });
   /** "Sign in" on a signed-out card, and "Start again" on an expired one. */
-  async function startAndOpen(repair?: string) {
+  async function startAndOpen(company: Company, repair?: string) {
     setProblem(undefined);
     try {
-      const started = await start(repair);
+      const started = await start(company, repair);
       if (isFailure(started)) setProblem(started.data.message);
       else setStep({ kind: "sign-in", signIn: started });
     } catch {
@@ -149,7 +149,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                 onEnabled={(enabled) =>
                   void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
                 }
-                onSignIn={() => startAndOpen(subscription.id)}
+                onSignIn={() => startAndOpen(subscription.company, subscription.id)}
               />
             )}
           </For>
@@ -162,14 +162,14 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   setStep({ kind: "sign-in", signIn });
                 }}
                 onCancel={() => cancel(signIn)}
-                onRestart={() => startAndOpen(signIn.repair)}
+                onRestart={() => startAndOpen(signIn.company, signIn.repair)}
               />
             )}
           </For>
         </div>
         <Show when={listed.data() && !subscriptions().length && !signIns().length}>
           <p class="m-0 text-row text-ink-3">
-            No subscriptions yet. Add one to sign in to Claude once for every thread.
+            No subscriptions yet. Add one to sign in to Claude or ChatGPT once for every thread.
           </p>
         </Show>
       </section>

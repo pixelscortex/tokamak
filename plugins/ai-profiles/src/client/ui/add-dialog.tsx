@@ -1,7 +1,8 @@
 import { For, Match, Show, Switch as Choose, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Chip, Collapsible, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
-import type { SignIn, Subscription } from "../lib/api";
+import type { Company, SignIn, Subscription } from "../lib/api";
+import { COMPANIES, wordsOf } from "../lib/companies";
 import { countOf, modelName, titleOf } from "../lib/format";
 import { glyphs, profilesIcon } from "../lib/icons";
 import { CompanyMark, markPath } from "./company-mark";
@@ -10,11 +11,12 @@ import { CompanyMark, markPath } from "./company-mark";
  * Adding a subscription (Paper "2a" to "2d"): company, then method, then
  * sign-in, then connected. Closing the dialog at any step stops nothing: a
  * sign-in keeps waiting, and the screen shows it as an "Awaiting sign-in" card
- * that opens this dialog at its sign-in step again.
+ * that opens this dialog at its sign-in step again. Every company goes through
+ * the same steps; only its words (`lib/companies.ts`) differ.
  */
 export type Step =
   | { kind: "company" }
-  | { kind: "method"; company: "anthropic" }
+  | { kind: "method"; company: Company }
   | { kind: "sign-in"; signIn: SignIn }
   | { kind: "connected"; subscription: Subscription };
 
@@ -26,7 +28,7 @@ export interface AddDialogProps {
   step: Step | undefined;
   onStep: (step: Step | undefined) => void;
   /** Starts a sign-in; `repair` signs that subscription in again instead of adding one. */
-  start: (repair?: string) => Promise<SignIn | Failed>;
+  start: (company: Company, repair?: string) => Promise<SignIn | Failed>;
   finish: (signIn: SignIn, pasted: string) => Promise<Subscription | Failed>;
   setLabel: (subscription: Subscription, label: string) => Promise<null | Failed>;
   /** Copies text to the clipboard; the window's own clipboard by default. */
@@ -48,17 +50,22 @@ export function AddDialog(props: AddDialogProps): JSX.Element {
             <div class="flex flex-col gap-5">
               <Choose>
                 <Match when={step().kind === "company"}>
-                  <CompanyStep onPick={() => props.onStep({ kind: "method", company: "anthropic" })} />
+                  <CompanyStep onPick={(company) => props.onStep({ kind: "method", company })} />
                 </Match>
-                <Match when={step().kind === "method"}>
-                  <MethodStep
-                    start={async () => {
-                      const started = await props.start();
-                      if (!failed(started)) props.onStep({ kind: "sign-in", signIn: started });
-                      return started;
-                    }}
-                    onBack={() => props.onStep({ kind: "company" })}
-                  />
+                <Match
+                  when={step().kind === "method" && (step() as Extract<Step, { kind: "method" }>).company}
+                >
+                  {(company) => (
+                    <MethodStep
+                      company={company()}
+                      start={async () => {
+                        const started = await props.start(company());
+                        if (!failed(started)) props.onStep({ kind: "sign-in", signIn: started });
+                        return started;
+                      }}
+                      onBack={() => props.onStep({ kind: "company" })}
+                    />
+                  )}
                 </Match>
                 <Match
                   when={step().kind === "sign-in" && (step() as Extract<Step, { kind: "sign-in" }>).signIn}
@@ -73,7 +80,7 @@ export function AddDialog(props: AddDialogProps): JSX.Element {
                         return added;
                       }}
                       restart={async () => {
-                        const started = await props.start(signIn().repair);
+                        const started = await props.start(signIn().company, signIn().repair);
                         if (!failed(started)) props.onStep({ kind: "sign-in", signIn: started });
                         return started;
                       }}
@@ -107,7 +114,7 @@ export function AddDialog(props: AddDialogProps): JSX.Element {
 }
 
 /** The dialog's top line: how far along it is, the company's mark, the title, close. */
-function Header(props: { step: keyof typeof STEPS; mark?: boolean; children: JSX.Element }): JSX.Element {
+function Header(props: { step: keyof typeof STEPS; mark?: Company; children: JSX.Element }): JSX.Element {
   return (
     <div class="flex items-center gap-3">
       <div class="flex gap-1" role="img" aria-label={`Step ${STEPS[props.step]} of 4`}>
@@ -115,9 +122,7 @@ function Header(props: { step: keyof typeof STEPS; mark?: boolean; children: JSX
           {(n) => <span class={["h-1 w-6 rounded-full", n <= STEPS[props.step] ? "bg-ink" : "bg-edge"]} />}
         </For>
       </div>
-      <Show when={props.mark}>
-        <CompanyMark company="anthropic" size={18} />
-      </Show>
+      <Show when={props.mark}>{(company) => <CompanyMark company={company()} size={18} />}</Show>
       <Dialog.Title class="flex-1">{props.children}</Dialog.Title>
       <Dialog.Close variant="ghost" icon={icons.close} label="Close" />
     </div>
@@ -134,25 +139,23 @@ function Problem(props: { message: string | undefined }): JSX.Element {
   );
 }
 
-function CompanyStep(props: { onPick: () => void }): JSX.Element {
+function CompanyStep(props: { onPick: (company: Company) => void }): JSX.Element {
   return (
     <>
       <Header step="company">Add subscription</Header>
       <div class="flex flex-col density-normal">
-        <Row
-          as="button"
-          lead={<CompanyMark company="anthropic" size={16} />}
-          trail={<Icon path={glyphs.next} size={14} />}
-          onClick={() => props.onPick()}
-        >
-          Anthropic
-        </Row>
-        {/* Listed, not yet offered: ChatGPT subscriptions come next (TKM-262). */}
-        <div class="opacity-50">
-          <Row lead={<CompanyMark company="openai" size={16} />} trail="Later">
-            OpenAI
-          </Row>
-        </div>
+        <For each={COMPANIES}>
+          {(company) => (
+            <Row
+              as="button"
+              lead={<CompanyMark company={company} size={16} />}
+              trail={<Icon path={glyphs.next} size={14} />}
+              onClick={() => props.onPick(company)}
+            >
+              {wordsOf[company].name}
+            </Row>
+          )}
+        </For>
         <div role="separator" class="mx-1 my-1 h-px bg-edge" />
         <div class="opacity-50">
           <Row lead={<span />}>More later</Row>
@@ -162,7 +165,12 @@ function CompanyStep(props: { onPick: () => void }): JSX.Element {
   );
 }
 
-function MethodStep(props: { start: () => Promise<unknown>; onBack: () => void }): JSX.Element {
+function MethodStep(props: {
+  company: Company;
+  start: () => Promise<unknown>;
+  onBack: () => void;
+}): JSX.Element {
+  const words = () => wordsOf[props.company];
   const [busy, setBusy] = createSignal(false);
   const [problem, setProblem] = createSignal<string>();
   async function choose() {
@@ -180,8 +188,8 @@ function MethodStep(props: { start: () => Promise<unknown>; onBack: () => void }
   }
   return (
     <>
-      <Header step="method" mark>
-        Anthropic
+      <Header step="method" mark={props.company}>
+        {words().name}
       </Header>
       <div class="flex flex-col gap-1">
         <div class="rounded-md p-1">
@@ -191,20 +199,15 @@ function MethodStep(props: { start: () => Promise<unknown>; onBack: () => void }
             aria-busy={busy() ? "true" : undefined}
             lead={<Icon path={profilesIcon} />}
             trail={<Icon path={glyphs.next} size={14} />}
-            detail="Pro · Max · Team · Enterprise"
+            detail={words().plans}
             onClick={() => void choose()}
           >
-            Claude subscription
+            {words().method}
           </Row>
         </div>
         {/* Shown so it is not missed, and marked as coming later. */}
         <div class="rounded-md p-1 opacity-50 inset-ring inset-ring-edge" aria-disabled="true">
-          <Row
-            kind="double"
-            lead={<Icon path={glyphs.key} />}
-            trail="Later"
-            detail="From the Anthropic console"
-          >
+          <Row kind="double" lead={<Icon path={glyphs.key} />} trail="Later" detail={words().keys}>
             API key
           </Row>
         </div>
@@ -270,8 +273,8 @@ function SignInStep(props: {
   }
   return (
     <>
-      <Header step="sign-in" mark>
-        Sign in to Claude
+      <Header step="sign-in" mark={props.signIn.company}>
+        {wordsOf[props.signIn.company].signIn}
       </Header>
       <Show
         when={!ended() && !expired()}
@@ -323,7 +326,7 @@ function SignInStep(props: {
               class="flex-1"
               aria-label="Address the sign-in ended on"
               aria-describedby="paste-help"
-              placeholder="http://localhost:54545/callback?code=…"
+              placeholder={wordsOf[props.signIn.company].returnAddress}
               invalid={Boolean(problem())}
               value={pasted()}
               onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>

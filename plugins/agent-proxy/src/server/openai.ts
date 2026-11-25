@@ -137,7 +137,8 @@ export function readPasted(pasted: string): Pasted {
     return { error: "That address could not be read. Paste the whole address." };
   }
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
-  const field = (name: string) => url.searchParams.get(name)?.trim() || fragment.get(name)?.trim() || undefined;
+  const field = (name: string) =>
+    url.searchParams.get(name)?.trim() || fragment.get(name)?.trim() || undefined;
   if (field("error") ?? field("error_description"))
     return { error: "The sign-in page did not give a code. Start again." };
   let code = field("code");
@@ -315,9 +316,7 @@ export async function renew(addresses: Addresses, refresh: string): Promise<Rene
     try {
       const body = (await response.json()) as { error?: unknown; code?: unknown };
       code =
-        text(body.error) ??
-        text((body.error as { code?: unknown } | undefined)?.code) ??
-        text(body.code);
+        text(body.error) ?? text((body.error as { code?: unknown } | undefined)?.code) ?? text(body.code);
     } catch {
       // No readable code: the status alone decides.
     }
@@ -387,4 +386,11 @@ export async function details(addresses: Addresses, { login }: { login: Login })
 }
 
 /** ChatGPT's sign-in, as the rest of the plugin uses every company's. */
-export const openai: SignInCompany = { name: "ChatGPT", link: signInLink, readPasted, exchange, renew, details };
+export const openai: SignInCompany = {
+  name: "ChatGPT",
+  link: signInLink,
+  readPasted,
+  exchange,
+  renew,
+  details,
+};
