@@ -63,6 +63,7 @@ for (const [id, source] of Object.entries(fixtures)) {
 const servers = [];
 const cleanup = [];
 const token = "a".repeat(64);
+const benchmarking = process.argv.includes("--benchmark");
 const localDir = join(scratch, "local");
 await mkdir(localDir);
 await writeFile(join(localDir, "server.token"), token, { mode: 0o600 });
@@ -74,6 +75,7 @@ try {
     servers,
     cleanup,
     localDir,
+    callMs: benchmarking ? undefined : 5000,
   });
   const client = await connect(address, { cleanup, token });
   const http = new URL(address);
@@ -90,7 +92,7 @@ try {
   const rows = owner.rows;
   const triggers = owner.triggers;
 
-  if (process.argv.includes("--benchmark")) {
+  if (benchmarking) {
     const { owner: plain } = await triggerFixtures(join(scratch, "baseline-sources"), { ownerStages: false });
     built(plain);
     const baselinePlugins = join(scratch, "baseline-plugins");
