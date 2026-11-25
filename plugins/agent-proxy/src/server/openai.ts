@@ -18,13 +18,18 @@ import { challenge } from "./pkce";
  * Codex 0.170.0's login crate does it (public source, codex-rs/login):
  *
  * - The link (`server.rs` `build_authorize_url`, `oauth/authorization.rs`):
- *   Codex's client id, its scopes, PKCE S256, `state`, and the extra
+ *   Codex's client id, CLIProxyAPI's narrower scope (see `SCOPE`), PKCE S256,
+ *   `state`, and the extra
  *   parameters `id_token_add_organizations`, `codex_cli_simplified_flow` and
  *   `originator=codex_cli_rs`, returning to `http://localhost:1455/auth/callback`
  *   as CLIProxyAPI does (Codex 0.170 uses `127.0.0.1`; see `REDIRECT`).
  * - The return (`oauth/authorization.rs` `CallbackParameters::validate`): the
- *   state is checked before the code or an error is read. ChatGPT may append
- *   `.onboarding_entrypoint=life_sciences` to the state; that is accepted.
+ *   state is checked before the code or an error is read. `readPasted` hands
+ *   back the state with either, and `signins:finishSignIn` compares it first,
+ *   so another sign-in's return (code or error) is "another sign-in". An error
+ *   is worded as Codex's `oauth_callback_error_message` (`server.rs`). ChatGPT
+ *   may append `.onboarding_entrypoint=life_sciences` to the state; that is
+ *   accepted.
  * - The exchange (`oauth/client.rs`): a form body without `state`.
  * - Renewal (`auth/manager.rs` `request_chatgpt_token_refresh`): a JSON body
  *   with `refresh_reason`. A 401, a 400 `invalid_grant`, or the codes
@@ -33,7 +38,9 @@ import { challenge } from "./pkce";
  *   later". A renewal that sends no new refresh or ID token keeps the old one.
  * - The ID token's claims (`token_data.rs`): the email (or the profile
  *   claim's), and under `https://api.openai.com/auth` the plan, the user and
- *   the workspace (`chatgpt_account_id`).
+ *   the workspace (`chatgpt_account_id`). The workspace id is kept on the
+ *   account; the ID token itself is never stored (it can be traded for an API
+ *   key, and nothing needs it after sign-in).
  * - The models (`codex-api/src/endpoint/models.rs`): `GET
  *   <ChatGPT backend>/codex/models?client_version=…` with the
  *   `chatgpt-account-id` header; the workspace's name from `/wham/accounts/check`
@@ -51,10 +58,19 @@ export const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
  * companies' returns, as Claude's is `localhost:54545`.
  */
 export const REDIRECT = "http://localhost:1455/auth/callback";
-const SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+/**
+ * CLIProxyAPI's scope (internal/auth/codex/openai_auth.go). Codex 0.170 also
+ * asks for `api.connectors.read api.connectors.invoke`
+ * (`server.rs` `build_authorize_url`); these logins only carry Codex turns
+ * through the proxy, and the connector scopes would only widen what a leaked
+ * token can do. Append them here to ask for Codex's exact scope.
+ */
+export const SCOPE = "openid profile email offline_access";
 const ORIGINATOR = "codex_cli_rs";
 /** The Codex version these details come from; the models endpoint filters by it. */
 export const CLIENT_VERSION = "0.170.0";
+/** What a sign-in that may have used its code says: a new code is needed. */
+const OPEN_AGAIN = "Open the sign-in page again and paste the new address.";
 /** What ChatGPT may append to the state for an onboarding entry point. */
 const STATE_SUFFIX = ".onboarding_entrypoint=life_sciences";
 const TIMEOUT_MS = 20_000;
@@ -139,14 +155,35 @@ export function readPasted(pasted: string): Pasted {
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
   const field = (name: string) =>
     url.searchParams.get(name)?.trim() || fragment.get(name)?.trim() || undefined;
-  if (field("error") ?? field("error_description"))
-    return { error: "The sign-in page did not give a code. Start again." };
   let code = field("code");
-  let state = field("state");
-  if (code && !state && code.includes("#")) [code, state] = code.split("#", 2) as [string, string];
+  let raw = field("state");
+  if (code && !raw && code.includes("#")) [code, raw] = code.split("#", 2) as [string, string];
+  const description = field("error_description");
+  const error = field("error") ?? description;
+  if (!raw)
+    return {
+      error: error
+        ? "That address has no state in it, so it cannot be told apart from another sign-in's. Paste the whole address."
+        : "That address has no state in it. Paste the whole address.",
+    };
+  const state = raw.endsWith(STATE_SUFFIX) ? raw.slice(0, -STATE_SUFFIX.length) : raw;
+  if (error) return { refused: callbackError(error, description), state };
   if (!code) return { error: "That address has no code in it. Paste the whole address." };
-  if (!state) return { error: "That address has no state in it. Paste the whole address." };
-  return { code, state: state.endsWith(STATE_SUFFIX) ? state.slice(0, -STATE_SUFFIX.length) : state };
+  return { code, state };
+}
+
+/**
+ * Codex's words for an error return (`server.rs` `oauth_callback_error_message`
+ * and `is_missing_codex_entitlement_error`). The sign-in keeps waiting, so
+ * the person is sent back to the page, not told to start again. The code is
+ * shown as a short token only: it is the company's text in an address anyone
+ * could make.
+ */
+function callbackError(code: string, description: string | undefined): string {
+  if (code === "access_denied" && description?.toLowerCase().includes("missing_codex_entitlement"))
+    return "Codex is not enabled for your workspace. Ask your workspace administrator to enable it.";
+  const shown = code.replace(/[^\w.-]/g, "").slice(0, 64) || "unknown";
+  return `ChatGPT refused the sign-in (${shown}). Open the sign-in page again.`;
 }
 
 type Claims = {
@@ -212,9 +249,8 @@ function expiry(access: string, expiresIn: unknown): number {
 }
 
 /**
- * The login in a token answer. A renewal may leave out the refresh token or
- * the ID token: the old refresh token is passed in, and a missing ID token is
- * left out so the stored one stays (as Codex keeps both).
+ * The login in a token answer. A renewal may leave out the refresh token: the
+ * old one is passed in, as Codex keeps it.
  */
 function login(answer: TokenAnswer, previousRefresh?: string): Login {
   const access = text(answer.access_token);
@@ -253,7 +289,8 @@ export async function exchange(
       TIMEOUT_MS,
     );
   } catch {
-    throw new SignInError("Unreachable", "ChatGPT could not be reached (sign-in). Try again.");
+    // A request that timed out may have used the code already: ask for a new one.
+    throw new SignInError("Unreachable", `ChatGPT could not be reached (sign-in). ${OPEN_AGAIN}`);
   }
   if (!response.ok) {
     await response.body?.cancel();
@@ -261,7 +298,7 @@ export async function exchange(
     throw new SignInError(
       busy ? "Unreachable" : "Refused",
       busy
-        ? `ChatGPT could not finish the sign-in (HTTP ${response.status}). Try again.`
+        ? `ChatGPT could not finish the sign-in (HTTP ${response.status}). ${OPEN_AGAIN}`
         : "ChatGPT did not accept that code. Open the sign-in page again, sign in, and paste the new address.",
     );
   }
@@ -269,7 +306,7 @@ export async function exchange(
   try {
     answer = (await response.json()) as TokenAnswer;
   } catch {
-    throw new SignInError("Unreachable", "ChatGPT's answer could not be read. Try again.");
+    throw new SignInError("Unreachable", `ChatGPT's answer could not be read. ${OPEN_AGAIN}`);
   }
   const signedIn = login(answer);
   // The ID token names the workspace; without it no backend request can be made.
@@ -291,6 +328,7 @@ function identityOf(idToken: string | undefined): Partial<Identity> {
   return {
     ...(workspace && person && { accountId: `${person}/${workspace}` }),
     ...(email && { email }),
+    ...(workspace && { workspace }),
   };
 }
 
@@ -334,7 +372,7 @@ export async function renew(addresses: Addresses, refresh: string): Promise<Rene
     return afterMs === undefined ? { kind: "later" } : { kind: "later", afterMs };
   }
   try {
-    // A missing ID token is left out, and `logins:renewed` keeps the stored one.
+    // A new ID token is not kept: the workspace stays on the account row.
     return { kind: "renewed", login: login((await response.json()) as TokenAnswer, refresh) };
   } catch {
     return { kind: "later" };
@@ -363,10 +401,12 @@ async function get(url: string, access: string, workspace: string) {
 export async function details(addresses: Addresses, { login }: { login: Login }): Promise<Details> {
   const claims = claimsOf(login.idToken);
   const raw = text(claims?.[AUTH_CLAIM]?.chatgpt_plan_type)?.toLowerCase();
-  const plan = raw ? (PLANS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)) : "Free";
+  // No claim, no plan: an ID token without `chatgpt_plan_type` says nothing about it.
+  const planKnown = raw !== undefined;
+  const plan = raw ? (PLANS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)) : "";
   const identity = identityOf(login.idToken);
   const workspace = workspaceOf(login);
-  if (!workspace) return { plan, identity, models: [] };
+  if (!workspace) return { plan, planKnown, identity, models: [] };
   const [catalog, accounts] = await Promise.all([
     get(`${addresses.openai.api}/codex/models?client_version=${CLIENT_VERSION}`, login.access, workspace),
     get(`${addresses.openai.api}/wham/accounts/check`, login.access, workspace),
@@ -385,7 +425,7 @@ export async function details(addresses: Addresses, { login }: { login: Login })
     ? (accounts.accounts as { id?: unknown; name?: unknown }[]).find((account) => account.id === workspace)
     : undefined;
   const organization = text(entry?.name);
-  return { plan, identity: { ...identity, ...(organization && { organization }) }, models };
+  return { plan, planKnown, identity: { ...identity, ...(organization && { organization }) }, models };
 }
 
 /** ChatGPT's sign-in, as the rest of the plugin uses every company's. */

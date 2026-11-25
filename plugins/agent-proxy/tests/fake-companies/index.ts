@@ -51,8 +51,8 @@ export async function startFakeCompanies({
       strict: boolean;
       /** Milliseconds the token endpoint waits before it answers for this account. */
       tokenDelayMs: number;
-      /** OpenAI: the ID token's `chatgpt_plan_type`. */
-      plan: string;
+      /** OpenAI: the ID token's `chatgpt_plan_type`; null leaves the claim out. */
+      plan: string | null;
       /** OpenAI: the workspace's name in `/wham/accounts/check`; none for a personal account. */
       workspace?: string;
       authorization?: { challenge: string; state: string; redirect: string };
@@ -137,6 +137,8 @@ export async function startFakeCompanies({
           redirect !== oauth[company].redirect ||
           url.searchParams.get("code_challenge_method") !== "S256" ||
           url.searchParams.get("response_type") !== "code" ||
+          // A ChatGPT login without offline_access has no refresh token, so it could never be renewed.
+          (company === "openai" && !url.searchParams.get("scope")?.split(" ").includes("offline_access")) ||
           url.searchParams.get("client_id") !== oauth[company].client)
       ) {
         return Response.json({ error: "invalid_request" }, { status: 400 });
@@ -210,7 +212,7 @@ export async function startFakeCompanies({
                 exp: Math.floor(account.expiresAt / 1000),
                 "https://api.openai.com/auth": {
                   chatgpt_account_id: account.id,
-                  chatgpt_plan_type: account.plan,
+                  ...(account.plan !== null && { chatgpt_plan_type: account.plan }),
                   chatgpt_user_id: `user-${account.id}`,
                 },
               }),
@@ -425,7 +427,7 @@ export async function startFakeCompanies({
         strict = true,
         plan = "plus",
         workspace,
-      }: { signIn?: SignIn; strict?: boolean; plan?: string; workspace?: string } = {},
+      }: { signIn?: SignIn; strict?: boolean; plan?: string | null; workspace?: string } = {},
     ) {
       if (accounts.has(id)) throw new Error(`Duplicate fake account: ${id}`);
       const account = {

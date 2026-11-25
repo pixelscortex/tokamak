@@ -34,14 +34,26 @@ export interface SignInCompany {
   details(addresses: Addresses, signedIn: SignedIn): Promise<Details>;
 }
 
-export type Pasted = { code: string; state: string | undefined } | { error: string };
+export type Pasted =
+  | { code: string; state: string | undefined }
+  /** Not readable as a return: the sign-in is not touched. */
+  | { error: string }
+  /**
+   * The company's page returned an error instead of a code. It carries the
+   * state, which is checked first, so another sign-in's error return is
+   * "another sign-in" rather than this one's failure.
+   */
+  | { refused: string; state: string };
 
 export interface Login {
   readonly access: string;
   readonly refresh: string;
   /** Milliseconds since the epoch. */
   readonly expiresAt: number;
-  /** OpenAI's ID token: its claims name the workspace the login acts for. Claude has none. */
+  /**
+   * OpenAI's ID token, read at sign-in for the account, plan and workspace and
+   * never stored: it can be traded for an API key. Claude has none.
+   */
   readonly idToken?: string;
 }
 
@@ -49,8 +61,13 @@ export interface Identity {
   /** The company's own id for the account, so the same login is never added twice. */
   readonly accountId: string;
   readonly email?: string;
-  /** Claude's organisation, or the ChatGPT workspace. */
+  /** Claude's organisation, or the ChatGPT workspace, by name. */
   readonly organization?: string;
+  /**
+   * The company's id of the workspace every request of this login must name
+   * (ChatGPT's `chatgpt-account-id`); Claude has none.
+   */
+  readonly workspace?: string;
 }
 
 export interface SignedIn {
@@ -59,8 +76,13 @@ export interface SignedIn {
 }
 
 export interface Details {
-  /** "Max", "Plus", "Business"…, or "Free" when the company named none. */
+  /** "Max", "Plus", "Business"…; empty when the company's answer carried no plan. */
   readonly plan: string;
+  /**
+   * Whether the answer really named a plan. When it did not, the plan is
+   * unknown (never "Free" by guess) and a stored plan is left as it was.
+   */
+  readonly planKnown: boolean;
   readonly identity: Partial<Identity>;
   readonly models: { id: string; name: string }[];
 }

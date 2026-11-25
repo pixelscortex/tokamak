@@ -124,7 +124,8 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
       client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
       redirect_uri: "http://localhost:1455/auth/callback",
       code_challenge_method: "S256",
-      scope: "openid profile email offline_access api.connectors.read api.connectors.invoke",
+      // CLIProxyAPI's narrower scope, not Codex's connector scopes (see openai.ts SCOPE).
+      scope: "openid profile email offline_access",
       id_token_add_organizations: "true",
       codex_cli_simplified_flow: "true",
       originator: "codex_cli_rs",
@@ -168,6 +169,16 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
     expect(await finish(client, waiting.id, callback.replace(/state=[^&]+/, "state=another"))).toMatchObject(
       plain("WrongSignIn"),
     );
+    // An error return is checked by its state first, as Codex does: another sign-in's error is
+    // "another sign-in", and this one's says what ChatGPT refused while the sign-in keeps waiting.
+    const state = new URL(callback).searchParams.get("state");
+    const refusal =
+      "http://localhost:1455/auth/callback?error=access_denied&error_description=missing_codex_entitlement";
+    expect(await finish(client, waiting.id, `${refusal}&state=another`)).toMatchObject(plain("WrongSignIn"));
+    expect(await finish(client, waiting.id, `${refusal}&state=${state}`)).toMatchObject({
+      ...plain("Refused"),
+      data: { message: expect.stringMatching(/^Codex is not enabled for your workspace/) },
+    });
     expect(await finish(client, waiting.id, callback)).toMatchObject({
       ...plain("Refused"),
       data: { message: expect.stringMatching(/ChatGPT did not accept that code/) },
@@ -175,7 +186,8 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
     account.signIn = "unavailable";
     expect(await finish(client, waiting.id, callback)).toMatchObject({
       ...plain("Unreachable"),
-      data: { message: expect.stringMatching(/HTTP 503/) },
+      // The exchange may have used the code: a new one is asked for.
+      data: { message: expect.stringMatching(/HTTP 503\). Open the sign-in page again/) },
     });
     expect((await list(client)).signIns.map((signIn) => signIn.id)).toEqual([waiting.id]);
     expect((await list(client)).subscriptions).toHaveLength(before);
@@ -238,6 +250,26 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
     expect((await list(client)).subscriptions.filter((item) => item.id === added.id)).toHaveLength(1);
   });
 
+  test("a plan ChatGPT does not name stays unknown, and a repair as another workspace names that workspace", async () => {
+    fake.addAccount("openai", "unnamed", { plan: null, workspace: "Acme" });
+    const client = await workspace.owner();
+    const added = await add(client, "unnamed");
+    // Unknown, not "Free": the card shows "ChatGPT" without a plan word.
+    expect(added).toMatchObject({
+      plan: "",
+      accounts: [{ email: "unnamed@example.test", organization: "Acme" }],
+    });
+
+    // The same email in another workspace is another account: said with the workspace's name.
+    fake.addAccount("openai", "elsewhere", { workspace: "Beta" });
+    const repair = await start(client, "openai", added.id);
+    expect(await finish(client, repair.id, await signInOnPage(repair.link, "elsewhere"))).toMatchObject({
+      ...plain("OtherAccount"),
+      data: { message: expect.stringContaining("elsewhere@example.test in Beta") },
+    });
+    await call(client, "mutation", api.subscriptions.cancelSignIn, { id: repair.id });
+  });
+
   test("a Claude and a ChatGPT subscription sit side by side, and another member sees neither", async () => {
     fake.addAccount("anthropic", "claude-personal");
     fake.addAccount("openai", "chatgpt-personal");
@@ -268,10 +300,11 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
   test("no login (access, refresh or ID token, nor a verifier) reaches the window or the server's output", () => {
     const secrets = fake.requests.flatMap(({ body }) => {
       const fields = body as Record<string, unknown> | undefined;
-      return [fields?.code_verifier, fields?.refresh_token];
+      // The authorization code too: with the verifier it was a login.
+      return [fields?.code_verifier, fields?.refresh_token, fields?.code];
     });
     // Every token the fake handed out to these accounts, before and after one renewal.
-    for (const id of ["acme", "renewing", "chatgpt-personal", "claude-personal"])
+    for (const id of ["acme", "renewing", "chatgpt-personal", "claude-personal", "unnamed"])
       secrets.push(`fake-${id}-access`, `fake-${id}-refresh`, `fake-${id}-access-1`, `fake-${id}-refresh-1`);
     const values = secrets.filter((value): value is string => typeof value === "string");
     expect(values.length).toBeGreaterThan(10);

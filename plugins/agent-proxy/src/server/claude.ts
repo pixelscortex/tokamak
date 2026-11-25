@@ -108,7 +108,11 @@ async function post(url: string, body: Record<string, string>, step: string): Pr
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {
-    throw new SignInError("Unreachable", `Claude could not be reached (${step}). Try again.`);
+    // A request that timed out may have used the code already: ask for a new one.
+    throw new SignInError(
+      "Unreachable",
+      `Claude could not be reached (${step}). Open the sign-in page again and paste the new address.`,
+    );
   }
 }
 
@@ -153,7 +157,7 @@ export async function exchange(
     throw new SignInError(
       busy ? "Unreachable" : "Refused",
       busy
-        ? `Claude could not finish the sign-in (HTTP ${response.status}). Try again.`
+        ? `Claude could not finish the sign-in (HTTP ${response.status}). Open the sign-in page again and paste the new address.`
         : "Claude did not accept that code. Paste the whole address again, or open the sign-in page again for a new code.",
     );
   }
@@ -161,7 +165,10 @@ export async function exchange(
   try {
     answer = (await response.json()) as TokenAnswer;
   } catch {
-    throw new SignInError("Unreachable", "Claude's answer could not be read. Try again.");
+    throw new SignInError(
+      "Unreachable",
+      "Claude's answer could not be read. Open the sign-in page again and paste the new address.",
+    );
   }
   return {
     login: login(answer),
@@ -223,7 +230,7 @@ const PLANS: Record<string, string> = {
 export async function accountDetails(
   addresses: Addresses,
   access: string,
-): Promise<{ plan: string; identity: Partial<Identity> }> {
+): Promise<{ plan: string; planKnown: boolean; identity: Partial<Identity> }> {
   const answer = (await get(`${addresses.anthropic.api}/api/oauth/profile`, access)) as
     | {
         account?: { uuid?: unknown; email?: unknown; has_claude_max?: unknown; has_claude_pro?: unknown };
@@ -231,15 +238,16 @@ export async function accountDetails(
       }
     | undefined;
   const type = text(answer?.organization?.organization_type);
-  const plan =
-    (type && PLANS[type]) ??
-    (answer?.account?.has_claude_max === true
-      ? "Max"
-      : answer?.account?.has_claude_pro === true
-        ? "Pro"
-        : "Free");
+  const max = answer?.account?.has_claude_max;
+  const pro = answer?.account?.has_claude_pro;
+  // Known only when the answer carried a plan field: a 200 without them says nothing about the plan.
+  const planKnown = type !== undefined || typeof max === "boolean" || typeof pro === "boolean";
+  const plan = !planKnown
+    ? ""
+    : ((type && PLANS[type]) ?? (max === true ? "Max" : pro === true ? "Pro" : "Free"));
   return {
     plan,
+    planKnown,
     identity: {
       accountId: text(answer?.account?.uuid),
       email: text(answer?.account?.email),
