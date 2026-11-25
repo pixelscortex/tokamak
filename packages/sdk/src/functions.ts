@@ -285,7 +285,7 @@ type ReturnValidator = Validator<unknown> | undefined;
 
 type FunctionOptions<K extends FunctionKind, M extends DataModel, F extends Fields, R, S> = {
   args?: F;
-  returns?: K extends "local" ? never : S;
+  returns?: S;
   on?: K extends "action" ? ActionTarget : never;
   handler: (
     ctx: K extends "query" ? QueryContext<M> : K extends "mutation" ? MutationContext<M> : ActionContext,

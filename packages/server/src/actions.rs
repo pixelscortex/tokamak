@@ -462,7 +462,7 @@ impl<'a> ActionStageExecutor<'a> {
                 if self.dispatch.is_some()
                     && matches!(
                         crate::protocol::failure_kind(&value),
-                        Some("machineLost" | "runnerArtifactMismatch")
+                        Some("machineLost" | "machineForbidden" | "runnerArtifactMismatch")
                     )
                 {
                     return Err(runner_action_artifact_unavailable());

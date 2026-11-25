@@ -140,8 +140,8 @@ impl Coordinator {
                 .enter(name, validator, args)
                 .map_err(|error| error.to_string())?
         } else {
-            // Legacy local functions can make public calls from hosted windows
-            // without letting the socket supply inherited context.
+            // A caller action in a hosted window can make public calls without
+            // letting the socket supply inherited context.
             Some(auth.clone()).into()
         };
         Ok(RequestCaller {
