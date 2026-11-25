@@ -459,7 +459,7 @@ test("profiles screens", async ({ browser }) => {
 
     // The subscription details (TKM-265): one account, then a second added
     // through the same sign-in, then that one signed out. "Used by" names both profiles.
-    await subscriptions.getByRole("button", { name: "Claude Pro details" }).click();
+    await subscriptions.getByRole("button", { name: "Claude Pro, Personal details" }).click();
     const details = page.getByRole("region", { name: "Claude Pro details" });
     await expect(details.getByText("personal@example.test")).toBeVisible();
     await expect(details.getByRole("region", { name: "Used by" }).getByRole("listitem")).toHaveCount(2);
@@ -487,7 +487,7 @@ test("profiles screens", async ({ browser }) => {
       .getByRole("navigation", { name: "Breadcrumb" })
       .getByRole("button", { name: "Profiles" })
       .click();
-    await subscriptions.getByRole("button", { name: "Remove Claude Pro" }).click();
+    await subscriptions.getByRole("button", { name: "Remove Claude Pro, Personal" }).click();
     await expect(dialog.getByText(/PERS/)).toBeVisible();
     await rest();
     await shot(page, "profiles-remove");
