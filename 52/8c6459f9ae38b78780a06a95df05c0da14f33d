@@ -1,0 +1,51 @@
+packages/server/tests/action-placement.mjs
+  s_6bd43a2c58496b::t_f7c5ea3d56d088 7-8,157,163-210,357-382
+packages/sdk/README.md
+  s_6bd43a2c58496b::t_98ee58d1ff7df0 199-205
+packages/build/tests/local.test.mjs
+  s_6bd43a2c58496b::t_61aaa5c0bc4b28 344-385
+packages/runtime/js/local.ts
+  s_6bd43a2c58496b::t_3f82baade7a78c 1,704
+packages/sdk/src/protocol.ts
+  s_6bd43a2c58496b::t_5abdeb231b45df 6
+packages/sdk/src/transport.ts
+  s_6bd43a2c58496b::t_fe7acd0cce9908 1,96-106,119-131,347-349
+packages/sdk/tools/bundle.mjs
+  s_6bd43a2c58496b::t_1d8b5d45aba664 285,290,293-303
+packages/sdk/tools/contracts.mjs
+  s_6bd43a2c58496b::t_91f0b506977295 187
+packages/sdk/tools/placement.mjs
+  s_6bd43a2c58496b::t_6add894594d9e4 237-244
+packages/sdk/tools/server-builtins.mjs
+  s_6bd43a2c58496b::t_195ae805924146 45,53-54,56
+packages/server/src/actions.rs
+  s_6bd43a2c58496b::t_47dae2d832f967 157,159-167,407
+packages/server/src/bin/export-protocol.rs
+  s_6bd43a2c58496b::t_8efce53160de3c 4,10,12
+packages/server/src/host/action_process/mod.rs
+  s_6bd43a2c58496b::t_f8160823ba7580 305-309,313-316,320-330
+packages/server/src/protocol.rs
+  s_6bd43a2c58496b::t_c465ac5f30ed42 7-8
+packages/server/src/service/action_coordination.rs
+  s_6bd43a2c58496b::t_cf15423039fc17 35,95,105,158,227-228
+packages/server/src/service/command_loop.rs
+  s_6bd43a2c58496b::t_ae2fc8ecc0210f 46
+packages/server/src/service/mod.rs
+  s_6bd43a2c58496b::t_59d0fc2e5298e6 274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "528c6459f9ae38b78780a06a95df05c0da14f33d",
+  "prompts": {},
+  "sessions": {
+    "s_6bd43a2c58496b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-b624-7543-af8b-6d738e892f5a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
