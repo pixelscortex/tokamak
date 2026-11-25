@@ -1,10 +1,13 @@
-import { waitFor } from "@testing-library/dom";
+import { screen, waitFor, within } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { render } from "@solidjs/web";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { RegionOutlet, RegionProvider } from "@tokamak/sdk/client";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
 import * as desktop from "../src/client/lib/desktop";
+import { openSubscription } from "../src/client/lib/manage";
 import { Profiles } from "../src/client/pages/profiles";
 
 // The desktop app's return listener on the Profiles page, for every kind of
@@ -130,4 +133,108 @@ test("an add-account sign-in waiting with no dialog open is finished by its retu
     ),
   );
   await waitFor(() => expect(finish).toHaveBeenCalledWith({ id: another.id, pasted: address }));
+});
+
+// The details' "Add account" waits in the details' own dialog, while the page's
+// return watch finishes it. The details must say how it ended, never assume it
+// was cancelled in another window, even when their list never showed it.
+
+/** The page with the details of `team` open; `addAccount` starts `another`, `finishSignIn` answers `answer`. */
+let added = 0;
+async function details(answer: JsonValue, after: Subscription | undefined) {
+  const another: SignIn = {
+    id: `agent-proxy/signIns:add-details-${++added}`,
+    company: "anthropic",
+    method: "subscription",
+    link: "https://claude.example/oauth/authorize?state=add2-state",
+    startedAt: Date.now(),
+    expired: false,
+    addTo: team.id,
+  };
+  let listed = { signIns: [] as SignIn[], subscriptions: [team] };
+  let publish = () => {};
+  const transport: ClientTransport = {
+    query: async () => null,
+    mutation: async () => null,
+    action: async (name) => {
+      if (name.endsWith(":addAccount")) return another as unknown as JsonValue;
+      if (name.endsWith(":finishSignIn")) {
+        // The sign-in ends on the server; the list never showed it.
+        if (after) listed = { signIns: [], subscriptions: [after] };
+        publish();
+        return answer;
+      }
+      return null;
+    },
+    subscribe(name, _args, onEvent) {
+      if (name === "ai-profiles/profiles:list" || name === "ai-profiles/manage:usedBy") {
+        queueMicrotask(() => onEvent({ value: [] }));
+        return () => {};
+      }
+      publish = () => onEvent({ value: structuredClone(listed) as unknown as JsonValue });
+      queueMicrotask(publish);
+      return () => {};
+    },
+  };
+  const root = document.createElement("div");
+  document.body.append(root);
+  const dispose = render(
+    () => (
+      <ClientContext value={new TokamakClient(transport)}>
+        <RegionProvider>
+          <header aria-label="Page header">
+            <RegionOutlet name="header" />
+          </header>
+          <Profiles />
+        </RegionProvider>
+      </ClientContext>
+    ),
+    root,
+  );
+  unmount = () => {
+    dispose();
+    root.remove();
+    openSubscription.set(undefined);
+  };
+  const user = userEvent.setup({ document });
+  const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
+  await user.click(within(card).getByRole("button", { name: "Claude Team, Acme details" }));
+  const region = await screen.findByRole("region", { name: "Claude Team details" });
+  await user.click(within(region).getByRole("button", { name: "Add account" }));
+  return region;
+}
+
+test("an add-account return the page finished before the details' list showed it closes their dialog", async () => {
+  // The return is held until the details' dialog is open on the sign-in step.
+  // Held until the details' dialog is open; every listen the page starts waits for the same return.
+  let arrive: (result: Return) => void = () => {};
+  const held = new Promise<Return>((done) => (arrive = done));
+  vi.mocked(desktop.listenForSignInReturn).mockImplementation(() => held);
+  const two: Subscription = {
+    ...team,
+    accounts: [...team.accounts, { id: "agent-proxy/accounts:a2", email: "you2@acme.test", status: "ok" }],
+  };
+  const region = await details(two as unknown as JsonValue, two);
+  expect(await screen.findByRole("dialog", { name: "Sign in to Claude" })).toBeTruthy();
+  await waitFor(() => expect(desktop.listenForSignInReturn).toHaveBeenCalled());
+  arrive({ status: "returned", address: "http://localhost:54545/callback?code=c&state=add2-state" });
+  // Nothing to label after another account: the dialog closes when it is in, and nobody says "cancelled".
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(await within(region).findByText("you2@acme.test")).toBeTruthy();
+  expect(screen.queryByText(/cancelled in another window/)).toBeNull();
+});
+
+test("an add-account return the page finished with a failure is said in the details as that failure", async () => {
+  // Held until the details' dialog is open; every listen the page starts waits for the same return.
+  let arrive: (result: Return) => void = () => {};
+  const held = new Promise<Return>((done) => (arrive = done));
+  vi.mocked(desktop.listenForSignInReturn).mockImplementation(() => held);
+  const message = "you@acme.test is already in this subscription.";
+  const region = await details({ failed: true, kind: "AlreadyAdded", data: { message } }, undefined);
+  expect(await screen.findByRole("dialog", { name: "Sign in to Claude" })).toBeTruthy();
+  await waitFor(() => expect(desktop.listenForSignInReturn).toHaveBeenCalled());
+  arrive({ status: "returned", address: "http://localhost:54545/callback?code=c&state=add2-state" });
+  expect(await within(region).findByText(message)).toBeTruthy();
+  expect(screen.queryByText(/cancelled in another window/)).toBeNull();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });

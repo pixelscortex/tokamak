@@ -2,8 +2,11 @@ import { createEffect } from "solid-js";
 import type { SignIn, Subscription } from "./api";
 import type { Step } from "../ui/add-dialog";
 
-/** Failures after which a sign-in no longer exists on the server. */
+/** Failures after which a sign-in no longer exists on the server; the dialog offers to start again. */
 export const ENDING = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
+
+/** How a sign-in ended elsewhere in this window: the subscription it connected, or why it failed. */
+export type Ending = { subscription: Subscription } | { message: string };
 
 type Listed = { subscriptions: readonly Subscription[]; signIns: readonly SignIn[] };
 /** A subscription's accounts by id, with the status each had. */
@@ -54,6 +57,13 @@ export function createSignInWatch(options: {
   onCancelled: (message: string) => void;
   /** A sign-in this window ended (finished, cancelled, or one that cannot finish). */
   onEnded?: (id: string) => void;
+  /**
+   * How another part of this window ended a sign-in: the page's return watch
+   * finishes sign-ins the details started, and keeps each one's result.
+   * Read before "cancelled in another window" is assumed, and also for a
+   * sign-in that ended before this list ever showed it.
+   */
+  endedBy?: (id: string) => Ending | undefined;
 }) {
   const busy = new Set<string>();
   const endedHere = new Set<string>();
@@ -75,8 +85,12 @@ export function createSignInWatch(options: {
   }
 
   createEffect(
-    () => ({ data: options.data(), open: options.step() }),
-    ({ data, open }) => {
+    () => {
+      const open = options.step();
+      const id = open?.kind === "sign-in" ? open.signIn.id : undefined;
+      return { data: options.data(), open, ending: id !== undefined ? options.endedBy?.(id) : undefined };
+    },
+    ({ data, open, ending }) => {
       if (!data) return;
       for (const signIn of data.signIns) {
         if (seen.has(signIn.id)) continue;
@@ -88,12 +102,25 @@ export function createSignInWatch(options: {
       }
       if (open?.kind !== "sign-in") return;
       const id = open.signIn.id;
-      if (!seen.has(id) || busy.has(id) || endedHere.has(id)) return;
+      if (busy.has(id) || endedHere.has(id)) return;
       const still = data.signIns.find((signIn) => signIn.id === id);
       if (still) {
         if (still.expired !== open.signIn.expired) options.setStep({ kind: "sign-in", signIn: still });
         return;
       }
+      // Ended by another part of this window (the page's return watch): say how, even when this
+      // list never showed the sign-in at all.
+      if (ending) {
+        endedHere.add(id);
+        if ("subscription" in ending)
+          options.setStep({ kind: "connected", subscription: ending.subscription });
+        else {
+          options.setStep(undefined);
+          options.onCancelled(ending.message);
+        }
+        return;
+      }
+      if (!seen.has(id)) return;
       endedHere.add(id);
       const added = endedAs(open.signIn, seen.get(id), data);
       if (added) options.setStep({ kind: "connected", subscription: added });

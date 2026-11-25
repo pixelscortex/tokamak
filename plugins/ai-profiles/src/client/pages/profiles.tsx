@@ -9,7 +9,7 @@ import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
 import { openSubscription } from "../lib/manage";
-import { ENDING, createSignInWatch } from "../lib/sign-in-watch";
+import { ENDING, createSignInWatch, type Ending } from "../lib/sign-in-watch";
 import { CardActions } from "../ui/card-actions";
 import { RemoveDialog } from "../ui/remove-dialog";
 import { SubscriptionDetails } from "./subscription";
@@ -84,11 +84,15 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   const [returned, setReturned] = createSignal<ReadonlyMap<string, { address: string; problem?: string }>>(
     new Map(),
   );
+  /** How the return watch below ended each sign-in, for whichever dialog waits on it. */
+  const [endings, setEndings] = createSignal<ReadonlyMap<string, Ending>>(new Map());
+  const record = (id: string, ending: Ending) => setEndings((all) => new Map(all).set(id, ending));
   const watch = createSignInWatch({
     data: () => listed.data(),
     step,
     setStep,
     onCancelled: setProblem,
+    endedBy: (id) => endings().get(id),
     onEnded: (id) => {
       setCompletion((n) => n + 1);
       discardReturn(id);
@@ -165,10 +169,12 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
         const open = step();
         const sameDialog = open?.kind === "sign-in" && open.signIn.id === signIn.id;
         if (!isFailure(added)) {
+          record(signIn.id, { subscription: added as Subscription });
           if (sameDialog) setStep({ kind: "connected", subscription: added as Subscription });
           return false;
         }
         if (ENDING.includes(added.kind)) {
+          record(signIn.id, { message: added.data.message });
           if (sameDialog) {
             setStep(undefined);
             setProblem(added.data.message);
@@ -187,6 +193,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
     listening,
     returned: (id: string) => returned().get(id),
     started: (signIn: SignIn) => setStartedHere(signIn),
+    ended: (id: string) => endings().get(id),
   };
   async function cancel(signIn: SignIn) {
     await local(

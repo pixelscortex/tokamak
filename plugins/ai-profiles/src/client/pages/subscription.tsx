@@ -6,7 +6,7 @@ import { Avatar, Button, Chip, Icon, Input, icons } from "@tokamak/ui";
 import { api, type SignIn, type Subscription } from "../lib/api";
 import { modelName, titleOf } from "../lib/format";
 import { manageGlyphs, openSubscription } from "../lib/manage";
-import { ENDING, createSignInWatch } from "../lib/sign-in-watch";
+import { ENDING, createSignInWatch, type Ending } from "../lib/sign-in-watch";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { CompanyMark, markPath } from "../ui/company-mark";
 
@@ -32,6 +32,8 @@ export interface Returns {
   listening: (id: string) => boolean;
   returned: (id: string) => { address: string; problem?: string } | undefined;
   started: (signIn: SignIn) => void;
+  /** How the page's return watch ended a sign-in: the subscription, or why it failed. */
+  ended: (id: string) => Ending | undefined;
 }
 
 export function SubscriptionDetails(props: { data: Listed | undefined; returns: Returns }): JSX.Element {
@@ -78,7 +80,13 @@ function Details(props: {
   const id = () => props.subscription.id;
   // Nothing to label after another account or a repair: the dialog closes when it is in.
   const show = (next: Step | undefined) => setStep(next?.kind === "connected" ? undefined : next);
-  const { local } = createSignInWatch({ data: props.data, step, setStep: show, onCancelled: setProblem });
+  const { local } = createSignInWatch({
+    data: props.data,
+    step,
+    setStep: show,
+    onCancelled: setProblem,
+    endedBy: (id) => props.returns.ended(id),
+  });
 
   /** "Add account" without an account; an account's own "Sign in" signs that one account in again. */
   const start = async (account?: string) => {

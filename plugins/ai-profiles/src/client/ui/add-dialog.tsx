@@ -4,6 +4,7 @@ import { Button, Chip, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { Company, SignIn, Subscription } from "../lib/api";
 import { COMPANIES, pasteExample, wordsOf } from "../lib/companies";
 import { hasDesktopSignIn, openSignInBrowser } from "../lib/desktop";
+import { ENDING } from "../lib/sign-in-watch";
 import { countOf, modelName, titleOf } from "../lib/format";
 import { glyphs, profilesIcon } from "../lib/icons";
 import { CompanyMark, markPath } from "./company-mark";
@@ -235,8 +236,6 @@ function MethodStep(props: {
   );
 }
 
-/** Failures after which this sign-in cannot finish: the dialog offers to start again. */
-const ENDED = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
 
 function SignInStep(props: {
   signIn: SignIn;
@@ -271,7 +270,7 @@ function SignInStep(props: {
       const result = await props.finish(address);
       if (failed(result)) {
         setProblem(result.data.message);
-        setEnded(ENDED.includes(result.kind));
+        setEnded(ENDING.includes(result.kind));
       }
     } catch {
       setProblem("The sign-in could not finish. Try again.");
