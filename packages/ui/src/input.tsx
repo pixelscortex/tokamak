@@ -69,7 +69,8 @@ export function Input(props: InputProps): JSX.Element {
   const rest = omit(props, "class", "size", "mono", "icon", "trail", "invalid", "data-preview");
   // `trail={value() && <Clear />}` passes false or "" when there is nothing to show; only a
   // real action may take the end padding.
-  const hasTrail = () => props.trail !== undefined && props.trail !== null && props.trail !== false && props.trail !== "";
+  const hasTrail = () =>
+    props.trail !== undefined && props.trail !== null && props.trail !== false && props.trail !== "";
   const styles = () => inputVariants({ size: props.size, mono: props.mono, trail: hasTrail() });
   return (
     <InputGroup data-preview={props["data-preview"]} class={styles().root({ class: props.class })}>
