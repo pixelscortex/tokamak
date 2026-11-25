@@ -1,0 +1,7 @@
+/**
+ * agent-proxy's exports for other plugins (`plugin:agent-proxy/server`). All
+ * plugin-only: no window calls them directly, and none returns a login.
+ */
+export { listSubscriptions, setLabel, setEnabled, renewLogins } from "./subscriptions";
+export { startSignIn, finishSignIn, cancelSignIn } from "./signins";
+export type { SignInView, SubscriptionView } from "./_functions";

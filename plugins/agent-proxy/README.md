@@ -1,7 +1,66 @@
 # Agent Proxy
 
-This plugin currently provides provider addresses and an offline test tool. The
-plugin has no sign-in, proxy, tables, or window API.
+This plugin owns a person's AI subscriptions, the provider accounts in them,
+their logins and the sign-in that makes them. It knows nothing about threads.
+The proxy itself (an inbound HTTP route) comes later (TKM-263); today it holds
+subscriptions for the Profiles screen of `ai-profiles`.
+
+## Exports
+
+All in `src/server/api.ts`, all plugin-only (`plugin:agent-proxy/server`): no
+window calls them directly, and none returns a login. Each answers for the
+calling member only, so another member of a shared server never sees or
+changes someone else's subscriptions.
+
+| Function            | Kind     | Arguments                                                    | Result                                                         |
+| ------------------- | -------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
+| `listSubscriptions` | query    | none                                                         | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
+| `startSignIn`       | action   | `{ company: "anthropic", method: "subscription", repair? }`  | `SignInView` (the link to open), or `fail("Gone")`             |
+| `finishSignIn`      | action   | `{ id, pasted }`: the callback link or Claude's `code#state` | `SubscriptionView`, or a failure with `data.message`           |
+| `cancelSignIn`      | mutation | `{ id }`                                                     | `null`                                                         |
+| `setLabel`          | mutation | `{ id, label }`                                              | `null`, or `fail("Gone" \| "TooLong")`                         |
+| `setEnabled`        | mutation | `{ id, enabled }`                                            | `null`, or `fail("Gone")`                                      |
+| `renewLogins`       | action   | none                                                         | `{ renewed, signedOut }`                                       |
+
+`finishSignIn` failures: `Unreadable` and `WrongSignIn` (the sign-in keeps
+waiting for another paste), `Refused` (Claude refused the code; the sign-in
+ends), `Unreachable` (try again), `Cancelled`, `AlreadyAdded`, `Gone`, and
+`OtherAccount` when a repair signed in as another account (it keeps waiting).
+
+## Sign-in
+
+The server does the whole sign-in over the network, as CLIProxyAPI does
+(`internal/auth/claude/anthropic_auth.go`): `startSignIn` makes a PKCE
+verifier and `state`, keeps both in the `signIns` table and returns only the
+link (Claude Code's client id, scopes and `http://localhost:54545/callback`
+redirect, `code=true`). The person signs in on Claude's page and pastes the
+link the browser ended on or the `code#state` the page shows. `finishSignIn`
+exchanges it (JSON with `state`), reads the plan, email and organisation from
+`/api/oauth/profile` and the models from `/v1/models`, and stores the login in
+`logins` in the same transaction that ends the sign-in. A cancel that lands
+while Claude answers wins, and nothing is stored. Server actions have no
+`crypto.subtle`, so `pkce.ts` computes the S256 challenge itself.
+
+## Renewal
+
+`logins:fresh` (internal) is the one way to a usable login: it renews the
+login when it runs out within five minutes, and the proxy will call it before
+every request. A renewal Claude refuses (HTTP 400 or 401) deletes the login and
+turns the account "Signed out"; `startSignIn` with `repair` then signs the same
+subscription in again in place. Both writes check the refresh token the
+renewal used, so a renewal that loses a race does not sign the account out.
+A plugin's server code has no timer that may use the network (`maintenance`
+is a mutation), so `renewLogins` runs while the Profiles screen is open.
+
+## Tables
+
+`subscriptions`, `accounts` (one login at the company, by its account id),
+`logins` (access and refresh token, expiry) and `signIns` (verifier, `state`,
+link, an optional subscription to repair). Every row has the `owner` member
+id. Logins sit in ordinary tables: there is no secret store yet (TKM-292), so
+whoever can read the server's database can read them. No function logs them.
+
+## Addresses
 
 `src/server/addresses.ts` is the only source of production addresses. Call
 `await companyAddresses(ctx)` from a server action. The OpenAI API base is the
@@ -16,11 +75,16 @@ grant fetch only to the five real provider hosts, including on redirects.
 The native integration test builds a disposable copy with a test-only action
 and `net:127.0.0.1`, starts a workspace server on a free port, and verifies a
 server action reaches the fake using its installation `.env.local`. The
-shipped artifact has neither the action nor the loopback grant and is not in
-the starter set. Build the native harness once to exercise this test:
+shipped artifact has neither the action nor the loopback grant. The sign-in
+test (`tests/sign-in.test.ts`) installs chat, ai, basic-auth, agent-proxy and
+ai-profiles on a real shared server the same way and drives the Profiles
+screen's functions against the fake, once for each server build it finds
+(`target/debug` and the cloud build in `target/cloud/debug`). Build the native
+harness once to exercise these tests:
 
 ```sh
 CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
+CARGO_BUILD_JOBS=2 cargo build --locked --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
 moon run agent-proxy:test
 ```
 
