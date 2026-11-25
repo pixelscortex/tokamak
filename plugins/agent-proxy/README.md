@@ -14,21 +14,57 @@ changes someone else's subscriptions. Every id is checked to be of the right
 table; a malformed id, an id of another table, or another member's gets
 `fail("NotFound")` and changes nothing.
 
-| Function            | Kind     | Arguments                                                   | Result                                                         |
-| ------------------- | -------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `listSubscriptions` | query    | none                                                        | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
-| `startSignIn`       | action   | `{ company: "anthropic", method: "subscription", repair? }` | `SignInView` (the link to open), or `fail("NotFound")`         |
-| `finishSignIn`      | action   | `{ id, pasted }`: the address the browser ended on, or code | `SubscriptionView`, or a failure with `data.message`           |
-| `cancelSignIn`      | mutation | `{ id }`                                                    | `null`, or `fail("NotFound")`                                  |
-| `setLabel`          | mutation | `{ id, label }`                                             | `null`, or `fail("NotFound" \| "TooLong")`                     |
-| `setEnabled`        | mutation | `{ id, enabled }`                                           | `null`, or `fail("NotFound")`                                  |
-| `renewLogins`       | action   | none                                                        | `{ renewed, signedOut, waiting }`                              |
+| Function             | Kind     | Arguments                                                   | Result                                                         |
+| -------------------- | -------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `listSubscriptions`  | query    | none                                                        | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
+| `startSignIn`        | action   | `{ company: "anthropic", method: "subscription", repair? }` | `SignInView` (the link to open), or `fail("NotFound")`         |
+| `finishSignIn`       | action   | `{ id, pasted }`: the address the browser ended on, or code | `SubscriptionView`, or a failure with `data.message`           |
+| `cancelSignIn`       | mutation | `{ id }`                                                    | `null`, or `fail("NotFound")`                                  |
+| `setLabel`           | mutation | `{ id, label }`                                             | `null`, or `fail("NotFound" \| "TooLong")`                     |
+| `setEnabled`         | mutation | `{ id, enabled }`                                           | `null`, or `fail("NotFound")`                                  |
+| `renewLogins`        | action   | none                                                        | `{ renewed, signedOut, waiting }`                              |
+| `addAccount`         | action   | `{ id }` of a subscription                                  | `SignInView` with `addTo`, or `fail("NotFound")`               |
+| `signOutAccount`     | mutation | `{ id }` of an account                                      | `null`, or `fail("NotFound")`                                  |
+| `checkAgain`         | action   | `{ id }` of a subscription                                  | `SubscriptionView`, or `fail("Unreachable" \| "SignedOut")`    |
+| `removeSubscription` | mutation | `{ id }` of a subscription                                  | `null`, or `fail("NotFound")`                                  |
 
 `finishSignIn` failures that keep the sign-in waiting: `Unreadable`,
 `WrongSignIn`, `Refused` (Claude did not accept the code; paste again or open
 the page again for a new code), `Unreachable`, `OtherAccount` (a repair signed
-in as another account) and `Busy` (another finish of it is running). Ones that
+in as another account), `OtherPlan` and `OtherCompany` (an added account on
+another plan or of another company) and `Busy` (another finish of it is running). Ones that
 end it: `AlreadyAdded`, `Gone`, `Expired`, `Cancelled`, `NotFound`.
+
+## Several accounts, signing out, checking again, removing
+
+A subscription can hold several provider accounts of one company, such as two
+logins of one team plan (`src/server/manage.ts`). `addAccount` starts the same
+sign-in with a target subscription (`addTo`); `finishSignIn` then adds the
+account to it. It is refused (`AlreadyAdded`, the sign-in ends) when the
+account is already signed in under this subscription or is under another of
+the member's subscriptions, and (`OtherPlan`, the sign-in keeps waiting) when
+Claude reports another plan for it: the subscription is one plan, so that
+account is added as a subscription of its own. When Claude does not answer the
+plan read, the account is taken and the subscription keeps its plan. An
+account of this subscription that was signed out is signed in again in place.
+New models of the added account join the subscription's list.
+
+`SubscriptionView.status` is `ok` while at least one account is signed in (the
+proxy can still use the subscription) and `signed-out` only when every account
+is; each entry of `accounts` has its own `id`, `status` and `reason`.
+
+`signOutAccount` deletes the account's login and marks it "Signed out"; the
+row stays and `startSignIn` with `repair` (or `addAccount` with the same
+account) signs it in again in place. `setEnabled(false)` keeps every login and
+keeps renewing them; the proxy (TKM-263) will skip a subscription that is off
+and an account that is signed out when it chooses one. `checkAgain` takes a
+fresh login of each signed-in account (`logins:fresh`, with its renewal rules)
+and reads the plan, the email and organisation, and the models again; only
+what Claude answered replaces what is stored, and when it answered nothing the
+result is `Unreachable` and nothing changes. `removeSubscription` deletes the
+subscription, its accounts, their logins and any sign-in waiting to repair it
+or add to it, in one transaction. It knows nothing of profiles: the caller
+updates its own.
 
 ## Sign-in
 

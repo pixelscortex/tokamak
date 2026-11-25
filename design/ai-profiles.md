@@ -1,13 +1,14 @@
 # AI Profiles
 
 The Profiles screen: a page of its own in the rail. Today it draws the
-Subscriptions section and the add-subscription dialog; the Profiles section
-(TKM-264), the subscription and profile details and the picker column come
-with later tickets. Subscriptions are `agent-proxy`'s data
+Subscriptions section, the add-subscription dialog, the subscription details
+and the remove confirmation (TKM-265); the Profiles section (TKM-264), the
+profile details and the picker column come with later tickets. Subscriptions are `agent-proxy`'s data
 (`design/agent-proxy.md`); company logos are the marks of the `claude` and
 `codex` agent plugins, read from ai's agent list on this computer.
 Paper page: `App 1:1 · AI profiles plugin`. Drawn from the owner's
-"Flow · Profiles (proposal)" artboards `1 · Profiles · screen` and `2a` to `2d`.
+"Flow · Profiles (proposal)" artboards `1 · Profiles · screen`, `2a` to `2d`
+and `3 · Subscription · details`.
 
 ## Screens
 
@@ -20,13 +21,20 @@ Paper page: `App 1:1 · AI profiles plugin`. Drawn from the owner's
 | Dialog, step 3: sign-in, the address field shown, "Signed in on another device?" folded | `ui/add-dialog.tsx` (`SignInStep`)                                              | `Profiles · add · sign-in`                 |
 | Dialog, step 3 with an address pasted and the other-device note open                    | `ui/add-dialog.tsx` (`SignInStep`)                                              | `Profiles · add · sign-in, address pasted` |
 | Dialog, step 4: connected, plan, email, models, label                                   | `ui/add-dialog.tsx` (`ConnectedStep`)                                           | `Profiles · add · connected`               |
+| Subscription details, one account: accounts, label, models, "Used by"                   | `pages/subscription.tsx`                                                        | `Profiles · subscription`                  |
+| The same with a second account added through "Add account"                              | `pages/subscription.tsx`, the dialog's sign-in step                             | `Profiles · subscription · two accounts`   |
+| The same with one of the two signed out (its own "Sign in"; the card still "OK")        | `pages/subscription.tsx` (`AccountRow`)                                         | `Profiles · subscription · one signed out` |
+| Remove confirmation, no profile using it                                                | `ui/remove-dialog.tsx`                                                          | `Profiles · remove`                        |
 
 Not drawn yet: no subscriptions ("No subscriptions yet…"), a "Signed out" card
 with "Sign in", a refused or wrong paste (the line under the field, the sign-in
 still waiting), an ended sign-in ("Start again"), an expired one (card and
 dialog), "Awaiting sign-in again" for a repair, the "Copied" state of Copy
-link, "That sign-in was cancelled in another window.", and a plain browser
-(neutral company marks). The window tests cover each of them.
+link, "That sign-in was cancelled in another window.", a plain browser
+(neutral company marks), the card actions' tooltips, a failed "Check again"
+(the line under the card's buttons), "Used by" with profiles and the remove
+confirmation naming them (no profiles exist before TKM-264). The window tests
+cover each of them.
 
 Measured on the owner's artboards and kept: the column is 1220 wide and
 centred (`max-w-profiles`, a token in this plugin's `styles.css`), 24 from
@@ -50,9 +58,54 @@ at rest, and their hover is the `Row`'s own tray tone (drawn: the band, only
 on hover), with a 16 px icon (drawn 18; `Icon` has 12, 14 and 16); OpenAI
 sits at half strength with "Later" until TKM-262; model chips are `Chip` `sm`
 with the company mark (drawn on the tray tone, 6 apart); the connected logo is
-24 (drawn 28); the card's action row (models, refresh, settings, remove) and
-its profile codes come with TKM-265 and TKM-264. Button `sm` keeps radius 8
-(drawn 6) and ghost `sm` text is ink-2 (drawn ink), as the package draws them.
+24 (drawn 28); the card's profile codes come with TKM-264. Button `sm` keeps
+radius 8 (drawn 6) and ghost `sm` text is ink-2 (drawn ink), as the package
+draws them.
+
+**Subscription details and card actions (TKM-265).** Measured on `1 · Profiles
+· screen` and `3 · Subscription · details` and kept: the card's action row is
+four ghost `sm` icon-only buttons (24 × 24, 14 px icons in ink-3), 2 px apart
+(`gap-hair`, a token in this plugin's `styles.css`; under the 32 px target
+rule, an exception pending the owner): Models, Check again, Details, Remove,
+each with a `Tooltip` and a name that says which subscription ("Remove Claude
+Team"). The details column is 912 wide (`max-w-subscription`) and centred, 24
+from the header, 32 between the title row and the columns; the title row is
+32 tall: logo, title (`text-read` semibold) and label (`text-row` ink-3), 12
+apart. The accounts column is 536 (`w-accounts`), 48 from the right column. A
+section header is 24 + 8 + a 1 px edge line (33), its name `text-label` ink-3
+with the count in data mono. An account row is 12 + 36 + 12 + its edge line
+(61): `Avatar` 24, the email `text-row` medium ink over its status in
+`text-label` ink-3 ("Signed out" in warn), and a ghost `sm` "Sign out" or
+"Sign in". The right column's sections are 32 apart and 12 inside; model chips
+are `Chip` `sm` with the company mark, 8 apart; a "Used by" row is 24 tall,
+the profile mark 12 and code in data mono ink-3, the name `text-row` medium,
+the thread count in data mono ink-3.
+
+Decided here, not drawn: the details replace the Subscriptions section on the
+same page (window state `openSubscription`), with "Profiles / Claude Team" in
+the page header, where "Profiles" is a `bare` Button that goes back (drawn as
+plain ink-3 text 16 from the edge; the Button's padding puts it 28 from the
+edge). The shell's Back does not leave the details: a plugin cannot open a
+route of its own with a parameter, nor navigate. The label is edited in the
+details, in a "Label" section above "Models" (`Input` `md`, saved on Enter or
+when the field is left). "Add account" and an account's "Sign in" open the
+add-subscription dialog at its sign-in step and close it when the account is
+in (no "Connected" step). Models and Details on the card both open the
+details; the Models tooltip lists the model names. A failed Check again says
+why in a line under the card's buttons. The card's icon row is not pulled 6 px
+left as drawn (no negative margins), so its first icon sits 5 px in from the
+text. The details logo is 24 (drawn 28). An account's status line is "OK" or
+"Signed out · why" (drawn "OK · in use" and "Cooling down · resets 14:00",
+which need the proxy, TKM-263). The remove confirmation is not drawn: a
+`Dialog` titled "Remove Claude Team, Acme?", what is deleted, the profiles
+that lose it (or "No profile uses it."), "Cancel" and a destructive "Remove".
+
+## Where profiles come in (TKM-264)
+
+`src/server/profile-uses.ts` is the one seam: `profilesUsing(ctx, id)` answers
+the details' "Used by" and the remove confirmation (through `manage:usedBy`),
+and `subscriptionRemoved(ctx, id)` runs in the same transaction as
+`manage:remove`. Both are empty today.
 
 ## Parts it offers
 
@@ -69,7 +122,12 @@ None. It publishes no `component`.
 - Card or column sizes: four 296 px cards and three 12 px gaps make the 1220
   column (`max-w-profiles` in `src/client/styles.css`); change both together.
 - The card's lines read `agent-proxy`'s `SubscriptionView` (plan, accounts,
-  models, status, reason); a new status there needs a line here.
+  models, status, reason); a new status there needs a line here. The card
+  shows the subscription's status, the details each account's.
+- The details hide the Subscriptions section (`hidden`) while open; a section
+  added under it (the Profiles section, TKM-264) must hide with it.
+- The card's action buttons are named from `titleOf` ("Remove Claude Team");
+  the tests and the browser screens find them by those names.
 - `CompanyMark` keeps only path outlines, like ai's `AgentMark`: the marks
   `claude` and `codex` ship must stay single-colour paths. A model chip shows
   the mark only when it is one path in a 24 × 24 box (Claude's is).
@@ -80,11 +138,13 @@ None. It publishes no `component`.
 
 ## Primitives used
 
-`Button` (`sm` ghost "Sign in", "Continue", "Cancel"; `md` ghost "Add
-subscription", "Copy link", "Back"; brand "Open sign-in page" as a link,
-"Done", "Start again"), `Chip` (`sm`), `Collapsible` (`quiet` trigger),
-`Dialog`, `Icon`, `icons`, `Input` (`md` `mono`, `lg`), `Row` (single and
-double), `Switch` (solid-js's `Switch` is imported as `Choose`); its own `CompanyMark`.
+`Avatar`, `Button` (`sm` ghost "Sign in", "Sign out", "Add account",
+"Continue", "Cancel"; `md` ghost "Add subscription", "Copy link", "Back";
+`bare` "Profiles" in the header; brand "Open sign-in page" as a link, "Done",
+"Start again"; destructive "Remove"), `Chip` (`sm`), `Collapsible` (`quiet`
+trigger), `Dialog`, `Icon`, `icons`, `Input` (`md`, `md` `mono`, `lg`), `Row`
+(single and double), `Switch` (solid-js's `Switch` is imported as `Choose`),
+`Tooltip` (`sm` ghost icon triggers); its own `CompanyMark`.
 
 How the Paper copies were made: `e2e/browser/screens.spec.ts` ("profiles
 screens") takes each screen; `e2e/paper-html.ts` turns the page with

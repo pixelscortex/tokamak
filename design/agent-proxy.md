@@ -16,20 +16,31 @@ None.
 
 ## What it adds to others
 
-| Target (ai-profiles)     | What                                                                                                                                        | Export                             | Paper artboard                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| Subscription card        | Company, plan ("Pro", "Max", "Team", "Enterprise", "Free"), label, enabled, status, the accounts' emails and organisation, models, last use | `listSubscriptions`                | `Profiles · subscriptions`, `Profiles · awaiting sign-in`              |
-| "Signed out" on the card | `status: "signed-out"` and the reason ("Claude would not renew the login. Sign in again.")                                                  | `listSubscriptions`, `renewLogins` | not drawn yet                                                          |
-| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription                                               | `listSubscriptions`                | `Profiles · awaiting sign-in`                                          |
-| Dialog, sign-in step     | The sign-in link (Claude's page with PKCE challenge and `state`)                                                                            | `startSignIn`                      | `Profiles · add · sign-in`, `Profiles · add · sign-in, address pasted` |
-| Dialog, connected step   | Plan, email, organisation and models found                                                                                                  | `finishSignIn`                     | `Profiles · add · connected`                                           |
-| Dialog lines             | Why a paste or a sign-in failed (`data.message` of each failure)                                                                            | `finishSignIn`                     | not drawn yet                                                          |
+| Target (ai-profiles)     | What                                                                                                                                        | Export                                              | Paper artboard                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Subscription card        | Company, plan ("Pro", "Max", "Team", "Enterprise", "Free"), label, enabled, status, the accounts' emails and organisation, models, last use | `listSubscriptions`                                 | `Profiles · subscriptions`, `Profiles · awaiting sign-in`                                                       |
+| "Signed out" on the card | `status: "signed-out"` and the reason ("Claude would not renew the login. Sign in again.")                                                  | `listSubscriptions`, `renewLogins`                  | not drawn yet                                                                                                   |
+| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription                                               | `listSubscriptions`                                 | `Profiles · awaiting sign-in`                                                                                   |
+| Dialog, sign-in step     | The sign-in link (Claude's page with PKCE challenge and `state`)                                                                            | `startSignIn`                                       | `Profiles · add · sign-in`, `Profiles · add · sign-in, address pasted`                                          |
+| Dialog, connected step   | Plan, email, organisation and models found                                                                                                  | `finishSignIn`                                      | `Profiles · add · connected`                                                                                    |
+| Dialog lines             | Why a paste or a sign-in failed (`data.message` of each failure)                                                                            | `finishSignIn`                                      | not drawn yet                                                                                                   |
+| Card action row          | "Check again": plan, account details and models read anew; why it failed (`Unreachable`, `SignedOut`)                                       | `checkAgain`                                        | `Profiles · subscriptions`                                                                                      |
+| Subscription details     | Each account's id, email, organisation, status and reason; "Add account" starts a sign-in with `addTo`; "Sign out" on one account           | `listSubscriptions`, `addAccount`, `signOutAccount` | `Profiles · subscription`, `Profiles · subscription · two accounts`, `Profiles · subscription · one signed out` |
+| Remove confirmation      | Removes the subscription, its accounts, their logins and any sign-in waiting for it                                                         | `removeSubscription`                                | `Profiles · remove`                                                                                             |
 
 ## If you change X, check Y
 
 - `SubscriptionView` or `SignInView` (`src/server/_functions.ts`): every field
   is drawn by ai-profiles' cards and dialog; the window tests there stand in for
   these shapes.
+- A subscription's `status` is "ok" while at least one of its accounts is
+  signed in, and "signed-out" only when every account is. The card reads the
+  subscription's status ("OK", or "Signed out" with "Sign in"); the details
+  read each account's own. With two accounts and one signed out, the card says
+  "OK" and the details show that one "Signed out" with its own "Sign in".
+- Failure kinds of an `addAccount` sign-in (`finishSignIn`): `AlreadyAdded`
+  ends it, as for a new subscription; `OtherPlan` and `OtherCompany` keep it
+  waiting. ai-profiles' dialog lists the ending kinds (`ENDED`).
 - Failure messages in `src/server/claude.ts` and `src/server/signins.ts`: they
   are shown as written, in ai-profiles' dialog and its alert line.
 - Plan names (`PLANS` in `claude.ts`): the card title is "Claude " and the plan,
@@ -50,7 +61,8 @@ None.
 - **Any plugin that depends on `agent-proxy` acts as the calling member.** Its
   server code can call every export for the person whose call it is handling:
   list their subscriptions and sign-ins (no logins, no verifiers), start,
-  finish and cancel their sign-ins, label and switch their subscriptions, and
+  finish and cancel their sign-ins, label and switch their subscriptions, add
+  an account to one, sign an account out, check one again, remove one, and
   trigger renewal. It cannot reach another member's rows, nor any login.
 - **Logins sit in ordinary tables.** Whoever can read the server's database can
   read them (no secret store yet, TKM-292). When plugins can hook internal
