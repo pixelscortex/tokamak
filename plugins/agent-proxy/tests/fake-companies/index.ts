@@ -51,6 +51,12 @@ export async function startFakeCompanies({
       strict: boolean;
       /** Milliseconds the token endpoint waits before it answers for this account. */
       tokenDelayMs: number;
+      /** Claude's `organization_type` on the profile read (`claude_pro` unless set). */
+      plan?: string;
+      /** The models the models read lists, instead of the one fake model. */
+      models?: { id: string; name: string }[];
+      /** `unavailable`: the profile and models reads answer HTTP 503. */
+      reads?: "ok" | "unavailable";
       authorization?: { challenge: string; state: string; redirect: string };
     }
   >();
@@ -237,6 +243,16 @@ export async function startFakeCompanies({
     const answer = isTurn ? account.answers.shift() : undefined;
     if (answer?.kind === "signed-out") return error(401, "authentication_error");
     if (route === "/v1/messages/count_tokens") return Response.json({ input_tokens: 8 });
+    if (
+      account.reads === "unavailable" &&
+      ["/models", "/codex/models", "/v1/models", "/api/oauth/profile"].includes(route)
+    )
+      return error(503, "api_error");
+    if (company === "anthropic" && route === "/v1/models" && account.models)
+      return Response.json({
+        data: account.models.map((model) => ({ id: model.id, type: "model", display_name: model.name })),
+        has_more: false,
+      });
     if (["/models", "/codex/models", "/v1/models"].includes(route))
       return Response.json(
         company === "anthropic"
@@ -282,7 +298,7 @@ export async function startFakeCompanies({
         organization: {
           uuid: "fake-org",
           name: "Fake organization",
-          organization_type: "claude_pro",
+          organization_type: account.plan ?? "claude_pro",
           rate_limit_tier: "default_claude_pro",
         },
       });
@@ -426,6 +442,9 @@ export async function startFakeCompanies({
         tokenDelayMs: 0,
         expiresAt: Infinity,
         answers: [] as Answer[],
+        plan: undefined as string | undefined,
+        models: undefined as { id: string; name: string }[] | undefined,
+        reads: "ok" as "ok" | "unavailable",
       };
       accounts.set(id, account);
       return account;
