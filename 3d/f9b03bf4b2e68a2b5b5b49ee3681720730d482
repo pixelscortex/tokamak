@@ -1,0 +1,19 @@
+plugins/ai/tests/agent-row.test.tsx
+  s_6f4a87ec8baba4::t_9121b0e7c20adc 54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3df9b03bf4b2e68a2b5b5b49ee3681720730d482",
+  "prompts": {},
+  "sessions": {
+    "s_6f4a87ec8baba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c6-b0f2-7902-b7f5-2cbd839f1c4e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
