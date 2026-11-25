@@ -7,6 +7,9 @@ import { profilesIcon } from "../lib/icons";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
+import { createBuilder } from "../lib/builder";
+import { CardProfiles } from "../ui/card-profiles";
+import { ProfilesSection } from "../ui/profiles-section";
 
 /**
  * How often the open screen asks the server to renew logins that run out
@@ -104,6 +107,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
 
   const subscriptions = () => listed.data()?.subscriptions ?? [];
   const signIns = () => listed.data()?.signIns ?? [];
+  const builder = createBuilder(client, subscriptions);
   async function cancel(signIn: SignIn) {
     await local(
       signIn.id,
@@ -150,6 +154,9 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
                 }
                 onSignIn={() => startAndOpen(subscription.id)}
+                dimmed={builder.dimmed(subscription.id)}
+                profiles={<CardProfiles subscription={subscription} builder={builder} />}
+                onPointerDown={(event) => builder.drag.start(event, { subscription: subscription.id })}
               />
             )}
           </For>
@@ -163,6 +170,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                 }}
                 onCancel={() => cancel(signIn)}
                 onRestart={() => startAndOpen(signIn.repair)}
+                dimmed={builder.dimmed()}
               />
             )}
           </For>
@@ -173,6 +181,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           </p>
         </Show>
       </section>
+      <ProfilesSection builder={builder} subscriptions={subscriptions()} />
       <AddDialog
         step={step()}
         onStep={setStep}
