@@ -1,0 +1,9 @@
+/* Utilities only: the shell already loads Tailwind's base and the Tokamak theme. */
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@tokamak/ui/theme.css" reference;
+@source "./";
+
+/* The Profiles screen's column: four 296 px subscription cards with 12 px between them (Paper "1 · Profiles · screen"). */
+@theme {
+  --container-profiles: 1220px;
+}

@@ -1,0 +1,97 @@
+import { For } from "solid-js";
+import type { JSX } from "@solidjs/web";
+import type { TokamakClient } from "@tokamak/sdk";
+import { state } from "@tokamak/sdk/client";
+import { agentOf, ai, type Company } from "../lib/api";
+import { glyphs } from "../lib/icons";
+
+/**
+ * A company's logo: the mark its agent plugin ships (`claude`'s and `codex`'s
+ * icon files), which this window learns from ai's agent list. Neither agent
+ * plugin knows about this one. A window without a local part (a plain
+ * browser) cannot ask, and shows the neutral mark.
+ */
+
+interface Mark {
+  readonly viewBox: string;
+  readonly paths: readonly { d: string; fillRule?: "evenodd" | "nonzero" }[];
+}
+
+const NEUTRAL: Mark = { viewBox: "0 0 24 24", paths: [{ d: glyphs.company }] };
+const MAX_SVG = 16_384;
+
+/** The agents' SVG marks by agent id, as this computer's local part listed them. */
+const marks = state<Readonly<Record<string, string>>>({});
+let asked: Promise<void> | undefined;
+
+/** Asks ai for the agents' marks once per window. */
+export function loadMarks(client: TokamakClient): void {
+  if (!client.hasLocal || asked) return;
+  asked = client.local(ai.agents.list, {}).then(
+    (list) =>
+      void marks.set(
+        Object.fromEntries(list.flatMap((agent) => (agent.icon ? [[agent.id, agent.icon]] : []))),
+      ),
+    () => {
+      asked = undefined;
+    },
+  );
+}
+
+const parsed = new Map<string, Mark | null>();
+
+/**
+ * Only the outlines: the root's viewBox and each path's `d` and fill rule,
+ * painted in currentColor, so a mark brings no markup, script or colour of its
+ * own into the window (the same rule as ai's AgentMark).
+ */
+function parse(svg: string): Mark | null {
+  if (svg.length > MAX_SVG) return null;
+  if (parsed.has(svg)) return parsed.get(svg)!;
+  let mark: Mark | null = null;
+  const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+  if (root.localName === "svg" && root.namespaceURI === "http://www.w3.org/2000/svg") {
+    const rule = (value: string | null) => (value === "evenodd" || value === "nonzero" ? value : undefined);
+    const paths = [...root.querySelectorAll("path")].flatMap((path): Mark["paths"][number][] => {
+      const d = path.getAttribute("d");
+      const fillRule = rule(path.getAttribute("fill-rule") ?? root.getAttribute("fill-rule"));
+      return d ? [{ d, ...(fillRule && { fillRule }) }] : [];
+    });
+    const viewBox = root.getAttribute("viewBox") ?? "";
+    if (paths.length) mark = { viewBox: /^[\d\s.,-]+$/.test(viewBox) ? viewBox : "0 0 24 24", paths };
+  }
+  parsed.set(svg, mark);
+  return mark;
+}
+
+export function markOf(company: Company | "openai"): Mark {
+  const svg = marks()[agentOf[company]];
+  return (svg ? parse(svg) : null) ?? NEUTRAL;
+}
+
+/** A single-path mark's outline, for a Chip's icon. */
+export function markPath(company: Company): string | undefined {
+  const mark = markOf(company);
+  return mark.viewBox === "0 0 24 24" && mark.paths.length === 1 ? mark.paths[0]!.d : undefined;
+}
+
+const sizes = { 12: "size-3", 14: "size-mark", 16: "size-4", 18: "size-avatar", 24: "size-6" } as const;
+
+export function CompanyMark(props: {
+  company: Company | "openai";
+  size: keyof typeof sizes;
+  class?: string;
+}): JSX.Element {
+  return (
+    <svg
+      data-slot="icon"
+      viewBox={markOf(props.company).viewBox}
+      class={["block shrink-0", sizes[props.size], props.class]}
+      aria-hidden="true"
+    >
+      <For each={markOf(props.company).paths}>
+        {(path) => <path d={path.d} fill="currentColor" fill-rule={path.fillRule} />}
+      </For>
+    </svg>
+  );
+}
