@@ -68,7 +68,7 @@ async function sample(client, folder) {
         return performance.now() - started;
       });
     const finished = client
-      .local(ai.run.turn, {
+      .action(ai.run.turn, {
         threadId,
         messageId,
         folder,

@@ -3,7 +3,6 @@ import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { editBundle, inspectHosts, reload, until } from "../../runner/tests/support/routing.mjs";
 import { runLocalTurn } from "../../../plugins/ai/src/client/lib/local-turn.ts";
-import { connect, within } from "../../../e2e/fake-agent/harness.mjs";
 import { FORCE_STOP_MS, RELOADED } from "../../../plugins/ai/src/shared/turn-timing.ts";
 import { alive, gitPids, stall } from "./code-snapshot-review-cases.mjs";
 
@@ -98,7 +97,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   await h.waitFor(folder, "process-tree.json");
   const agentPids = await Bun.file(join(folder, "process-tree.json")).json();
   const args = { turnId: turn._id };
-  await desk.local(ai.run.stop, args);
+  await desk.action(ai.run.stop, args);
   const [stopping] = await agent.turns.until("agent stopping", (rows) => !!rows[0]?.stoppingAt);
 
   const blocked = await project("stop-before");
@@ -108,7 +107,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   const pending = hook.run(hook.messageId, "edit");
   const pids = await gitPids(blocked);
   await Bun.sleep(Math.max(0, stopping.stoppingAt + FORCE_STOP_MS - Date.now()));
-  assert.equal(await desk.local(ai.run.forceStop, args), null);
+  assert.equal(await desk.action(ai.run.forceStop, args), null);
   assert.ok(agentPids.every((pid) => !alive(pid)));
   assert.ok(pids.every(alive), "agent Force stop leaves the running hook's Git group alone");
   assert.deepEqual(await running, { turnId: turn._id, state: "stopped" });
@@ -116,7 +115,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   assert.deepEqual(refs(git, prefix), [`${prefix}/after`, `${prefix}/before`]);
 
   const [before] = await hook.turns.until("before hook is running", (rows) => rows.length === 1);
-  await desk.local(ai.run.stop, { turnId: before._id });
+  await desk.action(ai.run.stop, { turnId: before._id });
   assert.deepEqual(await pending, { turnId: before._id, state: "stopped" });
   await until("Stop cancels the hook's Git group", () => pids.every((pid) => !alive(pid)));
   assert.deepEqual(refs(blocked.git), []);
@@ -128,7 +127,7 @@ export async function reloadManager({ h, runner, desk, project, start }) {
   const { ai } = h.api;
   const waiting = await project("reload-during-question");
   const thread = await start(desk, waiting.folder);
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId: thread.threadId,
     messageId: thread.messageId,
     folder: waiting.folder,
@@ -168,12 +167,12 @@ export async function reloadManager({ h, runner, desk, project, start }) {
   assert.equal(row.state, "interrupted");
   assert.equal(row.error, why);
   assert.equal(row.question, undefined);
-  assert.equal((await desk.local(ai.run.stop, { turnId: turn._id })).kind, "NotRunning");
+  assert.equal((await desk.action(ai.run.stop, { turnId: turn._id })).kind, "NotRunning");
   const question = { turnId: turn._id, questionId: turn.question.id };
-  assert.equal(await desk.local(ai.run.pending, question), false);
-  assert.equal((await desk.local(ai.run.answer, { ...question, answer: "approve" })).kind, "Expired");
-  assert.deepEqual(await desk.local(ai.working.list, {}), []);
-  assert.equal(await desk.local(ai.working.stopAll, {}), 0);
+  assert.equal(await desk.action(ai.run.pending, question), false);
+  assert.equal((await desk.action(ai.run.answer, { ...question, answer: "approve" })).kind, "Expired");
+  assert.deepEqual(await desk.action(ai.working.list, {}), []);
+  assert.equal(await desk.action(ai.working.stopAll, {}), 0);
   await until("AI reload reaped the agent and Git", () => [...children, ...git].every((pid) => !alive(pid)));
   await h.gate(waiting.folder, "go");
   assert.equal((await thread.run(await thread.post(), "edit")).state, "done");
@@ -186,81 +185,69 @@ export async function reloadManagerTimeout({ h, runner, desk, project, start }) 
   const { ai } = h.api;
   const { folder } = await project("reload-timeout");
   const thread = await start(desk, folder);
-  const cleanup = [];
-  const blocked = Promise.withResolvers();
+  const plugin = join(h.plugins, "ai");
+  const workspace = join(h.scratch, "snapshots");
+  const original = await readFile(join(plugin, "local.js"), "utf8");
+  const finish = "state = await ctx.runMutation(api.turns.finish,";
+  assert.ok(original.includes(finish));
+  // Hold finish inside the retired build, so the test works when the action
+  // reaches the Runner directly without passing through a window worker.
+  await editBundle(plugin, 'import { writeFile as markFinish } from "node:fs/promises";', (code) =>
+    code.replace(
+      finish,
+      `await markFinish(${JSON.stringify(join(folder, "finish-attempted"))}, "");
+       await new Promise(() => {});
+       ${finish}`,
+    ),
+  );
+  await reload(runner, workspace, "ai");
   const hosts = await inspectHosts(runner);
-  const window = await connect(runner.endpoint.ws, {
-    token: runner.endpoint.token,
-    cleanup,
-    launch(artifact, receive, close, workspace) {
-      return runner.launch(
-        artifact,
-        (frame) => {
-          if (
-            artifact.id === "ai" &&
-            frame.name === "local.runMutation" &&
-            frame.payload.name === "ai/turns:finish"
-          ) {
-            blocked.resolve(); // The old build cannot save its own interruption.
-            return;
-          }
-          receive(frame);
-        },
-        close,
-        workspace,
-      );
-    },
+  const running = runLocalTurn(desk, {
+    threadId: thread.threadId,
+    messageId: thread.messageId,
+    folder,
+    agentId: "fake-agent",
+    model: "ask-once",
+    access: "ask",
   });
-  try {
-    const running = runLocalTurn(window, {
-      threadId: thread.threadId,
+  void running.catch(() => {});
+  const [turn] = await thread.turns.until(
+    "the agent asks permission",
+    (rows) => rows[0]?.state === "waiting",
+  );
+  const old = hosts().find(({ id }) => id === "ai");
+  assert.ok(old);
+  assert.equal(
+    await desk.mutation(ai.liveness.releaseReloaded, {
       messageId: thread.messageId,
-      folder,
-      agentId: "fake-agent",
-      model: "ask-once",
-      access: "ask",
-    });
-    void running.catch(() => {});
-    const [turn] = await thread.turns.until(
-      "the agent asks permission",
-      (rows) => rows[0]?.state === "waiting",
-    );
-    const old = hosts().find(({ id }) => id === "ai");
-    assert.ok(old);
-    assert.equal(
-      await desk.mutation(ai.liveness.releaseReloaded, {
-        messageId: thread.messageId,
-        replyToken: "another invocation",
-      }),
-      false,
-    );
-    await editBundle(join(h.plugins, "ai"), "/* replaced while finish cannot settle */");
-    await reload(runner, join(h.scratch, "snapshots"), "ai");
-    await within(blocked.promise, "old AI version attempts finish");
-    assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
-    const row = await thread.reply(turn._id);
-    assert.equal(row.state, "interrupted");
-    assert.equal(row.error, RELOADED);
-    assert.equal(row.question, undefined);
-    await until("the window closed the stuck retired host", () => !alive(old.pid));
-    await h.gate(folder, "go");
-    const messageId = await thread.post();
-    const replyToken = "01".repeat(32);
-    const next = await desk.local(ai.run.turn, {
-      threadId: thread.threadId,
-      messageId,
-      replyToken,
-      folder,
-      agentId: "fake-agent",
-      model: "edit",
-    });
-    assert.equal(next.state, "done");
-    assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
-    assert.equal((await thread.reply(next.turnId)).state, "done");
-    console.log("code snapshots: the window saved the reload reason when old AI could not finish");
-  } finally {
-    for (const close of cleanup.reverse()) await close();
-  }
+      replyToken: "another invocation",
+    }),
+    false,
+  );
+  await editBundle(plugin, "", () => original);
+  await reload(runner, workspace, "ai");
+  await h.waitFor(folder, "finish-attempted");
+  assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
+  const row = await thread.reply(turn._id);
+  assert.equal(row.state, "interrupted");
+  assert.equal(row.error, RELOADED);
+  assert.equal(row.question, undefined);
+  await until("the Runner closed the stuck retired host", () => !alive(old.pid));
+  await h.gate(folder, "go");
+  const messageId = await thread.post();
+  const replyToken = "01".repeat(32);
+  const next = await desk.action(ai.run.turn, {
+    threadId: thread.threadId,
+    messageId,
+    replyToken,
+    folder,
+    agentId: "fake-agent",
+    model: "edit",
+  });
+  assert.equal(next.state, "done");
+  assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
+  assert.equal((await thread.reply(next.turnId)).state, "done");
+  console.log("code snapshots: the window saved the reload reason when old AI could not finish");
 }
 
 export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }) {
@@ -274,7 +261,7 @@ export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }
   const afterPids = await gitPids(final);
   const [last] = await after.turns.until("after hook is running", (rows) => rows.length === 1);
   for (let i = 0; i < 2; i++) {
-    const result = await desk.local(ai.run.stop, { turnId: last._id });
+    const result = await desk.action(ai.run.stop, { turnId: last._id });
     assert.equal(result.kind, "NotRunning", "Stop cannot change a turn whose agent has settled");
     assert.equal(result.data.finishing, true, "the window shows no notice for a turn that is only finishing");
   }

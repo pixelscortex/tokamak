@@ -61,7 +61,7 @@ export async function resistantTurns({ h, client, hello, overlap, wire }) {
       const controller = new AbortController();
       const held = action === "cancel" ? wire.hold("Hello Tokamak") : undefined;
       try {
-        const running = client.local(
+        const running = client.action(
           ai.run.turn,
           { threadId, messageId, folder, agentId: "claude", model: "sonnet", effort: "low" },
           { signal: controller.signal },
@@ -78,15 +78,15 @@ export async function resistantTurns({ h, client, hello, overlap, wire }) {
         assert.ok(pids.every(alive));
         const args = { turnId: row._id };
         if (action === "force") {
-          assert.equal(await client.local(ai.run.stop, args), null);
-          assert.equal((await client.local(ai.run.forceStop, args)).kind, "TooEarly");
+          assert.equal(await client.action(ai.run.stop, args), null);
+          assert.equal((await client.action(ai.run.forceStop, args)).kind, "TooEarly");
           const [stopping] = await turns.until("stop requested", ([turn]) => !!turn?.stoppingAt);
           await Bun.sleep(Math.max(0, stopping.stoppingAt + FORCE_STOP_MS - Date.now()));
           assert.ok(
             pids.every(alive),
             "the deadline makes Force stop available; it does not kill the program",
           );
-          assert.equal(await client.local(ai.run.forceStop, args), null);
+          assert.equal(await client.action(ai.run.forceStop, args), null);
           assert.deepEqual(await within(running, "forced turn returns"), { ...args, state: "stopped" });
         } else {
           controller.abort();

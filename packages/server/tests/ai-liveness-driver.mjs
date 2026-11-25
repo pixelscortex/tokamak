@@ -64,7 +64,7 @@ async function crashedManager(binary) {
       folder: { kind: "chosen", path: folder },
     });
     const invoke = (messageId, model, access) =>
-      window.local(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model, access });
+      window.action(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model, access });
     const stopped = assert.rejects(invoke(messageId, "ask-once", "ask"), /Plugin ai process:/);
     void stopped.catch(() => {});
     const turns = watchQuery(window, ai.turns.list, { threadId }, cleanup);
@@ -77,7 +77,7 @@ async function crashedManager(binary) {
     const killedAt = Date.now();
     process.kill(pid, "SIGKILL");
     await stopped;
-    assert.deepEqual(await window.local(ai.working.list, {}), []);
+    assert.deepEqual(await window.action(ai.working.list, {}), []);
     assert.ok(manager() && manager() !== pid, "ai restarted while the window remained connected");
     const [ended] = await turns.until(
       "maintenance interrupts the turn whose manager crashed",
@@ -114,7 +114,7 @@ async function crashedApp() {
       text: `Work on ${label}`,
       folder: { kind: "chosen", path: folder },
     });
-    const running = client.local(ai.run.turn, {
+    const running = client.action(ai.run.turn, {
       threadId,
       messageId,
       folder,
@@ -187,7 +187,7 @@ async function crashedApp() {
 
   // The thread is free: the open app begins a new turn in it at once.
   const next = await open.mutation(chat.messages.post, { threadId: writing.threadId, text: "Carry on" });
-  const resumed = await open.local(ai.run.turn, {
+  const resumed = await open.action(ai.run.turn, {
     threadId: writing.threadId,
     messageId: next,
     folder: writing.folder,
@@ -232,7 +232,7 @@ async function lostServer() {
     text: "Keep going",
     folder: { kind: "chosen", path: folder },
   });
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId,
     messageId,
     folder,

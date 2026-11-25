@@ -3,7 +3,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { agentInfoCache } from "@tokamak/sdk/agent-turn";
-import { local, provide, type LocalContext } from "@tokamak/sdk";
+import { action, provide, type CallerActionContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { killAfter, minimumVersion, open, parse, signedIn, speeds, streamArgs, usableVersion } from "./wire";
 import { turn } from "./turn";
@@ -14,7 +14,7 @@ const updateRequired = `Claude needs Claude Code ${minimumVersion} or later.`;
 const setup = { install: "curl -fsSL https://claude.ai/install.sh | bash", signIn: "claude auth login" };
 const noCatalog = { models: [], modes: [], speeds: [] } as const;
 
-async function claudeInfo(ctx: LocalContext, setupDeadline?: number): Promise<ai.Info> {
+async function claudeInfo(ctx: CallerActionContext, setupDeadline?: number): Promise<ai.Info> {
   const remaining = () => (setupDeadline === undefined ? undefined : setupDeadline - Date.now());
   const version = await usableVersion(ctx, remaining());
   if (version === undefined || (setupDeadline !== undefined && version === "old"))
@@ -47,7 +47,8 @@ const discovery = agentInfoCache(claudeInfo, async () => {
   const stamp = await stat(path).catch(() => undefined);
   return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
 });
-const info = local({
+const info = action({
+  on: "caller",
   handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
     setupDeadline === undefined ? discovery.read(ctx) : claudeInfo(ctx, setupDeadline),
 });
@@ -75,7 +76,7 @@ export function modelName(model: { displayName: string; description?: unknown })
   return model.displayName.replace(/\s*\(recommended\)$/i, "");
 }
 
-async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "speeds">> {
+async function choices(ctx: CallerActionContext): Promise<Pick<ai.Info, "models" | "speeds">> {
   // No user message is sent: initialize reveals model aliases and supported
   // effort levels without purchasing a turn. Avoid loading MCP servers just
   // to open the picker; keep Claude's account and gateway settings.
@@ -124,7 +125,8 @@ async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "spe
   return { models: [{ id: "default", name: "Default", efforts: [] }], speeds: [] };
 }
 
-const start = local({
+const start = action({
+  on: "caller",
   handler: async (ctx, run: ai.Run) => {
     try {
       const version = await usableVersion(ctx);

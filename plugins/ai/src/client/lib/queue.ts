@@ -3,18 +3,17 @@ import { resolveFolder } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
 import { runLocalTurn } from "./local-turn";
 import { errorText } from "../../shared/turn-shared";
-import { api, notice, reasonLine } from "./agents";
+import { api, machineNotice, notice, reasonLine } from "./agents";
 
 /** Watch across threads: the first snapshot after reloading can pick up a ready queue too. */
 export function watchQueue(client: TokamakClient): () => void {
-  if (!client.hasLocal) return () => {};
   let closed = false;
   let heads: TurnView[] = [];
   const launching = new Set<string>();
   const attempted = new Set<Id<"turns">>();
 
   function launchReady() {
-    if (closed) return;
+    if (closed || machineNotice()) return;
     for (const head of heads) {
       if (attempted.has(head._id) || launching.has(head.threadId)) continue;
       attempted.add(head._id);
@@ -52,6 +51,7 @@ async function launchQueued(client: TokamakClient, head: TurnView, isClosed: () 
   const folder = await resolveFolder(client, threadId);
   if (isClosed()) return;
   if (folder === undefined) {
+    if (isFailure(await client.action(api.working.list, {}))) return;
     const reason = "The queue could not run: this thread's folder could not be resolved.";
     notice.set(reason);
     return settle(client, head, reason);
@@ -65,7 +65,9 @@ async function launchQueued(client: TokamakClient, head: TurnView, isClosed: () 
   if (result === undefined) return;
   if (isFailure(result)) {
     // Busy: another turn holds the thread; this head starts when it ends.
-    if (result.kind !== "Busy") await settle(client, head, reasonLine(result.kind, head.agent.name));
+    if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable") {
+      notice.set(reasonLine(result.kind, head.agent.name));
+    } else if (result.kind !== "Busy") await settle(client, head, reasonLine(result.kind, head.agent.name));
   } else if (!isClosed() && "ended" in result && result.ended) {
     notice.set(result.ended);
   } else if (!isClosed() && "hookNotice" in result && result.hookNotice) {

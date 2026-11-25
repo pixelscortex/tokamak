@@ -1,3 +1,4 @@
+import { isFailure } from "@tokamak/sdk";
 import { onQuit } from "@tokamak/sdk/client";
 import { api, connectedClient } from "./agents";
 
@@ -20,17 +21,18 @@ function workingLine(turns: readonly Work[], queued: readonly Work[]): string {
 export function guardQuit(pauseQueue: () => void): () => void {
   return onQuit(async () => {
     const client = connectedClient();
-    if (!client?.hasLocal) return undefined;
+    if (!client) return undefined;
     const [turns, queued] = await Promise.all([
-      client.local(api.working.list, {}),
+      client.action(api.working.list, {}),
       client.query(api.turns.queuedForDevice, {}),
     ]);
+    if (isFailure(turns)) return undefined;
     if (turns.length === 0 && queued.length === 0) return undefined;
     return {
       message: workingLine(turns, queued),
       stop: async () => {
         pauseQueue();
-        await client.local(api.working.stopAll, {});
+        await client.action(api.working.stopAll, {});
       },
     };
   });

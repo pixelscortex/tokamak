@@ -3,7 +3,7 @@ import { auth, state } from "@tokamak/sdk/client";
 import { onDraftSubmit, type DraftSubmission } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
 import { errorText } from "../../shared/turn-shared";
-import { api, notice, reasonLine, unavailable } from "./agents";
+import { api, machineNotice, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
 
 export const localActiveTurn = state<TurnView | null>(null);
@@ -21,7 +21,7 @@ export function onTurnDraft(
 ) {
   const me = auth.me();
   return onDraftSubmit(async (draft) => {
-    if (!client.hasLocal || draft.threadId !== threadId()) return false;
+    if (machineNotice() || draft.threadId !== threadId()) return false;
     const id = creatorId();
     return id !== undefined && id === me.id && submit(client, draft);
   });
@@ -32,8 +32,10 @@ async function submit(client: TokamakClient, { threadId, text, intent }: DraftSu
   if (!holder) return false;
   notice.set(undefined);
   if (holder.state !== "queued" && intent === "steer") {
-    const result = await client.local(api.run.steer, { turnId: holder._id, text });
+    const result = await client.action(api.run.steer, { turnId: holder._id, text });
     if (isFailure(result)) {
+      if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable")
+        throw new Error(reasonLine(result.kind, ""));
       if (result.kind === "NoSteerHandler")
         throw new Error("This agent doesn't accept follow-ups during a turn. Use Cmd+Enter to queue.");
       if (!(await client.query(api.turns.pending, { threadId }))) return false;
@@ -60,10 +62,14 @@ async function submit(client: TokamakClient, { threadId, text, intent }: DraftSu
 
 export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
   try {
-    const result = await client.local(api.run.stop, { turnId });
+    const result = await client.action(api.run.stop, { turnId });
     // A turn that is only saving its after work has already finished; Stop has nothing to say.
-    if (isFailure(result) && !("finishing" in result.data))
-      notice.set("This turn is running in another window or has ended.");
+    if (isFailure(result)) {
+      if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable")
+        notice.set(reasonLine(result.kind, ""));
+      else if (!("finishing" in result.data))
+        notice.set("This turn is running in another window or has ended.");
+    }
   } catch (cause) {
     notice.set(`The turn could not stop: ${errorText(cause)}`);
   }
@@ -71,12 +77,14 @@ export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
 
 export async function forceStopTurn(client: TokamakClient, turnId: Id<"turns">) {
   try {
-    const result = await client.local(api.run.forceStop, { turnId });
+    const result = await client.action(api.run.forceStop, { turnId });
     if (isFailure(result))
       notice.set(
-        result.kind === "NotRunning"
-          ? "This turn is running in another window or has ended."
-          : "Still stopping…",
+        result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable"
+          ? reasonLine(result.kind, "")
+          : result.kind === "NotRunning"
+            ? "This turn is running in another window or has ended."
+            : "Still stopping…",
       );
   } catch (cause) {
     notice.set(`The turn could not stop: ${errorText(cause)}`);

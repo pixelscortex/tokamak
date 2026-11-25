@@ -379,10 +379,11 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
     /**
      * Starts the real server on `pluginsDir` (chat, ai and the fake agents by
      * default); resolves its WebSocket address. `shared` makes it a shared server.
+     * `windowRouted` uses a separate desktop Runner so a test can observe the window bridge.
      */
-    async serve(label, { shared = false, pluginsDir = plugins } = {}) {
+    async serve(label, { shared = false, pluginsDir = plugins, windowRouted = false } = {}) {
       if (shared) await installBasicAuth(pluginsDir);
-      if (useRunner) {
+      if (useRunner && !windowRouted) {
         assert.ok(!shared, "A Runner serves a private workspace");
         const runner = await startRunner({
           binary,
@@ -396,7 +397,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       }
       let child;
       const address = await startServer({
-        binary,
+        binary: useRunner ? join(dirname(binary), "tokamak-server") : binary,
         dir: join(scratch, label),
         pluginsDir,
         shared,

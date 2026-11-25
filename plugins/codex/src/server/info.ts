@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import { agentCommand } from "@tokamak/sdk/agent-turn";
 import type { Info } from "plugin:ai/contracts";
 import { AppServer, isRecord } from "./rpc";
@@ -16,7 +16,7 @@ const UNAVAILABLE: Info = {
   speeds: [],
 };
 
-export async function codexInfo(ctx: LocalContext, setupDeadline?: number): Promise<Info> {
+export async function codexInfo(ctx: CallerActionContext, setupDeadline?: number): Promise<Info> {
   const remaining = (fallback: number) =>
     setupDeadline === undefined ? fallback : Math.max(0, setupDeadline - Date.now());
   const version = await support(ctx, remaining(5_000));
@@ -88,7 +88,7 @@ async function listModes(app: AppServer) {
   return ["default", "plan"].filter((mode) => data.some((preset) => preset.mode === mode));
 }
 
-async function support(ctx: LocalContext, timeout: number) {
+async function support(ctx: CallerActionContext, timeout: number) {
   const answer = await agentCommand(ctx, ["codex", "--version"], timeout);
   if (answer === "missing") return answer;
   if (answer?.code !== 0) return;

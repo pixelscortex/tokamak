@@ -68,7 +68,7 @@ async function turn(desk, folder, { model = "edit", during, threadId, earlier } 
     }));
   await h.closeGate(folder, "go").catch(() => {});
   const running = within(
-    desk.local(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
+    desk.action(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
     model,
   );
   if (model === "edit") {

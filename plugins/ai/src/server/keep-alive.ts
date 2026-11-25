@@ -1,4 +1,4 @@
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { Id, CallerActionContext } from "@tokamak/sdk";
 import { BEAT_MS, SILENCE_MS } from "../shared/turn-timing";
 import { api } from "./_generated/api";
 
@@ -15,7 +15,7 @@ const SERVER_LOST = `This computer could not reach the server for ${seconds} sec
  * through for SILENCE_MS: by then the server ends the turn too, so an agent
  * left running would only write into a closed reply.
  */
-export function keepAlive(ctx: LocalContext, turnId: Id<"turns">, ended: (reason: string) => void) {
+export function keepAlive(ctx: CallerActionContext, turnId: Id<"turns">, ended: (reason: string) => void) {
   let stopped = false;
   let heard = Date.now();
   let ticked = heard;

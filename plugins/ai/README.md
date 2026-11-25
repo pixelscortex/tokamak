@@ -60,13 +60,15 @@ publishes and imports no agent plugin: agents (`claude`, `codex`, the test
 ## The agent contract
 
 ```ts
-import { local, provide } from "@tokamak/sdk";
+import { action, provide } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 
-const info = local({
+const info = action({
+  on: "caller",
   handler: async (ctx): Promise<ai.Info> => ({ installed, signedIn, install, signIn, models, speeds, modes }),
 });
-const start = local({
+const start = action({
+  on: "caller",
   handler: async (ctx, run: ai.Run) => {
     const program = ctx.proc(["codex", "app-server"], { cwd: run.folder });
     // … send run.prompt, then for each message: run.text(delta)
@@ -76,8 +78,8 @@ const start = local({
 export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 ```
 
-- The contract lives in the local part (`{ place: "local", dataMethods: true }`): `info` and
-  `start` run in the sender's own local part, with `ctx.proc`.
+- The contract uses `{ on: "caller", dataMethods: true }`: `info` and
+  `start` run in the sender's Runner, with `ctx.proc`.
 - `run.prompt` is the message exactly as stored; `run.text(delta)` adds to the
   reply. The agent never writes rows; `ai` does.
 - The other reports: `run.thinking(delta)`; `run.tool({ id, kind, title,
@@ -184,7 +186,7 @@ never sent to windows. A queued row has no reply until it starts.
 Plugins use `provide(ai.turnHooks, { before, after })` with either or both
 members. On the QuickJS Runner, each receives plain data in the provider's
 process: `threadId`, `turnId`, and `folder`. Use
-`local({ handler: (ctx, turn: ai.TurnInfo) => … })`. The
+`action({ on: "caller", handler: (ctx, turn: ai.TurnInfo) => … })`. The
 SDK supplies `turn.signal` in the provider on QuickJS; Bun passes the live
 signal. Use `turnId` to find anything saved for the turn.
 

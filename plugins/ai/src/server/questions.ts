@@ -4,7 +4,7 @@
 // long as the app that asked it, so quitting expires it, and only this local
 // part holds the token that lets `turns:answer` clear it.
 import { randomBytes, randomUUID } from "node:crypto";
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { Id, CallerActionContext } from "@tokamak/sdk";
 import type { TurnAnswer } from "@tokamak/sdk/agent-turn";
 import type { Access, Question } from "../contracts";
 import { api } from "./_generated/api";
@@ -53,7 +53,7 @@ export function settle(turnId: string, pending: Pending, answer: TurnAnswer): bo
  * wait in a queue: the turn shows one at a time.
  */
 export function asking(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   turn: { turnId: Id<"turns">; access: Access; session: string; carried: string | undefined },
 ) {
   const { turnId, access, session, carried } = turn;

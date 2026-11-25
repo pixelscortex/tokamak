@@ -1,4 +1,4 @@
-import type { TokamakClient } from "@tokamak/sdk";
+import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Info } from "../../contracts";
 import { setupReason } from "../../shared/turn-shared";
@@ -20,6 +20,8 @@ export const agents = state<readonly AgentEntry[]>([]);
 /** A short line the row shows after a turn could not begin; cleared by the next Send. */
 export const notice = state<string | undefined>(undefined);
 
+export const machineNotice = state<string | undefined>(undefined);
+
 let asking: Promise<void> | undefined;
 let queued: Promise<void> | undefined;
 let connected: TokamakClient | undefined;
@@ -38,7 +40,6 @@ export function connectedClient(): TokamakClient | undefined {
  */
 export function refreshAgents(client: TokamakClient): Promise<void> {
   connected = client;
-  if (!client.hasLocal) return Promise.resolve();
   if (asking) {
     queued ??= asking.then(() => {
       queued = undefined;
@@ -47,9 +48,13 @@ export function refreshAgents(client: TokamakClient): Promise<void> {
     return queued;
   }
   asking = client
-    .local(api.agents.list, {})
+    .action(api.agents.list, {})
     .then(
-      (list) => void agents.set(list),
+      (list) => {
+        if (connected !== client) return;
+        machineNotice.set(isFailure(list) ? reasonLine(list.kind, "") : undefined);
+        agents.set(isFailure(list) ? [] : list);
+      },
       () => void agents.set([]),
     )
     .finally(() => {
@@ -59,11 +64,22 @@ export function refreshAgents(client: TokamakClient): Promise<void> {
 }
 
 /** Why a turn cannot run or begin, as `run:turn` fails or the row sees it. */
-export type Reason = "NoAgent" | "NotInstalled" | "SignedOut" | "Busy" | "Answered";
+export type Reason =
+  | "NoAgent"
+  | "NotInstalled"
+  | "SignedOut"
+  | "Busy"
+  | "Answered"
+  | "noMachine"
+  | "runnerCapabilityUnavailable";
 
 /** The row's line for `reason`, naming the agent as a person sees it. */
 export function reasonLine(reason: Reason, agent: string, updateRequired?: string): string {
   switch (reason) {
+    case "noMachine":
+      return "Connect a machine to run this";
+    case "runnerCapabilityUnavailable":
+      return "This machine cannot run this action.";
     case "NotInstalled":
       return updateRequired ?? `${agent} isn't installed.`;
     case "SignedOut":

@@ -44,16 +44,18 @@ try {
   const address = await h.serve("snapshots");
   const runner = h.runner(address);
   assert.ok(runner, "Code process tests require the Runner");
-  const hookCalls = new Set();
+  let sawDeletionHook = false;
   const desk = await h.connect(address, {
     local: true,
     observe(plugin, frame, direction) {
       if (
         direction === "fromWorker" &&
         frame.name === "local.contract.call" &&
-        frame.payload.plugin === "code"
+        frame.payload.plugin === "code" &&
+        frame.payload.name === "threadDeletedLocal" &&
+        frame.payload.method === "after"
       ) {
-        hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
+        sawDeletionHook = plugin === "chat";
       }
     },
   });
@@ -65,11 +67,8 @@ try {
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
   await stopDuringAfter(fixture);
   await separateProcesses(fixture);
-  assert.deepEqual([...hookCalls].sort(), [
-    "ai/turnHooks/after",
-    "ai/turnHooks/before",
-    "chat/threadDeletedLocal/after",
-  ]);
+  // The turn hooks are checked by the before/after refs in separateProcesses.
+  assert.ok(sawDeletionHook);
   await unavailableProviders(fixture);
   await thirdPartyNotice(desk);
   await cancelledCleanup(fixture);
@@ -209,7 +208,7 @@ async function start(desk, folder, text = "Make an edit") {
   const { threadId } = sent;
   const run = (messageId, model, timeout) =>
     within(
-      desk.local(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
+      desk.action(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
       model,
       timeout,
     );
@@ -409,7 +408,7 @@ async function stoppedTurn(desk) {
   const running = thread.run(thread.messageId, "edit-stop");
   await thread.edited();
   const [turn] = await thread.turns.until("running stop fixture", (rows) => rows.length === 1);
-  await desk.local(ai.run.stop, { turnId: turn._id });
+  await desk.action(ai.run.stop, { turnId: turn._id });
   assert.equal((await running).state, "stopped");
   const saved = await thread.reply(turn._id);
   assert.equal(saved.state, "stopped");

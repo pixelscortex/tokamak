@@ -11,7 +11,8 @@ the table under "What it adds to others" says which artboard shows each part.
 ## Screens
 
 All of these are chat screens with ai's parts in them. The client draws them
-only when it has a local part (the desktop app); a plain browser shows chat alone.
+when the caller has a Runner. Caller actions discover agents, run turns and handle controls.
+After a Send without a Runner, the row shows “Connect a machine to run this” and chat still works.
 
 | Screen                                                                                         | Source                                                              | Paper artboard              |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |

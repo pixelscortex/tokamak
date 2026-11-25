@@ -34,7 +34,7 @@ export function agentTurns({ h, client, agent, model, effort, timeout }) {
       const label = `${agent.name}: ${text.slice(0, 70)}`;
       const context = { client, ai, chat, args, label, isTurn: (row) => row.messageId === messageId };
       const running = within(
-        client.local(ai.run.turn, {
+        client.action(ai.run.turn, {
           ...args,
           messageId,
           folder,
@@ -87,7 +87,7 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
   }
 
   function sendAnswer({ turnId, id: questionId }, answer) {
-    return client.local(ai.run.answer, { turnId, questionId, answer });
+    return client.action(ai.run.answer, { turnId, questionId, answer });
   }
 
   return {
@@ -116,11 +116,11 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
     },
     async stop() {
       const { _id: turnId } = await replyUntil("the running turn", () => true);
-      assert.equal(await client.local(ai.run.stop, { turnId }), null);
+      assert.equal(await client.action(ai.run.stop, { turnId }), null);
     },
     async steer(text) {
       const { _id: turnId } = await replyUntil("the running turn", () => true);
-      assert.deepEqual(await client.local(ai.run.steer, { turnId, text }), { error: null });
+      assert.deepEqual(await client.action(ai.run.steer, { turnId, text }), { error: null });
     },
   };
 }

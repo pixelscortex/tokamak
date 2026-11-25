@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { local, TIMED_OUT, within, type AuthContext, type Id } from "@tokamak/sdk";
+import { action, TIMED_OUT, within, type AuthContext, type Id } from "@tokamak/sdk";
 import { isSendersDevice } from "../shared/turn-shared";
 import { FORCE_STOP_MS } from "../shared/turn-timing";
 import type { turnControl } from "./controls";
@@ -37,7 +37,8 @@ function mine(auth: AuthContext) {
 }
 
 /** Each turn running on this computer for the caller: its thread and the agent's name. */
-export const list = local({
+export const list = action({
+  on: "caller",
   handler: async (ctx) =>
     mine(ctx.auth).map(([turnId, { threadId, agent }]) => ({ turnId, threadId, agent })),
 });
@@ -51,7 +52,8 @@ const AFTER_FORCE_MS = 3_000;
  * An agent still running after the Force stop delay has its programs killed.
  * Resolves with how many turns were handled.
  */
-export const stopAll = local({
+export const stopAll = action({
+  on: "caller",
   handler: async (ctx) => {
     await ctx.runMutation(api.turns.stopQueued, {});
     const turns = mine(ctx.auth);

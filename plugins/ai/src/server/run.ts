@@ -1,6 +1,15 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
-import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
+import {
+  fail,
+  isFailure,
+  action,
+  v,
+  type ArgsOf,
+  type Id,
+  type Infer,
+  type CallerActionContext,
+} from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type Run, type Usage } from "../contracts";
 import { errorText, setupReason } from "../shared/turn-shared";
@@ -39,7 +48,8 @@ import { RELOADED } from "../shared/turn-timing";
  * window calls this after each Send with the thread's choices; it returns
  * when the turn has ended.
  */
-export const turn = local({
+export const turn = action({
+  on: "caller",
   args: {
     threadId: v.id("threads"),
     messageId: v.string(),
@@ -217,7 +227,8 @@ export const turn = local({
 });
 
 /** Steers on the sender's local part, and records the text only once the agent can receive it. */
-export const steer = local({
+export const steer = action({
+  on: "caller",
   args: { turnId: v.id("turns"), text: v.string() },
   handler: async (ctx, { turnId, text }) => {
     const control = controlFor(turnId, ctx.auth);
@@ -234,7 +245,8 @@ export const steer = local({
 const finishing = new Set<string>();
 
 /** Marks Stop on the server before asking the provider to end, so its final reply is stopped. */
-export const stop = local({
+export const stop = action({
+  on: "caller",
   args: { turnId: v.id("turns") },
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
@@ -248,7 +260,8 @@ export const stop = local({
 });
 
 /** Kills the run's program groups after the deadline recorded on its server row. */
-export const forceStop = local({
+export const forceStop = action({
+  on: "caller",
   args: { turnId: v.id("turns") },
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
@@ -266,7 +279,8 @@ export const forceStop = local({
  * sender on its device, with the token only this local part holds); only
  * then does the answer reach the agent.
  */
-export const answer = local({
+export const answer = action({
+  on: "caller",
   args: { turnId: v.id("turns"), questionId: v.string(), answer: answerValue },
   handler: async (ctx, { turnId, questionId, answer }) => {
     const pending = pendingQuestion(turnId, questionId);
@@ -282,7 +296,8 @@ export const answer = local({
  * Whether this local part still holds the question, so the card can say at
  * once that a question from before the app quit has expired.
  */
-export const pending = local({
+export const pending = action({
+  on: "caller",
   args: { turnId: v.id("turns"), questionId: v.string() },
   handler: async (_ctx, { turnId, questionId }) => pendingQuestion(turnId, questionId) !== undefined,
 });
@@ -378,7 +393,7 @@ class Unsent {
  * the computer that runs the turn. A write refused twice breaks the writer:
  * `broke` resolves, and every later report throws back to the agent.
  */
-function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
+function turnWriter(ctx: CallerActionContext, turnId: Id<"turns">) {
   const unsent = new Unsent();
   let flight: Promise<void> | undefined;
   let broken: unknown;

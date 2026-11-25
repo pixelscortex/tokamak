@@ -1,4 +1,4 @@
-import { isFailure, type LocalContext } from "@tokamak/sdk";
+import { isFailure, type CallerActionContext } from "@tokamak/sdk";
 import { turnHooks, type TurnHooks, type TurnInfo } from "../contracts";
 import { errorText } from "../shared/turn-shared";
 
@@ -7,7 +7,7 @@ const BEFORE_TIMEOUT = "The turn could not start: a before hook timed out.";
 const AFTER_TIMEOUT = "A turn after hook timed out.";
 const AFTER_INTERRUPTED = "A turn after hook was interrupted.";
 
-export function hooksFor(ctx: LocalContext, turn: Omit<TurnInfo, "signal">) {
+export function hooksFor(ctx: CallerActionContext, turn: Omit<TurnInfo, "signal">) {
   const controller = new AbortController();
   const input: TurnInfo = { ...turn, signal: controller.signal };
   const notices = new Set<string>();

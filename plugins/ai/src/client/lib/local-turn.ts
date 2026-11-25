@@ -11,7 +11,7 @@ export async function runLocalTurn(
     byte.toString(16).padStart(2, "0"),
   ).join("");
   try {
-    return await client.local(api.run.turn, { ...input, replyToken });
+    return await client.action(api.run.turn, { ...input, replyToken });
   } catch (error) {
     if (!isLocalReloadTimeout(error)) throw error;
     const released = await client.mutation(api.liveness.releaseReloaded, {

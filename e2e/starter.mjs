@@ -98,7 +98,7 @@ try {
     });
     cleanup.push(runner.stop);
     const client = await connect(address, { token, cleanup, launch: runner.launch });
-    const available = await client.local(api.ai.agents.list, {});
+    const available = await client.action(api.ai.agents.list, {});
     for (const id of new Set(requested)) {
       const info = available.find((agent) => agent.id === id)?.info;
       assert.ok(info?.installed && info.signedIn, `${names[id]} must be installed and signed in`);

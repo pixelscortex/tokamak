@@ -6,7 +6,7 @@ import { Menu } from "@tokamak/ui";
 import { holdSend, type ComposerProps } from "plugin:chat/client";
 import type { Picked } from "../../shared/offered";
 import { errorText, isSendersDevice } from "../../shared/turn-shared";
-import { agents, api, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
+import { agents, api, machineNotice, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
 import {
   ACCESS_LABEL,
   creatorOnlyLine,
@@ -35,8 +35,8 @@ import { AgentMark } from "./agent-mark";
  * and Send stays off in this composer until it is fixed; the agent picker
  * always opens, so even a single agent can be asked again.
  *
- * Empty when no agent plugin is installed or there is no local part (a plain
- * browser), so chat stays plain chat. Each Send in this window begins a turn
+ * Empty when no agent plugin is installed. When a Send cannot reach a Runner,
+ * the status line shows how to connect a machine. Each Send in this window begins a turn
  * with these choices (lib/turn.ts). The row also starts following this
  * person's waiting questions (lib/questions.ts) for the permission card.
  */
@@ -52,7 +52,7 @@ export function AgentRow(props: ComposerProps): JSX.Element {
   createEffect(
     () => {
       const turn = active.data();
-      return turn && client.hasLocal && isSendersDevice(turn, { user: me, device: me.device }) ? turn : null;
+      return turn && !machineNotice() && isSendersDevice(turn, { user: me, device: me.device }) ? turn : null;
     },
     (turn) => {
       localActiveTurn.set(turn);
@@ -150,8 +150,24 @@ function Row(props: {
     void pick(props.client, props.threadId, current, next).catch((cause: unknown) =>
       notice.set(errorText(cause)),
     );
+  const status = (line: () => string) => (
+    <span role="status" class="text-label text-ink-3">
+      {line()}
+    </span>
+  );
   return (
-    <Show when={props.resolved()}>
+    <Show
+      when={props.resolved()}
+      fallback={
+        <Show when={machineNotice() && notice()}>
+          {(line) => (
+            <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center justify-end pe-3">
+              {status(line)}
+            </div>
+          )}
+        </Show>
+      }
+    >
       {(current) => (
         // No padding at the start: the agent button's edge sits on the box's edge above it, and
         // 4 px from the tray on the left and below alike.
@@ -173,13 +189,7 @@ function Row(props: {
             <Choosers current={current()} refresh={refresh} change={change} />
           </Show>
           <span class="flex-1" />
-          <Show when={notice() ?? props.turnLine() ?? missing()}>
-            {(line) => (
-              <span role="status" class="text-label text-ink-3">
-                {line()}
-              </span>
-            )}
-          </Show>
+          <Show when={notice() ?? props.turnLine() ?? missing()}>{(line) => status(line)}</Show>
         </div>
       )}
     </Show>

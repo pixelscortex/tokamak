@@ -1,15 +1,17 @@
 import { screen, waitFor } from "@testing-library/dom";
 import { render } from "@solidjs/web";
 import { afterEach, expect, test } from "vitest";
-import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { TokamakClient, fail, type ClientTransport, type Id, type JsonValue } from "@tokamak/sdk";
 import { ShortcutContext } from "@tokamak/sdk/client";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { ComposerProps } from "plugin:chat/client";
 import { isHeld } from "../../chat/src/client/lib/hold";
 import type { Info } from "../src/contracts";
+import { refreshAgents } from "../src/client/lib/agents";
+import { startTurn } from "../src/client/lib/turn";
 import { AgentRow } from "../src/client/ui/agent-row";
 
-// The agent row on its own, with a stand-in client: the local part answers
+// The agent row on its own, with a stand-in client: the Runner answers
 // `agents:list` with whatever `installed` holds at that moment, and the server
 // answers `choices:get` with `stored` (no turn runs, nothing is queued).
 
@@ -26,6 +28,7 @@ let installed: { id: string; name: string; info: Info }[] = [];
 let stored: JsonValue = null;
 let creator: JsonValue = { id: "local", name: "Sam" };
 let asked = 0;
+let hasMachine = true;
 
 function client(): TokamakClient {
   const transport = {
@@ -33,15 +36,15 @@ function client(): TokamakClient {
       queueMicrotask(() => onEvent({ value: answer(name) }));
       return () => {};
     },
-  } as unknown as ClientTransport;
-  const local = {
-    invoke: async (name: string) => {
-      if (name !== "ai/agents:list") throw new Error(`Unexpected local call ${name}`);
+    action: async (name: string) => {
+      if (!hasMachine) return fail("noMachine", null);
+      if (name === "ai/working:list") return [];
+      if (name !== "ai/agents:list") throw new Error(`Unexpected action ${name}`);
       asked += 1;
       return structuredClone(installed) as unknown as JsonValue;
     },
-  };
-  return new TokamakClient(transport, local);
+  } as unknown as ClientTransport;
+  return new TokamakClient(transport);
 }
 
 /** A picker by its "<name>: <value>" text (jsdom drops the space that browsers keep). */
@@ -63,7 +66,7 @@ function answer(name: string): JsonValue {
 
 const composer = (threadId: string | undefined) => ({ threadId }) as unknown as ComposerProps;
 
-function mount(threadId: string | undefined) {
+function mount(threadId: string | undefined, connection = client()) {
   const root = document.createElement("div");
   document.body.append(root);
   const props = {
@@ -76,7 +79,7 @@ function mount(threadId: string | undefined) {
   };
   const dispose = render(
     () => (
-      <ClientContext value={client()}>
+      <ClientContext value={connection}>
         <ShortcutContext value={{ registerShortcut: () => () => {} }}>
           <AgentRow {...(props as ComposerProps)} />
         </ShortcutContext>
@@ -96,6 +99,7 @@ afterEach(() => {
   stored = null;
   creator = { id: "local", name: "Sam" };
   asked = 0;
+  hasMachine = true;
 });
 
 test("with one agent, signed out, the agent picker still opens and asks again", async () => {
@@ -138,4 +142,24 @@ test("in someone else's thread the row names the creator and hides the agent pic
   expect(screen.queryByRole("button")).toBeNull();
   // The creator's missing agent does not hold another member's text.
   expect(isHeld(composer("t1"))).toBe(false);
+});
+
+test("a client without a Runner shows the composer notice", async () => {
+  hasMachine = false;
+  const connection = client();
+  mount(undefined, connection);
+  await refreshAgents(connection);
+  expect(screen.queryByRole("status")).toBeNull();
+
+  await startTurn(connection, {
+    threadId: "chat/threads:fixture" as Id<"threads">,
+    messageId: "chat/messages:fixture" as Id<"messages">,
+    text: "Hello",
+    folder: undefined,
+    first: true,
+  });
+
+  expect((await screen.findByRole("status")).textContent).toBe("Connect a machine to run this");
+  expect(screen.queryByRole("button", { name: picker("Agent") })).toBeNull();
+  expect(isHeld(composer(undefined))).toBe(false);
 });

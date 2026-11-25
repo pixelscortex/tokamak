@@ -1,4 +1,4 @@
-import type { TokamakClient } from "@tokamak/sdk";
+import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { BEAT_MS } from "../../shared/turn-timing";
 import { api } from "./agents";
 
@@ -12,9 +12,10 @@ const TRIES = 4;
  * 45-second limit.
  */
 export async function releaseOrphanedTurns(client: TokamakClient): Promise<void> {
-  if (!client.hasLocal) return;
   for (let attempt = 0; attempt < TRIES; attempt++) {
-    const running = (await client.local(api.working.list, {})).map((turn) => turn.turnId);
+    const turns = await client.action(api.working.list, {});
+    if (isFailure(turns)) return;
+    const running = turns.map((turn) => turn.turnId);
     const pending = await client.mutation(api.liveness.release, { running });
     // A reconnect can still see calls from the old window while its socket is closing.
     if (pending === 0 && running.length === 0) return;

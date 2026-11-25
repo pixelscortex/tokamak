@@ -26,8 +26,7 @@ let stop: (() => void) | undefined;
  * the card's `when` can read `questionFor` without a subscription per composer.
  */
 export function watchQuestions(client: TokamakClient): void {
-  // Only a window with a local part can answer: the turn waits in this computer's local part.
-  if (watching === client || !client.hasLocal) return;
+  if (watching === client) return;
   stop?.();
   watching = client;
   stop = client.subscribe(api.turns.questions, {}, (event) => {
@@ -53,7 +52,9 @@ export const answers: readonly { readonly answer: Answer; readonly label: string
  * question from before the app quit: the card says it expired straight away.
  */
 export async function stillAsked(client: TokamakClient, question: Waiting): Promise<boolean> {
-  return client.local(api.run.pending, { turnId: question.turnId, questionId: question.id });
+  return (
+    (await client.action(api.run.pending, { turnId: question.turnId, questionId: question.id })) === true
+  );
 }
 
 /**
@@ -61,7 +62,7 @@ export async function stillAsked(client: TokamakClient, question: Waiting): Prom
  * false when the question has expired (the app that asked it has quit).
  */
 export async function sendAnswer(client: TokamakClient, question: Waiting, answer: Answer): Promise<boolean> {
-  const result = await client.local(api.run.answer, {
+  const result = await client.action(api.run.answer, {
     turnId: question.turnId,
     questionId: question.id,
     answer,
