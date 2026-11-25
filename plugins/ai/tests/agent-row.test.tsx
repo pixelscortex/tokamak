@@ -50,8 +50,8 @@ function client(): TokamakClient {
     },
     action: async (name: string) => {
       actions.push(name);
-      if (!hasMachine) return fail("noMachine", null);
       if (name === "chat/folders:resolve") return "/fixture";
+      if (!hasMachine) return fail("noMachine", null);
       if (name === "ai/working:list") return [];
       if (name === "ai/run:stop") return null;
       if (name === "ai/run:steer") return { error: null };
