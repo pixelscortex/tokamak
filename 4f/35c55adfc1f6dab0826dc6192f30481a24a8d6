@@ -1,0 +1,100 @@
+packages/server/tests/ai-turns-driver.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 750
+  s_467911d521291f::t_a953a2fc0dc8ea 829,955
+.ci/check.sh
+  s_467911d521291f::t_6a918cb6fa4103 92
+bun.lock
+  s_467911d521291f::t_01c2ae2066a989 183,185
+design/chat.md
+  s_467911d521291f::t_a2cbff92c72e1a 7-10
+design/code.md
+  s_467911d521291f::t_08ad071666c13b 6-7
+moon.yml
+  s_467911d521291f::t_f61b99bda51aa1 54
+packages/server/tests/ai-threads-driver.mjs
+  s_467911d521291f::t_b4c4a8cfe49fff 66
+packages/server/tests/chat-threads-driver.mjs
+  s_467911d521291f::t_176b6efbf3cdf7 118-119,135,194,203,233-237,253,263
+packages/server/tests/code-changes-driver.mjs
+  s_467911d521291f::t_e0912c165539dd 136,144,177,184,199,205,220,260,286,296,306,316,332,334,336,341,343,346
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_467911d521291f::t_3497f34ba57b5b 49,65,84,405,412,464,524
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_467911d521291f::t_0a719766485592 113,196
+packages/server/tests/code-snapshots-driver.mjs
+  s_467911d521291f::t_65a65b8f3889bc 66,303,322,358,430,434,452,480
+plugins/chat/README.md
+  s_467911d521291f::t_eb0f00ed37348f 14,31,49-50,54,108
+plugins/chat/src/client/lib/send.ts
+  s_467911d521291f::t_d0fd3cb8ab2321 2,53-56
+plugins/chat/src/client/lib/sent.ts
+  s_467911d521291f::t_cce67708d380b6 10
+plugins/chat/src/client/pages/chat.tsx
+  s_467911d521291f::t_2758b8af2b15ef 3,82-86,88
+plugins/chat/src/client/ui/empty.tsx
+  s_467911d521291f::t_bd7710f73d8090 48,54-56,59-63
+plugins/chat/src/contracts.ts
+  s_467911d521291f::t_c1d674f56c14ce 28
+plugins/chat/src/server/_generated/api.ts
+  s_467911d521291f::t_96adf1fe60c016 4-7,25-26
+plugins/chat/src/server/folders/folders.ts
+  s_467911d521291f::t_38faeba1c565bc 2,17-18,46-47,73
+plugins/chat/src/server/schema.ts
+  s_467911d521291f::t_f243d69ed4a0b0 23
+plugins/chat/src/server/threads/threads.ts
+  s_467911d521291f::t_75bd9c199f4f5b 1,16,40,69,104,138-139,148
+plugins/chat/tests/extensions.test.tsx
+  s_467911d521291f::t_250b54fbf57d09 2,22,296-363
+plugins/chat/tests/send.test.ts
+  s_467911d521291f::t_85f07c8af6216a 11,18,20,22-23,76,78
+plugins/code/README.md
+  s_467911d521291f::t_090c96c9d67d7c 33,46,49
+plugins/code/package.json
+  s_467911d521291f::t_32f3f5c0df911a 6-8,17-19
+plugins/code/src/client/api.tsx
+  s_467911d521291f::t_5813e5efd9975e 1-2,6-7,13,18,25-29,32,34-36,44-48,53-62,64,104-115
+plugins/code/src/client/lib/changes.ts
+  s_467911d521291f::t_d1467cd5b9b123 1-9,14,39,108-109,134-140,143-146,149-150,156,160,162,191-192,219-235,237-239,242-243
+plugins/code/src/client/lib/runner.ts
+  s_467911d521291f::t_50800631436839 1-85
+plugins/code/src/client/ui/review-panel.tsx
+  s_467911d521291f::t_31087b5b2f3816 3,11,20,30,35,42-43,47-54
+plugins/code/src/client/ui/thread-header.tsx
+  s_467911d521291f::t_a078177f6bea87 6-7,14,17
+plugins/code/src/local/changes.ts
+  s_467911d521291f::t_84f2e4258c00f3 1,69,102,137,166,189-193,210,222,251,299
+plugins/code/src/local/git.ts
+  s_467911d521291f::t_cf238ec114d478 5,34,65-70,94,104,140,295-296,338-339,356,375
+plugins/code/src/local/snapshots.ts
+  s_467911d521291f::t_9c8210c53dd718 5,17-22,29,40,44,49,65,117
+plugins/code/src/server/changes.ts
+  s_467911d521291f::t_5d0b58205ae740 1,20,44-45,52-53,60-61
+plugins/code/src/server/hooks.ts
+  s_467911d521291f::t_1fbca5701afcb7 1,5,13-14,33-34,54-55,64-66,76-77
+plugins/code/src/server/notices.ts
+  s_467911d521291f::t_4491f65cc8aceb 1,5-7
+plugins/code/tests/runner.test.tsx
+  s_467911d521291f::t_0fc22703b8d822 1-142
+plugins/code/tests/tsconfig.json
+  s_467911d521291f::t_c4e7bbc6d1a63f 1-5
+plugins/code/tests/vitest.config.ts
+  s_467911d521291f::t_8f5e509dd44bd3 1-16
+plugins/code/tests/window-state.ts
+  s_467911d521291f::t_d55ee77ca93b88 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4f35c55adfc1f6dab0826dc6192f30481a24a8d6",
+  "prompts": {},
+  "sessions": {
+    "s_467911d521291f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21439-c6af-76f3-b7f1-72ea8b30d1b6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}
