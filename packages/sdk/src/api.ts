@@ -7,23 +7,43 @@ const referenceTypes: unique symbol = Symbol("tokamak.reference.types");
 
 export const functionName: unique symbol = Symbol("tokamak.function.name");
 
-export interface FunctionReference<K extends FunctionKind, A, R> {
+export interface FunctionReference<
+  K extends FunctionKind,
+  A,
+  R,
+  V extends Visibility = Visibility,
+  Owner extends string = string,
+> {
   readonly [functionName]: string;
-  readonly [referenceTypes]: { kind: K; args: A; result: R };
+  readonly [referenceTypes]: { kind: K; args: A; result: R; visibility: V; owner: Owner };
 }
 
-type ReferencesFromModule<M, V extends Visibility> = {
+type ReferencesFromModule<M, V extends Visibility, Owner extends string> = {
   readonly [
     E in keyof M as M[E] extends FunctionDefinition<FunctionKind, unknown, unknown, V> ? E : never
-  ]: ReferenceFromDefinition<M[E]>;
+  ]: ReferenceFromDefinition<M[E], Owner>;
 };
 
-export type ReferenceFromDefinition<D> =
-  D extends FunctionDefinition<infer K, infer A, infer R> ? FunctionReference<K, A, R> : never;
+export type ReferenceFromDefinition<D, Owner extends string = string> =
+  D extends FunctionDefinition<infer K, infer A, infer R, infer V>
+    ? FunctionReference<K, A, R, V, Owner>
+    : never;
 
-export type ApiFromModule<M> = ReferencesFromModule<M, typeof Visibility.Public>;
-export type InternalFromModule<M> = ReferencesFromModule<M, typeof Visibility.Internal>;
-export type PluginFunctionsFromModule<M> = ReferencesFromModule<M, typeof Visibility.PluginOnly>;
+export type ApiFromModule<M, Owner extends string = string> = ReferencesFromModule<
+  M,
+  typeof Visibility.Public,
+  Owner
+>;
+export type InternalFromModule<M, Owner extends string = string> = ReferencesFromModule<
+  M,
+  typeof Visibility.Internal,
+  Owner
+>;
+export type PluginFunctionsFromModule<M, Owner extends string = string> = ReferencesFromModule<
+  M,
+  typeof Visibility.PluginOnly,
+  Owner
+>;
 
 export type ArgsOf<R> = R extends FunctionReference<FunctionKind, infer A, unknown> ? A : never;
 

@@ -300,3 +300,43 @@ test("client rejects erased peer source imports and internal module spelling", a
     }
   });
 }, 30_000);
+
+test("query hook stages use the target's types and reject unsupported targets", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `import {query, mutation, v} from "@tokamak/sdk";
+       export const read = query({args: {text: v.string()}, handler: (_ctx, {text}) => text.length});
+       export const write = mutation({handler: () => null});`,
+    );
+    await file(owner, "src/server/api.ts", 'export {read, write} from "./functions";');
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {hook, internalQuery} from "@tokamak/sdk";
+       import * as owner from "plugin:owner/server";
+       import {internal} from "./_generated/internal";
+       export const privateRead = internalQuery({handler: () => 1});
+       export const badBefore = hook(owner.api.read, {before: (_ctx, args) => ({text: args.text.length})});
+       export const badAfter = hook(owner.api.read, {after: (_ctx, result, args) => args.text + result});
+       export const badWrite = hook(owner.api.write, {});
+       export const badInternal = hook(internal.policy.privateRead, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    const diagnostics = result.stdout + result.stderr;
+    expect(diagnostics).toContain("Type 'number' is not assignable to type 'string'");
+    expect(diagnostics).toContain("Type 'string' is not assignable to type 'MaybePromise<number>'");
+    expect(
+      diagnostics.match(/hooks on mutations, actions and internal functions are not supported yet/g)?.length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+}, 30_000);

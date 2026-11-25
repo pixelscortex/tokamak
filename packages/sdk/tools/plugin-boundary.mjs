@@ -211,7 +211,7 @@ function declarePlugin(root, id, declared) {
       (target.side === "client"
         ? `export * from ${entry};\n`
         : `export type * from ${entry};\n` +
-          `type PublicApi = Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry})> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry})>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>;\n` +
+          `type PublicApi = Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry}), ${JSON.stringify(target.id)}> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry}), ${JSON.stringify(target.id)}>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>;\n` +
           `export declare const api: PublicApi;\n` +
           refs
             .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)

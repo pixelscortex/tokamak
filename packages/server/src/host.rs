@@ -15,6 +15,38 @@ pub(crate) use crate::data::ReadSet;
 type SharedTransaction = Arc<Mutex<Option<Transaction>>>;
 type Failure = Arc<std::sync::Mutex<Option<String>>>;
 
+#[derive(Clone)]
+struct TransactionContext {
+    shared: SharedTransaction,
+    observations: Arc<Mutex<Observations>>,
+    failure: Failure,
+    failed_hook: Arc<std::sync::Mutex<Option<String>>>,
+}
+
+impl TransactionContext {
+    fn new(tx: Transaction) -> Self {
+        Self {
+            shared: Arc::new(Mutex::new(Some(tx))),
+            observations: Arc::default(),
+            failure: Arc::default(),
+            failed_hook: Arc::default(),
+        }
+    }
+
+    fn poison(&self, error: String) {
+        *self.failure.lock().expect("failure lock") = Some(error);
+    }
+
+    fn call_error(&self, error: engine::Error) -> String {
+        if matches!(error, engine::Error::Timeout { phase: "call" })
+            && let Some(hook) = self.failed_hook.lock().expect("hook failure lock").as_ref()
+        {
+            return format!("{hook}: {error}");
+        }
+        error.to_string()
+    }
+}
+
 #[derive(Default)]
 struct Observations {
     reads: ReadSet,
@@ -73,6 +105,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         Some(target) => note.with_root_args(&target.args, &args),
         None => note,
     };
+    let target_name = name;
     let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
     let tx = if mutation {
         Box::pin(db.begin()).await
@@ -91,19 +124,16 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         }
     };
 
-    let shared: SharedTransaction = Arc::new(Mutex::new(Some(tx)));
+    let context = TransactionContext::new(tx);
 
-    let observations = Arc::new(Mutex::new(Observations::default()));
-
-    let failure: Failure = Arc::default();
-
-    let ops = operations(
-        shared.clone(),
-        observations.clone(),
-        failure.clone(),
+    let call = hooks::plan(
+        bundle,
+        name,
         space,
         mutation,
         graph,
+        target_name,
+        context.clone(),
         CallContext {
             determinism: Some(determinism),
             note,
@@ -111,23 +141,24 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         },
     );
 
-    let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
-        Ok(pending) => pending.await.map_err(|e| e.to_string()),
-        Err(e) => Err(e.to_string()),
-    };
+    let result = call
+        .submit(pool, args)
+        .await
+        .map_err(|error| context.call_error(error));
 
-    let tx = shared
+    let tx = context
+        .shared
         .lock()
         .await
         .take()
         .expect("only invocation owner finishes");
 
-    let mut observed = observations.lock().await;
+    let mut observed = context.observations.lock().await;
 
     let result = result.and_then(|value| {
-        let nested = failure.lock().expect("failure lock");
+        let nested = context.failure.lock().expect("failure lock");
 
-        match observed.error.as_ref().or(nested.as_ref()) {
+        match nested.as_ref().or(observed.error.as_ref()) {
             Some(error) => Err(error.clone()),
             None => Ok(value),
         }
@@ -211,9 +242,7 @@ impl CallScope {
 }
 
 fn operations(
-    shared: SharedTransaction,
-    observations: Arc<Mutex<Observations>>,
-    failure: Failure,
+    tx: TransactionContext,
     space: DataSpace,
     writable: bool,
     graph: Graph,
@@ -232,9 +261,9 @@ fn operations(
     }
     database_operations::register(
         &mut ops,
-        shared.clone(),
-        observations.clone(),
-        failure.clone(),
+        tx.shared.clone(),
+        tx.observations.clone(),
+        tx.failure.clone(),
         scope.clone(),
         space,
         writable,
@@ -245,7 +274,7 @@ fn operations(
             .expect("unique operation");
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {
-                if failure.lock().expect("failure lock").is_some() {
+                if tx.failure.lock().expect("failure lock").is_some() {
                     return Err("An earlier plugin operation failed".to_string());
                 }
 
@@ -267,13 +296,14 @@ fn operations(
                 let child_note = note.enter(name, Some(&target.args), &args)?;
 
                 let child_scope = CallScope::default();
-                let child_ops = operations(
-                    shared.clone(),
-                    observations.clone(),
-                    failure.clone(),
+                let child = hooks::plan(
+                    target.bundle,
+                    target.local_name,
                     target.space,
                     target.mutation,
                     Some((plugins.clone(), target.owner)),
+                    name,
+                    tx.clone(),
                     CallContext {
                         determinism: None,
                         note: child_note,
@@ -281,23 +311,15 @@ fn operations(
                     },
                 );
 
-                let failed = failure.clone();
-                let call = ModuleCall::new(
-                    target.bundle,
-                    "invoke",
-                    json!({"name":target.local_name,"args":args}),
-                    child_ops,
-                    move |error| {
-                        *failed.lock().expect("failure lock") = Some(error);
-                    },
-                );
+                let failed = tx.clone();
+                let call = child.module(args, move |error| failed.poison(error));
                 Ok(scope
                     .clone()
-                    .nest(child_scope, shared.clone(), target.mutation, call))
+                    .nest(child_scope, tx.shared.clone(), target.mutation, call))
             })();
 
             if let Err(error) = &resolved {
-                *failure.lock().expect("failure lock") = Some(error.clone());
+                tx.poison(error.clone());
             }
             resolved
         })
@@ -310,6 +332,7 @@ mod database_operations;
 use database_operations::{field, text};
 
 mod database_queries;
+mod hooks;
 
 mod process_frames;
 

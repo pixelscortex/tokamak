@@ -1,3 +1,4 @@
+import { isServerRoot } from "./server-files.mjs";
 import { Visibility } from "../src/visibility.ts";
 import { join } from "node:path";
 import { functionPlacement, lanes, placementTransform, registrySource } from "./placement.mjs";
@@ -5,9 +6,18 @@ import { bunPluginBoundary } from "./plugin-boundary.mjs";
 import { contractTarget } from "./contracts.mjs";
 import { serverBuiltins, workerBuiltins } from "./server-builtins.mjs";
 
-export function transactionSources({ root, files, modules, hasSchema, header, pluginRoot, placement }) {
+export function transactionSources({
+  root,
+  files,
+  modules,
+  hasSchema,
+  header,
+  pluginRoot,
+  placement,
+  namespace,
+}) {
   const paths = files.map((file) => join(root, file));
-  placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root });
+  placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root }, namespace);
   const inLane = (keep) =>
     paths.flatMap((path, index) => {
       const definitions = placement?.modules.get(path);
@@ -43,6 +53,7 @@ export function transactionSources({ root, files, modules, hasSchema, header, pl
       modules: inLane(lanes.descriptor.keep),
       hasSchema,
       metadata,
+      results: placement?.results(root, isServerRoot(root)),
       providers,
       lane: lanes.descriptor,
       header,

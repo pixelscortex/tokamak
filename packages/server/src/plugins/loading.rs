@@ -73,6 +73,8 @@ impl Loaded {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
+            hooks: BTreeMap::new(),
+            transaction_bundles: BTreeMap::new(),
             descriptor: Value::Null,
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
@@ -126,6 +128,7 @@ impl Loaded {
                 }
             }
         };
+        loaded.register_hooks()?;
         loaded.update_metadata()?;
         Ok(loaded)
     }
@@ -267,6 +270,9 @@ impl Loaded {
                                 .unwrap_or(&function["args"])
                                 .clone(),
                         ),
+                        result: inspected.descriptor["results"]
+                            .get(local_name)
+                            .map(|validator| Arc::new(validator.clone())),
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind,
@@ -278,6 +284,7 @@ impl Loaded {
             if let Some(source) = source {
                 self.action_sources.insert(id.clone(), source);
             }
+            self.transaction_bundles.insert(id.clone(), bundle);
             self.inspected.insert(id.clone(), inspected);
         }
         Ok(())
@@ -289,6 +296,7 @@ impl Loaded {
         }
         self.remove_skipped()?;
         self.contracts = self.load_contracts().map_err(|failure| failure.error)?;
+        self.register_hooks()?;
         self.update_metadata()
     }
 
@@ -307,6 +315,8 @@ impl Loaded {
         self.action_sources
             .retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
+        self.transaction_bundles
+            .retain(|id, _| !skipped.contains_key(id));
         Ok(())
     }
 
@@ -333,6 +343,76 @@ impl Loaded {
     pub(super) fn skip(&mut self, id: String, reason: String) {
         eprintln!("Skipping plugin {id}: {reason}");
         self.skipped.insert(id, reason);
+    }
+
+    fn register_hooks(&mut self) -> Result<(), Error> {
+        self.hooks.clear();
+
+        for (owner, inspected) in &self.inspected {
+            let Some(hooks) = inspected.descriptor.get("hooks") else {
+                continue;
+            };
+            let hooks = hooks
+                .as_array()
+                .ok_or_else(|| invalid("Expected a list of hooks"))?;
+            if hooks.is_empty() {
+                continue;
+            }
+
+            let bundle = &self.transaction_bundles[owner];
+            let space = DataSpace::plugin(owner).map_err(|error| invalid(error.to_string()))?;
+
+            for hook in hooks {
+                let name = hook["name"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing hook name"))?;
+                let target = hook["target"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing hook target"))?;
+                let before = hook["before"]
+                    .as_bool()
+                    .ok_or_else(|| invalid("Invalid before stage"))?;
+                let after = hook["after"]
+                    .as_bool()
+                    .ok_or_else(|| invalid("Invalid after stage"))?;
+                if !before && !after {
+                    continue;
+                }
+                let Some((target_owner, _)) = target.split_once('/') else {
+                    return Err(invalid(format!(
+                        "Hook {owner}/{name} must target another plugin"
+                    )));
+                };
+                if target_owner == owner {
+                    return Err(invalid(format!(
+                        "Hook {owner}/{name} must target another plugin"
+                    )));
+                }
+                let Some(function) = self.targets.get(target) else {
+                    eprintln!("Skipping hook {owner}/{name}: target {target} is missing");
+                    continue;
+                };
+
+                if function.kind != FunctionKind::Query || function.visibility != Visibility::Public
+                {
+                    eprintln!(
+                        "Skipping hook {owner}/{name}: target {target} is no longer a public query"
+                    );
+                    continue;
+                }
+
+                self.hooks.entry(target.to_owned()).or_default().push(Hook {
+                    owner: owner.clone(),
+                    name: name.to_owned(),
+                    before,
+                    after,
+                    bundle: bundle.clone(),
+                    space: space.clone(),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn update_metadata(&mut self) -> Result<(), Error> {

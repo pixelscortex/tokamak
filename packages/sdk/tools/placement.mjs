@@ -11,6 +11,7 @@ import {
   runtimeExportNames,
 } from "./plugin-compiler.mjs";
 
+import { resultValidator } from "./result-validator.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
 const serverFunction = (kind) => kind !== "local";
@@ -31,7 +32,7 @@ export const lanes = {
   },
 };
 
-export function functionPlacement(root, selected) {
+export function functionPlacement(root, selected, namespace) {
   root = realpathSync(root);
   const src = resolve(root, "src");
   const files = selected ? [...selected.files] : [];
@@ -59,6 +60,7 @@ export function functionPlacement(root, selected) {
   const program = ts.createProgram(files.sort(), pluginCompilerOptions(root, options ?? {}));
   const checker = program.getTypeChecker();
   const modules = new Map();
+  const hookType = (type) => type.getProperties().some((p) => p.name.startsWith("__@hookBrand@"));
   const providers = discoverProviders(root, files, program, checker);
   for (const path of files) {
     if (path === resolve(src, "server/api.ts")) continue;
@@ -69,7 +71,22 @@ export function functionPlacement(root, selected) {
     for (const value of symbol ? checker.getExportsOfModule(symbol) : []) {
       if (!runtime.has(value.name)) continue;
       const definition = definitionInfo(checker, value, source);
-      if (definition?.kind) exports.set(value.name, definition);
+      const type = checker.getTypeOfSymbolAtLocation(value, source);
+      if (hookType(type)) {
+        if (path.startsWith(resolve(src, "client") + sep))
+          throw new Error("Hooks must be exported from the plugin's server part");
+        const reference = checker.getTypeOfSymbolAtLocation(type.getProperty("reference"), source);
+        const brand = reference.getProperties().find((p) => p.name.startsWith("__@referenceTypes@"));
+        const owner = brand && checker.getTypeOfSymbolAtLocation(brand, source).getProperty("owner");
+        if (namespace && owner && checker.getTypeOfSymbolAtLocation(owner, source).value === namespace)
+          throw new Error("Hooks must target a public query of another plugin");
+        exports.set(value.name, { kind: "hook" });
+      } else if (definition?.kind) {
+        exports.set(value.name, {
+          ...definition,
+          ...(definition.kind === "query" ? { type, source } : {}),
+        });
+      }
     }
     if (exports.size) modules.set(path, exports);
   }
@@ -105,7 +122,8 @@ export function functionPlacement(root, selected) {
         return;
       }
       if (!erased && ts.isVariableDeclaration(node) && node.initializer) {
-        const target = definitionTypeInfo(checker, checker.getTypeAtLocation(node.initializer), node)?.kind;
+        const type = checker.getTypeAtLocation(node.initializer);
+        const target = hookType(type) ? "hook" : definitionTypeInfo(checker, type, node)?.kind;
         if (target && !lane.keep(target)) {
           cuts.push([node.initializer.getStart(file), node.initializer.end, "undefined"]);
           references(node.initializer, discard, true);
@@ -167,7 +185,17 @@ export function functionPlacement(root, selected) {
       contents = contents.slice(0, start) + replacement + contents.slice(end);
     return contents;
   }
-  return { modules, providers, transform, edits };
+  function results(server, organized) {
+    return Object.fromEntries(
+      [...modules].flatMap(([path, definitions]) =>
+        [...definitions].flatMap(([name, { kind, type, source }]) => {
+          const result = kind === "query" && resultValidator(checker, type, source);
+          return result ? [[`${moduleName(server, path, organized)}:${name}`, result]] : [];
+        }),
+      ),
+    );
+  }
+  return { modules, providers, transform, edits, results };
 }
 
 function isDeclarationName(node) {
@@ -230,6 +258,7 @@ export function registrySource({
   modules,
   hasSchema,
   metadata,
+  results,
   providers = [],
   lane = lanes.server,
   worker = false,
@@ -283,7 +312,7 @@ export function registrySource({
     );
   return (
     header +
-    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
+    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, createHookRegistry, hookMetadata, invokeHook, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
     (serverData.length ? 'import {contractData} from "@tokamak/sdk/internal/contracts";\n' : "") +
     definitions +
     "\n" +
@@ -295,8 +324,10 @@ export function registrySource({
         ? `[...functionMetadata(functions), ...${JSON.stringify(metadata)}]`
         : "functionMetadata(functions)"
     };\n` +
-    `export const describe = () => ({schema, functions: metadata${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
-    "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n"
+    `const hooks = createHookRegistry({${entries.join(",")}});\n` +
+    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), results: ${JSON.stringify(results ?? {})}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
+    "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n" +
+    "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n"
   );
 }
 

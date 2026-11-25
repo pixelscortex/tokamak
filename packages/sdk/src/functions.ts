@@ -101,7 +101,9 @@ export type WireResult<R> = WireValue<
 >;
 
 /** Return an expected failure that callers can narrow by kind. A mutation returning it rolls back its writes. */
-export function fail<const K extends string, D extends JsonValue>(kind: K, data: D): Failure<K, D> {
+export function fail<const K extends string>(kind: K): Failure<K, null>;
+export function fail<const K extends string, D extends JsonValue>(kind: K, data: D): Failure<K, D>;
+export function fail(kind: string, data: JsonValue = null): Failure<string, JsonValue> {
   return { failed: true, kind, data };
 }
 

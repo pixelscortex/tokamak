@@ -37,6 +37,8 @@ pub struct ModuleCall {
     ops: Arc<OpRegistry>,
     on_error: Box<dyn Fn(String) + Send + Sync>,
     scope: Option<OpenModule>,
+    depth_increment: u8,
+    error_context: Option<String>,
     finished: bool,
 }
 impl ModuleCall {
@@ -54,6 +56,8 @@ impl ModuleCall {
             ops,
             on_error: Box::new(on_error),
             scope: None,
+            depth_increment: 1,
+            error_context: None,
             finished: false,
         }
     }
@@ -77,6 +81,24 @@ impl ModuleCall {
         self
     }
 
+    /// A trusted host adapter routes calls without adding a logical module level.
+    pub fn as_adapter(mut self) -> Self {
+        self.depth_increment = 0;
+        self
+    }
+
+    pub fn with_error_context(mut self, context: String) -> Self {
+        self.error_context = Some(context);
+        self
+    }
+
+    fn contextualize(&self, error: String) -> String {
+        match &self.error_context {
+            Some(context) => format!("{context}: {error}"),
+            None => error,
+        }
+    }
+
     fn finish(&mut self, error: Option<String>) {
         self.finished = true;
         if let Some(error) = error {
@@ -87,7 +109,9 @@ impl ModuleCall {
 impl Drop for ModuleCall {
     fn drop(&mut self) {
         if !self.finished {
-            (self.on_error)("delegated module operation abandoned before completion".into());
+            (self.on_error)(
+                self.contextualize("delegated module operation abandoned before completion".into()),
+            );
         }
     }
 }
@@ -275,14 +299,12 @@ fn install_leased<'js>(
                         let mut call = resolve(args)
                             .map_err(|error| Exception::throw_message(&ctx, &error))?;
                         let number = lease.modules.fetch_add(1, Ordering::Relaxed);
-                        if lease.depth >= 16 || number >= 256 {
-                            call.finish(Some(
+                        if lease.depth + call.depth_increment > 16 || number >= 256 {
+                            let error = call.contextualize(
                                 "delegated module depth/count budget exceeded".into(),
-                            ));
-                            return Err(Exception::throw_message(
-                                &ctx,
-                                "delegated module depth/count budget exceeded",
-                            ));
+                            );
+                            call.finish(Some(error.clone()));
+                            return Err(Exception::throw_message(&ctx, &error));
                         }
                         Ok(Promise::wrap_future(
                             &ctx,
@@ -343,7 +365,7 @@ async fn invoke_module<'js>(
                 active: lease.active.clone(),
                 deadline: lease.deadline,
                 modules: lease.modules,
-                depth: lease.depth + 1,
+                depth: lease.depth + call.depth_increment,
                 determinism: child,
             },
         )?;
@@ -367,8 +389,9 @@ async fn invoke_module<'js>(
             Ok(value)
         }
         Err(error) => {
-            let error =
-                crate::engine::js_error_named(&ctx, error, &call.bundle, false, &name).to_string();
+            let error = call.contextualize(
+                crate::engine::js_error_named(&ctx, error, &call.bundle, false, &name).to_string(),
+            );
             call.finish(Some(error.clone()));
             Err(Exception::throw_message(&ctx, &error))
         }

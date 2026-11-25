@@ -747,3 +747,47 @@ Dependents can import the reference from `plugin:<id>/server`. Within the
 defining plugin, use the generated `_generated/plugin.ts` references. These
 functions are excluded from the window API, local-to-server transport and
 subscriptions. `internal*` remains private to its own plugin.
+
+## Hook another plugin's query
+
+Export a hook from a server module and target a public query from a plugin
+dependency. Installing your plugin registers the hook automatically; the owner
+doesn't have to change its code or grant permission.
+
+```ts
+import { createHook, fail } from "@tokamak/sdk";
+import * as team from "plugin:team/server";
+import schema from "./schema";
+
+const hook = createHook(schema); // use the SDK's `hook` directly if no schema is needed
+
+export const moderateUsers = hook(team.api.list, {
+  before(ctx, args) {
+    if (ctx.auth.user.role === "member") return fail("forbidden");
+    return { ...args, text: args.text.trim() };
+  },
+  async after(ctx, users, args) {
+    const bans = await ctx.db.query("bans").collect();
+    return users.filter((user) => !bans.some((ban) => ban.name === user.name));
+  },
+});
+```
+
+Either stage can be omitted. `before` returns valid arguments for the target
+or stops the query with `fail(kind, data?)`. `after` receives the query's
+result and the final arguments and returns a result of the same type. The
+server checks both stages' output and rejects extra fields. For an older
+bundle or a return type without a finite validator, the server checks the
+result against the shape of the value returned by the query. A failure or
+exception reports the hooking plugin to the caller. Hook order across plugins
+is unspecified; each stage receives the previous stage's value.
+
+A query hook can only read its own plugin's database. It has the original
+caller in `ctx.auth` and shares the call note in `ctx.call` at one greater
+depth. Calling the hooked query again is subject to the same depth limit as
+any nested call. The hooks also run on server calls and live window queries;
+a change to data read by either the query or a hook can refresh a live result.
+Removing the hooking plugin removes its hooks. A hook whose target is gone
+is skipped with a server warning.
+
+Hooks on mutations, actions and internal functions are not supported yet.

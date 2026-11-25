@@ -196,10 +196,19 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
+    const checkedPlacement =
+      namespace &&
+      placement &&
+      [...placement.modules.values()].some((entries) =>
+        [...entries.values()].some(({ kind }) => kind === "hook"),
+      )
+        ? functionPlacement(pluginRoot, undefined, namespace)
+        : placement;
     const source = registrySource({
       root,
       modules: split ? server : files.map((file, i) => [join(root, file), modules[i]]),
       hasSchema,
+      results: checkedPlacement?.results(root, organized),
       providers,
       header,
     });
@@ -272,7 +281,8 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
         hasSchema,
         header,
         pluginRoot,
-        placement: split ? placement : undefined,
+        placement: split ? checkedPlacement : undefined,
+        namespace,
       });
       await buildServer("transactions.js", descriptor.source, descriptor.plugins);
     }
