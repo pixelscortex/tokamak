@@ -397,6 +397,22 @@ test("build rejects local functions as hook targets", async () => {
   });
 }, 30_000);
 
+test("build reports an unresolved hook reference separately from non-hookable kinds", async () => {
+  await scratch(async (root) => {
+    const consumer = await backend(root, "consumer");
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
+       const refs = createApi<{functions: {run: FunctionReference<"query" | "mutation", {}, null, "public", "owner">}}>("owner");
+       export const invalid = hook(refs.functions.run, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Hook target reference could not be resolved");
+  });
+}, 30_000);
+
 test("owner build names an installed plugin that hooks a removed function", async () => {
   await scratch(async (root) => {
     const owner = await backend(root, "owner");
