@@ -364,7 +364,7 @@ export function registrySource({
       `${JSON.stringify(p.registration)}: contractData(provider${i}.implementation, ${JSON.stringify(p.methods.map((m) => m.member))})`,
   );
   const targets = registrations.flatMap((p, i) =>
-    p.methods
+    (localProvider(p) ? [] : p.methods)
       .filter((m) => lane.method(m.kind))
       .map(
         (m) =>

@@ -276,6 +276,61 @@ export type FunctionBuilder<
   definition: FunctionOptions<K, M, F, R, S>,
 ) => BuiltFunction<K, ObjectValue<F>, R, V, S>;
 
+function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallContext): CallerActionContext {
+  const machine = requireActionMachine;
+  const run =
+    (expected: ServerFunctionKind) =>
+    (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
+      callHost(bridge, "plugin.call", {
+        name: reference[functionName],
+        args: jsonSnapshot(input, "nested call args"),
+        kind: expected,
+        ...(options?.on === undefined ? {} : { on: options.on }),
+      });
+  return Object.freeze({
+    call,
+    get auth() {
+      if (!auth) throw new Error("There is no caller before sign-in");
+      return auth;
+    },
+    [contractScope]: {
+      list: (key, id, options) => {
+        if (key.place === "local") return (bridge.contracts ?? machine()).list(key, id, options);
+        return serverContracts(bridge).list(key, id, options);
+      },
+    },
+    use: <T>(api: T) => bindCalls(api, bridge),
+    signal: bridge.signal!,
+    retiring: bridge.retiring,
+    proc: bridge.proc ?? machine,
+    withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
+      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call))) ?? machine(),
+    crypto: Object.freeze({
+      hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
+      verifyPassword: (password: string, hash: string) =>
+        callHost(bridge, "crypto.verifyPassword", { password, hash }),
+      verifyAndRehashPassword: (password: string, hash: string) =>
+        callHost(bridge, "crypto.verifyAndRehashPassword", { password, hash }),
+    }),
+    env: (name: string) => callHost(bridge, "action.env", { name }),
+    runQuery: (reference, args) =>
+      bridge.proc
+        ? run("query")(reference, args)
+        : callHost(bridge, "action.runQuery", {
+            name: reference[functionName],
+            args: jsonSnapshot(args, "nested call args"),
+          }),
+    runMutation: (reference, args) =>
+      bridge.proc
+        ? run("mutation")(reference, args)
+        : callHost(bridge, "action.runMutation", {
+            name: reference[functionName],
+            args: jsonSnapshot(args, "nested call args"),
+          }),
+    runAction: run("action"),
+  } as CallerActionContext);
+}
+
 function builder<
   K extends FunctionKind,
   M extends DataModel,
@@ -292,13 +347,15 @@ function builder<
       args: description,
       ...(returns ? { returns } : {}),
       ...(definition.on === undefined ? {} : { on: definition.on }),
-      ...(kind === "local"
+      ...(kind === "local" || (kind === "action" && definition.on === "caller")
         ? {
             // Contract members are called in the same worker and can receive
             // live objects. Window calls still enter invoke() and validate JSON.
             invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call: CallContext) =>
               handler(
-                localContext(host, auth, call) as Parameters<typeof handler>[0],
+                (kind === "local"
+                  ? localContext(host, auth, call)
+                  : actionContext(host, auth, call)) as Parameters<typeof handler>[0],
                 input as Parameters<typeof handler>[1],
               ),
           }
@@ -331,59 +388,6 @@ function builder<
           return auth;
         };
 
-        const actionContext = (bridge: HostBridge): CallerActionContext => {
-          const machine = requireActionMachine;
-          const run =
-            (expected: ServerFunctionKind) =>
-            (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
-              callHost(bridge, "plugin.call", {
-                name: reference[functionName],
-                args: jsonSnapshot(input, "nested call args"),
-                kind: expected,
-                ...(options?.on === undefined ? {} : { on: options.on }),
-              });
-          return Object.freeze({
-            call,
-            get auth() {
-              return caller();
-            },
-            [contractScope]: {
-              list: (key, id, options) => {
-                if (key.place === "local") return (bridge.contracts ?? machine()).list(key, id, options);
-                return serverContracts(bridge).list(key, id, options);
-              },
-            },
-            use: <T>(api: T) => bindCalls(api, bridge),
-            signal: bridge.signal!,
-            retiring: bridge.retiring,
-            proc: bridge.proc ?? machine,
-            withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
-              bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped))) ?? machine(),
-            crypto: Object.freeze({
-              hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
-              verifyPassword: (password: string, hash: string) =>
-                callHost(bridge, "crypto.verifyPassword", { password, hash }),
-              verifyAndRehashPassword: (password: string, hash: string) =>
-                callHost(bridge, "crypto.verifyAndRehashPassword", { password, hash }),
-            }),
-            env: (name: string) => callHost(bridge, "action.env", { name }),
-            runQuery: (reference, args) =>
-              bridge.proc
-                ? run("query")(reference, args)
-                : callHost(bridge, "action.runQuery", {
-                    name: reference[functionName],
-                    args: jsonSnapshot(args, "nested call args"),
-                  }),
-            runMutation: (reference, args) =>
-              bridge.proc
-                ? run("mutation")(reference, args)
-                : callHost(bridge, "action.runMutation", {
-                    name: reference[functionName],
-                    args: jsonSnapshot(args, "nested call args"),
-                  }),
-            runAction: run("action"),
-          } as CallerActionContext);
-        };
         const run =
           (expected: ServerFunctionKind) => (reference: { [functionName]: string }, input: unknown) => {
             const payload = {
@@ -396,7 +400,7 @@ function builder<
           kind === "local"
             ? localContext(host, caller(), call)
             : kind === "action"
-              ? actionContext(host)
+              ? actionContext(host, auth, call)
               : {
                   call,
                   get auth() {
@@ -534,6 +538,11 @@ type ActionBuilder<V extends Visibility> = {
   }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R | MachineFailure>, V> & {
     readonly on: "caller";
   };
+  <A = any, R = unknown>(definition: {
+    on: "caller";
+    args?: undefined;
+    handler: (ctx: CallerActionContext, args: A) => R;
+  }): FunctionDefinition<"action", A, WireResult<R | MachineFailure>, V> & { readonly on: "caller" };
   <F extends Fields = Record<never, never>, R = unknown>(definition: {
     on?: "server";
     args?: F;

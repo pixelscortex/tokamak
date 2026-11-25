@@ -73,41 +73,41 @@ export function contractDeclarations(entry) {
       )
         throw new Error(`${entry} must export contracts declared with contract<T>("name", options)`);
       const [key, options] = call.arguments;
-      const place =
+      const property = (name) =>
         options && ts.isObjectLiteralExpression(options)
           ? options.properties.find(
-              (p) => ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "place",
+              (p) => ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === name,
             )?.initializer
           : undefined;
+      const place = property("place");
+      const on = property("on");
       if (
         !key ||
         !ts.isStringLiteralLike(key) ||
         !contractName.test(key.text) ||
-        (options && (!place || !ts.isStringLiteralLike(place) || !["local", "server"].includes(place.text)))
+        (options &&
+          (on
+            ? place || !ts.isStringLiteralLike(on) || on.text !== "caller"
+            : !place || !ts.isStringLiteralLike(place) || !["local", "server"].includes(place.text)))
       )
         throw new Error(`${entry}: contract names and places must be literals`);
+      const local = on !== undefined || place?.text === "local";
       if (contracts.some((item) => item.name === key.text))
         throw new Error(`${entry}: duplicate contract ${key.text}`);
-      const data =
-        options && ts.isObjectLiteralExpression(options)
-          ? options.properties.find(
-              (p) =>
-                ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "dataMethods",
-            )?.initializer
-          : undefined;
+      const data = property("dataMethods");
       if (place?.text === "local" && data?.kind !== ts.SyntaxKind.TrueKeyword) {
         const missing = nonDataMethods(entry, name.text, data, file);
         throw new Error(
           `${entry}: local contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
         );
       }
-      if (data && place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
+      if (data && !local) throw new Error(`${entry}: dataMethods requires a local contract`);
       contracts.push({
         exported: name.text,
         name: key.text,
-        place: place?.text ?? "server",
+        place: local ? "local" : "server",
         declarationHash,
-        dataMethods: data ? true : undefined,
+        dataMethods: local ? true : undefined,
         memberHook: call.typeArguments?.[0]?.getText(file) === "MemberHook",
       });
     }
@@ -175,7 +175,7 @@ export function discoverProviders(root, files, program, checker) {
         if (owner !== "auth" || !contract.memberHook)
           throw new Error(`${path}: onMember requires an auth membership event`);
         methods.push({ member: MEMBER_HOOK_RUN, kind: "mutation", field: implementation, argument: true });
-      } else if (contract.place === "server") {
+      } else if (contract.place === "server" || ts.isObjectLiteralExpression(implementation)) {
         if (!ts.isObjectLiteralExpression(implementation))
           throw new Error(`${path}: a server provider must declare its members in an object literal`);
         for (const field of implementation.properties) {
@@ -183,12 +183,23 @@ export function discoverProviders(root, files, program, checker) {
             (!ts.isShorthandPropertyAssignment(field) && !ts.isPropertyAssignment(field)) ||
             !(ts.isIdentifier(field.name) || ts.isStringLiteralLike(field.name)) ||
             !contractName.test(field.name.text)
-          )
+          ) {
+            if (contract.place === "local") continue;
             throw new Error(`${path}: a server provider requires statically named members`);
+          }
           const value = ts.isShorthandPropertyAssignment(field) ? field.name : field.initializer;
           const actual = checker.getTypeAtLocation(value);
           const info = definitionTypeInfo(checker, actual, value);
-          if (info?.kind === "local")
+          if (
+            contract.place === "local" &&
+            info?.kind &&
+            info.kind !== "local" &&
+            (info.kind !== "action" || info.on !== "caller")
+          )
+            throw new Error(
+              `${path}: contract "${contract.name}" method "${field.name.text}" requires local() or action({ on: "caller" })`,
+            );
+          if (contract.place === "server" && info?.kind === "local")
             throw new Error(
               `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
             );

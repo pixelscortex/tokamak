@@ -56,12 +56,14 @@ function checkedProvider(module: ProviderModule, { plugin, owner, name, registra
 
 function localMethod(value: unknown) {
   const method = value as FunctionDefinition | null | undefined;
-  return method?.kind === "local" ? method.invokeLocal : undefined;
+  return method?.kind === "local" || (method?.kind === "action" && method.on === "caller")
+    ? method.invokeLocal
+    : undefined;
 }
 
 function localThread(value: unknown, args: JsonValue) {
   const method = value as FunctionDefinition | null | undefined;
-  if (method?.kind !== "local" || !method.args) return;
+  if (!localMethod(method) || !method?.args) return;
   try {
     validate(method.args, args);
     return threadArgument(method.args, args);
@@ -312,9 +314,8 @@ function bindProvider(definition: object, bridge: HostBridge, auth: AuthContext,
       Object.entries(definition).map(([member, value]) => {
         if (typeof value === "function")
           return [member, (...args: unknown[]) => Reflect.apply(value, implementation, args)];
-        const method = value as FunctionDefinition | null | undefined;
-        if (method?.kind === "local" && method.invokeLocal)
-          return [member, (input: unknown = {}) => method.invokeLocal!(input, bridge, auth, call)];
+        const invoke = localMethod(value);
+        if (invoke) return [member, (input: unknown = {}) => invoke(input, bridge, auth, call)];
         return [member, value];
       }),
     ),

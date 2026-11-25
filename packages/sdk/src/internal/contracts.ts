@@ -1,4 +1,4 @@
-import type { FunctionDefinition, ServerFunctionKind, WireResult } from "../functions";
+import type { FunctionDefinition, MachineFailure, ServerFunctionKind, WireResult } from "../functions";
 import { callHost, type HostBridge, type LocalChannel, type ChannelHandler } from "../host";
 import { jsonSnapshot, type JsonValue } from "../values";
 
@@ -113,7 +113,9 @@ type Implementation<T, P extends ContractPlace> = {
     : T[K];
 };
 type LocalImplementation<A extends unknown[], R> = A extends [infer Input] | []
-  ? FunctionDefinition<"local", Input, WireResult<R>>
+  ?
+      | FunctionDefinition<"local", Input, WireResult<R>>
+      | (FunctionDefinition<"action", Input, WireResult<R | MachineFailure>> & { readonly on: "caller" })
   : never;
 
 export interface Provider<P extends ContractPlace> {
@@ -124,10 +126,15 @@ export interface Provider<P extends ContractPlace> {
 
 export function contract<T extends object>(
   name: string,
-  options: {
-    place: "local";
-    dataMethods: true;
-  },
+  options:
+    | {
+        place: "local";
+        dataMethods: true;
+      }
+    | {
+        on: "caller";
+        dataMethods?: true;
+      },
 ): Contract<T, "local">;
 export function contract<T extends object>(
   name: string,
@@ -137,8 +144,13 @@ export function contract<T extends object>(
   name: string,
   options?: { place: ContractPlace; dataMethods?: true },
 ): Contract<T, "local"> | Contract<T, "server"> {
-  return options?.place === "local"
-    ? contractReference<T, "local">(name, "local", undefined, options.dataMethods)
+  return options?.place === "local" || options?.on === "caller"
+    ? contractReference<T, "local">(
+        name,
+        "local",
+        undefined,
+        options.on === "caller" ? true : options.dataMethods,
+      )
     : contractReference<T, "server">(name, "server");
 }
 
