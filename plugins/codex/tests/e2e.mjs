@@ -220,7 +220,8 @@ try {
       "without an earlier usage notification, the first total is the baseline",
     );
   if (!real) {
-    assert.equal(steered.text, "1. TheSTEERED");
+    // The steer starts a new Codex message; it does not run into the text before it.
+    assert.equal(steered.text, "1. The\n\nSTEERED");
     assert.equal(steered.row.sessionId, greeting.row.sessionId);
   }
   passed("steer while streaming");
