@@ -1,4 +1,4 @@
-import { action, internalQuery, mutation, query, v } from "@tokamak/sdk";
+import { action, fail, internalQuery, isFailure, mutation, query, v } from "@tokamak/sdk";
 import { readProjectFile } from "./read-project";
 import { api } from "./_generated/api";
 import { internal } from "./_generated/internal";
@@ -74,4 +74,13 @@ export const marker = query({ handler: (): string => "unhooked" });
 export const hookedQuery = action({
   on: "caller",
   handler: (ctx) => ctx.runQuery(api.work.marker, {}),
+});
+
+export const failureValue = action({
+  handler: () => fail("runnerCapabilityUnavailable", "privateFunctions"),
+});
+
+export const useFailureValue = action({
+  on: "caller",
+  handler: async (ctx) => isFailure(await ctx.runAction(api.work.failureValue, {})),
 });

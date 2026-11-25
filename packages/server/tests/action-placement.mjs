@@ -234,6 +234,7 @@ try {
   await assertChannel(embedded);
   await assertLiveSignal(embedded);
   assert.equal(await embedded.action(api.work.hookedQuery, {}), "hooked");
+  assert.equal(await embedded.action(api.work.useFailureValue, {}), true);
 
   const serverPlugins = mode === "--cloud" ? join(scratch, "cloud") : plugins;
   if (mode === "--cloud") {
@@ -303,6 +304,7 @@ try {
   await assertChannel(window);
   await assertLiveSignal(window);
   assert.equal(await window.action(api.work.hookedQuery, {}), "hooked");
+  assert.equal(await window.action(api.work.useFailureValue, {}), true);
   assert.deepEqual(
     await within(browser.action(api.work.run, args, { on: "server" }), "server program request", 5000),
     noMachine,
