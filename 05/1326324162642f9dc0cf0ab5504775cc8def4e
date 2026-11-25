@@ -1,0 +1,21 @@
+e2e/fake-agent/harness.mjs
+  s_50b61fe9c78095::t_de434a8a3dcae2 128-129,142,151
+packages/server/tests/connected-runner.mjs
+  s_50b61fe9c78095::t_6caabeaf857920 21-22,66-70,369,371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "051326324162642f9dc0cf0ab5504775cc8def4e",
+  "prompts": {},
+  "sessions": {
+    "s_50b61fe9c78095": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213e3-4ba7-7ff2-89d1-7c2c4da8b5d6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
