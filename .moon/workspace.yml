@@ -13,6 +13,7 @@ projects:
   wiki: "wiki"
   chat: "plugins/chat"
   ai: "plugins/ai"
+  agent-proxy: "plugins/agent-proxy"
 vcs:
   defaultBranch: "main"
   provider: "github"
