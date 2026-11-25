@@ -342,7 +342,10 @@ function SignInStep(props: {
             browser, or a listener that is busy or unavailable, needs the address pasted. */}
         <p id="sign-in-help" class="m-0 flex items-start gap-2 text-label text-ink-2">
           <Show when={props.listening}>
-            <Icon path={icons.running} size={12} class="mt-0.5 shrink-0 text-ink-3" />
+            {/* One label line tall, so the icon sits on the first line of the text. */}
+            <span class="flex h-4 shrink-0 items-center text-ink-3">
+              <Icon path={icons.running} size={12} />
+            </span>
           </Show>
           {props.listening
             ? "Sign in in your browser. Tokamak finishes by itself when you are done."
