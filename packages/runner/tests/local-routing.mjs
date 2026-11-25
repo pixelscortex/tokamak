@@ -38,9 +38,10 @@ async function plugin(id, source, contract = "") {
 }
 
 async function local_arguments_continue_into_server_calls(client, api, auth, threadId) {
-  for (const selection of [undefined, threadId]) {
-    const note = (depth) => ({ ...auth, depth, ...(selection === undefined ? {} : { threadId: selection }) });
-    assert.deepEqual(await client.local(api.serverNotes, selection === undefined ? {} : { selection }), {
+  for (const args of [{}, { threadId }]) {
+    const note = (depth) => ({ ...auth, depth, ...args });
+    assert.deepEqual(await client.local(api.serverNotes, args), {
+      args,
       local: note(0),
       query: note(1),
       mutation: note(1),
@@ -88,8 +89,9 @@ await plugin(
     handler: (ctx, input) => ownProbe.get("${owner}", ctx).walk(input),
   });
   export const serverNotes = local({
-    args: { selection: v.optional(v.id("threads")) },
-    handler: async (ctx) => ({
+    args: { threadId: v.optional(v.id("threads")) },
+    handler: async (ctx, args) => ({
+      args,
       local: ctx.call,
       query: await ctx.runQuery(api.probe.queryNote, { continuation: { depth: 0, thread: "chat/threads:forged" } }),
       mutation: await ctx.runMutation(api.probe.mutationNote, {}),
@@ -282,7 +284,12 @@ try {
     { ...auth, threadId, depth: 0 },
     { ...auth, threadId, depth: 1 },
   ]);
-  await local_arguments_continue_into_server_calls(client, api, auth, threadId);
+  await local_arguments_continue_into_server_calls(
+    client,
+    api,
+    auth,
+    `chat/threads:${crypto.randomUUID().replaceAll("-", "")}`,
+  );
   await recursive_local_calls_keep_the_depth_limit_on_server_reentry(client, api, auth);
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());

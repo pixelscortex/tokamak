@@ -22,7 +22,7 @@ if (!live) await scanReplays("claude");
 
 const source = fileURLToPath(new URL("../", import.meta.url));
 const h = await agentHarness({ binary, name: "claude-turns" });
-const { ai } = h.api;
+const { ai, chat } = h.api;
 
 const wire = turnWire();
 const executable = () => join(h.scratch, "bin", "claude");
@@ -191,9 +191,13 @@ async function discovery(client) {
   assert.deepEqual(readyState(old), [false, false]);
   assert.equal(old.install, "claude update");
   assert.equal(old.updateRequired, "Claude needs Claude Code 2.1.330 or later.");
+  const { threadId, messageId } = await client.mutation(chat.threads.start, {
+    text: "Check whether Claude needs an update",
+    folder: { kind: "chosen", path: h.home },
+  });
   const rejected = await client.local(ai.run.turn, {
-    threadId: "unused",
-    messageId: "unused",
+    threadId,
+    messageId,
     folder: h.home,
     agentId: "claude",
   });
