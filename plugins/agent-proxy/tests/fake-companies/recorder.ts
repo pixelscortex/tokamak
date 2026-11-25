@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { syntheticJwt } from "./oauth";
 
 export interface Fixture {
   exchanges: {
@@ -8,9 +9,9 @@ export interface Fixture {
 }
 
 const secretField =
-  /^(access_token|refresh_token|id_token|code|code_verifier|code_challenge|state|client_secret|email(_address)?|organization_name|account_id|organization_id|uuid)$/i;
+  /(?:^(?:access_token|refresh_token|code_verifier|code_challenge|state|client_secret|email(?:_?address)?|uuid|id|prompt_cache_key)$|_(?:id|uuid)$)/i;
 const messageField =
-  /^(text|delta|input|content|instructions|system|prompt|message|name|detail|error_description)$/i;
+  /(?:^(?:text|delta|input|content|instructions|system|prompt|message|title|detail|error_description)$|name$)/i;
 
 export function cleanFixture(fixture: Fixture, replacements: Record<string, string> = {}): Fixture {
   const values = new Map(Object.entries(replacements).filter(([value]) => value.length > 0));
@@ -25,18 +26,56 @@ export function cleanFixture(fixture: Fixture, replacements: Record<string, stri
     }
     return value.replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, "fixture@example.test");
   }
-  function clean(value: unknown, key = ""): unknown {
+  function cleanJwt(token: string) {
+    let account: unknown;
+    let plan: unknown;
+    try {
+      const claims = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
+      account = claims["https://api.openai.com/auth"]?.chatgpt_account_id;
+      plan = claims["https://api.openai.com/auth"]?.chatgpt_plan_type;
+    } catch {
+      // No opaque or unknown claims get copied.
+    }
+    return syntheticJwt({
+      email: "fixture@example.test",
+      exp: 4102444800,
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: typeof account === "string" ? placeholder(account, "account_id") : "fake-account",
+        chatgpt_plan_type: ["free", "plus", "pro", "team", "business", "enterprise", "edu"].includes(
+          String(plan),
+        )
+          ? plan
+          : "plus",
+      },
+    });
+  }
+  function clean(value: unknown, key = "", secretCode = false): unknown {
+    if (/^(?:client_)?metadata$/i.test(key)) return typeof value === "string" ? "[fixture metadata]" : {};
     if (typeof value === "string") {
-      if (secretField.test(key)) return placeholder(value, key);
+      if (key === "id_token") return cleanJwt(value);
+      if (secretField.test(key) || (secretCode && key === "code")) return placeholder(value, key);
       if (messageField.test(key)) return "[sample text]";
       return values.get(value) ?? replacePrivateText(value);
     }
     if (Array.isArray(value)) return value.map((entry) => clean(entry, key));
     if (value && typeof value === "object")
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, clean(v, k)]));
+      return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, clean(v, k, secretCode && key === "")]),
+      );
     return value;
   }
-  function cleanBody(raw: string, encoding = "") {
+  const routes = new Set(
+    "api oauth authorize token callback auth v1 backend-api codex responses messages count_tokens models profile claude_cli roles wham usage accounts organizations workspaces check profiles me".split(
+      " ",
+    ),
+  );
+  function cleanPath(path: string) {
+    return new URL(path, "http://127.0.0.1").pathname
+      .split("/")
+      .map((part) => (!part || routes.has(part) ? part : placeholder(decodeURIComponent(part), "path_id")))
+      .join("/");
+  }
+  function cleanBody(raw: string, encoding = "", tokenRequest = false) {
     if (!raw) return "";
     if (encoding.includes("text/event-stream")) {
       // Network chunks can split JSON, line breaks and UTF-8 anywhere.
@@ -57,11 +96,14 @@ export function cleanFixture(fixture: Fixture, replacements: Record<string, stri
         );
     }
     if (encoding.includes("application/x-www-form-urlencoded")) {
-      const safe = clean(Object.fromEntries(new URLSearchParams(raw))) as Record<string, string>;
+      const safe = clean(Object.fromEntries(new URLSearchParams(raw)), "", tokenRequest) as Record<
+        string,
+        string
+      >;
       return new URLSearchParams(safe).toString();
     }
     if (!encoding.includes("json")) return "[omitted non-JSON body]";
-    return JSON.stringify(clean(JSON.parse(raw)));
+    return JSON.stringify(clean(JSON.parse(raw), "", tokenRequest));
   }
   function safeHeaders(headers: Record<string, string>) {
     const safe: Record<string, string> = {};
@@ -73,27 +115,32 @@ export function cleanFixture(fixture: Fixture, replacements: Record<string, stri
         const url = new URL(value, "http://127.0.0.1");
         const fields = ["code", "state", "error"].flatMap((key) => {
           const value = url.searchParams.get(key);
-          return value === null ? [] : [[key, String(clean(value, key))]];
+          return value === null ? [] : [[key, String(clean(value, key, true))]];
         });
         safe[name] = `/callback?${new URLSearchParams(fields)}`;
       } else if (
-        /^(content-type|anthropic-beta|anthropic-version|retry-after|anthropic-ratelimit-requests-reset|x-codex-primary-reset-at)$/.test(
+        /^(?:content-type|anthropic-beta|anthropic-version|retry-after|anthropic-ratelimit-[a-z0-9_-]+|x-codex-(?:(?:[a-z0-9-]+-)?(?:primary|secondary)-(?:used-percent|window-minutes|reset-at|reset-after-seconds)|active-limit|rate-limit-reached-type|credits-(?:balance|has-credits|unlimited)|plan-type))$/.test(
           name,
         )
       ) {
-        safe[name] = value;
+        safe[name] = replacePrivateText(value);
       }
     }
     return safe;
   }
   return {
     exchanges: fixture.exchanges.map(({ request, response }) => {
-      const requestBody = cleanBody(request.body, request.headers["content-type"]);
+      const path = cleanPath(request.path);
+      const requestBody = cleanBody(
+        request.body,
+        request.headers["content-type"],
+        path.endsWith("/oauth/token"),
+      );
       const responseBody = cleanBody(response.chunks.join(""), response.headers["content-type"]);
       return {
         request: {
           method: request.method,
-          path: replacePrivateText(new URL(request.path, "http://127.0.0.1").pathname),
+          path,
           headers: safeHeaders(request.headers),
           body: String(requestBody),
         },
