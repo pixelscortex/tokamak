@@ -1,0 +1,23 @@
+packages/build/src/component-parts.ts
+  s_7485715999886d::t_0949a537b43f3f 424
+packages/sdk/client.tsx
+  s_7485715999886d::t_350c931bfb8758 79-82
+packages/sdk/component-parts.tsx
+  s_7485715999886d::t_afd3a48a619111 72-74,106-112,263,298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2c0168adee85d98e56290071e74c368a519b380",
+  "prompts": {},
+  "sessions": {
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
