@@ -1,0 +1,77 @@
+plugins/chat/tests/extensions.test.tsx
+  s_5da48a806990de::t_2a29606ca28e1f 2,22,296-361
+  s_5da48a806990de::t_38c901e6c0efcd 362-363
+moon.yml
+  s_5da48a806990de::t_2256010dcf2809 54
+plugins/code/src/client/api.tsx
+  s_5da48a806990de::t_2a29606ca28e1f 1,6-7,13,18,32,34-36,44-48,53-62,104-115
+plugins/code/src/client/lib/changes.ts
+  s_5da48a806990de::t_2a29606ca28e1f 229
+  s_5da48a806990de::t_78cdcb0562c4c2 6,14,108-109,134-140,143-146,156,162,191-192,219-228,230-235,237-239,242-243
+plugins/code/src/client/lib/runner.ts
+  s_5da48a806990de::t_2a29606ca28e1f 52-61
+  s_5da48a806990de::t_9279d850c5ea84 1-51,62-85
+plugins/code/tests/vitest.config.ts
+  s_5da48a806990de::t_2a29606ca28e1f 11-14
+  s_5da48a806990de::t_434d1cd4dd7a0d 1-10,15-16
+plugins/code/tests/runner.test.tsx
+  s_5da48a806990de::t_2256010dcf2809 19
+  s_5da48a806990de::t_2a29606ca28e1f 2,67-95
+  s_5da48a806990de::t_813e41c750ac16 1,3-18,20-66,96-142
+plugins/code/tests/tsconfig.json
+  s_5da48a806990de::t_2a29606ca28e1f 3
+  s_5da48a806990de::t_2256010dcf2809 1-2,4-5
+plugins/code/package.json
+  s_5da48a806990de::t_2a29606ca28e1f 6-8
+  s_5da48a806990de::t_1cbe7057fd2d0e 17-19
+plugins/code/README.md
+  s_5da48a806990de::t_2256010dcf2809 33,46,49
+bun.lock
+  s_5da48a806990de::t_5918043fc57147 183,185
+plugins/chat/README.md
+  s_5da48a806990de::t_800780f26e17ce 14,31,108
+plugins/chat/src/client/lib/sent.ts
+  s_5da48a806990de::t_b61f7efb38005c 10
+plugins/chat/src/client/ui/empty.tsx
+  s_5da48a806990de::t_bc8b50894c04f9 48
+plugins/chat/src/server/folders/folders.ts
+  s_5da48a806990de::t_3b397bfffa7920 73
+plugins/chat/src/server/schema.ts
+  s_5da48a806990de::t_5d4fd69a55b550 23
+plugins/chat/src/server/threads/threads.ts
+  s_5da48a806990de::t_5325b209863258 16,40,69,104,148
+plugins/code/src/client/ui/review-panel.tsx
+  s_5da48a806990de::t_3311d33ebb0f8b 20
+plugins/code/src/client/ui/thread-header.tsx
+  s_5da48a806990de::t_2feda01422d95a 6-7
+plugins/code/src/local/changes.ts
+  s_5da48a806990de::t_4f0df2a412b6f2 1
+plugins/code/src/local/git.ts
+  s_5da48a806990de::t_09b4d04aead0b0 5
+plugins/code/src/local/snapshots.ts
+  s_5da48a806990de::t_fd000ceb2a19fb 5,44
+plugins/code/src/server/changes.ts
+  s_5da48a806990de::t_7285100fc694f0 1
+plugins/code/src/server/hooks.ts
+  s_5da48a806990de::t_b075bd7b75d00d 1,5,64
+plugins/code/src/server/notices.ts
+  s_5da48a806990de::t_f8d28ed943c605 5
+plugins/code/tests/window-state.ts
+  s_5da48a806990de::t_4d174cf1b1b30d 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63b839291a184ee00bc8021909076453065ebf75",
+  "prompts": {},
+  "sessions": {
+    "s_5da48a806990de": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c7-140e-7971-9fb7-fe39e1192eff",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
