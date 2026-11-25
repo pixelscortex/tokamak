@@ -16,7 +16,12 @@ export interface CompanyWords {
   readonly keys: string;
   /** "Sign in to Claude": the sign-in step's title. */
   readonly signIn: string;
-  /** The return address the browser ends on, as the paste field's placeholder. */
+  /**
+   * Where the company's page sends the browser after sign-in, without its
+   * query: the one place this is written. agent-proxy's company module sends
+   * the same address in its link; `returnPort` and `returnPath` below are
+   * derived from it for anything that listens there.
+   */
   readonly returnAddress: string;
 }
 
@@ -29,7 +34,7 @@ export const wordsOf: Record<Company, CompanyWords> = {
     plans: "Pro · Max · Team · Enterprise",
     keys: "From the Anthropic console",
     signIn: "Sign in to Claude",
-    returnAddress: "http://localhost:54545/callback?code=…",
+    returnAddress: "http://localhost:54545/callback",
   },
   openai: {
     name: "OpenAI",
@@ -37,6 +42,15 @@ export const wordsOf: Record<Company, CompanyWords> = {
     plans: "Plus · Pro · Business · Enterprise",
     keys: "From the OpenAI platform",
     signIn: "Sign in to ChatGPT",
-    returnAddress: "http://localhost:1455/auth/callback?code=…",
+    returnAddress: "http://localhost:1455/auth/callback",
   },
 };
+
+/** The port the company's return address is on: 54545 for Claude, 1455 for ChatGPT. */
+export const returnPort = (company: Company) => Number(new URL(wordsOf[company].returnAddress).port);
+
+/** The path of the company's return address: `/callback`, `/auth/callback`. */
+export const returnPath = (company: Company) => new URL(wordsOf[company].returnAddress).pathname;
+
+/** The paste field's example: the return address as the browser shows it after sign-in. */
+export const pasteExample = (company: Company) => `${wordsOf[company].returnAddress}?code=…`;

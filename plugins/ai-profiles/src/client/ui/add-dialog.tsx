@@ -2,7 +2,7 @@ import { For, Match, Show, Switch as Choose, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Chip, Collapsible, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { Company, SignIn, Subscription } from "../lib/api";
-import { COMPANIES, wordsOf } from "../lib/companies";
+import { COMPANIES, pasteExample, wordsOf } from "../lib/companies";
 import { countOf, modelName, titleOf } from "../lib/format";
 import { glyphs, profilesIcon } from "../lib/icons";
 import { CompanyMark, markPath } from "./company-mark";
@@ -326,7 +326,7 @@ function SignInStep(props: {
               class="flex-1"
               aria-label="Address the sign-in ended on"
               aria-describedby="paste-help"
-              placeholder={wordsOf[props.signIn.company].returnAddress}
+              placeholder={pasteExample(props.signIn.company)}
               invalid={Boolean(problem())}
               value={pasted()}
               onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>
