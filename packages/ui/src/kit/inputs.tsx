@@ -42,7 +42,6 @@ export function Inputs(props: { theme: string }): JSX.Element {
                 defaultChecked={item.checked}
                 disabled={"disabled" in item}
                 data-preview={"preview" in item ? item.preview : undefined}
-                tabindex={item.state === "on" ? 0 : -1}
               />
               <Caption>{item.state}</Caption>
             </span>

@@ -83,6 +83,22 @@ test("an input keeps one line, marks itself invalid, and holds an icon and an ac
   expect(clear).toHaveBeenCalledTimes(1);
 });
 
+test("Enter toggles a switch once, and an empty trail takes no room", async () => {
+  const user = userEvent.setup();
+  const change = vi.fn();
+  mount(() => (
+    <>
+      <Switch aria-label="Once" onCheckedChange={change} />
+      <Input aria-label="No action" trail={false} />
+    </>
+  ));
+  screen.getByRole("switch", { name: "Once" }).focus();
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(change).toHaveBeenCalledTimes(1));
+  const well = screen.getByRole("textbox", { name: "No action" }).closest('[data-slot="input-group"]')!;
+  expect(well.className).not.toContain("pe-1");
+});
+
 test("a disabled input marks its well and takes no text", async () => {
   const user = userEvent.setup();
   mount(() => <Input aria-label="Label" size="lg" disabled defaultValue="Personal" />);

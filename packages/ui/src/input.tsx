@@ -9,7 +9,7 @@
   field, for roomy forms. mono sets the text in data mono for links and codes.
   icon puts a 16 px tertiary mark before the text; trail holds one action,
   such as a ghost icon button, at the end. invalid edges it in red; say why in
-  words beside it, never by colour alone.
+  words beside it, never by colour alone, and point aria-describedby at those words.
 */
 import { Input as Base, InputGroup } from "@ui-sdk/solid/input";
 import { omit } from "solid-js";
@@ -67,8 +67,10 @@ export type InputProps = Omit<ComponentProps<typeof Base>, "class" | "size"> & {
 
 export function Input(props: InputProps): JSX.Element {
   const rest = omit(props, "class", "size", "mono", "icon", "trail", "invalid", "data-preview");
-  const styles = () =>
-    inputVariants({ size: props.size, mono: props.mono, trail: props.trail !== undefined });
+  // `trail={value() && <Clear />}` passes false or "" when there is nothing to show; only a
+  // real action may take the end padding.
+  const hasTrail = () => props.trail !== undefined && props.trail !== null && props.trail !== false && props.trail !== "";
+  const styles = () => inputVariants({ size: props.size, mono: props.mono, trail: hasTrail() });
   return (
     <InputGroup data-preview={props["data-preview"]} class={styles().root({ class: props.class })}>
       {props.icon && <Icon path={props.icon} class="text-ink-3" />}
