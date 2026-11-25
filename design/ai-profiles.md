@@ -162,6 +162,12 @@ for the card with the action row. Matched to `feature/tkm-265`.
 
 ## Open questions
 
+- **The details are not a page of their own.** A plugin cannot read a route
+  parameter or navigate, so the details replace the cards on the same page and
+  the shell's Back does not leave them. A `view` route with a parameter and a
+  way to open it would let the details be `/p/ai-profiles/subscription/<id>`.
+- A second account on another plan is refused (`OtherPlan`). If the owner
+  wants mixed plans under one card, the card needs a plan per account.
 - **The sign-in step differs from the drawing.** The drawing puts the paste
   field under "Signed in on another device?" and expects Claude's page to show
   `code#state`. With the redirect as built (`http://localhost:54545/callback`,
