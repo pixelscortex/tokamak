@@ -79,28 +79,31 @@ export function ProfileBox(props: {
           </span>
         </Show>
       </header>
-      <ol class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`${profile().code}, in use order`}>
-        <For each={rows()}>
-          {(id, index) => (
-            <>
-              <Show when={slot() === index()}>
-                <DropSlot position={index() + 1} />
-              </Show>
-              <Entry
-                profile={profile()}
-                builder={builder()}
-                subscription={props.subscriptions.get(id)}
-                id={id}
-                position={index()}
-                count={profile().subscriptions.length}
-              />
-            </>
-          )}
-        </For>
-        <Show when={slot() !== undefined && slot()! >= rows().length}>
-          <DropSlot position={rows().length + 1} />
-        </Show>
-      </ol>
+      {/* An empty list would still take a gap: the box then shows only its hint. */}
+      <Show when={rows().length > 0 || slot() !== undefined}>
+        <ol class="m-0 flex list-none flex-col gap-1 p-0" aria-label={`${profile().code}, in use order`}>
+          <For each={rows()}>
+            {(id, index) => (
+              <>
+                <Show when={slot() === index()}>
+                  <DropSlot position={index() + 1} />
+                </Show>
+                <Entry
+                  profile={profile()}
+                  builder={builder()}
+                  subscription={props.subscriptions.get(id)}
+                  id={id}
+                  position={index()}
+                  count={profile().subscriptions.length}
+                />
+              </>
+            )}
+          </For>
+          <Show when={slot() !== undefined && slot()! >= rows().length}>
+            <DropSlot position={rows().length + 1} />
+          </Show>
+        </ol>
+      </Show>
       <Show when={!profile().subscriptions.length && slot() === undefined}>
         <p class="m-0 flex h-10 items-center px-3 text-label text-ink-3">Drag a subscription here</p>
       </Show>
