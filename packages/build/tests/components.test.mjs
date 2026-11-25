@@ -208,7 +208,10 @@ test("a named part keeps its positional ancestors, and a new attribute is not a 
     expect(edited.status, edited.stderr).toBe(0);
     expect(edited.stderr).not.toContain('Plugin "addon"');
 
-    await writeFile(entry, original.replace('<nav role="b">', '<nav role="c"><p data-part="x"/></nav><nav role="b">'));
+    await writeFile(
+      entry,
+      original.replace('<nav role="b">', '<nav role="c"><p data-part="x"/></nav><nav role="b">'),
+    );
     const shifted = build(owner);
     expect(shifted.status, shifted.stderr).toBe(0);
     expect(shifted.stderr).toContain(

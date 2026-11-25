@@ -107,8 +107,7 @@ export function ExtensionProvider(props: {
 
     // A reloaded add-on reports its stale targets again; a removed one has none.
     let forgotten = false;
-    for (const key of stale.keys())
-      if (JSON.parse(key)[0] === id) forgotten = stale.delete(key) || forgotten;
+    for (const key of stale.keys()) if (JSON.parse(key)[0] === id) forgotten = stale.delete(key) || forgotten;
     if (forgotten) alerts();
   }
 
