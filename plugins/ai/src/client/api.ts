@@ -5,13 +5,14 @@
 import { after, append, before, prepend, replace } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 import { AgentRow } from "./ui/agent-row";
-import { TurnSteers } from "./ui/turn-steers";
+import { SteeredBody } from "./ui/turn-steers";
+import { hasSteers } from "./lib/steers";
 import { StopButton } from "./ui/turn-controls";
 import { AgentHeading } from "./ui/heading";
 import { ReplyCards } from "./ui/reply-cards";
 import { ReplyHeader } from "./ui/reply-header";
 import { ReplyWork } from "./ui/reply-work";
-import { isAgentReply } from "./lib/replies";
+import { isAgentReply, shownTurn } from "./lib/replies";
 import { PermissionCard } from "./ui/permission-card";
 import { activeFor } from "./lib/turn-controls";
 import { listenForSends } from "./lib/turn";
@@ -40,8 +41,12 @@ export const Stop = replace(chat.Composer.sendButton, StopButton, {
   when: (props) => Boolean(activeFor(props.threadId)),
 });
 
-export const Steers = after(chat.Message.body, TurnSteers, {
-  when: (props) => props.message.author?.id.startsWith("agent:") ?? false,
+/**
+ * A reply the person steered: its text cut where each follow-up arrived, the
+ * follow-up drawn between as their own message. Other replies keep chat's body.
+ */
+export const Steers = replace(chat.Message.body, SteeredBody, {
+  when: (props) => isAgentReply(props) && hasSteers(shownTurn(props)),
 });
 
 /** The status icon before each thread's title in chat's list. */

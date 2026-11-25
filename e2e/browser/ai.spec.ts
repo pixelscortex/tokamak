@@ -237,15 +237,27 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
 
     await send("Take the other route");
     await expect(conversation(page)).toContainText("Steered: Take the other route");
-    const steers = conversation(page)
-      .getByRole("article", { name: /^Fake agent at / })
-      .getByRole("list", { name: "Steers" })
-      .getByRole("listitem");
-    await expect(steers).toHaveText(["SteerTake the other route"]);
+    const reply = conversation(page).getByRole("article", { name: /^Fake agent at / });
+    const steers = reply.getByRole("group", { name: /^Steer from / });
+    await expect(steers).toHaveText([/^Steer.+Take the other route$/]);
+    // The steer sits where it was sent: after the text before it, before the agent's answer to it.
+    const pieces = reply.locator("[data-part=body] > *");
+    await expect(pieces).toHaveText([
+      "Ready for steering.",
+      /^Steer.+Take the other route$/,
+      "Steered: Take the other route",
+    ]);
     await expect(conversation(page).getByRole("article")).toHaveCount(4);
 
     await send("Keep these notes too");
-    await expect(steers).toHaveText(["SteerTake the other route", "SteerKeep these notes too"]);
+    await expect(steers).toHaveText([/^Steer.+Take the other route$/, /^Steer.+Keep these notes too$/]);
+    await expect(pieces).toHaveText([
+      "Ready for steering.",
+      /^Steer.+Take the other route$/,
+      "Steered: Take the other route",
+      /^Steer.+Keep these notes too$/,
+      "Then: Keep these notes too",
+    ]);
     await expect(queued).toHaveCount(1);
     await expect(queued).toHaveCount(1);
     await expect(conversation(page).getByText("Partial reply.", { exact: true })).toBeVisible();
