@@ -882,8 +882,17 @@ also lists the registered triggers for that table. Loops are stopped by the
 call note depth limit, and the mutation's call deadline also applies. Each
 trigger entered outside another trigger gets a budget of 256 delegated calls.
 Its nested triggers and hooks share that budget; running a trigger or hook
-stage itself does not use it. A later trigger on another row starts fresh.
-Trigger and hook stages share their bundle's module state only within one invocation.
+stage itself does not use it. Every trigger run entered outside another
+trigger starts fresh, including a second trigger on the same row.
+
+Triggers have no count limit per save, so the call deadline is what bounds a
+bulk write to a watched table. A trigger that writes one row and calls one
+query added about 2 ms per row on an Apple M4 Pro; with the default 1 s
+deadline such a save times out near 500 rows, and sooner on a slower host.
+Split larger writes across mutations.
+
+Trigger and hook stages share their bundle's module state only within one
+invocation. Do not keep `ctx` there: it stops working when its stage ends.
 
 The server's plugin catalog lists active triggers under `triggers`, keyed by
 qualified table name. A trigger whose table is missing is skipped with a
