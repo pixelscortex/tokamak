@@ -214,14 +214,23 @@ async function assertProgramsReaped(pids, label) {
   );
 }
 
-async function waitForProgram(client, previous) {
+async function waitForProgram(client, previous, action) {
+  const entered = (async () => {
+    for (;;) {
+      const { rows } = await client.query(api.work.rows, {});
+      if (rows.length > previous) return Number(rows[previous].text);
+      await Bun.sleep(20);
+    }
+  })();
   const pid = await within(
-    Promise.race([
-      entered,
-      action.then(() => {
-        throw new Error("Retiring action finished before its process started");
-      }),
-    ]),
+    action
+      ? Promise.race([
+          entered,
+          action.then(() => {
+            throw new Error("Retiring action finished before its process started");
+          }),
+        ])
+      : entered,
     "start action on retiring build",
     5000,
   );
@@ -233,7 +242,7 @@ async function assertReloadTimeout(client, reference, args, reload) {
   const previous = (await client.query(api.work.rows, {})).rows.length;
   const action = client.action(reference, args);
   void action.catch(() => {});
-  const pid = await waitForProgram(client, previous);
+  const pid = await waitForProgram(client, previous, action);
   await reload();
   const ticks = async () =>
     (await client.query(api.work.rows, {})).rows.filter((row) => row.text === "tick").length;
