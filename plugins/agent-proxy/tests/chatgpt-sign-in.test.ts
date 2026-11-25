@@ -17,7 +17,7 @@ type Subscription = {
   plan: string;
   status: "ok" | "signed-out";
   reason?: string;
-  accounts: { email?: string; organization?: string; status: string }[];
+  accounts: { id: string; email?: string; organization?: string; status: string }[];
   models: { id: string; name: string }[];
 };
 type SignIn = { id: string; company: string; link: string; repair?: string; expired: boolean };
@@ -36,12 +36,14 @@ const api = createApi<{
     cancelSignIn: Ref<"mutation", { id: string }, null | Failed>;
     renew: Ref<"action", Record<string, never>, { renewed: number; signedOut: number; waiting: number }>;
   };
+  manage: { signOut: Ref<"mutation", { id: string }, null | Failed> };
 }>("ai-profiles", [
   "subscriptions:list",
   "subscriptions:startSignIn",
   "subscriptions:finishSignIn",
   "subscriptions:cancelSignIn",
   "subscriptions:renew",
+  "manage:signOut",
 ]);
 
 /** A failure a person can read: one line, no stack trace, no source path. */
@@ -214,7 +216,9 @@ describe.skipIf(!available.length).each(available)("$name, ChatGPT", (build) => 
       refresh_reason: "proactive_expiry",
     });
 
-    // Signed in again with a login that expires, which ChatGPT then refuses to renew.
+    // Signed out here, then signed in again with a login that expires, which ChatGPT then
+    // refuses to renew. (A repair takes only a signed-out account, TKM-265.)
+    await call(client, "mutation", api.manage.signOut, { id: added.accounts[0]!.id });
     account.signIn = "expired";
     const again = await start(client, "openai", added.id);
     expect(await finish(client, again.id, await signInOnPage(again.link, "renewing"))).toMatchObject({

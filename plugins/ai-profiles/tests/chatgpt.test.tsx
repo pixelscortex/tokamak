@@ -32,7 +32,7 @@ const business: Subscription = {
   plan: "Business",
   enabled: true,
   status: "ok",
-  accounts: [{ email: "you@acme.test", organization: "Acme", status: "ok" }],
+  accounts: [{ id: "agent-proxy/accounts:a2", email: "you@acme.test", organization: "Acme", status: "ok" }],
   models: [
     { id: "gpt-5", name: "GPT-5" },
     { id: "gpt-5-codex", name: "GPT-5 Codex" },
@@ -45,7 +45,7 @@ const claude: Subscription = {
   company: "anthropic",
   label: "Personal",
   plan: "Max",
-  accounts: [{ email: "you@example.test", status: "ok" }],
+  accounts: [{ id: "agent-proxy/accounts:a1", email: "you@example.test", status: "ok" }],
   models: [{ id: "claude-opus", name: "Claude Opus" }],
   createdAt: 1,
 };
