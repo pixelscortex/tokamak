@@ -8,6 +8,9 @@ import { titleOf } from "./format";
 
 export type Profile = ProfileView;
 
+/** What a person reads when a change could not reach the server. */
+export const UNSAVED = "That change did not save. Try again.";
+
 /**
  * The Profiles section's state, shared by the subscription cards above it and
  * the profile boxes: the person's profiles, what is being dragged or offered,
@@ -27,8 +30,18 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
   /** The subscription whose card's "Add to profile" menu is open: the keyboard's drag. */
   const [offered, setOffered] = createSignal<string>();
   const [problem, setProblem] = createSignal<string>();
-  /** The last change, for the polite live region. */
-  const [said, say] = createSignal("");
+  /**
+   * The last change, for the polite live region. The region is emptied first
+   * and filled on the next frame, so the same sentence twice is read twice.
+   */
+  const [said, setSaid] = createSignal("");
+  let saying = 0;
+  const say = (message: string) => {
+    const turn = ++saying;
+    setSaid("");
+    requestAnimationFrame(() => turn === saying && setSaid(message));
+  };
+  onCleanup(() => void ++saying);
 
   const drag = createDrag((carry, over) => void drop(carry, over));
 
@@ -109,8 +122,10 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
       focusAgain();
       return true;
     } catch {
+      // Nothing is drawn ahead of the server, so the list already shows its state.
       refocus = undefined;
-      setProblem("That change did not save. Try again.");
+      setProblem(UNSAVED);
+      say(UNSAVED);
       return false;
     }
   }
@@ -158,11 +173,18 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     void add(profile.id, carry.subscription, over.index);
   }
 
+  /** Makes a profile; a call that throws comes back as a failure the dialog shows, like a refusal. */
   async function create(name: string, code: string) {
     setProblem(undefined);
-    const made = await client.mutation(api.profiles.create, { name, code });
-    if (!isFailure(made)) say(`Profile ${made.code} made.`);
-    return made;
+    try {
+      const made = await client.mutation(api.profiles.create, { name, code });
+      if (isFailure(made)) say((made.data as { message?: string } | undefined)?.message ?? UNSAVED);
+      else say(`Profile ${made.code} made.`);
+      return made;
+    } catch {
+      say(UNSAVED);
+      return { failed: true as const, kind: "Unsaved", data: { message: UNSAVED } };
+    }
   }
 
   return {

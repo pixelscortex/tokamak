@@ -5,7 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
-import type { Profile } from "../src/client/lib/builder";
+import { UNSAVED, type Profile } from "../src/client/lib/builder";
 import { Profiles } from "../src/client/pages/profiles";
 
 // The Profiles section on the Profiles screen, with a stand-in server that
@@ -41,6 +41,9 @@ let profiles: Profile[] = [];
 const calls: [string, Record<string, unknown>][] = [];
 /** A failure to answer the next `create` with, as the server would. */
 let refuseCreate: JsonValue | undefined;
+/** Calls that throw instead of answering, as when the connection drops; and one to hold open. */
+const broken = new Set<string>();
+let hold: Promise<void> | undefined;
 const listeners = new Map<string, Set<() => void>>();
 const push = () => {
   for (const send of listeners.get("ai-profiles/profiles:list") ?? []) send();
@@ -85,7 +88,14 @@ function serve(name: string, args: Record<string, unknown>): JsonValue {
 }
 
 function client(): TokamakClient {
-  const call = async (name: string, args: JsonValue) => serve(name, args as Record<string, unknown>);
+  const call = async (name: string, args: JsonValue) => {
+    if (hold && name.endsWith(":create")) await hold;
+    if (broken.has(name)) {
+      calls.push([name, args as Record<string, unknown>]);
+      throw new Error("connection lost");
+    }
+    return serve(name, args as Record<string, unknown>);
+  };
   const transport: ClientTransport = {
     query: call,
     mutation: call,
@@ -130,6 +140,8 @@ afterEach(async () => {
   listeners.clear();
   calls.length = 0;
   refuseCreate = undefined;
+  broken.clear();
+  hold = undefined;
 });
 
 const profile = (id: string, code: string, name: string, subscriptions: string[] = []): Profile => ({
@@ -364,4 +376,54 @@ test("a card's menu adds it to a profile from the keyboard; one that holds it sa
   );
   await waitFor(() => expect(within(article("Claude Pro, Personal")).getByText("SBOX")).toBeTruthy());
   expect(box("PERS").hasAttribute("data-added")).toBe(false);
+});
+
+test("a create that cannot reach the server keeps the dialog, its fields and Create, which is off while it runs", async () => {
+  const user = userEvent.setup({ document });
+  const section = await mount();
+  await user.click(within(section).getByRole("button", { name: "New profile" }));
+  const dialog = await screen.findByRole("dialog", { name: "New profile" });
+  await user.type(within(dialog).getByRole("textbox", { name: "Name" }), "Personal");
+  await user.type(within(dialog).getByRole("textbox", { name: "Code" }), "pers");
+  const create = within(dialog).getByRole("button", { name: "Create" });
+
+  let release = () => {};
+  hold = new Promise((done) => (release = done));
+  broken.add("ai-profiles/profiles:create");
+  await user.click(create);
+  await waitFor(() =>
+    expect(create.hasAttribute("disabled") || create.getAttribute("aria-disabled") === "true").toBe(true),
+  );
+  // A second press while it runs sends nothing more.
+  await user.keyboard("{Enter}");
+  release();
+  expect((await within(dialog).findByRole("alert")).textContent).toBe(UNSAVED);
+  expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("Personal");
+  expect((within(dialog).getByRole("textbox", { name: "Code" }) as HTMLInputElement).value).toBe("PERS");
+  await waitFor(() => expect(create.hasAttribute("disabled")).toBe(false));
+  expect(calls.filter(([name]) => name.endsWith(":create"))).toHaveLength(1);
+});
+
+test("a change that cannot reach the server is announced each time, and the list stays as the server has it", async () => {
+  await mount([profile("p1", "PERS", "Personal", [work.id])]);
+  const pers = box("PERS");
+  const region = document.querySelector('[aria-live="polite"]')!;
+  const heard: string[] = [];
+  new MutationObserver(() => heard.push(region.textContent ?? "")).observe(region, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+  broken.add("ai-profiles/profiles:add");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    drag(article("Claude Pro, Personal"), pers, 50).drop();
+    await waitFor(() => expect(heard.filter((text) => text === UNSAVED)).toHaveLength(attempt + 1));
+  }
+  // Emptied between the two tellings, so a reader hears the same sentence again.
+  expect(heard.slice(heard.indexOf(UNSAVED) + 1, heard.lastIndexOf(UNSAVED))).toContain("");
+  expect(
+    within(pers)
+      .getAllByRole("listitem")
+      .map((item) => item.getAttribute("aria-label")),
+  ).toEqual(["1. Claude Max, Work"]);
 });
