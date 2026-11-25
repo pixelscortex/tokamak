@@ -12,6 +12,15 @@ impl Server {
         wait.await.map_err(|_| Error::Closed)?
     }
 
+    /// Snapshot of the active triggers on a qualified table, in execution order.
+    pub async fn table_triggers(&self, table: &str) -> Result<Vec<Json>, Error> {
+        let metadata = self.plugins().await?;
+        Ok(metadata["triggers"][table]
+            .as_array()
+            .cloned()
+            .unwrap_or_default())
+    }
+
     /// Core-only discovery for sign-in before a session exists. No request
     /// or session command exposes provider actions to windows.
     pub async fn sign_in_methods(&self) -> Result<Vec<crate::plugins::SignInMethod>, Error> {

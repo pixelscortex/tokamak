@@ -4,7 +4,14 @@ import type { JsonValue } from "./values";
 
 export const MAX_WIRE_MESSAGE_BYTES = 1048576;
 
-export type CallErrorDetails = { plugin: string; hook: string; stage: string; kind: string; data: JsonValue };
+export type CallErrorDetails = {
+  plugin: string;
+  hook: string;
+  stage: string;
+  kind: string;
+  data: JsonValue;
+  table?: string;
+};
 
 export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }

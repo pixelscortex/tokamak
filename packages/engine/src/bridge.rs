@@ -65,7 +65,7 @@ impl From<crate::Error> for CallError {
 }
 
 pub trait StageExecutor {
-    fn run(&self, call: ModuleCall) -> CallFuture<'_>;
+    fn run(&self, call: ModuleCall, charge: bool) -> CallFuture<'_>;
 }
 
 pub trait CallTransforms: Send + Sync {
@@ -85,11 +85,14 @@ type StructuredOpFuture = Pin<Box<dyn Future<Output = Result<Json, CallError>> +
 type CompleteModule = Box<dyn FnOnce(Json) -> OpFuture + Send>;
 type OpenModule = Pin<Box<dyn Future<Output = Result<CompleteModule, String>> + Send>>;
 
+type StagedOperation = dyn for<'a> Fn(&'a dyn StageExecutor, Json) -> CallFuture<'a> + Send + Sync;
+
 enum Op {
     Sync(Box<dyn Fn(Json) -> OpResult + Send + Sync>),
     Async(Box<dyn Fn(Json) -> OpFuture + Send + Sync>),
     Call(Box<dyn Fn(Json) -> StructuredOpFuture + Send + Sync>),
     Module(Box<dyn Fn(Json) -> Result<ModuleCall, CallError> + Send + Sync>),
+    Staged(Arc<StagedOperation>),
 }
 
 /// Native-resolved module delegation in the same world and invocation lease.
@@ -226,6 +229,15 @@ impl OpRegistry {
         )
     }
 
+    /// Run an operation that may invoke transaction stages in the current world.
+    pub fn register_staged(
+        &mut self,
+        name: impl Into<String>,
+        op: impl for<'a> Fn(&'a dyn StageExecutor, Json) -> CallFuture<'a> + Send + Sync + 'static,
+    ) -> Result<(), crate::Error> {
+        self.insert(name.into(), Op::Staged(Arc::new(op)))
+    }
+
     pub fn register_call<F, Fut>(
         &mut self,
         name: impl Into<String>,
@@ -340,8 +352,8 @@ struct Lease {
     active: Arc<AtomicBool>,
     deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
-    hook_modules: Arc<AtomicU64>,
-    in_hook: bool,
+    stage_modules: Arc<AtomicU64>,
+    in_stage: bool,
     sequence: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
@@ -353,8 +365,8 @@ impl Lease {
             active: invocation.active.clone(),
             deadline: invocation.deadline,
             modules: Arc::default(),
-            hook_modules: Arc::default(),
-            in_hook: false,
+            stage_modules: Arc::default(),
+            in_stage: false,
             sequence: Arc::default(),
             depth: 0,
             determinism: invocation.determinism,
@@ -368,10 +380,10 @@ struct Executor<'js> {
 }
 
 impl StageExecutor for Executor<'_> {
-    fn run(&self, call: ModuleCall) -> CallFuture<'_> {
+    fn run(&self, call: ModuleCall, charge: bool) -> CallFuture<'_> {
         let mut lease = self.lease.clone();
-        lease.in_hook = true;
-        Box::pin(invoke_module(self.ctx.clone(), call, lease, false))
+        lease.in_stage = true;
+        Box::pin(invoke_module(self.ctx.clone(), call, lease, charge))
     }
 }
 
@@ -466,6 +478,17 @@ fn install_leased<'js>(
                         })?
                         .into_value())
                     }
+                    Op::Staged(op) => {
+                        let op = op.clone();
+                        let executor = Executor {
+                            ctx: ctx.clone(),
+                            lease: lease.clone(),
+                        };
+                        Ok(
+                            Promise::wrap_future(&ctx, await_staged(executor, op, args))?
+                                .into_value(),
+                        )
+                    }
                     Op::Call(_) => Err(Exception::throw_message(
                         &ctx,
                         "operation requires an action process",
@@ -489,16 +512,16 @@ async fn invoke_module<'js>(
     ctx: Ctx<'js>,
     mut call: ModuleCall,
     mut lease: Lease,
-    delegated: bool,
+    charge: bool,
 ) -> Result<Json, CallError> {
-    let modules = if lease.in_hook {
-        &lease.hook_modules
+    let modules = if lease.in_stage {
+        &lease.stage_modules
     } else {
         &lease.modules
     };
     let limit = if lease.depth >= 16 {
         Some(CallLimit::Depth)
-    } else if delegated && modules.fetch_add(1, Ordering::Relaxed) >= 256 {
+    } else if charge && modules.fetch_add(1, Ordering::Relaxed) >= 256 {
         Some(CallLimit::Modules)
     } else {
         None
@@ -585,7 +608,7 @@ fn throw_call(ctx: &Ctx<'_>, error: CallError) -> rquickjs::Error {
         if let Some(details) = &error.details {
             let value = encode(ctx, details.clone())?;
             if let Some(fields) = value.as_object() {
-                for key in ["plugin", "hook", "stage", "kind", "data"] {
+                for key in ["plugin", "hook", "stage", "kind", "data", "table"] {
                     exception
                         .as_object()
                         .set(key, fields.get::<_, Value>(key)?)?;
@@ -610,6 +633,25 @@ fn module_error(
     name: &str,
 ) -> CallError {
     crate::engine::js_error_named(ctx, error, bundle, false, name).into()
+}
+
+async fn await_staged<'js>(
+    executor: Executor<'js>,
+    op: Arc<StagedOperation>,
+    args: Json,
+) -> rquickjs::Result<Value<'js>> {
+    let Executor { ctx, lease } = &executor;
+    let mut future = op(&executor, args);
+    let result = std::future::poll_fn(|cx| {
+        check(ctx, &lease.active, lease.deadline)?;
+        future
+            .as_mut()
+            .poll(cx)
+            .map(|result| result.map_err(|e| throw_call(ctx, e)))
+    })
+    .await?;
+    check(ctx, &lease.active, lease.deadline)?;
+    encode(ctx, result)
 }
 
 async fn await_operation<'js>(

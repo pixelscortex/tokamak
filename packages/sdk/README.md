@@ -835,3 +835,53 @@ Removing the hooking plugin removes its hooks. A hook whose target is gone
 is skipped with a server warning.
 
 Hooks currently target public queries only. Mutations, actions, internal functions, and plugin-only functions are not supported.
+
+## Run code when a table changes
+
+Export a trigger from your plugin's server part. The owner doesn't need to
+register the trigger or call it from its mutations.
+
+```ts
+import { createTrigger } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+import schema from "./schema";
+
+const trigger = createTrigger(schema);
+
+export const logThread = trigger(chat.tables.threads, async (ctx, change) => {
+  if (change.operation === "insert") {
+    await ctx.db.insert("threadLog", { thread: change.id, title: change.newDoc.title });
+  }
+});
+```
+
+Declare `chat` in `depends` to watch its tables. To watch one of your
+own tables, pass its name to the builder returned by `createTrigger(schema)`,
+for example `trigger("threadLog", handler)`. You can import `trigger` directly
+to watch another plugin's table when you don't need a schema for your own
+database. The table determines the types of `id`, `oldDoc`, and `newDoc`.
+Insert has a null `oldDoc`, delete has a null `newDoc`, and update has both.
+
+A trigger runs after the write is applied and before the database call returns,
+inside the same transaction. It runs for writes from any mutation, including
+writes made by another trigger. It gets the original caller in `ctx.auth`
+and the same call note at one greater depth in `ctx.call`. Its writable
+`ctx.db` contains only its own plugin's tables. Call the owner's functions
+to read or change the owner's data.
+
+Deletes run one trigger chain per deleted row, including rows removed by
+`v.ref` cascades. The database applies the cascade before dispatching those
+triggers and dispatches the parent before the rows that reference it. Patch
+or replace that leaves the stored document unchanged, deleting an absent row,
+schema resets, and startup index backfills do not run triggers.
+
+If a trigger throws, the whole transaction rolls back, even if the writing
+mutation catches the exception. The caller's error identifies `plugin`,
+`hook` (the trigger export name), `stage: "trigger"`, and `table`. Its message
+also lists the registered triggers for that table. Loops are stopped by the
+call note depth limit, and trigger stages and calls they make share the same
+delegation budget as hook stages.
+
+The server's plugin catalog lists active triggers under `triggers`, keyed by
+qualified table name. A trigger whose table is missing is skipped with a
+warning. Removing the trigger plugin removes its registrations.

@@ -206,49 +206,98 @@ impl QueryHooks {
         note: CallNote,
         input: Json,
     ) -> Result<Json, engine::CallError> {
-        let scope = CallScope::default();
-        let tx = self.tx.hook_scope();
-        let ops = operations(
-            tx.clone(),
-            hook.space.clone(),
-            false,
-            Some((self.plugins.clone(), hook.owner.clone())),
-            CallContext {
-                determinism: None,
-                note,
-                scope: scope.clone(),
-                qualified: None,
-            },
-        );
-        let label = Arc::new(CallError::hook(
+        let label = CallError::hook(
             &hook.owner,
             &hook.name,
             stage.name(),
             "hookTimeout",
             Json::Null,
             &self.target.name,
-        ));
-        let call = ModuleCall::new(hook.bundle.clone(), "invoke_hook", input, ops, |_| {});
-        let active = &self.tx.active_hooks;
-        active
-            .lock()
-            .expect("active hooks lock")
-            .push(label.clone());
-        let value = executor.run(call).await;
-        active
-            .lock()
-            .expect("active hooks lock")
-            .retain(|entry| !Arc::ptr_eq(entry, &label));
-        scope.close().await;
-        let observed = tx.observations.lock().await;
-        let failure = tx.failure.lock().expect("failure lock");
-        if let Some(error) = &observed.error {
-            Err(error.clone().into())
-        } else if let Some(error) = failure.as_ref() {
-            Err(error.clone())
-        } else {
-            value
-        }
+        );
+        execute_stage(
+            executor,
+            &self.tx,
+            &self.plugins,
+            StageCall {
+                owner: &hook.owner,
+                space: &hook.space,
+                bundle: &hook.bundle,
+                kind: StageKind::QueryHook,
+                note,
+                input,
+                label,
+            },
+        )
+        .await
+    }
+}
+
+pub(super) enum StageKind {
+    QueryHook,
+    Trigger,
+}
+
+pub(super) struct StageCall<'a> {
+    pub owner: &'a str,
+    pub space: &'a DataSpace,
+    pub bundle: &'a Arc<Bundle>,
+    pub kind: StageKind,
+    pub note: CallNote,
+    pub input: Json,
+    pub label: engine::CallError,
+}
+
+pub(super) async fn execute_stage(
+    executor: &dyn StageExecutor,
+    parent: &TransactionContext,
+    plugins: &Arc<Loaded>,
+    stage: StageCall<'_>,
+) -> Result<Json, engine::CallError> {
+    let (export, writable, charge) = match stage.kind {
+        StageKind::QueryHook => ("invoke_hook", false, false),
+        StageKind::Trigger => ("invoke_trigger", true, true),
+    };
+    let scope = CallScope::default();
+    let tx = parent.stage_scope();
+    let ops = operations(
+        tx.clone(),
+        stage.space.clone(),
+        writable,
+        Some((plugins.clone(), stage.owner.to_owned())),
+        CallContext {
+            determinism: None,
+            note: stage.note,
+            scope: scope.clone(),
+            qualified: None,
+        },
+    );
+
+    let label = Arc::new(stage.label);
+    let active = &parent.active_stages;
+    active
+        .lock()
+        .expect("active stages lock")
+        .push(label.clone());
+
+    let call = ModuleCall::new(stage.bundle.clone(), export, stage.input, ops, |_| {});
+    let value = executor.run(call, charge).await;
+
+    active
+        .lock()
+        .expect("active stages lock")
+        .retain(|entry| !Arc::ptr_eq(entry, &label));
+    scope.close().await;
+    let observed = tx.observations.lock().await;
+    if observed.conflict && writable {
+        parent.observations.lock().await.conflict = true;
+    }
+    let failure = tx.failure.lock().expect("failure lock");
+    if let Some(error) = &observed.error {
+        Err(error.clone().into())
+    } else if let Some(error) = failure.as_ref() {
+        Err(error.clone())
+    } else {
+        value
     }
 }
 

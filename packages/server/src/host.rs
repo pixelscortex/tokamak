@@ -20,7 +20,8 @@ struct TransactionContext {
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
-    active_hooks: Arc<std::sync::Mutex<Vec<Arc<engine::CallError>>>>,
+    trigger_failure: Failure,
+    active_stages: Arc<std::sync::Mutex<Vec<Arc<engine::CallError>>>>,
     reads: Arc<Mutex<ReadSet>>,
 }
 
@@ -30,7 +31,8 @@ impl TransactionContext {
             shared: Arc::new(Mutex::new(Some(tx))),
             observations: Arc::default(),
             failure: Arc::default(),
-            active_hooks: Arc::default(),
+            trigger_failure: Arc::default(),
+            active_stages: Arc::default(),
             reads: Arc::default(),
         }
     }
@@ -39,7 +41,14 @@ impl TransactionContext {
         *self.failure.lock().expect("failure lock") = Some(error);
     }
 
-    fn hook_scope(&self) -> Self {
+    fn trigger_failed(&self) -> Option<engine::CallError> {
+        self.trigger_failure
+            .lock()
+            .expect("trigger failure lock")
+            .clone()
+    }
+
+    fn stage_scope(&self) -> Self {
         Self {
             observations: Arc::default(),
             failure: Arc::default(),
@@ -49,9 +58,13 @@ impl TransactionContext {
 
     fn call_error(&self, error: engine::Error) -> CallError {
         if matches!(error, engine::Error::Timeout { phase: "call" })
-            && let Some(hook) = self.active_hooks.lock().expect("active hooks lock").last()
+            && let Some(stage) = self
+                .active_stages
+                .lock()
+                .expect("active stages lock")
+                .last()
         {
-            return (**hook).clone().into();
+            return (**stage).clone().into();
         }
         engine::CallError::from(error).into()
     }
@@ -162,6 +175,11 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
     let mut observed = context.observations.lock().await;
 
+    let result = if let Some(error) = context.trigger_failed() {
+        Err(error.into())
+    } else {
+        result
+    };
     let result = result.and_then(|value| {
         let nested = context.failure.lock().expect("failure lock");
 
@@ -259,19 +277,20 @@ fn operations(
     graph: Graph,
     context: CallContext,
 ) -> Arc<OpRegistry> {
+    let mut ops = OpRegistry::new();
+    database_operations::register(&mut ops, &tx, &context, space, writable, &graph);
+
     let CallContext {
         note,
         determinism,
         scope,
         qualified,
     } = context;
-    let mut ops = OpRegistry::new();
     note.register(&mut ops).expect("unique operation");
 
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
     }
-    database_operations::register(&mut ops, tx.clone(), scope.clone(), space, writable);
 
     if let Some((plugins, owner)) = graph {
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
@@ -354,6 +373,7 @@ use database_operations::{field, text};
 
 mod database_queries;
 pub(crate) mod hooks;
+pub(crate) mod triggers;
 
 mod process_frames;
 

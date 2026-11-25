@@ -60,7 +60,10 @@ export function functionPlacement(root, selected, namespace) {
   const program = ts.createProgram(files.sort(), pluginCompilerOptions(root, options ?? {}));
   const checker = program.getTypeChecker();
   const modules = new Map();
-  const hookType = (type) => type.getProperties().some((p) => p.name.startsWith("__@hookBrand@"));
+  const stageKind = (type) =>
+    ["hook", "trigger"].find((kind) =>
+      type.getProperties().some((p) => p.name.startsWith(`__@${kind}Brand@`)),
+    );
   const providers = discoverProviders(root, files, program, checker);
   for (const path of files) {
     if (path === resolve(src, "server/api.ts")) continue;
@@ -72,7 +75,12 @@ export function functionPlacement(root, selected, namespace) {
       if (!runtime.has(value.name)) continue;
       const definition = definitionInfo(checker, value, source);
       const type = checker.getTypeOfSymbolAtLocation(value, source);
-      if (hookType(type)) {
+      const stage = stageKind(type);
+      if (stage === "trigger") {
+        if (["client", "local"].some((part) => path.startsWith(resolve(src, part) + sep)))
+          throw new Error("Triggers must be exported from the plugin's server part");
+        exports.set(value.name, { kind: stage });
+      } else if (stage === "hook") {
         if (path.startsWith(resolve(src, "client") + sep))
           throw new Error("Hooks must be exported from the plugin's server part");
         const reference = checker.getTypeOfSymbolAtLocation(type.getProperty("reference"), source);
@@ -123,7 +131,7 @@ export function functionPlacement(root, selected, namespace) {
       }
       if (!erased && ts.isVariableDeclaration(node) && node.initializer) {
         const type = checker.getTypeAtLocation(node.initializer);
-        const target = hookType(type) ? "hook" : definitionTypeInfo(checker, type, node)?.kind;
+        const target = stageKind(type) ?? definitionTypeInfo(checker, type, node)?.kind;
         if (target && !lane.keep(target)) {
           cuts.push([node.initializer.getStart(file), node.initializer.end, "undefined"]);
           references(node.initializer, discard, true);
@@ -312,7 +320,7 @@ export function registrySource({
     );
   return (
     header +
-    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, createHookRegistry, hookMetadata, invokeHook, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
+    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, createHookRegistry, hookMetadata, invokeHook, createTriggerRegistry, triggerMetadata, invokeTrigger, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
     (serverData.length ? 'import {contractData} from "@tokamak/sdk/internal/contracts";\n' : "") +
     definitions +
     "\n" +
@@ -325,9 +333,11 @@ export function registrySource({
         : "functionMetadata(functions)"
     };\n` +
     `const hooks = createHookRegistry({${entries.join(",")}});\n` +
-    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), results: ${JSON.stringify(results ?? {})}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
+    `const triggers = createTriggerRegistry({${entries.join(",")}});\n` +
+    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), triggers: triggerMetadata(triggers), results: ${JSON.stringify(results ?? {})}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
     "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n" +
-    "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n"
+    "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n" +
+    "export const invoke_trigger = (request: Parameters<typeof invokeTrigger>[1], host: HostBridge) => invokeTrigger(triggers, request, host);\n"
   );
 }
 

@@ -73,6 +73,7 @@ impl Loaded {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
+            triggers: Default::default(),
             query_hooks: BTreeMap::new(),
             transaction_bundles: BTreeMap::new(),
             descriptor: Value::Null,
@@ -431,7 +432,77 @@ impl Loaded {
         Ok(())
     }
 
+    fn register_triggers(&mut self) -> Result<(), Error> {
+        use crate::{
+            data::Table,
+            host::triggers::{TableTriggers, Trigger, TriggerRegistry},
+        };
+
+        let mut registry = TriggerRegistry::new();
+        for (owner, inspected) in &self.inspected {
+            let Some(triggers) = inspected.descriptor.get("triggers") else {
+                continue;
+            };
+            let triggers = triggers
+                .as_array()
+                .ok_or_else(|| invalid("Expected a list of triggers"))?;
+            for trigger in triggers {
+                let name = trigger["name"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing trigger name"))?;
+                let table = trigger["table"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing trigger table"))?;
+                let (target, table) = table.rsplit_once('.').unwrap_or((owner, table));
+                let qualified = format!("{target}.{table}");
+                if target != owner
+                    && !self.catalog.plugins[owner]
+                        .manifest
+                        .plugin
+                        .depends
+                        .contains_key(target)
+                {
+                    eprintln!("Skipping trigger {owner}/{name}: {target} is not in depends");
+                    continue;
+                }
+                if !self
+                    .inspected
+                    .get(target)
+                    .is_some_and(|entry| entry.descriptor["schema"]["tables"].get(table).is_some())
+                {
+                    eprintln!("Skipping trigger {owner}/{name}: table {qualified} is missing");
+                    continue;
+                }
+
+                let space =
+                    DataSpace::plugin(target).map_err(|error| invalid(error.to_string()))?;
+                let physical = Table::new(table)
+                    .and_then(|table| space.table(&table))
+                    .map_err(|error| invalid(error.to_string()))?;
+                registry
+                    .entry(physical)
+                    .or_insert_with(|| TableTriggers {
+                        name: qualified,
+                        space,
+                        handlers: Vec::new(),
+                    })
+                    .handlers
+                    .push(Trigger {
+                        owner: owner.clone(),
+                        name: name.to_owned(),
+                        bundle: self.transaction_bundles[owner].clone(),
+                        space: DataSpace::plugin(owner)
+                            .map_err(|error| invalid(error.to_string()))?,
+                    });
+            }
+        }
+
+        self.triggers = registry;
+        Ok(())
+    }
+
     fn update_metadata(&mut self) -> Result<(), Error> {
+        self.register_triggers()?;
         // Keep logical table names scoped by plugin in the aggregate metadata.
         let schemas: BTreeMap<_, _> = self
             .inspected
@@ -455,10 +526,16 @@ impl Loaded {
                 )
             })
             .collect();
-        self.descriptor = json!({"schema":schemas,"functions":functions});
+        let triggers: BTreeMap<_, _> = self
+            .triggers
+            .values()
+            .map(|table| (&table.name, table.list()))
+            .collect();
+        self.descriptor = json!({"schema":schemas,"functions":functions,"triggers":triggers});
         let mut metadata = self.catalog.metadata();
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
+        metadata["triggers"] = self.descriptor["triggers"].clone();
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }

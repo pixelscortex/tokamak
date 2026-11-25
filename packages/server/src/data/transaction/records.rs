@@ -74,6 +74,14 @@ impl Transaction {
     /// Mutations that error or are dropped after polling poison the transaction.
     /// Only rollback is then allowed; commit discards all staged writes.
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
+        self.insert_document(table, value).await.map(|row| row.id)
+    }
+
+    pub(crate) async fn insert_document(
+        &mut self,
+        table: &Table,
+        value: Object,
+    ) -> Result<Document> {
         self.create(table, None, value).await
     }
 
@@ -81,10 +89,12 @@ impl Transaction {
     /// JavaScript capability; keyed insertion rejects duplicates and poisons the
     /// transaction rather than silently replacing existing data.
     pub(crate) async fn insert_keyed(&mut self, id: &Id, value: Object) -> Result<Id> {
-        self.create(id.table(), Some(id), value).await
+        self.create(id.table(), Some(id), value)
+            .await
+            .map(|row| row.id)
     }
 
-    async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Id> {
+    async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Document> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -114,7 +124,7 @@ impl Transaction {
             let rid = id.record();
 
             let row = Document {
-                id: id.clone(),
+                id,
                 creation_time: millis,
                 fields,
             };
@@ -138,21 +148,26 @@ impl Transaction {
             tx.written.insert(table.clone());
             tx.record(None, Some(&row));
 
-            Ok(id)
+            Ok(row)
         }
         .await;
         mutation.finish(result)
     }
 
     pub async fn patch(&mut self, id: &Id, value: Object) -> Result<()> {
-        self.update(id, value, false).await
+        self.update(id, value, false).await.map(drop)
     }
 
     pub async fn replace(&mut self, id: &Id, value: Object) -> Result<()> {
-        self.update(id, value, true).await
+        self.update(id, value, true).await.map(drop)
     }
 
-    async fn update(&mut self, id: &Id, value: Object, replace: bool) -> Result<()> {
+    pub(crate) async fn update(
+        &mut self,
+        id: &Id,
+        value: Object,
+        replace: bool,
+    ) -> Result<Option<(Document, Document)>> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -178,7 +193,7 @@ impl Transaction {
             };
 
             if fields == old.fields {
-                return Ok(());
+                return Ok(None);
             }
             tx.catalog(false)?;
 
@@ -206,7 +221,7 @@ impl Transaction {
             tx.written.insert(id.table().clone());
             tx.record(Some(&old), Some(&persisted));
 
-            Ok(())
+            Ok(Some((old, persisted)))
         }
         .await;
         mutation.finish(result)

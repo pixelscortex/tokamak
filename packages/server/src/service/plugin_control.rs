@@ -10,6 +10,7 @@ impl Coordinator {
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
+        metadata["triggers"] = plugins.descriptor["triggers"].clone();
         metadata["skipped"] = serde_json::json!(plugins.skipped);
 
         Ok(metadata)

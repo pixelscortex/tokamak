@@ -1,13 +1,18 @@
-use super::*;
+use super::{
+    triggers::{Change, TriggerRegistry},
+    *,
+};
+use crate::plugins::Loaded;
 
 pub(super) fn register(
     ops: &mut OpRegistry,
-    tx: TransactionContext,
-    scope: CallScope,
+    tx: &TransactionContext,
+    context: &CallContext,
     space: DataSpace,
     writable: bool,
+    graph: &Graph,
 ) {
-    for operation in [
+    for name in [
         "db.get",
         "db.query",
         "db.insert",
@@ -15,67 +20,108 @@ pub(super) fn register(
         "db.replace",
         "db.delete",
     ] {
-        let tx = tx.clone();
+        let write = !matches!(name, "db.get" | "db.query");
+        let op = DatabaseOperation {
+            tx: tx.clone(),
+            space: space.clone(),
+            scope: context.scope.clone(),
+            allowed: !write || writable,
+            name,
+        };
 
-        let space = space.clone();
-
-        let scope = scope.clone();
-        ops.register_async(operation, move |payload| {
-            let scope_tx = tx.clone();
-
-            let space = space.clone();
-
-            let scope = scope.clone();
-            // This future is polled directly, never detached on another executor.
-            // Runtime retirement drops it before replying; taking the Option below
-            // revokes even retained callbacks before commit/rollback can start.
-            Box::pin(async move {
-                let _scope = scope.enter().await?;
-                let mut guard = scope_tx.shared.lock().await;
-
-                let tx = guard.as_mut().ok_or("invocation transaction is finished")?;
-
-                let observed = scope_tx.observations.lock().await;
-
-                if observed.error.is_some()
-                    || scope_tx.failure.lock().expect("failure lock").is_some()
-                {
-                    return Err("an earlier host operation failed".into());
-                }
-
-                let mut lease = Operation {
-                    observed,
-                    completed: false,
-                };
-
-                let result = if !writable && !["db.get", "db.query"].contains(&operation) {
-                    Err(data::Error::AccessDenied)
-                } else {
-                    Box::pin(operation_call(
-                        tx,
-                        &mut *scope_tx.reads.lock().await,
-                        &space,
-                        operation,
-                        payload,
-                    ))
-                    .await
-                };
-                lease.completed = true;
-
-                match result {
-                    Ok(value) => Ok(value),
-                    Err(error) => {
-                        lease.observed.conflict |= error.is_retryable_conflict();
-
-                        let message = error.to_string();
-                        lease.observed.error = Some(message.clone());
-
-                        Err(message)
-                    }
-                }
+        if let Some((plugins, _)) = graph
+            .as_ref()
+            .filter(|(plugins, _)| writable && write && !plugins.triggers.is_empty())
+        {
+            let plugins = plugins.clone();
+            let note = context.note.clone();
+            ops.register_staged(name, move |executor, payload| {
+                Box::pin(
+                    op.clone()
+                        .run_staged(executor, payload, plugins.clone(), note.clone()),
+                )
             })
-        })
+        } else {
+            ops.register_async(name, move |payload| {
+                let op = op.clone();
+                Box::pin(async move {
+                    let _scope = op.scope.clone().enter().await?;
+                    op.apply(payload, None).await.map(|(value, _)| value)
+                })
+            })
+        }
         .expect("fixed unique operation names");
+    }
+}
+
+#[derive(Clone)]
+struct DatabaseOperation {
+    tx: TransactionContext,
+    scope: CallScope,
+    space: DataSpace,
+    allowed: bool,
+    name: &'static str,
+}
+
+impl DatabaseOperation {
+    async fn run_staged(
+        self,
+        executor: &dyn engine::StageExecutor,
+        payload: Json,
+        plugins: Arc<Loaded>,
+        note: CallNote,
+    ) -> Result<Json, engine::CallError> {
+        let _scope = self.scope.clone().enter().await?;
+        let (value, changes) = self.apply(payload, Some(&plugins.triggers)).await?;
+        for change in changes {
+            change.run(executor, &plugins, &self.tx, &note).await?;
+        }
+        Ok(value)
+    }
+
+    async fn apply<'a>(
+        &self,
+        payload: Json,
+        triggers: Option<&'a TriggerRegistry>,
+    ) -> Result<(Json, Vec<Change<'a>>), String> {
+        let mut guard = self.tx.shared.lock().await;
+        let tx = guard.as_mut().ok_or("invocation transaction is finished")?;
+        let observed = self.tx.observations.lock().await;
+
+        if observed.error.is_some() || self.tx.failure.lock().expect("failure lock").is_some() {
+            return Err("an earlier host operation failed".into());
+        }
+
+        let mut lease = Operation {
+            observed,
+            completed: false,
+        };
+        let mut changes = Vec::new();
+        let result = if self.allowed {
+            Box::pin(operation_call(
+                tx,
+                &mut *self.tx.reads.lock().await,
+                &self.space,
+                self.name,
+                payload,
+                triggers,
+                &mut changes,
+            ))
+            .await
+        } else {
+            Err(data::Error::AccessDenied)
+        };
+        lease.completed = true;
+
+        match result {
+            Ok(value) => Ok((value, changes)),
+            Err(error) => {
+                lease.observed.conflict |= error.is_retryable_conflict();
+                let message = error.to_string();
+                lease.observed.error = Some(message.clone());
+                Err(message)
+            }
+        }
     }
 }
 
@@ -92,12 +138,14 @@ pub(super) fn text<'a>(payload: &'a Json, key: &str) -> data::Result<&'a str> {
     ))
 }
 
-async fn operation_call(
+async fn operation_call<'a>(
     tx: &mut Transaction,
     reads: &mut ReadSet,
     space: &DataSpace,
     op: &str,
     payload: Json,
+    triggers: Option<&'a TriggerRegistry>,
+    changes: &mut Vec<Change<'a>>,
 ) -> data::Result<Json> {
     match op {
         "db.get" => {
@@ -115,25 +163,35 @@ async fn operation_call(
 
             let value = json_object(field(&payload, "value")?)?;
 
-            Ok(json!(
-                space.present_id(&Box::pin(tx.insert(&table, value)).await?)?
-            ))
+            let row = Box::pin(tx.insert_document(&table, value)).await?;
+            let id = space.present_id(&row.id)?;
+            if let Some(watched) = triggers.and_then(|registry| registry.get(&table)) {
+                changes.push(Change::record(watched, None, Some(row))?);
+            }
+            Ok(json!(id))
         }
-        "db.patch" | "db.replace" | "db.delete" => {
+        "db.delete" => {
             let id = space.id(text(&payload, "id")?)?;
-
-            if op == "db.delete" {
+            let Some(registry) = triggers else {
                 Box::pin(tx.delete(&id)).await?;
-            } else {
-                let value = json_object(field(&payload, "value")?)?;
-
-                if op == "db.patch" {
-                    Box::pin(tx.patch(&id, value)).await?;
-                } else {
-                    Box::pin(tx.replace(&id, value)).await?;
+                return Ok(Json::Null);
+            };
+            for row in Box::pin(tx.delete_documents(&id)).await? {
+                if let Some(watched) = registry.get(row.id.table()) {
+                    changes.push(Change::record(watched, Some(row), None)?);
                 }
             }
-
+            Ok(Json::Null)
+        }
+        "db.patch" | "db.replace" => {
+            let id = space.id(text(&payload, "id")?)?;
+            let value = json_object(field(&payload, "value")?)?;
+            let updated = Box::pin(tx.update(&id, value, op == "db.replace")).await?;
+            if let Some((old, new)) = updated
+                && let Some(watched) = triggers.and_then(|registry| registry.get(id.table()))
+            {
+                changes.push(Change::record(watched, Some(old), Some(new))?);
+            }
             Ok(Json::Null)
         }
         _ => unreachable!("registry contains only SDK operations"),

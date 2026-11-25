@@ -239,6 +239,7 @@ fn reference_generation(catalog: Catalog, target: &str) -> Loaded {
     .collect();
 
     Loaded {
+        triggers: Default::default(),
         query_hooks: BTreeMap::new(),
         transaction_bundles: BTreeMap::new(),
         catalog,
