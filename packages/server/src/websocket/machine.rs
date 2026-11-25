@@ -317,21 +317,22 @@ async fn connection(
     peer.stop().cancel();
     drop(registration);
     identity.seen(&adapter.identities, DeviceSocket::MachineClosed);
-    if revoked.is_cancelled() {
-        close(&mut socket, DEVICE_SIGNED_OUT, "Device signed out").await;
-    } else if replaced.is_cancelled() {
-        close(
-            &mut socket,
-            machine_wire::DUPLICATE,
-            "Machine already connected",
-        )
-        .await;
-    }
-    drop(socket);
+    finish_socket(socket, &revoked, &replaced).await;
     incoming.shutdown().await;
 }
 
-async fn close(socket: &mut WebSocket, code: u16, reason: &'static str) {
+async fn finish_socket(
+    mut socket: WebSocket,
+    revoked: &CancellationToken,
+    replaced: &CancellationToken,
+) {
+    let (code, reason) = if revoked.is_cancelled() {
+        (DEVICE_SIGNED_OUT, "Device signed out")
+    } else if replaced.is_cancelled() {
+        (machine_wire::DUPLICATE, "Machine already connected")
+    } else {
+        return;
+    };
     let close = Message::Close(Some(CloseFrame {
         code,
         reason: reason.into(),

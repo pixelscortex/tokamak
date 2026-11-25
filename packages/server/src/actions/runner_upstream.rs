@@ -181,14 +181,8 @@ impl RunnerActionUpstream {
         let ops = match &self.0 {
             Upstream::Embedded(ops) => ops,
             Upstream::Connected { peer, root, .. } => {
-                let route = self
-                    .request(
-                        "local.contract.route",
-                        serde_json::json!({
-                            "label": label, "args": payload,
-                        }),
-                    )
-                    .await?;
+                let request = serde_json::json!({"label": label, "args": payload});
+                let route = self.request("local.contract.route", request).await?;
                 let hash = |key: &str| {
                     route[key]
                         .as_str()
