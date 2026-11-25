@@ -4,7 +4,7 @@ Tokamak is a Rust server with TypeScript plugins and a Solid 2 web client in
 Tauri 2. The client skeleton lists and creates Chat threads. `/kit` holds
 ui-sdk controls. Compiler-built plugin views load through the server; the product shell is next.
 
-On a shared server, local functions use the matching plugin builds already installed on
+On a shared server, caller actions use the matching plugin builds already installed on
 each member's computer. Milestone 1 does not download those builds from the server.
 Only the creator can rename or delete a thread or run its agent. Other members can post text.
 
@@ -76,7 +76,7 @@ for reserved signing inputs; signing, notarization and publishing are absent.
 Build the **Runner** for the desktop app, real machines and sandboxes. On macOS
 and Linux, ship the full `tokamak-plugin-host` beside it. Do not run the Runner
 in Docker for deployment. On Windows, build only `tokamak-runner`.
-Local functions and server actions are unavailable on Windows.
+Caller actions and server actions are unavailable on Windows.
 
 ```sh
 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host

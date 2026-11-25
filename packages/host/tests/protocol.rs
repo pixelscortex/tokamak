@@ -141,7 +141,7 @@ async fn allocation_failure_does_not_stop_another_call() {
     host.invoke(2, "memory", json!({})).await;
     assert_eq!(
         host.receive().await["error"],
-        "Plugin local function ran out of memory"
+        "Plugin action ran out of memory"
     );
 
     host.send(json!({ "type": "opResult", "id": echo_op["id"], "value": null }))

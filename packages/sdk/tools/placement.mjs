@@ -15,7 +15,6 @@ import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
 import { resultValidator } from "./result-validator.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
-const serverFunction = () => true;
 export const runnerFunction = (kind) => kind === "action";
 export function runnerProvider(provider) {
   return localProvider(provider) || provider.methods.some((method) => runnerFunction(method.kind));
@@ -42,7 +41,7 @@ export const lanes = {
     provider: runnerProvider,
     method: runnerFunction,
   },
-  server: { keep: serverFunction, provider: serverProvider, method: serverFunction },
+  server: { provider: serverProvider },
   descriptor: {
     keep: transaction,
     provider: serverProvider,
@@ -130,7 +129,7 @@ export function functionPlacement(root, selected, namespace) {
         return;
       }
       const method = !erased && fields.get(node);
-      if (method && !lane.method(method.kind)) {
+      if (method && lane.method && !lane.method(method.kind)) {
         cuts.push([
           node.getStart(file),
           node.end,
@@ -142,7 +141,7 @@ export function functionPlacement(root, selected, namespace) {
       if (!erased && ts.isVariableDeclaration(node) && node.initializer) {
         const type = checker.getTypeAtLocation(node.initializer);
         const target = hookType(type) ? "hook" : definitionTypeInfo(checker, type, node)?.kind;
-        if (target && !lane.keep(target)) {
+        if (target && lane.keep && !lane.keep(target)) {
           cuts.push([node.initializer.getStart(file), node.initializer.end, "undefined"]);
           references(node.initializer, discard, true);
           return;
@@ -355,7 +354,9 @@ export function moduleName(root, file, organized) {
 
 export function placedModules(placement, root, organized, keep) {
   return [...placement.modules].flatMap(([path, exports]) => {
-    const names = [...exports].filter(([, definition]) => keep(definition.kind)).map(([name]) => name);
+    const names = keep
+      ? [...exports].filter(([, definition]) => keep(definition.kind)).map(([name]) => name)
+      : [...exports.keys()];
     return names.length ? [[path, moduleName(root, path, organized), names]] : [];
   });
 }
@@ -404,7 +405,7 @@ export function registrySource({
   );
   const targets = registrations.flatMap((p, i) =>
     (localProvider(p) ? [] : p.methods)
-      .filter((m) => lane.method(m.kind))
+      .filter((m) => lane.method?.(m.kind) !== false)
       .map(
         (m) =>
           `${JSON.stringify(contractTarget(p, m))}: provider${i}.implementation[${JSON.stringify(m.member)}]`,

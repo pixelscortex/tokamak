@@ -101,7 +101,7 @@ export interface HostOperations {
     args: {
       name: string;
       args: JsonValue;
-      kind?: import("./functions").ServerFunctionKind;
+      kind?: import("./functions").FunctionKind;
       contract?: string;
       on?: import("./functions").ActionTarget;
     };

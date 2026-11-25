@@ -81,7 +81,7 @@ test("a provider must declare its contract owner as a dependency", async () => {
   });
 }, 30_000);
 
-test("a local contract must declare every method as plain data", async () => {
+test("a caller contract must declare every method as plain data", async () => {
   await fixture(async (owner, provider) => {
     const path = join(owner, "src/contracts.ts");
     await writeFile(
@@ -92,7 +92,10 @@ test("a local contract must declare every method as plain data", async () => {
     );
     const result = build(provider);
     assert.notEqual(result.status, 0);
-    assert.match(result.stdout + result.stderr, /dataMethods must be true for caller contracts/);
+    assert.match(
+      result.stdout + result.stderr,
+      /requires dataMethods: true on QuickJS; non-data methods: live/,
+    );
   });
 }, 30_000);
 

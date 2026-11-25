@@ -465,7 +465,10 @@ async function checkRoutesAndBuilds(runner, hosts) {
     rawWindow(runner, replacement, handle),
   ]);
   try {
-    await assert.rejects(first.invoke("ping", null, false), /local\(\) was removed; use client\.action/);
+    await assert.rejects(
+      first.invoke("ping", null, false),
+      /local\(\) was removed: rebuild the plugin with action\(\{ on: "caller" \}\)/,
+    );
     assert.deepEqual(await Promise.all([first.invoke("ping", null), second.invoke("ping", null)]), [1, 1]);
     const oldHosts = () => hosts().filter((host) => host.id === id);
     assert.equal(oldHosts().length, 1, "simultaneous startup of the same build must reuse a PID");

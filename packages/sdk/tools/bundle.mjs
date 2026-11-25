@@ -189,7 +189,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
     (local.length > 0 ||
       flat ||
       (organized && [...placement.modules.keys()].some((path) => !path.startsWith(root + sep))));
-  const server = split ? placedModules(placement, root, organized, () => true) : [];
+  const server = split ? placedModules(placement, root, organized) : [];
   const files = split
     ? [...new Set([...server, ...local].map(([path]) => relative(root, path).split(sep).join("/")))]
     : await scanFiles(root);

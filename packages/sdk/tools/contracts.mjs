@@ -24,6 +24,34 @@ export function contractPlacementMigration(value) {
   return `use contract(name, { on: "${on}" })`;
 }
 
+function nonDataMethods(entry, exported, data, file) {
+  const declared = new Set(
+    data && ts.isArrayLiteralExpression(data)
+      ? data.elements.filter(ts.isStringLiteralLike).map((name) => name.text)
+      : [],
+  );
+  // The normal path needs only the syntax tree. Resolve the contract's type to
+  // report method names only when rejecting an old or incomplete declaration.
+  const program = ts.createProgram([entry], { noEmit: true, skipLibCheck: true });
+  const source = program.getSourceFile(entry);
+  const checker = program.getTypeChecker();
+  const call = source?.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((declaration) => declaration.name.getText(source) === exported)?.initializer;
+  const node = call && ts.isCallExpression(call) && call.typeArguments?.[0];
+  const names = node
+    ? checker
+        .getTypeFromTypeNode(node)
+        .getProperties()
+        .flatMap((property) => {
+          const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, node));
+          return type.getCallSignatures().length && !declared.has(property.name) ? [property.name] : [];
+        })
+    : [];
+  return names.length ? names.join(", ") : (data?.getText(file) ?? "all methods");
+}
+
 /** A public contract module describes types and keys, and is never loaded by its providers. */
 export function contractDeclarations(entry) {
   if (!existsSync(entry)) return [];
@@ -70,8 +98,13 @@ export function contractDeclarations(entry) {
       if (contracts.some((item) => item.name === key.text))
         throw new Error(`${entry}: duplicate contract ${key.text}`);
       const data = property("dataMethods");
-      if (data && (!local || data.kind !== ts.SyntaxKind.TrueKeyword))
-        throw new Error(`${entry}: dataMethods must be true for caller contracts`);
+      if (data && !local) throw new Error(`${entry}: dataMethods requires a caller contract`);
+      if (data && data.kind !== ts.SyntaxKind.TrueKeyword) {
+        const missing = nonDataMethods(entry, name.text, data, file);
+        throw new Error(
+          `${entry}: caller contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
+        );
+      }
       contracts.push({
         exported: name.text,
         name: key.text,

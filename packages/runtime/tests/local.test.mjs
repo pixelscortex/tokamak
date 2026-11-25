@@ -189,3 +189,16 @@ test("window server actions do not need the plugin catalog", async () => {
     await local.close();
   }
 });
+
+test("an old window bundle gets a migration error from the former local entry point", async () => {
+  const functions = new LocalFunctions({
+    onPluginsChanged: () => () => {},
+  });
+  try {
+    await expect(functions.invoke("alpha/jobs.run", {})).rejects.toThrow(
+      'local() was removed: rebuild the plugin with action({ on: "caller" })',
+    );
+  } finally {
+    await functions.close();
+  }
+});

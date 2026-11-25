@@ -183,6 +183,8 @@ export class LocalFunctions implements LocalTransport {
     signal: ActionSignal | undefined,
     action: WindowInvocation,
   ): Promise<JsonValue> {
+    if (!action) throw new Error('local() was removed: rebuild the plugin with action({ on: "caller" })');
+
     const slash = name.indexOf("/");
     if (slash < 1) throw new Error("Expected a plugin-qualified caller action");
     if (signal?.aborted) throw new Error("Caller action cancelled");

@@ -20,7 +20,7 @@ import {
 } from "./internal/contracts";
 import { Visibility } from "./visibility";
 
-export type ServerFunctionKind = "query" | "mutation" | "action";
+export type FunctionKind = "query" | "mutation" | "action";
 export type ActionTarget = "server" | "caller";
 export type MachineFailure =
   | Failure<"noMachine", null>
@@ -28,7 +28,6 @@ export type MachineFailure =
 export interface ActionOptions {
   on?: ActionTarget;
 }
-export type FunctionKind = ServerFunctionKind;
 
 /** Authenticated caller, preserved across subscriptions and plugin calls. */
 export interface User {
@@ -166,7 +165,7 @@ export interface MutationContext<M extends DataModel> extends ContractContext {
 export interface ActionContext extends ContractContext {
   readonly auth: AuthContext;
   readonly call: CallContext;
-  use<T>(api: T): PluginCalls<T, ServerFunctionKind>;
+  use<T>(api: T): PluginCalls<T, FunctionKind>;
   readonly signal?: HostBridge["signal"];
   readonly crypto: {
     hashPassword(password: string): Promise<string>;
@@ -262,7 +261,7 @@ export type FunctionBuilder<
 function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallContext): CallerActionContext {
   const machine = requireActionMachine;
   const run =
-    (expected: ServerFunctionKind) =>
+    (expected: FunctionKind) =>
     (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
       callHost(bridge, "plugin.call", {
         name: reference[functionName],
@@ -321,7 +320,11 @@ function builder<
 >(kind: K, visibility: V, schema?: SchemaDefinition): FunctionBuilder<K, M, V> {
   return <F extends Fields, R, S extends ReturnValidator>(definition: FunctionOptions<K, M, F, R, S>) => {
     const description = v.object(definition.args ?? {}).description;
-    const handler = definition.handler;
+    // The builder selects the matching context before calling the handler.
+    const handler = definition.handler as (
+      ctx: QueryContext<M> | MutationContext<M> | ActionContext,
+      args: ObjectValue<F>,
+    ) => R;
     const returns = definition.returns?.description;
     return Object.freeze({
       [definitionBrand]: true as const,
@@ -335,10 +338,7 @@ function builder<
             // Contract members are called in the same worker and can receive
             // live objects. Window calls still enter invoke() and validate JSON.
             invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call: CallContext) =>
-              handler(
-                actionContext(host, auth, call) as unknown as Parameters<typeof handler>[0],
-                input as Parameters<typeof handler>[1],
-              ),
+              handler(actionContext(host, auth, call), input as Parameters<typeof handler>[1]),
           }
         : {}),
       async invoke(input: unknown, host: HostBridge) {
@@ -367,14 +367,13 @@ function builder<
           return auth;
         };
 
-        const run =
-          (expected: ServerFunctionKind) => (reference: { [functionName]: string }, input: unknown) => {
-            const payload = {
-              name: reference[functionName],
-              args: jsonSnapshot(input, "nested call args"),
-            };
-            return callHost(host, "plugin.call", { ...payload, kind: expected });
+        const run = (expected: FunctionKind) => (reference: { [functionName]: string }, input: unknown) => {
+          const payload = {
+            name: reference[functionName],
+            args: jsonSnapshot(input, "nested call args"),
           };
+          return callHost(host, "plugin.call", { ...payload, kind: expected });
+        };
         const ctx = Object.freeze(
           kind === "action"
             ? actionContext(host, auth, call)
@@ -398,7 +397,7 @@ function builder<
         // also enforces query-only calls. This cast never widens author types.
         try {
           const result = await handler(
-            ctx as unknown as Parameters<typeof handler>[0],
+            ctx as Parameters<typeof handler>[0],
             args as Parameters<typeof handler>[1],
           );
           const snapshot = jsonSnapshot(result === undefined ? null : result, "function result");
@@ -457,7 +456,7 @@ export function threadArgument(schema: ValidatorDescription, value: unknown): Id
   }
 }
 
-function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, ServerFunctionKind> {
+function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, FunctionKind> {
   const bind = (reference: unknown): unknown =>
     new Proxy(() => {}, {
       get(_target, key) {
@@ -472,7 +471,7 @@ function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, ServerFunctionKi
         });
       },
     });
-  return bind(api) as PluginCalls<T, ServerFunctionKind>;
+  return bind(api) as PluginCalls<T, FunctionKind>;
 }
 
 /** Loose builders are useful without a schema; createFunctions adds table types. */
@@ -516,7 +515,7 @@ export const internalMutation = builder<"mutation", LooseModel, typeof Visibilit
 export const internalAction = actionBuilder(Visibility.Internal);
 /** Export a server function to dependencies without admitting window requests. */
 export function pluginOnly<
-  D extends FunctionDefinition<ServerFunctionKind, unknown, unknown, typeof Visibility.Public>,
+  D extends FunctionDefinition<FunctionKind, unknown, unknown, typeof Visibility.Public>,
 >(definition: D): Omit<D, "visibility"> & { readonly visibility: typeof Visibility.PluginOnly } {
   if (definition.visibility !== Visibility.Public)
     throw new Error("Only non-internal server functions can be plugin-only");

@@ -24,7 +24,7 @@ async function loadLocalModule(path: string) {
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   // QuickJS can reject with null if it cannot allocate its own InternalError.
-  return error === null || message === "out of memory" ? "Plugin local function ran out of memory" : message;
+  return error === null || message === "out of memory" ? "Plugin action ran out of memory" : message;
 }
 
 export async function initialize(

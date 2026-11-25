@@ -286,7 +286,7 @@ pub(in crate::local) async fn connection(
                     match message["type"].as_str() {
                         Some("invoke") if message.get("contract").is_none() => {
                             if message["action"] != true {
-                                send(socket, result(id, Some("local() was removed; use client.action(...)"), Value::Null)).await?;
+                                send(socket, result(id, Some("local() was removed: rebuild the plugin with action({ on: \"caller\" })"), Value::Null)).await?;
                                 continue;
                             }
                             if active.contains_key(&id) {

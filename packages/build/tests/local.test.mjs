@@ -394,6 +394,18 @@ test("caller action builds allow types and instance fields to reference Runner i
 for (const [legacy, replacement] of [
   ['import { local as run } from "@tokamak/sdk";', 'use action({ on: "caller", … })'],
   [
+    'import { createFunctions, defineSchema } from "@tokamak/sdk"; const { local } = createFunctions(defineSchema({})); export const run = local({ handler: () => null });',
+    'use action({ on: "caller", … })',
+  ],
+  [
+    'import { createFunctions as make, defineSchema } from "@tokamak/sdk"; const functions = make(defineSchema({})); export const run = functions.local({ handler: () => null });',
+    'use action({ on: "caller", … })',
+  ],
+  [
+    'import * as sdk from "@tokamak/sdk"; export const run = sdk.local({ handler: () => null });',
+    'use action({ on: "caller", … })',
+  ],
+  [
     'import type { TokamakClient } from "@tokamak/sdk"; declare const desk: TokamakClient; desk.local(null, {});',
     "use client.action(...)",
   ],
@@ -416,3 +428,18 @@ for (const [legacy, replacement] of [
     });
   }, 30_000);
 }
+
+test("unrelated local, hasLocal and place members still build", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      const local = () => "local";
+      const client = { local, hasLocal: true };
+      const place = "here";
+      export const Window = () => client.hasLocal ? { value: client.local(), place } : { value: local() };
+    `,
+    );
+    built(folder);
+  });
+}, 30_000);

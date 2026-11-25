@@ -341,7 +341,7 @@ acceptance: try {
       }
       await Bun.sleep(10);
     }
-    assert.fail("Local function did not start");
+    assert.fail("Caller action did not start");
   }
 
   const abort = new AbortController();

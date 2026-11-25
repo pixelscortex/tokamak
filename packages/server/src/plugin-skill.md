@@ -1,6 +1,6 @@
 ---
 name: develop-tokamak-plugin
-description: Build and reload this Tokamak plugin using the server, local and window APIs.
+description: Build and reload this Tokamak plugin using server actions, caller actions and window APIs.
 ---
 
 Use the Tokamak checkout and install its dependencies with `proto run bun -- install`.

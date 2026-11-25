@@ -1,4 +1,4 @@
-import type { FunctionDefinition, MachineFailure, ServerFunctionKind, WireResult } from "../functions";
+import type { FunctionDefinition, MachineFailure, FunctionKind, WireResult } from "../functions";
 import { callHost, type HostBridge, type LocalChannel, type ChannelHandler } from "../host";
 import { jsonSnapshot, type JsonValue } from "../values";
 
@@ -108,7 +108,7 @@ type Implementation<T, P extends ContractTarget> = {
     ? P extends "caller"
       ? ((...args: A) => R) | LocalImplementation<A, R>
       : A extends [infer Input] | []
-        ? FunctionDefinition<ServerFunctionKind, Input, WireResult<R>>
+        ? FunctionDefinition<FunctionKind, Input, WireResult<R>>
         : never
     : T[K];
 };

@@ -169,13 +169,9 @@ impl Catalog {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
             let manifest = &self.plugins[id].manifest;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
-            // Only the local part needs provider registrations from the client
-            // catalog. Server dispatch keeps its private addresses on the server.
             if let Some(object) = value.as_object_mut() {
                 object.remove("pluginFunctions");
-                if let Some(Value::Array(providers)) = object.get_mut("contractProviders") {
-                    providers.retain(|provider| provider["on"] == "caller");
-                }
+                object.remove("contractProviders");
             }
             let routes = manifest.contracts.iter().filter(|key| key.on == ContractTarget::Caller)
                 .map(|key| (key.name.clone(), json!(self.runner_contract_providers(id, key))))

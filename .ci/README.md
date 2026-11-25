@@ -95,7 +95,7 @@ Download **desktop-windows-x64** from the CI run's Artifacts section (or use
 The installer is unsigned; Windows may require accepting its unknown-publisher
 prompt. No signing secrets are required.
 
-Local functions and server actions are unavailable on Windows until TKM-234.
+Caller actions and server actions are unavailable on Windows until TKM-234.
 Calls return `Plugin code is not supported on Windows yet.` Windows CI checks the
 build and server identity only. It does not launch the installer or desktop UI.
 

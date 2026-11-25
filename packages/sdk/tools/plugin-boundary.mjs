@@ -228,8 +228,27 @@ function removedClientMember(node) {
     return "use client.action(...)";
 }
 
-function hasRemovedClientMember(node) {
-  return !!removedClientMember(node) || !!ts.forEachChild(node, hasRemovedClientMember);
+function localReceiver(node) {
+  if (ts.isPropertyAccessExpression(node) && node.name.text === "local") return node.expression;
+  if (
+    ts.isElementAccessExpression(node) &&
+    ts.isStringLiteralLike(node.argumentExpression) &&
+    node.argumentExpression.text === "local"
+  )
+    return node.expression;
+  if (
+    ts.isBindingElement(node) &&
+    ts.isObjectBindingPattern(node.parent) &&
+    (node.propertyName ?? node.name).getText().replace(/['"]/g, "") === "local" &&
+    ts.isVariableDeclaration(node.parent.parent)
+  )
+    return node.parent.parent.initializer;
+}
+
+function needsMigrationChecker(node) {
+  return (
+    !!removedClientMember(node) || !!localReceiver(node) || !!ts.forEachChild(node, needsMigrationChecker)
+  );
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
@@ -239,7 +258,7 @@ export function checkPluginImports(root) {
   function checkFile(path) {
     const parsed = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
     const options = configuration(path).options;
-    const program = hasRemovedClientMember(parsed)
+    const program = needsMigrationChecker(parsed)
       ? ts.createProgram([path], pluginCompilerOptions(root, options))
       : undefined;
     const source = program?.getSourceFile(path) ?? parsed;
@@ -277,6 +296,23 @@ export function checkPluginImports(root) {
       }
     }
     const sdkContracts = new Set();
+    const sdkNamespaces = new Set();
+    const sdkFactories = new Set();
+    const importedBinding = (node, bindings) =>
+      ts.isIdentifier(node) &&
+      checker?.getSymbolAtLocation(node)?.declarations?.some((declaration) => bindings.has(declaration));
+    const sdkNamespace = (node) => importedBinding(node, sdkNamespaces);
+
+    function functionsFactory(call) {
+      if (!call || !ts.isCallExpression(call)) return false;
+      const target = call.expression;
+      return (
+        importedBinding(target, sdkFactories) ||
+        (ts.isPropertyAccessExpression(target) &&
+          target.name.text === "createFunctions" &&
+          sdkNamespace(target.expression))
+      );
+    }
     for (const node of source.statements) {
       if (
         !ts.isImportDeclaration(node) ||
@@ -285,15 +321,35 @@ export function checkPluginImports(root) {
       )
         continue;
       const bindings = node.importClause?.namedBindings;
-      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      if (!bindings) continue;
+      if (ts.isNamespaceImport(bindings)) {
+        sdkNamespaces.add(bindings);
+        continue;
+      }
       for (const binding of bindings.elements) {
         const imported = (binding.propertyName ?? binding.name).text;
         if (imported === "local") throw new Error(`${path}: use action({ on: "caller", … })`);
+        if (imported === "createFunctions") sdkFactories.add(binding);
         if (imported === "contract") sdkContracts.add(binding.name.text);
       }
     }
 
     function visit(node) {
+      const local = localReceiver(node);
+      if (
+        local &&
+        (sdkNamespace(local) ||
+          functionsFactory(local) ||
+          (ts.isIdentifier(local) &&
+            checker
+              ?.getSymbolAtLocation(local)
+              ?.declarations?.some(
+                (declaration) =>
+                  ts.isVariableDeclaration(declaration) && functionsFactory(declaration.initializer),
+              )))
+      ) {
+        throw new Error(`${path}: use action({ on: "caller", … })`);
+      }
       const replacement = removedClientMember(node);
       if (replacement && checker) {
         const receiver = checker.getTypeAtLocation(node.expression);
