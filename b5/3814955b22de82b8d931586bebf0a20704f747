@@ -1,0 +1,61 @@
+plugins/ai-profiles/src/client/ui/card-profiles.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-73
+plugins/ai-profiles/src/client/ui/subscription-card.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 22-27,34-36,79-85,102-103,109-110
+plugins/ai-profiles/src/server/_generated/api.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 12-18,36-40
+plugins/ai-profiles/src/server/_generated/internal.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 2-12
+plugins/ai-profiles/src/server/schema.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-31
+plugins/ai-profiles/src/client/ui/profile-box.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-193
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 58-62
+plugins/ai-profiles/src/client/lib/builder.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-215
+plugins/ai-profiles/tests/profiles-server.test.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-267
+plugins/ai-profiles/src/client/ui/profiles-section.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-103
+plugins/ai-profiles/src/client/lib/drag.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-126
+design/ai-profiles.md
+  s_503e9e7253d05e::t_a0c13150fb2f0c 12-19,38-41,52-57,69-108,180-181,226-261,310-338
+  s_503e9e7253d05e::t_772a184a8beb8d 301-309
+  s_503e9e7253d05e::t_cce4dcb9e22be8 262
+e2e/browser/screens.spec.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 435-481
+  s_503e9e7253d05e::t_772a184a8beb8d 434
+plugins/ai-profiles/tests/profiles-section.test.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-429
+plugins/ai-profiles/src/server/profiles.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-285
+plugins/ai-profiles/README.md
+  s_503e9e7253d05e::t_a0c13150fb2f0c 8-13,16-19,35-38
+plugins/ai-profiles/src/client/lib/profile-icons.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-10
+plugins/ai-profiles/src/client/ui/profile-dialog.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 1-115
+plugins/agent-proxy/tests/workspace.ts
+  s_503e9e7253d05e::t_a0c13150fb2f0c 4,51-57,60-84,105-106,110-119,124,129,151-166,181-196,205-221,253-257
+  s_503e9e7253d05e::t_4c779097441675 258
+plugins/ai-profiles/src/client/pages/profiles.tsx
+  s_503e9e7253d05e::t_a0c13150fb2f0c 15-17,84,137-139,153,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b53814955b22de82b8d931586bebf0a20704f747",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
