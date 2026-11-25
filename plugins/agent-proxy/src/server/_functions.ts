@@ -6,6 +6,7 @@ import {
   type Id,
   type ModelFromSchema,
 } from "@tokamak/sdk";
+import type { Company } from "./addresses";
 import schema from "./schema";
 
 export const { query, mutation, action, internalQuery, internalMutation, internalAction } =
@@ -51,7 +52,7 @@ export const notFound = (what: "subscription" | "sign-in") =>
 /** What the window and other plugins may learn of a subscription: never the login. */
 export interface SubscriptionView {
   readonly id: string;
-  readonly company: "anthropic";
+  readonly company: Company;
   readonly method: "subscription";
   readonly label: string;
   readonly plan: string;
@@ -68,7 +69,7 @@ export interface SubscriptionView {
 /** A sign-in that has not ended, as the "Awaiting sign-in" card and the dialog show it. */
 export interface SignInView {
   readonly id: string;
-  readonly company: "anthropic";
+  readonly company: Company;
   readonly method: "subscription";
   /** The company's page; holds the challenge and `state`, never the verifier. */
   readonly link: string;

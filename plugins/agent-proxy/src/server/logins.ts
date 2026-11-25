@@ -3,7 +3,7 @@ import type {} from "@tokamak/sdk/web";
 import { internal } from "./_generated/internal";
 import { RENEW_BEFORE_MS, internalAction, internalMutation, internalQuery } from "./_functions";
 import { companyAddresses } from "./addresses";
-import { renew } from "./claude";
+import { companies } from "./companies";
 
 /**
  * The stored logins. Everything here is internal: no window and no other
@@ -15,15 +15,17 @@ import { renew } from "./claude";
  * request carries a turn key, with no member behind it. Every public or
  * plugin-only function passes its caller here.
  *
- * Renewal is claimed: one call at a time sends a refresh token to Claude,
- * because a company that revokes a login when a refresh token is used twice
- * would sign the account out. Failures that are not a refusal wait before the
+ * Renewal is claimed: one call at a time sends a refresh token to the
+ * company, because a company that revokes a login when a refresh token is
+ * used twice (OpenAI answers `refresh_token_reused`) would sign the account
+ * out. Each company's module decides what its answers mean; nothing here
+ * names a company. Failures that are not a refusal wait before the
  * next try, so an open screen does not ask every minute forever.
  */
 
 const account = v.id("accounts");
 const owner = v.string();
-const REFUSED = "Claude would not renew the login. Sign in again.";
+const refusedBy = (name: string) => `${name} would not renew the login. Sign in again.`;
 /** How long a claim holds: longer than one renewal request (20 s timeout) takes. */
 const CLAIM_MS = 30_000;
 /** First wait after a failed renewal; it doubles with each failure in a row, up to the cap. */
@@ -96,8 +98,11 @@ export const claim = internalMutation({
     const now = Date.now();
     if ((row.renewingUntil ?? 0) > now) return { kind: "busy" as const };
     if ((row.retryAt ?? 0) > now) return { kind: "later" as const };
+    const account = await ctx.db.get(args.account);
+    const subscription = account && (await ctx.db.get(account.subscription));
+    if (!subscription) return { kind: "gone" as const };
     await ctx.db.patch(row._id, { renewingUntil: now + CLAIM_MS });
-    return { kind: "claimed" as const, refresh: row.refresh };
+    return { kind: "claimed" as const, refresh: row.refresh, company: subscription.company };
   },
 });
 
@@ -110,21 +115,31 @@ export const renewed = internalMutation({
     access: v.string(),
     next: v.string(),
     expiresAt: v.number(),
+    /** A new ID token; none keeps the stored one. */
+    idToken: v.optional(v.string()),
   },
-  handler: async (ctx, { owner, account, refresh, access, next, expiresAt }) => {
+  handler: async (ctx, { owner, account, refresh, access, next, expiresAt, idToken }) => {
     const row = await ctx.db
       .query("logins")
       .withIndex("by_account", (q) => q.eq("account", account))
       .first();
     if (!row || row.owner !== owner || row.refresh !== refresh) return false;
-    await ctx.db.replace(row._id, { owner, account, access, refresh: next, expiresAt });
+    const kept = idToken ?? row.idToken;
+    await ctx.db.replace(row._id, {
+      owner,
+      account,
+      access,
+      refresh: next,
+      expiresAt,
+      ...(kept !== undefined && { idToken: kept }),
+    });
     return true;
   },
 });
 
-/** Claude will not renew it: the login is deleted and the account shows "Signed out". */
+/** The company will not renew it: the login is deleted and the account shows "Signed out". */
 export const refused = internalMutation({
-  args: { owner, account, refresh: v.string() },
+  args: { owner, account, refresh: v.string(), name: v.string() },
   handler: async (ctx, args) => {
     const row = await ctx.db
       .query("logins")
@@ -132,7 +147,7 @@ export const refused = internalMutation({
       .first();
     if (!row || row.owner !== args.owner || row.refresh !== args.refresh) return false;
     await ctx.db.delete(row._id);
-    await ctx.db.patch(args.account, { status: "signed-out", reason: REFUSED });
+    await ctx.db.patch(args.account, { status: "signed-out", reason: refusedBy(args.name) });
     return true;
   },
 });
@@ -155,7 +170,7 @@ export const later = internalMutation({
   },
 });
 
-/** `renewed` says whether this call got a new login from Claude. */
+/** `renewed` says whether this call got a new login from the company. */
 type Fresh = { access: string; expiresAt: number; renewed: boolean } | null;
 const usable = (login: { access: string; expiresAt: number } | null, margin = 0): Fresh =>
   login && login.expiresAt > Date.now() + margin
@@ -189,15 +204,23 @@ export const fresh = internalAction({
       }
       return null;
     }
-    const answer = await renew(await companyAddresses(ctx), claimed.refresh);
+    const company = companies[claimed.company];
+    const answer = await company.renew(await companyAddresses(ctx), claimed.refresh);
     const refresh = claimed.refresh;
     if (answer.kind === "renewed") {
-      const { access, refresh: next, expiresAt } = answer.login;
-      await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
+      const { access, refresh: next, expiresAt, idToken } = answer.login;
+      await ctx.runMutation(internal.logins.renewed, {
+        ...args,
+        refresh,
+        access,
+        next,
+        expiresAt,
+        ...(idToken !== undefined && { idToken }),
+      });
       return { access, expiresAt, renewed: true };
     }
     if (answer.kind === "refused") {
-      await ctx.runMutation(internal.logins.refused, { ...args, refresh });
+      await ctx.runMutation(internal.logins.refused, { ...args, refresh, name: company.name });
       return null;
     }
     await ctx.runMutation(internal.logins.later, {

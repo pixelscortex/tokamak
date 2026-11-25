@@ -1,5 +1,8 @@
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
 
+/** The companies a subscription can be with; `companies.ts` holds each one's sign-in. */
+export const company = v.union(v.literal("anthropic"), v.literal("openai"));
+
 /**
  * Every row carries `owner`, the member who added it: a subscription is one
  * person's, and every function reads and writes only the caller's rows.
@@ -13,10 +16,10 @@ export default defineSchema({
   /** What a person added: one company's subscription, under their own label. */
   subscriptions: defineTable({
     owner: v.string(),
-    company: v.literal("anthropic"),
+    company,
     method: v.literal("subscription"),
     label: v.string(),
-    /** "Max", "Pro", "Team", "Enterprise", or "Free" when the company named none. */
+    /** "Max", "Pro", "Plus", "Business"…, or "Free" when the company named none. */
     plan: v.string(),
     enabled: v.boolean(),
     models: v.array(v.object({ id: v.string(), name: v.string() })),
@@ -49,6 +52,8 @@ export default defineSchema({
     refresh: v.string(),
     /** Milliseconds since the epoch. */
     expiresAt: v.number(),
+    /** OpenAI's ID token, whose claims name the workspace; Claude logins have none. */
+    idToken: v.optional(v.string()),
     /**
      * Set while one call renews this login, so a refresh token goes to the
      * company once: other callers use the stored token or wait for the new one.
@@ -67,7 +72,7 @@ export default defineSchema({
    */
   signIns: defineTable({
     owner: v.string(),
-    company: v.literal("anthropic"),
+    company,
     method: v.literal("subscription"),
     verifier: v.string(),
     state: v.string(),

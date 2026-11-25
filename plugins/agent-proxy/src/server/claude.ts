@@ -1,6 +1,20 @@
 import type {} from "@tokamak/sdk/web";
 import type { Addresses } from "./addresses";
+import {
+  SignInError,
+  retryAfter,
+  text,
+  type Details,
+  type Identity,
+  type Login,
+  type Pasted,
+  type Renewal,
+  type SignInCompany,
+} from "./company";
 import { challenge } from "./pkce";
+
+export { SignInError };
+export type { Identity, Login, Pasted, Renewal };
 
 /**
  * Claude's subscription sign-in, done by the server over the network the way
@@ -54,8 +68,6 @@ export function signInLink(addresses: Addresses, verifier: string, state: string
   return `${link.origin}${link.pathname}?${query.toString()}`;
 }
 
-export type Pasted = { code: string; state: string | undefined } | { error: string };
-
 /**
  * What the person pasted: the whole address the browser ended on, or a
  * `code#state`, or the code alone. In an address the state may be a query
@@ -87,27 +99,6 @@ export function readPasted(text: string): Pasted {
   return { code, state };
 }
 
-export interface Login {
-  readonly access: string;
-  readonly refresh: string;
-  readonly expiresAt: number;
-}
-
-export interface Identity {
-  readonly accountId: string;
-  readonly email?: string;
-  readonly organization?: string;
-}
-
-export class SignInError extends Error {
-  constructor(
-    readonly kind: "Refused" | "Unreachable",
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 async function post(url: string, body: Record<string, string>, step: string): Promise<Response> {
   try {
     return await fetch(url, {
@@ -128,8 +119,6 @@ type TokenAnswer = {
   account?: { uuid?: unknown; email_address?: unknown };
   organization?: { uuid?: unknown; name?: unknown };
 };
-
-const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
 
 function login(answer: TokenAnswer, previousRefresh?: string): Login {
   const access = text(answer.access_token);
@@ -182,23 +171,6 @@ export async function exchange(
       organization: text(answer.organization?.name),
     },
   };
-}
-
-export type Renewal =
-  | { readonly kind: "renewed"; readonly login: Login }
-  /** HTTP 400 or 401 from the token endpoint: the refresh token is dead. */
-  | { readonly kind: "refused" }
-  /** Not now: 429 (with the wait it asked for), 403, 5xx, a network error or an unreadable answer. */
-  | { readonly kind: "later"; readonly afterMs?: number };
-
-/** Seconds or an HTTP date in `Retry-After`, as milliseconds from now. */
-function retryAfter(response: Response): number | undefined {
-  const value = response.headers.get("retry-after")?.trim();
-  if (!value) return undefined;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-  const at = Date.parse(value);
-  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 
 /** Asks Claude for a new login with `refresh`; only 400 and 401 count as a refusal. */
@@ -288,3 +260,19 @@ export async function models(addresses: Addresses, access: string): Promise<{ id
     return id ? [{ id, name: text(model.display_name) ?? id }] : [];
   });
 }
+
+/** Claude's sign-in, as the rest of the plugin uses every company's. */
+export const claude: SignInCompany = {
+  name: "Claude",
+  link: signInLink,
+  readPasted,
+  exchange,
+  renew,
+  async details(addresses, { login }): Promise<Details> {
+    const [about, found] = await Promise.all([
+      accountDetails(addresses, login.access),
+      models(addresses, login.access),
+    ]);
+    return { ...about, models: found };
+  },
+};
