@@ -63,7 +63,8 @@ keys schemas by plugin ID, keeping logical table names separate. The legacy
 single-bundle loader applies the same registry in its selected DataSpace.
 Field schema assertions are not evaluated for ordinary fields. Inserting or
 changing a typed ref checks the target ID and confirms the row exists. The
-reference write and target delete write a separate guard key for that target.
+reference write sets a separate guard key for that target and the target's
+delete removes it, so the two conflict and no key outlives its row.
 Ordinary updates to the target row do not touch this key. Concurrent ref writes
 to the same target conflict on the guard key and the losing mutation retries.
 
