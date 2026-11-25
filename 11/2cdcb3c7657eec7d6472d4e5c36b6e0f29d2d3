@@ -1,0 +1,101 @@
+plugins/ai/src/client/lib/turn-controls.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 6,8,25,36,66,81
+plugins/ai/src/server/run.ts
+  s_6f4a87ec8baba4::t_e7a8f950fcddad 39,54,72-73,113-114,137,187,233,236-238,249,254-256,259-261,271-273,281,285,290-292,302,307-309,312
+  s_6f4a87ec8baba4::t_f9229e45f5e0ee 118
+plugins/ai/src/client/lib/agents.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 18,51,53,61,65,69,72-77,100
+  s_6f4a87ec8baba4::t_4d7d6f1a95c25d 6,24,26,28,54
+  s_6f4a87ec8baba4::t_a3956eed726e98 33-37,52,55-60
+plugins/ai/src/client/lib/queue.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 6,15,19,21,24,26-28,30-31,44,46-47,58,63,72-74,90
+  s_6f4a87ec8baba4::t_4d7d6f1a95c25d 7,50
+  s_6f4a87ec8baba4::t_a2176b83139ca7 13,29,45,48-49
+plugins/ai/src/client/lib/local-turn.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 9,15
+  s_6f4a87ec8baba4::t_3bc17d4a4f9193 4
+plugins/ai/src/client/lib/release.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 16
+  s_6f4a87ec8baba4::t_a46b53e87324f2 4,10-12
+plugins/ai/src/server/questions.ts
+  s_6f4a87ec8baba4::t_e7a8f950fcddad 13,23,28-30,33-34,36,56,58,83
+  s_6f4a87ec8baba4::t_fac412b8dbdc81 2-3,12
+plugins/ai/src/client/lib/turn.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 18,34,36-40,82
+  s_6f4a87ec8baba4::t_4d7d6f1a95c25d 5
+plugins/ai/src/client/lib/quit.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 27,36
+  s_6f4a87ec8baba4::t_60a083bfb88665 4
+plugins/ai/src/contracts.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 80,85,87
+plugins/ai/src/client/lib/questions.ts
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 57-58,63,67
+  s_6f4a87ec8baba4::t_1b5930d96474ca 5,52
+plugins/ai/src/server/agents.ts
+  s_6f4a87ec8baba4::t_e7a8f950fcddad 2,25
+plugins/ai/src/server/controls.ts
+  s_6f4a87ec8baba4::t_e7a8f950fcddad 4,15,17,20,23,75
+  s_6f4a87ec8baba4::t_de08b4cf4dd3ce 1
+plugins/ai/src/client/lib/window-actions.ts
+  s_6f4a87ec8baba4::t_4d7d6f1a95c25d 5-14,27
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 1-4,15-22,26,28-29
+  s_6f4a87ec8baba4::t_854034905a82e9 23-25
+packages/server/tests/code-snapshots-driver.mjs
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 48
+  s_6f4a87ec8baba4::t_254e3dab17f359 25,60
+plugins/ai/tests/agent-row.test.tsx
+  s_6f4a87ec8baba4::t_5ac1d86ed8e2ed 8,33-38,47-50,52,54,56-58,64-69,79-81,106-112,114-115,135-137,182-190,195-196,198,200-216,219-228,230-235,237-242
+  s_6f4a87ec8baba4::t_1af181639dc037 46,113,217-218
+plugins/ai/src/client/ui/agent-row.tsx
+  s_6f4a87ec8baba4::t_1dcc2edc35f272 38-39,55,154,176-182
+plugins/ai/src/server/working.ts
+  s_6f4a87ec8baba4::t_e7a8f950fcddad 2,8,15,35-36,39-44,47-49,63-64,66
+design/ai.md
+  s_6f4a87ec8baba4::t_111db9201d8be9 15-17
+e2e/fake-agent/harness.mjs
+  s_6f4a87ec8baba4::t_ebea48278e5147 23,158-168,185,192
+e2e/fake-agent/no-bun.mjs
+  s_6f4a87ec8baba4::t_10b4ea4abe90d0 98-106
+packages/runner/tests/measure-linux-memory.mjs
+  s_6f4a87ec8baba4::t_cdb4a2dee6ce1f 54
+packages/server/tests/ai-liveness-driver.mjs
+  s_6f4a87ec8baba4::t_16547644066b81 14-15,19-21,32,43-91
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_6f4a87ec8baba4::t_b1936d43ce1622 126-188
+plugins/ai/src/client/ui/permission-card.tsx
+  s_6f4a87ec8baba4::t_af64f108dce061 39
+plugins/ai/src/server/choices.ts
+  s_6f4a87ec8baba4::t_68a46964ca2650 32
+plugins/ai/src/server/keep-alive.ts
+  s_6f4a87ec8baba4::t_e10d05e37c2bd4 10,29
+plugins/ai/src/server/liveness.ts
+  s_6f4a87ec8baba4::t_3ca6e445ee2aab 44,61-63,145
+plugins/ai/src/server/schema.ts
+  s_6f4a87ec8baba4::t_cb06c8c6b4e2b7 64-65,130,147-148,182,224
+plugins/ai/src/server/turns.ts
+  s_6f4a87ec8baba4::t_d020f8778be610 22,233,278,368,538-539,554
+plugins/ai/src/shared/turn-timing.ts
+  s_6f4a87ec8baba4::t_8459abee8491c6 2
+plugins/ai/tests/agent-turn.test.ts
+  s_6f4a87ec8baba4::t_a399586a6466d3 2,43
+plugins/claude/README.md
+  s_6f4a87ec8baba4::t_05180978244b4f 5
+plugins/code/contracts/ai.ts
+  s_6f4a87ec8baba4::t_b24c34e86c401e 80,85,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "112cdcb3c7657eec7d6472d4e5c36b6e0f29d2d3",
+  "prompts": {},
+  "sessions": {
+    "s_6f4a87ec8baba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c6-b0f2-7902-b7f5-2cbd839f1c4e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
