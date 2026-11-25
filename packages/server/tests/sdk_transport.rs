@@ -608,3 +608,16 @@ fn core_discovers_private_sign_in_methods_before_creating_a_session() {
         backend.close().await.unwrap();
     });
 }
+
+#[test]
+fn typed_refs_validate_and_cascade_atomically_without_granting_database_access() {
+    run(async {
+        let status = tokio::process::Command::from(bun_script("refs-driver.mjs"))
+            .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+            .kill_on_drop(true)
+            .status()
+            .await
+            .expect("start typed ref acceptance driver");
+        assert!(status.success(), "typed ref driver exited: {status}");
+    });
+}

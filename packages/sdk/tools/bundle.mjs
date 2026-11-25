@@ -4,7 +4,7 @@ import { Visibility } from "../src/visibility.ts";
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
 import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
-import { join, resolve, relative, dirname, sep } from "node:path";
+import { basename, join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildLocalBundle, transactionSources } from "./worker.mjs";
@@ -161,11 +161,12 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined) {
+export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined, depends) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
-  const pluginRoot = featurePluginRoot(root);
-  checkPluginImports(pluginRoot);
+  const pluginRoot =
+    depends !== undefined && basename(root) === "src" ? dirname(root) : featurePluginRoot(root);
+  checkPluginImports(pluginRoot, depends);
   // An explicit empty plugin server part is valid; a missing root still fails.
   const organized = isServerRoot(root);
   const flat = root === join(pluginRoot, "src");
@@ -279,7 +280,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
       await buildServer("transactions.js", descriptor.source, descriptor.plugins);
     }
     // Report unsupported imports before TypeScript reports missing Node declarations.
-    await checkFeature(root, temporary, generated, files, entry, hasLocal, providers);
+    await checkFeature(root, pluginRoot, temporary, generated, files, entry, hasLocal, providers);
     if (namespace !== undefined)
       await Bun.write(
         join(root, "dist/contracts.json"),
@@ -305,15 +306,21 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
 }
 
 if (import.meta.main) {
-  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
-    throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
+  const [, , folder, flag, namespace, dependsFlag, depends] = process.argv;
+  if (
+    !folder ||
+    (flag !== undefined && (flag !== "--plugin" || !namespace)) ||
+    (dependsFlag !== undefined && (dependsFlag !== "--depends" || !depends)) ||
+    process.argv.length > 7
+  ) {
+    throw new Error("sdk:bundle expects a feature folder and optional --plugin <id> [--depends <json>]");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
   // from either the repository root or the feature's own moon configuration.
-  const feature = resolve(sdkRoot, "../..", process.argv[2]);
+  const feature = resolve(sdkRoot, "../..", folder);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], true);
+  await bundleFeature(feature, namespace, true, depends && JSON.parse(depends));
 }
 
 async function scanFiles(root) {
@@ -334,7 +341,7 @@ async function scanFiles(root) {
   return files;
 }
 
-async function checkFeature(root, temporary, generated, files, entry, hasLocal, providers) {
+async function checkFeature(root, pluginRoot, temporary, generated, files, entry, hasLocal, providers) {
   const config = join(temporary, "tsconfig.json");
   // Inherit resolution options unchanged, including paths relative to the
   // config that declared them. A build-only SDK alias or TS-extension opt-in
@@ -347,7 +354,7 @@ async function checkFeature(root, temporary, generated, files, entry, hasLocal, 
     {},
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
-  const paths = pluginCompilerOptions(featurePluginRoot(root), inherited?.options ?? {}).paths;
+  const paths = pluginCompilerOptions(pluginRoot, inherited?.options ?? {}).paths;
   await Bun.write(
     config,
     JSON.stringify({
@@ -366,7 +373,7 @@ async function checkFeature(root, temporary, generated, files, entry, hasLocal, 
         ...new Set([
           ...files.map((file) => join(root, file)),
           ...providers.map((p) => p.path),
-          ...[contractEntry(featurePluginRoot(root))].filter(ts.sys.fileExists),
+          ...[contractEntry(pluginRoot)].filter(ts.sys.fileExists),
         ]),
       ],
       include: [],

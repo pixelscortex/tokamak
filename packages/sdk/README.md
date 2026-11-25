@@ -92,8 +92,8 @@ plugins that require it.
 Limits, checked at declaration and again by the server at load: 256 tables per
 plugin, 32 indexes per table, 16 fields per index, 64 characters per table or
 index name.
-Field descriptions provide types and metadata; field validation on persisted
-writes and schema migrations remain deferred.
+General field descriptions provide types and metadata. Typed refs are checked
+on persisted writes; general field validation and schema migrations remain deferred.
 
 ## Actions
 
@@ -614,6 +614,40 @@ const remove = onQuit(async () => {
 
 `within(promise, ms)` from `@tokamak/sdk` waits at most `ms` and resolves
 `TIMED_OUT` when the time is up (window and local code; server functions have no timers).
+
+### Typed references to another plugin's rows
+
+Declare the owner in `depends` in `plugin.ts`. Import its table handles from
+`plugin:<id>/tables` and use `v.ref` on a top-level field in your own schema:
+
+```ts
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+
+export default defineSchema({
+  threadProfiles: defineTable({
+    thread: v.ref(chat.tables.threads),
+    profile: v.string(),
+  }).unique("by_thread", ["thread"]),
+});
+```
+
+The field has type `Id<"chat.threads">`. The builder copies the owner's table
+types into `.tokamak/types/` and refreshes the copy each time you build.
+Use `TableDocument<typeof chat.tables.threads>` for the owner's document type.
+You can use the same validator for function arguments. The ref works with an
+index like any other field and may be optional with `v.optional`.
+
+A ref does not give `ctx.db` access to the owner's table. To read a referenced
+row, call the owner's public query. Saving a ref requires an existing row in
+the declared table. Deleting that row automatically deletes all rows that
+reference it as part of the same save. If the save rolls back, all rows remain.
+
+Adding a ref or changing its target does not check existing values. Rows of a
+removed plugin keep their refs, but those refs do not cascade until the plugin
+is installed again. Importing `plugin:owner/tables` anywhere in your plugin
+switches that owner's generated API types to qualified IDs for your whole
+plugin, so you can pass those IDs directly between refs and public functions.
 
 ### Typed contracts between plugins
 
