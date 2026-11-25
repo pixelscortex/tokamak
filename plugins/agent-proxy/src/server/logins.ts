@@ -35,7 +35,11 @@ const BACKOFF_CAP_MS = 30 * 60_000;
 const WAIT_MS = 1_000;
 const WAITS = 5;
 
-/** The login for `account`, or null when there is none or it is another member's. */
+/**
+ * The login for `account`, with the account's workspace id when the company
+ * has one (ChatGPT's `chatgpt-account-id`); null when there is none or it is
+ * another member's.
+ */
 export const read = internalQuery({
   args: { owner, account },
   handler: async (ctx, args) => {
@@ -43,7 +47,9 @@ export const read = internalQuery({
       .query("logins")
       .withIndex("by_account", (q) => q.eq("account", args.account))
       .first();
-    return row && row.owner === args.owner ? row : null;
+    if (!row || row.owner !== args.owner) return null;
+    const workspace = (await ctx.db.get(args.account))?.workspace;
+    return { ...row, ...(workspace !== undefined && { workspace }) };
   },
 });
 
@@ -115,24 +121,14 @@ export const renewed = internalMutation({
     access: v.string(),
     next: v.string(),
     expiresAt: v.number(),
-    /** A new ID token; none keeps the stored one. */
-    idToken: v.optional(v.string()),
   },
-  handler: async (ctx, { owner, account, refresh, access, next, expiresAt, idToken }) => {
+  handler: async (ctx, { owner, account, refresh, access, next, expiresAt }) => {
     const row = await ctx.db
       .query("logins")
       .withIndex("by_account", (q) => q.eq("account", account))
       .first();
     if (!row || row.owner !== owner || row.refresh !== refresh) return false;
-    const kept = idToken ?? row.idToken;
-    await ctx.db.replace(row._id, {
-      owner,
-      account,
-      access,
-      refresh: next,
-      expiresAt,
-      ...(kept !== undefined && { idToken: kept }),
-    });
+    await ctx.db.replace(row._id, { owner, account, access, refresh: next, expiresAt });
     return true;
   },
 });
@@ -171,10 +167,16 @@ export const later = internalMutation({
 });
 
 /** `renewed` says whether this call got a new login from the company. */
-type Fresh = { access: string; expiresAt: number; renewed: boolean } | null;
-const usable = (login: { access: string; expiresAt: number } | null, margin = 0): Fresh =>
+/**
+ * `workspace` is the id every request of this login must name, when the
+ * company has one (ChatGPT's `chatgpt-account-id` header); absent for Claude.
+ */
+type Fresh = { access: string; expiresAt: number; renewed: boolean; workspace?: string } | null;
+type Stored = { access: string; expiresAt: number; workspace?: string };
+const workspace = (login: Stored) => (login.workspace !== undefined ? { workspace: login.workspace } : {});
+const usable = (login: Stored | null, margin = 0): Fresh =>
   login && login.expiresAt > Date.now() + margin
-    ? { access: login.access, expiresAt: login.expiresAt, renewed: false }
+    ? { access: login.access, expiresAt: login.expiresAt, renewed: false, ...workspace(login) }
     : null;
 
 /**
@@ -208,16 +210,10 @@ export const fresh = internalAction({
     const answer = await company.renew(await companyAddresses(ctx), claimed.refresh);
     const refresh = claimed.refresh;
     if (answer.kind === "renewed") {
-      const { access, refresh: next, expiresAt, idToken } = answer.login;
-      await ctx.runMutation(internal.logins.renewed, {
-        ...args,
-        refresh,
-        access,
-        next,
-        expiresAt,
-        ...(idToken !== undefined && { idToken }),
-      });
-      return { access, expiresAt, renewed: true };
+      // A renewed ID token is dropped: the workspace is already on the account.
+      const { access, refresh: next, expiresAt } = answer.login;
+      await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
+      return { access, expiresAt, renewed: true, ...workspace(login) };
     }
     if (answer.kind === "refused") {
       await ctx.runMutation(internal.logins.refused, { ...args, refresh, name: company.name });

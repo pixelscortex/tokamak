@@ -19,7 +19,7 @@ export default defineSchema({
     company,
     method: v.literal("subscription"),
     label: v.string(),
-    /** "Max", "Pro", "Plus", "Business"…, or "Free" when the company named none. */
+    /** "Max", "Pro", "Plus", "Business"…; empty while the company has not named it. */
     plan: v.string(),
     enabled: v.boolean(),
     models: v.array(v.object({ id: v.string(), name: v.string() })),
@@ -36,6 +36,12 @@ export default defineSchema({
     accountId: v.string(),
     email: v.optional(v.string()),
     organization: v.optional(v.string()),
+    /**
+     * The company's id of the workspace every request of this login must
+     * name (ChatGPT's `chatgpt-account-id`); none for Claude. Kept here so the
+     * proxy needs no ID token: that is never stored.
+     */
+    workspace: v.optional(v.string()),
     status: v.union(v.literal("ok"), v.literal("signed-out")),
     /** Why the account is signed out, in the person's words. */
     reason: v.optional(v.string()),
@@ -52,8 +58,6 @@ export default defineSchema({
     refresh: v.string(),
     /** Milliseconds since the epoch. */
     expiresAt: v.number(),
-    /** OpenAI's ID token, whose claims name the workspace; Claude logins have none. */
-    idToken: v.optional(v.string()),
     /**
      * Set while one call renews this login, so a refresh token goes to the
      * company once: other callers use the stored token or wait for the new one.

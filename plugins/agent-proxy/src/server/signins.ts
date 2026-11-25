@@ -44,6 +44,10 @@ const FINISH_CLAIM_MS = 90_000;
 const EXPIRED = "This sign-in expired after 15 minutes. Start again.";
 
 type Failed = { failed: true; kind: string; data: { message: string } };
+const wrongSignIn = () =>
+  fail("WrongSignIn", {
+    message: "That address belongs to another sign-in. Paste the one from the page this dialog opened.",
+  });
 
 /** One "Awaiting sign-in" per target: starting again replaces the unfinished one. */
 export const begin = internalMutation({
@@ -151,13 +155,17 @@ export const release = internalMutation({
 
 /**
  * Which company the member's sign-in is with, so the paste can be read its
- * way, and whether it has expired; null when it is gone or another member's.
+ * way, its state (in the link already, not a secret) so a return of another
+ * sign-in is told apart before anything is claimed, and whether it has
+ * expired; null when it is gone or another member's.
  */
 export const pending = internalQuery({
   args: { owner: v.string(), id: v.id("signIns") },
   handler: async (ctx, { owner, id }) => {
     const row = await ctx.db.get(id);
-    return row && row.owner === owner ? { company: row.company, expired: isExpired(row, Date.now()) } : null;
+    return row && row.owner === owner
+      ? { company: row.company, state: row.state, expired: isExpired(row, Date.now()) }
+      : null;
   },
 });
 
@@ -200,14 +208,15 @@ export const connect = internalMutation({
     accountId: v.string(),
     email: v.optional(v.string()),
     organization: v.optional(v.string()),
+    workspace: v.optional(v.string()),
     plan: v.string(),
+    planKnown: v.boolean(),
     models: v.array(model),
     access: v.string(),
     refresh: v.string(),
     expiresAt: v.number(),
-    idToken: v.optional(v.string()),
   },
-  handler: async (ctx, { owner, id, access, refresh, expiresAt, idToken, ...found }) => {
+  handler: async (ctx, { owner, id, access, refresh, expiresAt, ...found }) => {
     const signIn = await ctx.db.get(id);
     if (!signIn || signIn.owner !== owner)
       return fail("Cancelled", { message: "The sign-in was cancelled. Nothing was added." });
@@ -219,21 +228,27 @@ export const connect = internalMutation({
     const identity = {
       ...(found.email !== undefined && { email: found.email }),
       ...(found.organization !== undefined && { organization: found.organization }),
+      ...(found.workspace !== undefined && { workspace: found.workspace }),
     };
+    // An unknown plan never replaces a known one; a new subscription stores it as unknown ("").
+    const plan = found.planKnown ? { plan: found.plan } : {};
     let subscriptionId: Id<"subscriptions">;
     let accountId: Id<"accounts">;
     if (signIn.repair) {
       const subscription = await ctx.db.get(signIn.repair);
       if (!subscription || subscription.owner !== owner)
         return fail("Gone", { message: "That subscription was removed meanwhile. Nothing was added." });
-      if (!same || same.subscription !== subscription._id)
+      if (!same || same.subscription !== subscription._id) {
+        // A person in two workspaces has one email in both: name the workspace too.
+        const who = [found.email ?? "another account", found.organization].filter(Boolean).join(" in ");
         return fail("OtherAccount", {
-          message: `You signed in as ${found.email ?? "another account"}, not the account of this subscription. Sign in with that account.`,
+          message: `You signed in as ${who}, not the account of this subscription. Sign in with that account.`,
         });
+      }
       subscriptionId = subscription._id;
       accountId = same._id;
       await ctx.db.patch(same._id, { ...identity, status: "ok" });
-      await ctx.db.patch(subscription._id, { plan: found.plan, models: found.models });
+      await ctx.db.patch(subscription._id, { ...plan, models: found.models });
       const old = await ctx.db
         .query("logins")
         .withIndex("by_account", (q) => q.eq("account", same._id))
@@ -251,7 +266,7 @@ export const connect = internalMutation({
         company: signIn.company,
         method: "subscription",
         label: "",
-        plan: found.plan,
+        plan: found.planKnown ? found.plan : "",
         enabled: true,
         models: found.models,
         createdAt: Date.now(),
@@ -264,14 +279,7 @@ export const connect = internalMutation({
         status: "ok",
       });
     }
-    await ctx.db.insert("logins", {
-      owner,
-      account: accountId,
-      access,
-      refresh,
-      expiresAt,
-      ...(idToken !== undefined && { idToken }),
-    });
+    await ctx.db.insert("logins", { owner, account: accountId, access, refresh, expiresAt });
     const subscription = (await ctx.db.get(subscriptionId))!;
     const accounts = await ctx.db
       .query("accounts")
@@ -309,14 +317,23 @@ export const finishSignIn = pluginOnly(
         return waiting.expired
           ? fail("Cancelled", { message: "This sign-in is no longer waiting. Start again." })
           : fail("Unreadable", { message: read.error });
+      // The state first, as Codex checks it before a code or an error: another sign-in's
+      // return is said to be that, and this one keeps waiting untouched. (An expired one
+      // goes on to the claim, which says it expired.)
+      if (!waiting.expired) {
+        if (read.state !== undefined && read.state !== waiting.state) return wrongSignIn();
+        if ("refused" in read) return fail("Refused", { message: read.refused });
+      }
       const claimed = await ctx.runMutation(internal.signins.claimFinish, args);
       if (isFailure(claimed)) return claimed;
       if (claimed.expired) return fail("Expired", { message: EXPIRED });
       if (read.state !== undefined && read.state !== claimed.state) {
         await settle(false);
-        return fail("WrongSignIn", {
-          message: "That address belongs to another sign-in. Paste the one from the page this dialog opened.",
-        });
+        return wrongSignIn();
+      }
+      if ("refused" in read) {
+        await settle(false);
+        return fail("Refused", { message: read.refused });
       }
       const addresses = await companyAddresses(ctx);
       let signedIn: SignedIn;
@@ -342,17 +359,19 @@ export const finishSignIn = pluginOnly(
       }
       const email = about.identity.email ?? signedIn.identity.email;
       const organization = about.identity.organization ?? signedIn.identity.organization;
+      const workspace = about.identity.workspace ?? signedIn.identity.workspace;
       const added = await ctx.runMutation(internal.signins.connect, {
         ...args,
         accountId,
         ...(email !== undefined && { email }),
         ...(organization !== undefined && { organization }),
+        ...(workspace !== undefined && { workspace }),
         plan: about.plan,
+        planKnown: about.planKnown,
         models: about.models,
         access: login.access,
         refresh: login.refresh,
         expiresAt: login.expiresAt,
-        ...(login.idToken !== undefined && { idToken: login.idToken }),
       });
       // `connect` rolls back on failure, so the sign-in is still there with its claim.
       if (isFailure(added)) await settle(added.kind === "AlreadyAdded" || added.kind === "Gone");

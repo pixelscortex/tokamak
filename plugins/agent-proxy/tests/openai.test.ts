@@ -19,8 +19,27 @@ test("a paste is read as CLIProxyAPI reads a callback, and a bare code is refuse
   expect(readPasted(`${base}#code=abc&state=xyz`)).toEqual(read);
   // ChatGPT may append an onboarding entry point to the state (Codex accepts it).
   expect(readPasted(`${base}?code=abc&state=xyz.onboarding_entrypoint%3Dlife_sciences`)).toEqual(read);
-  for (const wrong of ["", "abc", `${base}?code=abc`, `${base}?error=access_denied&state=xyz`])
+  for (const wrong of ["", "abc", `${base}?code=abc`, `${base}?error=access_denied`])
     expect(readPasted(wrong)).toHaveProperty("error");
+});
+
+test("an error return keeps its state, so it is checked first, and is worded as Codex words it", () => {
+  const base = "http://localhost:1455/auth/callback";
+  // Codex's own case: the workspace has not enabled Codex for this person.
+  expect(
+    readPasted(`${base}?error=access_denied&error_description=missing_codex_entitlement&state=xyz`),
+  ).toEqual({
+    refused: "Codex is not enabled for your workspace. Ask your workspace administrator to enable it.",
+    state: "xyz",
+  });
+  // Any other error names its code (as a short token) and sends the person back to the page.
+  expect(readPasted(`${base}?error=access_denied&state=xyz`)).toEqual({
+    refused: "ChatGPT refused the sign-in (access_denied). Open the sign-in page again.",
+    state: "xyz",
+  });
+  expect(readPasted(`${base}?error=%3Cscript%3E%2F..&state=xyz`)).toMatchObject({
+    refused: expect.stringMatching(/^ChatGPT refused the sign-in \(script\.\.\)/),
+  });
 });
 
 /** A company that answers every request with `answer`, and remembers what it was sent. */
@@ -91,6 +110,20 @@ test("a renewal without a new refresh or ID token keeps the old refresh token an
   }
 });
 
+test("a JWT access token's own exp sets the expiry, as Codex reads it, over expires_in", async () => {
+  const exp = Math.floor(Date.now() / 1000) + 600;
+  const company = await endpoint(() => ({
+    status: 200,
+    body: JSON.stringify({ access_token: syntheticJwt({ exp }), refresh_token: "r2", expires_in: 86_400 }),
+  }));
+  try {
+    const answer = await renew(company.addresses, "r1");
+    expect(answer).toMatchObject({ kind: "renewed", login: { expiresAt: exp * 1000, refresh: "r2" } });
+  } finally {
+    await company.stop();
+  }
+});
+
 test("an exchange without an ID token is refused: without it no workspace is known", async () => {
   const company = await endpoint(() => ({
     status: 200,
@@ -133,7 +166,8 @@ test("the plan is Codex's name for the claim, and a model hidden from Codex's pi
     });
     expect(found).toEqual({
       plan: "Business",
-      identity: { accountId: "user-1/ws-1", email: "you@acme.test", organization: "Acme" },
+      planKnown: true,
+      identity: { accountId: "user-1/ws-1", email: "you@acme.test", organization: "Acme", workspace: "ws-1" },
       models: [{ id: "gpt-5", name: "GPT-5" }],
     });
   } finally {

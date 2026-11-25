@@ -11,7 +11,8 @@ export const oauth = {
   openai: {
     client: "app_EMoamEEZ73f0CkXaXp7hrann",
     redirect: "http://localhost:1455/auth/callback",
-    scope: "openid profile email offline_access api.connectors.read api.connectors.invoke",
+    // CLIProxyAPI's scope, as agent-proxy asks for it (Codex adds the two connector scopes).
+    scope: "openid profile email offline_access",
   },
 } as const;
 
