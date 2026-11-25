@@ -71,13 +71,13 @@ export function AddToProfile(props: { subscription: Subscription; builder: Build
       <Menu.Content>
         <Menu.Group>
           <Menu.GroupLabel>Add to profile</Menu.GroupLabel>
-          <For each={props.builder.profiles()}>
+          <For each={props.builder.profiles()} keyed={(profile: { id: string }) => profile.id}>
             {(profile) => {
-              const holds = () => profile.subscriptions.includes(id());
+              const holds = () => profile().subscriptions.includes(id());
               return (
-                <Menu.Item value={profile.id} disabled={holds()}>
-                  <span class="text-code">{profile.code}</span>
-                  <span class="min-w-0 flex-1 truncate">{profile.name}</span>
+                <Menu.Item value={profile().id} disabled={holds()}>
+                  <span class="text-code">{profile().code}</span>
+                  <span class="min-w-0 flex-1 truncate">{profile().name}</span>
                   <Show when={holds()}>
                     <span class="text-label text-ink-3">added</span>
                   </Show>

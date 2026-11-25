@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { isFailure } from "@tokamak/sdk";
 import { useClient, useQuery } from "@tokamak/sdk/client";
@@ -31,7 +31,10 @@ export function RemoveDialog(props: { subscriptions: readonly Subscription[] }):
 
 function Confirm(props: { subscription: Subscription }): JSX.Element {
   const client = useClient();
-  const uses = useQuery(client, api.manage.usedBy, () => ({ id: props.subscription.id }));
+  // Every answer of the list brings a fresh subscription object: the query follows its id only,
+  // or each answer would subscribe again and redraw the rows.
+  const id = createMemo(() => props.subscription.id);
+  const uses = useQuery(client, api.manage.usedBy, () => ({ id: id() }));
   const [problem, setProblem] = createSignal<string>();
   const name = () => [titleOf(props.subscription), props.subscription.label].filter(Boolean).join(", ");
   async function remove() {
@@ -62,12 +65,12 @@ function Confirm(props: { subscription: Subscription }): JSX.Element {
         <div class="flex flex-col gap-2">
           <p class="m-0 text-row text-ink-2">{countOf(uses.data()!.length, "profile")} will lose it:</p>
           <ul aria-label="Profiles that lose it" class="m-0 flex list-none flex-col gap-1 p-0">
-            <For each={uses.data()}>
+            <For each={uses.data()} keyed={(use: { id: string }) => use.id}>
               {(use) => (
                 <li class="flex h-6 items-center gap-2">
                   <Icon path={manageGlyphs.profile} size={12} class="text-ink-3" />
-                  <span class="text-data text-ink-3">{use.code}</span>
-                  <span class="text-row font-medium text-ink">{use.name}</span>
+                  <span class="text-data text-ink-3">{use().code}</span>
+                  <span class="text-row font-medium text-ink">{use().name}</span>
                 </li>
               )}
             </For>

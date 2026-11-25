@@ -54,10 +54,10 @@ export function SubscriptionCard(props: {
         />
       </div>
       <div class="flex min-w-0 flex-1 flex-col">
-        <For each={subscription().accounts}>
+        <For each={subscription().accounts} keyed={(account: Subscription["accounts"][number]) => account.id}>
           {(account) => (
-            <Show when={account.email}>
-              <span class="truncate text-data text-ink-2">{account.email}</span>
+            <Show when={account().email}>
+              {(email) => <span class="truncate text-data text-ink-2">{email()}</span>}
             </Show>
           )}
         </For>

@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { isFailure } from "@tokamak/sdk";
 import { Region, useClient, useQuery } from "@tokamak/sdk/client";
@@ -144,12 +144,16 @@ function Details(props: {
               </Button>
             </SectionHeader>
             <ul class="m-0 flex list-none flex-col p-0">
-              <For each={props.subscription.accounts}>
+              {/* Keyed by id, as every list of records here: an answer brings fresh objects. */}
+              <For
+                each={props.subscription.accounts}
+                keyed={(account: Subscription["accounts"][number]) => account.id}
+              >
                 {(account) => (
                   <AccountRow
-                    account={account}
-                    onSignOut={() => signOut(account)}
-                    onSignIn={() => open(account.id)}
+                    account={account()}
+                    onSignOut={() => signOut(account())}
+                    onSignIn={() => open(account().id)}
                   />
                 )}
               </For>
@@ -312,11 +316,11 @@ function Models(props: { subscription: Subscription }): JSX.Element {
         <span class="text-label text-ink-3">found automatically</span>
       </SectionHeader>
       <ul class="m-0 flex list-none flex-wrap gap-2 p-0">
-        <For each={props.subscription.models}>
+        <For each={props.subscription.models} keyed={(model: { id: string }) => model.id}>
           {(model) => (
             <li>
               <Chip size="sm" icon={markPath(props.subscription.company)}>
-                {modelName(model.name)}
+                {modelName(model().name)}
               </Chip>
             </li>
           )}
@@ -329,7 +333,10 @@ function Models(props: { subscription: Subscription }): JSX.Element {
 /** The profiles that hold the subscription (TKM-264, through `manage:usedBy`). */
 function UsedBy(props: { subscription: Subscription }): JSX.Element {
   const client = useClient();
-  const uses = useQuery(client, api.manage.usedBy, () => ({ id: props.subscription.id }));
+  // Every answer of the list brings a fresh subscription object: the query follows its id only,
+  // or each answer would subscribe again and redraw the rows.
+  const id = createMemo(() => props.subscription.id);
+  const uses = useQuery(client, api.manage.usedBy, () => ({ id: id() }));
   return (
     <section aria-label="Used by" class="flex flex-col gap-3">
       <SectionHeader title="Used by" />
@@ -342,16 +349,16 @@ function UsedBy(props: { subscription: Subscription }): JSX.Element {
         }
       >
         <ul class="m-0 flex list-none flex-col gap-2 p-0">
-          <For each={uses.data()}>
+          <For each={uses.data()} keyed={(use: { id: string }) => use.id}>
             {(use) => (
               <li class="flex h-6 items-center gap-2">
                 <span class="flex items-center gap-1 text-ink-3">
                   <Icon path={manageGlyphs.profile} size={12} />
-                  <span class="text-data">{use.code}</span>
+                  <span class="text-data">{use().code}</span>
                 </span>
-                <span class="flex-1 truncate text-row font-medium text-ink">{use.name}</span>
+                <span class="flex-1 truncate text-row font-medium text-ink">{use().name}</span>
                 <span class="text-data text-ink-3">
-                  {use.threads} {use.threads === 1 ? "thread" : "threads"}
+                  {use().threads} {use().threads === 1 ? "thread" : "threads"}
                 </span>
               </li>
             )}

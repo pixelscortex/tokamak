@@ -237,37 +237,39 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           )}
         </Show>
         <div class="grid grid-cols-4 gap-3">
-          <For each={subscriptions()}>
+          {/* Keyed by id: every answer of the list brings fresh objects, and a card must stay
+              the same element (its hover, focus and open menu; Solid's UNSTABLE_LIST_IDENTITY). */}
+          <For each={subscriptions()} keyed={(item: Subscription) => item.id}>
             {(subscription) => (
               <SubscriptionCard
-                subscription={subscription}
+                subscription={subscription()}
                 now={now()}
                 onEnabled={(enabled) =>
-                  void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
+                  void client.mutation(api.subscriptions.setEnabled, { id: subscription().id, enabled })
                 }
-                onSignIn={() => startAndOpen({ company: subscription.company, repair: subscription.id })}
+                onSignIn={() => startAndOpen({ company: subscription().company, repair: subscription().id })}
                 actions={
                   <CardActions
-                    subscription={subscription}
-                    addToProfile={<AddToProfile subscription={subscription} builder={builder} />}
+                    subscription={subscription()}
+                    addToProfile={<AddToProfile subscription={subscription()} builder={builder} />}
                   />
                 }
-                dimmed={builder.dimmed(subscription.id)}
-                profiles={<CardProfiles subscription={subscription} builder={builder} />}
-                onPointerDown={(event) => builder.drag.start(event, { subscription: subscription.id })}
+                dimmed={builder.dimmed(subscription().id)}
+                profiles={<CardProfiles subscription={subscription()} builder={builder} />}
+                onPointerDown={(event) => builder.drag.start(event, { subscription: subscription().id })}
               />
             )}
           </For>
-          <For each={signIns()}>
-            {(signIn: SignIn) => (
+          <For each={signIns()} keyed={(item: SignIn) => item.id}>
+            {(signIn) => (
               <AwaitingCard
-                signIn={signIn}
+                signIn={signIn()}
                 onContinue={() => {
                   setProblem(undefined);
-                  setStep({ kind: "sign-in", signIn });
+                  setStep({ kind: "sign-in", signIn: signIn() });
                 }}
-                onCancel={() => cancel(signIn)}
-                onRestart={() => startAndOpen(signIn)}
+                onCancel={() => cancel(signIn())}
+                onRestart={() => startAndOpen(signIn())}
                 dimmed={builder.dimmed()}
               />
             )}
