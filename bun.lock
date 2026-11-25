@@ -114,6 +114,16 @@
         "vitest": "5.1.0",
       },
     },
+    "plugins/agent-proxy": {
+      "name": "agent-proxy",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tokamak/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "vitest": "5.1.0",
+      },
+    },
     "plugins/ai": {
       "name": "ai",
       "version": "0.1.0",
@@ -808,6 +818,8 @@
     "acorn-jsx": ["acorn-jsx@5.3.2", "", { "peerDependencies": { "acorn": "^6.0.0 || ^7.0.0 || ^8.0.0" } }, "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ=="],
 
     "acorn-loose": ["acorn-loose@8.5.2", "", { "dependencies": { "acorn": "^8.15.0" } }, "sha512-PPvV6g8UGMGgjrMu+n/f9E/tCSkNQ2Y97eFvuVdJfG11+xdIeDcLyNdC8SHcrHbRqkfwLASdplyR6B6sKM1U4A=="],
+
+    "agent-proxy": ["agent-proxy@workspace:plugins/agent-proxy"],
 
     "ai": ["ai@workspace:plugins/ai"],
 
