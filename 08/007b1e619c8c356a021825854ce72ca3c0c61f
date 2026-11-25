@@ -1,0 +1,121 @@
+design/README.md
+  s_419b7bad57fe38::t_ea9a68c2d95a5d 11
+design/ai.md
+  s_419b7bad57fe38::t_ab7fd83611d3c6 32-35,41-53,73,76
+design/chat.md
+  s_419b7bad57fe38::t_68ba9fb8eb9a9d 21-37
+design/code.md
+  s_419b7bad57fe38::t_d4ef979b76e3bf 25-27,33-40,50,68
+e2e/fake-agent/agents/fake-agent/src/client/api.tsx
+  s_419b7bad57fe38::t_14325b18a4974f 10
+packages/build/README.md
+  s_419b7bad57fe38::t_c98dccace6ee89 124-153,156-157,159,162-193
+packages/build/src/artifact-bundle.ts
+  s_419b7bad57fe38::t_24f1341753369c 3,10,54
+packages/build/src/client-surface.ts
+  s_419b7bad57fe38::t_fd4fac23430e78 24,36,56,65,82-86
+packages/build/src/component-parts.ts
+  s_419b7bad57fe38::t_b3022c5e37e389 1-3,6-7,9-15,17-27,30-124,126-295,297-321,325-472,474-478,480-482,484-488,490,492-495,497-541,551-555,559-564,591-595,599,603,609-610,617,623-630,644-645,655-657,671-677,679-680
+packages/build/src/contributions.ts
+  s_419b7bad57fe38::t_ef5ec2fc866b36 12,21-26,43-44,50,52,78-93,104,251-254,256-258,265-275,277-282,297-298,302,305-322,325
+packages/build/src/descriptor.ts
+  s_419b7bad57fe38::t_c86b017935b213 4
+packages/build/src/part-props.ts
+  s_419b7bad57fe38::t_5ac6d46764fdca 1-135
+packages/build/src/vite.ts
+  s_419b7bad57fe38::t_118b3787ef1993 20,38,112,247,263,265
+packages/build/tests/browser.test.ts
+  s_419b7bad57fe38::t_373cd06f454350 21-22
+packages/build/tests/components.test.mjs
+  s_419b7bad57fe38::t_a190da62ab2e2f 17-29,31,33-56,61-71,74-100,105,107-116,118-120,124,126-136,138,142-177,181,183-209,212-227,229-236,240,242-249,251,253-259,261-290
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_10757045762615 1,3-14
+packages/build/tests/fixtures/browser/src/client/view.tsx
+  s_419b7bad57fe38::t_9d5c2b0209207e 1,6-7,11
+packages/build/tests/fixtures/window-plugin/src/main.tsx
+  s_419b7bad57fe38::t_c4fde8dcb39617 2,19,25,27,30
+packages/build/tests/plugins.test.mjs
+  s_419b7bad57fe38::t_07c66336432370 244,251,263-265
+packages/runtime/js/plugins.ts
+  s_419b7bad57fe38::t_1f1d5973849fd4 204-206
+packages/sdk/README.md
+  s_419b7bad57fe38::t_0c950e09fd62ef 564-575,579-584
+packages/sdk/client.tsx
+  s_419b7bad57fe38::t_d91fd2e10c7837 2,16,33,36-38,47-56,58-102,104-128,139,144-145,147,178,195-231,238,247,310-330
+packages/sdk/component-actions.ts
+  s_419b7bad57fe38::t_a675db353cef6d 6,22,36,50,61,66,74
+packages/sdk/component-parts.tsx
+  s_419b7bad57fe38::t_fc581380e9654f 5-9,17-18,22,29-248,253-323,327,349,351-352,360-370
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_419b7bad57fe38::t_ad882f6a013b5c 9-10
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_419b7bad57fe38::t_b553b9e282c946 4,6-8,10-27,32-33,36-39,63-66,69,74-83,89-125
+packages/sdk/tests/web/component-actions.test.tsx
+  s_419b7bad57fe38::t_4584a3cac6d51a 6-7,13,43-44,149,200-204,224-229,241-243,251-252,329-463
+packages/sdk/tests/web/component-parts-budget.test.tsx
+  s_419b7bad57fe38::t_baa1f7953f9e36 1-168
+packages/sdk/tests/web/component-wrapper-lifecycle.test.tsx
+  s_419b7bad57fe38::t_fe487c36f7ae80 7-8,10
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_ab540a58b96a71 1-9
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_419b7bad57fe38::t_2427281a4287e6 1-2,4-21
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_eaaa85622494db 1,3-78
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_419b7bad57fe38::t_92779e986c6c10 15-16,18-19,21,25,27-32,34-49,51-98
+packages/sdk/tools/plugin-boundary.mjs
+  s_419b7bad57fe38::t_6c00c8fe3a7cae 99-106,120
+packages/sdk/view.ts
+  s_419b7bad57fe38::t_291b1b4da43fb4 12
+packages/sdk/vitest.config.ts
+  s_419b7bad57fe38::t_29f7ca7acb4dab 4,13-15,26-41,44
+packages/server/src/plugin-skill.md
+  s_419b7bad57fe38::t_a264245d11793e 32-35
+plugins/ai/README.md
+  s_419b7bad57fe38::t_804c86ad841eb0 55-56
+plugins/ai/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_d466f44fe12951 1-309
+plugins/ai/src/client/api.ts
+  s_419b7bad57fe38::t_1d96b8eadb2ba1 26,28,30,35,37,39-40,48,53,55,59
+plugins/chat/README.md
+  s_419b7bad57fe38::t_5d4ae2acd3952c 62-65,68,81-85,88-90
+plugins/chat/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_915bf0590ba09b 1,3-235
+plugins/chat/src/client/api.ts
+  s_419b7bad57fe38::t_2cb649ec314e36 3
+plugins/chat/src/client/ui/composer.tsx
+  s_419b7bad57fe38::t_ae07b1026e36bf 28,30-31,58,64
+plugins/chat/src/client/ui/empty.tsx
+  s_419b7bad57fe38::t_d611e3627eada5 4,23,26-27,29,33,35
+plugins/chat/src/client/ui/message.tsx
+  s_419b7bad57fe38::t_b972f74a829f89 39,44,66,68
+plugins/chat/src/client/ui/thread-header.tsx
+  s_419b7bad57fe38::t_fa1fe00d73c6cd 20,44-45,61,63,78
+plugins/chat/src/client/ui/thread-list.tsx
+  s_419b7bad57fe38::t_8d49ba4eb3769c 26-27,33-34,37,41,44
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_419b7bad57fe38::t_13f05dabb67435 7-8,13,20-27,30,40,68-69,72-79
+plugins/code/src/client/_generated/components.d.ts
+  s_419b7bad57fe38::t_e693cbc877f071 1-143
+plugins/code/src/client/api.tsx
+  s_419b7bad57fe38::t_76fadfde9ecc19 73,97,100,105,108,111
+wiki/content/docs/api/window.mdx
+  s_419b7bad57fe38::t_bd03180bbba887 12-14,17-21,23,33,46-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "08007b1e619c8c356a021825854ce72ca3c0c61f",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
