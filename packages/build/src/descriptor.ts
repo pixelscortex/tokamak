@@ -3,16 +3,11 @@ import ts from "typescript";
 import { basename, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import type { PluginDefinition } from "@tokamak/sdk";
+export { clientEntry } from "../../sdk/tools/plugin-boundary.mjs";
 
 export function serverModule(root: string, module: string): string {
   return existsSync(resolve(root, "src/server")) ? basename(module) : module;
 }
-export function clientEntry(root: string): string {
-  for (const entry of ["src/client/api.ts", "src/client/api.tsx", "src/client/main.tsx", "src/main.tsx"])
-    if (existsSync(resolve(root, entry))) return resolve(root, entry);
-  return resolve(root, existsSync(resolve(root, "src/client")) ? "src/client/main.tsx" : "src/main.tsx");
-}
-
 export function readDescriptor(root: string): PluginDefinition | undefined {
   const path = resolve(root, "plugin.ts");
   if (!existsSync(path)) return;

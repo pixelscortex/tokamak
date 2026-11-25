@@ -11,6 +11,7 @@ import { contractDeclarations, contractEntry } from "../../sdk/tools/contracts.m
 import { serverDirectory } from "../../sdk/tools/server-files.mjs";
 import { functionPlacement, lanes } from "../../sdk/tools/placement.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
+import { uiContributions } from "./contributions.ts";
 import { artifactBundle, stripSourcesContent } from "./artifact-bundle.ts";
 import solid from "@solidjs/vite-plugin";
 import { clientSurface } from "./client-surface.ts";
@@ -27,6 +28,7 @@ export function tokamak(
   let root: string;
   let plugin: Readonly<PluginDefinition>;
   let placement: ReturnType<typeof functionPlacement>;
+  let ui: ReturnType<typeof uiContributions> | undefined;
   let hasLocal = false;
   let stripClientSources = false;
   return [
@@ -100,6 +102,7 @@ export function tokamak(
               version: manifest.version ?? "0.1.0",
             },
         );
+        if (options.ui !== false) ui = uiContributions(root, plugin.id, (message) => this.warn(message));
         const signIn = signInDependency(root, plugin, options.pluginCatalog);
         if (signIn)
           throw new Error(`Plugin ${plugin.id} lists ${signIn} as a dependency; depend on auth instead`);
@@ -215,7 +218,7 @@ export function tokamak(
       generateBundle: {
         order: "post",
         handler(_options, bundle, isWrite) {
-          return artifactBundle(root, plugin, { ...options, stripClientSources }).call(
+          return artifactBundle(ui?.contributes ?? {}, plugin, { ...options, stripClientSources }).call(
             this,
             _options,
             bundle,
@@ -231,8 +234,9 @@ export function tokamak(
       (id) => {
         const edits = placement?.edits(id, lanes.window) ?? [];
         if (edits.length) stripClientSources = true;
-        return edits;
+        return [...edits, ...(ui?.edits.get(id) ?? [])];
       },
+      options.pluginCatalog,
     ),
     solid(),
   ];

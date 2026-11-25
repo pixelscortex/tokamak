@@ -59,19 +59,13 @@ and streams replies from plugins through its reply API.
 
 ## Extending chat
 
-Import the components through `plugin:chat/client` and act on their elements.
-Every action and its `when` receive the component's props.
-
-| Component   | Elements                                                        | Props                                    |
-| ----------- | --------------------------------------------------------------- | ---------------------------------------- |
-| `Composer`  | `top`, `box`, `input`, `tools`, `sendButton`                    | `threadId`, `folder`, `draft`, `sending` |
-| `Message`   | `avatar`, `header`, `body`, `footer`                            | `message`, `threadId`, `next`, `isLast`  |
-| `Empty`     | `icon`, `glyph`, `heading`, `folders`                           | `folders`, `folder`                      |
-| `ThreadRow` | `row`, `status`, `title`, `age`, `detail` (second line)         | `thread`, `now`                          |
-| `Header`    | `icon`, `title`, `titleInput`, `folder`, `menu`, `deleteDialog` | `thread`                                 |
+Import `parts` through `plugin:chat/client`. The compiler publishes paths for
+every JSX tag. See [Chat's design notes](../../design/chat.md#parts-it-offers)
+for the parts used by starter add-ons. Each action and its live `when`
+receive the owning component's props.
 
 `Message.next` and `isLast` tell where a run of replies ends without chat
-knowing about turns. A filled `ThreadRow.detail` makes the row a double row.
+knowing about turns. A filled detail lane makes the thread row a double row.
 
 `onDraftSubmit` can handle an open thread's draft before normal Send. It
 receives `{ threadId, text, intent }`, where intent is `"steer"` for Enter or
@@ -84,14 +78,16 @@ import { onCleanup } from "solid-js";
 import { after, append, prepend, replace } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Row = after(chat.Composer.box, AgentRow);
-export const Question = prepend(chat.Composer.top, PermissionCard, { when: (c) => waiting(c.threadId) });
-export const Card = append(chat.Message.footer, ChangeCard, {
+export const Row = after(chat.parts.Composer.div.div$2, AgentRow);
+export const Question = prepend(chat.parts.Composer.div.div, PermissionCard, {
+  when: (c) => waiting(c.threadId),
+});
+export const Card = append(chat.parts.Message.article.div$2, ChangeCard, {
   when: (m) => !m.next || m.next.role === "user",
 });
-export const Heading = replace(chat.Empty.heading, AgentHeading);
-export const Status = append(chat.ThreadRow.status, StatusIcon);
-export const Branch = after(chat.Header.title, BranchChip);
+export const Heading = replace(chat.parts.Empty.div.div.h2, AgentHeading);
+export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.span, StatusIcon);
+export const Branch = after(chat.parts.Header.div.div, BranchChip);
 
 // After each Send, once the message is stored and the folder exists on this computer:
 // { threadId, messageId, text, folder, first }.

@@ -3,13 +3,14 @@ import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
 import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
-import { Composer, CustomLayout, Labels } from "./fixtures/parts/owner/src/client/_generated/components";
+import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
+import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
 
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
 
 test("a plugin can add live UI before another plugin's button", async () => {
   const [visible, setVisible] = createSignal(false);
-  const target = Composer.sendButton;
+  const target = parts.Composer.section.SendButton;
   const Cost = before(target, (props) => <small>Cost of {props.label}</small>, { when: visible });
   const root = document.createElement("div");
   const lifecycle: string[] = [];
@@ -39,8 +40,8 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   const [hiding, setHiding] = createSignal(false);
   const [wrapping, setWrapping] = createSignal(true);
   const [label, setLabel] = createSignal("Send");
-  const button = Composer.sendButton;
-  const toolbar = Composer.toolbar;
+  const button = parts.Composer.section.SendButton;
+  const toolbar = parts.Composer.section;
   const layers = [
     layer(
       "Before",
@@ -143,42 +144,9 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   }
 });
 
-test("an owner can place appended and prepended UI itself", async () => {
-  const target = CustomLayout.ribbon;
-  const layers = [
-    layer(
-      "Intro",
-      prepend(target, () => "intro"),
-      "prepend",
-      target,
-    ),
-    layer(
-      "Title",
-      append(target, () => "title"),
-      "append",
-      target,
-    ),
-  ];
-  const root = document.createElement("div");
-  const dispose = render(
-    () => (
-      <ExtensionProvider host={host(layers)}>
-        <CustomLayout />
-      </ExtensionProvider>
-    ),
-    root,
-  );
-  try {
-    await waitFor(() => expect(root.querySelector("h2")?.textContent).toBe("title"));
-    expect(root.querySelector("footer")?.textContent).toBe("intro");
-  } finally {
-    dispose();
-  }
-});
-
 test("a later replacement is refused even while the first installed replacement is inactive", async () => {
   const [active, setActive] = createSignal(false);
-  const target = Composer.sendButton;
+  const target = parts.Composer.section.SendButton;
   const layers = [
     layer(
       "Second",
@@ -229,10 +197,11 @@ test("a later replacement is refused even while the first installed replacement 
   }
 });
 
-test("render props, explicit children and void elements still work inside an extensible component", async () => {
-  const list = Labels.for;
-  const search = Labels.search;
-  const body = Labels.body;
+test("render props, forwarded and explicit children, and void elements keep their behavior", async () => {
+  const list = parts.Labels.section.For;
+  const search = parts.Labels.section.input;
+  const body = parts.Labels.section.Region.span;
+  const button = parts.Labels.section.button;
   const layers = [
     layer(
       "Result",
@@ -252,6 +221,12 @@ test("render props, explicit children and void elements still work inside an ext
       "append",
       body,
     ),
+    layer(
+      "Forwarded",
+      append(button, () => "?"),
+      "append",
+      button,
+    ),
   ];
   const root = document.createElement("div");
   const dispose = render(
@@ -263,7 +238,7 @@ test("render props, explicit children and void elements still work inside an ext
     root,
   );
   try {
-    await waitFor(() => expect(root.textContent).toBe("one!two!FilterBody!"));
+    await waitFor(() => expect(root.textContent).toBe("1: one!2: two!FilterBody!Forwarded?"));
     expect(root.querySelector("b + input")?.getAttribute("aria-label")).toBe("Search");
   } finally {
     dispose();
@@ -271,8 +246,8 @@ test("render props, explicit children and void elements still work inside an ext
 });
 
 test("each action's `when` reads the props of the instance it would change", async () => {
-  const button = Composer.sendButton;
-  const toolbar = Composer.toolbar;
+  const button = parts.Composer.section.SendButton;
+  const toolbar = parts.Composer.section;
   // Only the composer labelled "Post" is changed; the "Send" one stays as it was.
   const onPost = (props: { label: string }) => props.label === "Post";
   const cases: [Layer[], string][] = [

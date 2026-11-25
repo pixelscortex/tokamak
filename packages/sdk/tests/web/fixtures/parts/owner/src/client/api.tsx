@@ -1,6 +1,5 @@
 import type { JSX } from "@solidjs/web";
 import { For, onCleanup } from "solid-js";
-import { component } from "@tokamak/sdk/client";
 
 export interface ExampleProps {
   label: string;
@@ -13,31 +12,25 @@ const SendButton = (props: ExampleProps) => {
   return <button>{props.label}</button>;
 };
 
-export const Composer = component("composer", {}, (props: ExampleProps) => (
-  <section part="toolbar" aria-label="toolbar">
+export const Composer = (props: ExampleProps) => (
+  <section aria-label="toolbar">
     <SendButton {...props} />
   </section>
-));
-
-export const CustomLayout = component("customLayout", {}, () => (
-  <section part="ribbon">
-    {(added) => (
-      <>
-        <h2>{added.append}</h2>
-        <footer>{added.prepend}</footer>
-      </>
-    )}
-  </section>
-));
+);
 
 const Region = (props: { children: JSX.Element }) => <main>{props.children}</main>;
 
-export const Labels = component("labels", {}, (props: { labels: string[] }) => (
+export const Labels = (props: { labels: string[] }) => (
   <section>
-    <For part="for" each={props.labels}>
-      {(label) => <span>{label}</span>}
+    <For each={props.labels}>
+      {(props, index) => (
+        <span>
+          {index() + 1}: {props}
+        </span>
+      )}
     </For>
-    <input part="search" aria-label="Search" />
-    <Region children={<span part="body">Body</span>} />
+    <input aria-label="Search" />
+    <Region children={<span>Body</span>} />
+    <button {...{ children: "Forwarded" }} />
   </section>
-));
+);

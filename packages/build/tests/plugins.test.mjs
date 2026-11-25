@@ -241,15 +241,14 @@ test("a plugin importing a slot or contribution helper fails to compile", async 
   });
 }, 30_000);
 
-test("wrap and replace require named elements and component options cannot declare a page", async () => {
+test("the SDK has no component marking helper and actions require a part", async () => {
   await scratch(async (root) => {
     const path = await source(
       root,
       "old-component",
       `
 import { component, replace, wrap } from "@tokamak/sdk/client";
-const Card = component("card", {}, () => <div />);
-export const oldPage = component("page", { route: "/" }, () => null);
+const Card = () => <div />;
 export const oldWrap = wrap(Card, ({ children }) => children);
 export const oldReplace = replace(Card, () => null);
 `,
@@ -261,8 +260,8 @@ export const oldReplace = replace(Card, () => null);
     );
     const diagnostics = check.stdout + check.stderr;
     expect(check.status, diagnostics).not.toBe(0);
-    expect(diagnostics).toMatch(/api\.tsx\(4,\d+\): error/);
-    for (const line of [5, 6])
-      expect(diagnostics).toMatch(new RegExp(`api\\.tsx\\(${line},\\d+\\): error[^\\n]+UnlockedPart`));
+    expect(diagnostics).toContain("has no exported member 'component'");
+    for (const line of [4, 5])
+      expect(diagnostics).toMatch(new RegExp(`api\\.tsx\\(${line},\\d+\\): error[^\\n]+Part`));
   });
 }, 30_000);

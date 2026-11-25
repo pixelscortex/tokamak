@@ -3,8 +3,6 @@ import { createEffect, createContext, createMemo, createSignal, onCleanup, useCo
 import type { JSX } from "@solidjs/web";
 import { componentActionKind, isComponentAction, type ComponentAction } from "./component-actions";
 export {
-  component,
-  defineComponent as __defineComponent,
   before,
   after,
   prepend,
@@ -13,10 +11,7 @@ export {
   wrapPart as wrap,
   replacePart as replace,
   type ComponentPart,
-  type ComponentOptions,
   type ComponentActionOptions,
-  type ComponentParts,
-  type ComponentSelf,
 } from "./component-actions";
 import { PartActions, type LoadedPartAction } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
@@ -208,4 +203,4 @@ export {
   type RegionName,
 } from "./regions";
 
-export { renderPart as __renderPart, type PartAdditions } from "./component-parts";
+export { renderPart as __renderPart } from "./component-parts";

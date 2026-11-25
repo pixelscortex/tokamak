@@ -10,17 +10,7 @@ import {
   useContext,
 } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import {
-  componentActionKind,
-  PartProps,
-  type ComponentAction,
-  type ComponentActionKind,
-} from "./component-actions";
-
-export interface PartAdditions {
-  readonly prepend: JSX.Element;
-  readonly append: JSX.Element;
-}
+import { componentActionKind, type ComponentAction, type ComponentActionKind } from "./component-actions";
 
 export interface LoadedPartAction {
   id: string;
@@ -30,20 +20,24 @@ export interface LoadedPartAction {
   /** Reads the action's `when` with the props of the component that owns the element. */
   enabled(props: object): boolean;
 }
+type Contents = {
+  (override?: () => JSX.Element): JSX.Element;
+  spread(props: { readonly children?: JSX.Element }): object;
+};
+
 export const PartActions = createContext<(target: string) => readonly LoadedPartAction[]>(() => []);
 
 /** Compiler entry point. Keep the original element and contents lazy so hiding
  * or replacing the element disposes its entire Solid owner. */
 export function renderPart(
-  target: string | null,
-  render: (contents: (override?: () => JSX.Element) => JSX.Element) => JSX.Element,
+  target: string,
+  props: object,
+  render: (contents: Contents) => JSX.Element,
   original?: () => JSX.Element,
-  place?: (added: PartAdditions) => JSX.Element,
 ): JSX.Element {
   const actions = useContext(PartActions);
-  const props = useContext(PartProps);
   const at = (kind: ComponentActionKind) =>
-    target === null ? [] : actions(target).filter((item) => componentActionKind(item.action) === kind);
+    actions(target).filter((item) => componentActionKind(item.action) === kind);
   const enabled = (item: LoadedPartAction) => item.enabled(props);
   const hidden = createMemo(() => at("hide").some(enabled));
   const replacement = createMemo(() => at("replace").find(enabled) ?? null);
@@ -65,17 +59,10 @@ export function renderPart(
       </For>
     );
   }
+  const hasInside = () => at("prepend").length > 0 || at("append").length > 0;
   function contents(override = original) {
-    return place ? (
-      place({
-        get prepend() {
-          return additions("prepend");
-        },
-        get append() {
-          return additions("append");
-        },
-      })
-    ) : (
+    if (!override && !hasInside()) return undefined;
+    return (
       <>
         {additions("prepend")}
         {override?.()}
@@ -83,6 +70,15 @@ export function renderPart(
       </>
     );
   }
+  contents.spread = (forwarded: { readonly children?: JSX.Element }) =>
+    hasInside()
+      ? merge(forwarded, {
+          get children() {
+            return contents(() => forwarded?.children);
+          },
+        })
+      : forwarded;
+
   function surround(wrapper: LoadedPartAction, inner: JSX.Element): JSX.Element {
     // Keep the inner layers outside this branch so toggling a wrapper only
     // moves their nodes and does not dispose their owners.
@@ -128,20 +124,4 @@ export function renderPart(
     );
   }
   return <Show when={!hidden()}>{shown()}</Show>;
-}
-
-declare module "@solidjs/web" {
-  namespace JSX {
-    interface IntrinsicAttributes {
-      // Existing components can still use these names for their own props.
-      // The plugin compiler validates markers inside component() renders.
-      part?: unknown;
-      locked?: unknown;
-    }
-    // @ts-ignore The plugin compiler consumes placement callbacks before Solid handles the children.
-    interface ElementAttributes<T> {
-      locked?: true;
-      children?: CustomAttributes<T>["children"] | ((added: PartAdditions) => Element);
-    }
-  }
 }

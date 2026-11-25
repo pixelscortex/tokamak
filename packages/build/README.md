@@ -116,55 +116,46 @@ paths to the plugin's tsconfig (relative to the plugin root):
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
 
-## Extending a component
+## Extending a screen
 
-Export the component from the plugin's window API, then build the owner plugin.
-In the render function, a tag such as `<SendButton />` publishes `sendButton`.
-Use `part="name"` on a native element or to give two uses of the same tag
-different names. Solid controls such as `Show` and `For` publish paths only
-with an explicit `part`. Mark an element `locked` to prevent actions on it.
+Build the owner plugin to publish a typed `parts` export on its public client
+API. No part declarations are needed: the compiler names each JSX tag in
+the plugin's window code, including HTML tags and Solid controls.
 
-```tsx
-// chat/src/client/api.tsx
-import { component } from "@tokamak/sdk/client";
+A path starts with the enclosing named render function, followed by the tag
+names along its JSX ancestry. For example, a `Picker` with
+`<Row><Price /></Row>` publishes `parts.Picker.Row.Price`. Fragments and
+inline callbacks do not add segments. Each same-named sibling after the first
+gets `$2`, `$3`, and so on in source order. This count is local to its parent
+and tag name; inserting another tag elsewhere does not change the path.
+Duplicate render function names follow the same rule in source file order.
+Tag names retain their case; punctuation is escaped as a dollar sign, its
+hex code, and a closing dollar sign (for example, `Menu.Root` becomes
+`Menu$2e$Root`). The names `target`, `constructor`, `prototype`, and
+`__proto__` are prefixed with `$`.
 
-const SendButton = () => <button>Send</button>;
-export const Composer = component("composer", {}, () => (
-  <section part="toolbar">
-    <SendButton />
-    <span part="status" locked>
-      Ready
-    </span>
-  </section>
-));
-```
-
-Commit the generated `src/client/_generated/components.d.ts` with the component.
-Other plugins use the public client import and export each action from their own
-window API:
+Commit the generated `_generated/components.d.ts` next to the client entry.
+Export actions from the contributing plugin's client entry:
 
 ```tsx
-import { append, before } from "@tokamak/sdk/client";
-import * as chat from "plugin:chat/client";
+import { after } from "@tokamak/sdk/client";
+import * as ai from "plugin:ai/client";
 
-export const Cost = before(chat.Composer.sendButton, () => <small>Free</small>);
-export const Mic = append(chat.Composer.toolbar, MicLevel, { when: micEnabled, order: 10 });
+export const Profile = after(ai.parts.Picker.Row.Price, ProfileColumn);
 ```
 
-`before` and `after` render siblings; `prepend` and `append` render inside the
-element. `wrap` gets the current element as `props.children`. The remaining
-actions are `replace(path, UI, options?)` and `hide(path, options?)`, which
-dispose the original element and its descendants when active. Hiding also
-removes its `before` and `after` additions. Actions receive
-the declaring component's props, and so does `when`, a live check such as `(m) => m.isLast`. Layers at one
-position are ordered by `order` (default 0) and then plugin ID. The first
-installed replacement owns the position even while its condition is false.
+`before` and `after` render siblings. `prepend` and `append` render inside
+elements that accept children. `wrap` receives the element as `props.children`.
+`replace` substitutes another element; `hide` also removes the sibling
+additions. `replace` and `hide` dispose the original element and its
+descendants while active. Actions and their live `when` option receive the
+props of the render function that owns the tag. Layers at one position are
+ordered by `order` (default 0) and then plugin ID. The first installed
+replacement owns the position even while its condition is false.
 
-A named native element can place the inside layers explicitly with a sole
-function child, for example `{(added) => <><header>{added.prepend}</header><footer>{added.append}</footer></>}`.
-The callback receives `PartAdditions`. On a component tag, use its ordinary
-render prop for the data it supplies; put any placement callback on a named
-native child.
+If an installed plugin targets a path that is renamed or removed, the build
+warns with the contributing plugin's ID. Only that placement is skipped;
+other placements still render. Update the add-on to use the new path.
 
 ### Contract registrations
 

@@ -490,17 +490,25 @@ replaces it.
 
 ## Component actions
 
-Export a `component(name, options, render)` from your plugin's window API to
-give other plugins named JSX elements they can extend. The builder publishes
-typed paths using `ComponentParts`, so an action can target a path such as
-`chat.Composer.sendButton` and receive the owner's props.
+The builder publishes typed paths for the elements of each plugin's screen
+under its public client `parts` export. Write ordinary JSX in the owner
+plugin. In the add-on, import the parts and export a placement:
+
+```tsx
+import { after } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Cost = after(chat.parts.Composer.div.div$2, (props) => (
+  <small>{props.draft.length} characters</small>
+));
+```
 
 Use `before` and `after` for siblings, `prepend` and `append` for children,
 `wrap` to surround an element, `replace` to substitute another element, or
-`hide` to remove it. A named native element can accept a `PartAdditions`
-callback to place the prepended and appended children explicitly.
-See the [builder guide](../build/README.md#extending-a-component) for examples
-and the rules for naming, ordering, and locking elements.
+`hide` to remove it. A placement and its optional live `when` function
+receive the owning render function's props. If a path disappears, the build
+warns and skips that placement. See the
+[builder guide](../build/README.md#extending-a-screen) for the naming rule.
 
 ## Caller identity
 

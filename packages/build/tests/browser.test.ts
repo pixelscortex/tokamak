@@ -18,8 +18,8 @@ test("browser plugin emits DOM ESM with host imports, routes and qualified parts
   expect(ui.imports).toContain("@tokamak/sdk/client");
   expect(ui.dynamicImports).toContain("@plugins/other/ui");
   expect(ui.code).toContain("useQuery");
-  expect(ui.code).toContain("browser-fixture.fixtureBody.body");
-  expect(ui.code).not.toContain("browser-fixture.fixtureView.");
+  expect(ui.code).toContain("browser-fixture.FixtureBody.section");
+  expect(ui.code).toContain("browser-fixture.FixtureView.FixtureBody");
   const manifest = output.output.find((file) => file.fileName === "manifest.json");
   if (!manifest || manifest.type !== "asset") throw new Error("Missing manifest");
   const metadata = JSON.parse(String(manifest.source));

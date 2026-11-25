@@ -6,5 +6,6 @@ declare module "virtual:built-component-addon" {
     };
     entries: { ui: { code: string } };
   };
+  export const RenamedComposer: typeof import("./fixtures/parts/owner/src/client/api").Composer;
   export function loadActions(): Promise<Record<string, unknown>>;
 }

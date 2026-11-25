@@ -1,6 +1,5 @@
 import { Show } from "solid-js";
 import type { Id } from "@tokamak/sdk";
-import { component } from "@tokamak/sdk/client";
 import { Avatar } from "@tokamak/ui";
 import type { MessageDoc } from "../lib/api";
 import { timeOfDay } from "../lib/time";
@@ -37,12 +36,12 @@ function endLine(message: MessageDoc): string | undefined {
  * One message (Paper "Chat v7", "Turn · user"): the `avatar`, who wrote it and
  * when, the text, and an open `footer` other plugins append to, such as a change card.
  */
-export const Message = component("message", {}, (props: MessageProps) => (
+export const Message = (props: MessageProps) => (
   <article
     class="flex flex-col gap-2 pb-12"
     aria-label={`${props.message.author?.name ?? "Unknown"} at ${timeOfDay(props.message.createdAt)}`}
   >
-    <header part="header" data-part="header" class="flex h-5 items-center gap-2">
+    <header data-part="header" class="flex h-5 items-center gap-2">
       <Avatar name={props.message.author?.name ?? "?"} size={18} />
       <span class="text-label text-ink-3">{props.message.author?.name ?? "Unknown"}</span>
       <time class="text-data text-ink-3" datetime={new Date(props.message.createdAt).toISOString()}>
@@ -50,7 +49,6 @@ export const Message = component("message", {}, (props: MessageProps) => (
       </time>
     </header>
     <div
-      part="body"
       data-part="body"
       class={[
         "max-w-read text-read break-words whitespace-pre-wrap text-ink",
@@ -65,6 +63,6 @@ export const Message = component("message", {}, (props: MessageProps) => (
     <Show when={endLine(props.message)}>
       <span class="text-label text-ink-3">{endLine(props.message)}</span>
     </Show>
-    <div part="footer" data-part="footer" class="flex flex-col gap-2 empty:hidden" />
+    <div data-part="footer" class="flex flex-col gap-2 empty:hidden" />
   </article>
-));
+);

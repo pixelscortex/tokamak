@@ -3,10 +3,21 @@ import { render } from "@solidjs/web";
 import { expect, test, vi } from "vitest";
 import { createPluginLoader, type PluginModuleHost } from "../../../runtime/js/plugins";
 import { ExtensionProvider } from "../../client";
-import { Composer } from "./fixtures/parts/owner/src/client/_generated/components";
-import { loadActions, manifest } from "virtual:built-component-addon";
+import { Composer } from "./fixtures/parts/owner/src/client/api";
+import { loadActions, manifest, RenamedComposer } from "virtual:built-component-addon";
 
-test("loads built actions through the catalog and warns about a mismatched export", async () => {
+test.each([
+  {
+    title: "a built add-on renders after a plain JSX element with the owner's props",
+    Screen: Composer,
+    matches: true,
+  },
+  {
+    title: "an installed add-on keeps its other placement after a part is renamed",
+    Screen: RenamedComposer,
+    matches: false,
+  },
+])("$title", async ({ Screen, matches }) => {
   const catalogEntry = structuredClone(manifest);
   // Model a stale catalog that names a missing export without changing the actual bundle.
   const contributions = catalogEntry.plugin.contributes["component-action"];
@@ -44,14 +55,14 @@ test("loads built actions through the catalog and warns about a mismatched expor
   const dispose = render(
     () => (
       <ExtensionProvider host={loader}>
-        <Composer label="Send" lifecycle={() => {}} />
+        <Screen label="Send" lifecycle={() => {}} />
       </ExtensionProvider>
     ),
     root,
   );
   try {
-    await waitFor(() => expect(root.querySelector("small + button")?.textContent).toBe("Send"));
-    expect(root.querySelector("small")?.textContent).toBe("Built for Send");
+    await waitFor(() => expect(root.querySelector("section + p")?.textContent).toBe("Notes for Send"));
+    expect(root.querySelector("button + small")?.textContent).toBe(matches ? "Built for Send" : undefined);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/addon.*MissingBadge.*manifest/));
   } finally {
     dispose();

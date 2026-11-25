@@ -23,21 +23,21 @@ import { ThreadDetail, ThreadHelpers, ThreadStatusIcon } from "./ui/thread-statu
 listenForSends();
 
 /** The agent row sits under the composer box, inside the composer's tray. */
-export const Agent = after(chat.Composer.box, AgentRow);
+export const Agent = after(chat.parts.Composer.div.div$2, AgentRow);
 /** "What should Claude work on?" in place of "Start a conversation". */
-export const Heading = replace(chat.Empty.heading, AgentHeading);
+export const Heading = replace(chat.parts.Empty.div.div.h2, AgentHeading);
 /** The permission question, on the composer's tray above the prompt, while the sender's turn waits. */
-export const Permission = prepend(chat.Composer.top, PermissionCard, {
+export const Permission = prepend(chat.parts.Composer.div.div, PermissionCard, {
   when: (composer) => questionFor(composer.threadId) !== undefined,
 });
 
 /** An agent's reply: "✳ Claude  opus 5.5" in place of chat's author line. */
-export const ReplyAuthor = replace(chat.Message.header, ReplyHeader, { when: isAgentReply });
+export const ReplyAuthor = replace(chat.parts.Message.article.header, ReplyHeader, { when: isAgentReply });
 /** Above the reply's text: thinking, the actions line and helper rows. */
-export const Work = before(chat.Message.body, ReplyWork, { when: isAgentReply });
+export const Work = before(chat.parts.Message.article.div, ReplyWork, { when: isAgentReply });
 /** Under the reply's text: Tasks, the plan card and usage. */
-export const Cards = after(chat.Message.body, ReplyCards, { when: isAgentReply });
-export const Stop = replace(chat.Composer.sendButton, StopButton, {
+export const Cards = after(chat.parts.Message.article.div, ReplyCards, { when: isAgentReply });
+export const Stop = replace(chat.parts.Composer.div.div$2.div.SendButton, StopButton, {
   when: (props) => Boolean(activeFor(props.threadId)),
 });
 
@@ -45,17 +45,17 @@ export const Stop = replace(chat.Composer.sendButton, StopButton, {
  * A reply the person steered: its text cut where each follow-up arrived, the
  * follow-up drawn between as their own message. Other replies keep chat's body.
  */
-export const Steers = replace(chat.Message.body, SteeredBody, {
+export const Steers = replace(chat.parts.Message.article.div, SteeredBody, {
   when: (props) => isAgentReply(props) && hasSteers(shownTurn(props)),
 });
 
 /** The status icon before each thread's title in chat's list. */
-export const ThreadStatus = prepend(chat.ThreadRow.status, ThreadStatusIcon);
+export const ThreadStatus = prepend(chat.parts.ThreadRow.ListboxItem.span.span.span, ThreadStatusIcon);
 /** The second line (agent, model, folder), only while the thread's turn runs or waits. */
-export const ThreadWork = append(chat.ThreadRow.detail, ThreadDetail, {
+export const ThreadWork = append(chat.parts.ThreadRow.ListboxItem.span.span$2, ThreadDetail, {
   when: (row) => isWorking(statusOf(row.thread._id)),
 });
 /** The working turn's helper agents, as small rows under the thread. */
-export const Helpers = after(chat.ThreadRow.detail, ThreadHelpers, {
+export const Helpers = after(chat.parts.ThreadRow.ListboxItem.span.span$2, ThreadHelpers, {
   when: (row) => isWorking(statusOf(row.thread._id)) && (statusOf(row.thread._id)?.helpers.length ?? 0) > 0,
 });

@@ -22,20 +22,22 @@ files yet.", the 3,000-line cut), the skipped-files notice under a reply.
 
 ## Parts it offers
 
-None. `code` publishes no `component`.
+The compiler publishes every JSX tag under `parts` in `plugin:code/client`,
+including the review panel. See
+`plugins/code/src/client/_generated/components.d.ts` for the generated paths.
 
 ## What it adds to others
 
 All actions are in `plugins/code/src/client/api.tsx`.
 
-| Target                | Action                                          | What is drawn                                                                 | File                                                               | Paper artboard                                                                         |
-| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| chat `Header.title`   | after                                           | Branch chip (mono, branch icon), read every 3 s while visible                 | `ui/thread-header.tsx` (`BranchChip`)                              | `Code · review panel`; also every `AI · reply` artboard                                |
-| chat `Header.menu`    | before                                          | Layout control: "Thread only" / "Review panel" on a tray, pressed half lifted | `ui/thread-header.tsx` (`ReviewToggle`)                            | `Code · review panel` ("Review panel" pressed); `AI · reply` artboards ("Thread only") |
-| chat `Header.menu`    | after                                           | Mounts the review panel into the shell's `Region.Panel`                       | `ui/thread-header.tsx` (`ReviewPanelMount`), `ui/review-panel.tsx` | `Code · review panel`, `Shell · frame`                                                 |
-| chat `Message.footer` | append, last reply of a turn that changed files | Change card: file icon, "1 file" / "3 files", +7 −11, "open in review ›"      | `ui/change-card.tsx`                                               | `Code · review panel`, `AI · reply finished`                                           |
-| chat `Message.footer` | append, finished agent replies                  | Notices: skipped files over 50 MB, the hook warning                           | `api.tsx` (`SnapshotNotice`)                                       | not drawn yet                                                                          |
-| chat `Composer.top`   | prepend                                         | Nothing drawn: prunes snapshot refs of deleted threads once per connection    | `api.tsx` (`SnapshotCleanup`)                                      | none                                                                                   |
+| Target                             | Action                                          | What is drawn                                                                 | File                                                               | Paper artboard                                                                         |
+| ---------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| chat `parts.Header.div.div`        | after                                           | Branch chip (mono, branch icon), read every 3 s while visible                 | `ui/thread-header.tsx` (`BranchChip`)                              | `Code · review panel`; also every `AI · reply` artboard                                |
+| chat `parts.Header.div.ThreadMenu` | before                                          | Layout control: "Thread only" / "Review panel" on a tray, pressed half lifted | `ui/thread-header.tsx` (`ReviewToggle`)                            | `Code · review panel` ("Review panel" pressed); `AI · reply` artboards ("Thread only") |
+| chat `parts.Header.div.ThreadMenu` | after                                           | Mounts the review panel into the shell's `Region.Panel`                       | `ui/thread-header.tsx` (`ReviewPanelMount`), `ui/review-panel.tsx` | `Code · review panel`, `Shell · frame`                                                 |
+| chat `parts.Message.article.div$2` | append, last reply of a turn that changed files | Change card: file icon, "1 file" / "3 files", +7 −11, "open in review ›"      | `ui/change-card.tsx`                                               | `Code · review panel`, `AI · reply finished`                                           |
+| chat `parts.Message.article.div$2` | append, finished agent replies                  | Notices: skipped files over 50 MB, the hook warning                           | `api.tsx` (`SnapshotNotice`)                                       | not drawn yet                                                                          |
+| chat `parts.Composer.div.div`      | prepend                                         | Nothing drawn: prunes snapshot refs of deleted threads once per connection    | `api.tsx` (`SnapshotCleanup`)                                      | none                                                                                   |
 
 Code depends on chat and optionally on ai; it reads ai's `turns:list` to find
 and number a reply's turn ("Turn 2").
@@ -45,7 +47,7 @@ and number a reply's turn ("Turn 2").
 - The change card (a `Row as="button" variant="card"` in a `density-dense`
   `surface-card` box, 32 tall, full column width; the tracking-only card is a
   plain `h-8 px-2` box): chat's
-  `Message.footer` gap (8) and message column (760); ai's cards above it
+  `parts.Message.article.div$2` gap (8) and message column (760); ai's cards above it
   are narrower (`max-w-read`).
 - The branch chip (`ms-2` after the title) or the layout control: chat's
   header (`gap-2`, the title truncates, the folder chip follows the title).
@@ -63,7 +65,7 @@ and number a reply's turn ("Turn 2").
 
 ## Open questions
 
-- Notices and the change card both append to `Message.footer` with no
+- Notices and the change card both append to `parts.Message.article.div$2` with no
   `order`; which one comes first is not set on purpose in the code.
 - Without ai there are no turns to read, so the change card and panel stay
   empty; the README says ai is optional but does not say what code shows then.

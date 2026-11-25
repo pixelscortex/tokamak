@@ -1,134 +1,228 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import type MagicString from "magic-string";
 import ts from "typescript";
-import { runtimeExportNames } from "../../sdk/tools/plugin-compiler.mjs";
-import {
-  brand,
-  exportedInitializer,
-  importModule,
-  inSource,
-  unalias,
-  type Element,
-  type ElementMount,
-} from "./compiler.ts";
+import { brand, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
+import { partProps } from "./part-props.ts";
 
-type Part = { name: string; target: string; locked: boolean };
-type Definition = {
-  call: ts.CallExpression;
-  parts: Part[];
-  elements: { node: Element; part?: Part; markers: ts.JsxAttribute[] }[];
-};
-const reserved = new Set(Object.getOwnPropertyNames(Function.prototype).concat("prototype", "__proto__"));
+type Part = { target: string; props: string; type: string };
+type Tree = { part?: Part; children: Map<string, Tree>; names: Map<string, number> };
+type Scope = { path: string; tree: Tree; props: string; type: () => string };
+type Binding = { node: ts.ConciseBody; parameter: ts.ParameterDeclaration };
+
+const branch = (): Tree => ({ children: new Map(), names: new Map() });
 const voidTags = new Set("area base br col embed hr img input link meta param source track wbr".split(" "));
-const namePattern = /^[A-Za-z_$][\w$]*$/;
-const solidModules = new Set(["solid-js", "solid-js/web", "@solidjs/web"]);
-const solidBuiltins = new Set(
-  "For Show Errored ErrorBoundary Switch Match Index Dynamic Portal Suspense SuspenseList Loading Repeat Reveal NoHydration Hydration".split(
-    " ",
-  ),
-);
 
-export function componentParts(entry: ts.SourceFile, checker: ts.TypeChecker, plugin: string, root: string) {
-  const files = new Map<ts.SourceFile, Definition[]>();
-  const published = new Map<string, Definition>();
-  const definitions = new Map<ts.CallExpression, Definition>();
-  const named = new Set<Element>();
-  const byName = new Set<string>();
+function child(parent: Tree, name: string) {
+  const count = (parent.names.get(name) ?? 0) + 1;
+  parent.names.set(name, count);
+  const key = count === 1 ? name : `${name}$${count}`;
+  const tree = branch();
+  parent.children.set(key, tree);
+  return { tree, key };
+}
+
+function segment(name: string) {
+  return name
+    .replace(/[^\w]/g, (c) => `$${c.charCodeAt(0).toString(16)}$`)
+    .replace(/^(target|__proto__|constructor|prototype)$/, (name) => "$" + name);
+}
+
+export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin: string, root: string) {
+  const files = new Map<ts.SourceFile, Map<Element, Part>>();
+  const bindings = new Map<ts.SourceFile, Binding[]>();
+  const paths = new Set<string>();
+  const tree = branch();
+  const checker = program.getTypeChecker();
   const module = checker.getSymbolAtLocation(entry);
-  const runtime: Set<string> = module ? runtimeExportNames(checker, module) : new Set();
-  for (const exported of module ? checker.getExportsOfModule(module) : []) {
-    if (!runtime.has(exported.name)) continue;
-    const symbol = unalias(checker, exported);
-    const declaration = symbol.valueDeclaration;
-    if (!declaration || !inSource(root, declaration.getSourceFile().fileName)) continue;
-    const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
-    if (!brand(type, "componentBrand")) continue;
-    const call = exportedInitializer(declaration);
-    if (!call || !ts.isCallExpression(call))
-      throw problem(declaration, "Export a component defined by component(name, options, render)");
-    let definition = definitions.get(call);
-    if (!definition) {
-      const name = call.arguments[0];
-      const render = call.arguments[2];
-      if (!name || !ts.isStringLiteralLike(name) || !namePattern.test(name.text))
-        throw problem(call, "component requires a literal identifier as its name");
-      if (byName.has(name.text)) throw problem(call, `Duplicate component name "${name.text}"`);
-      byName.add(name.text);
-      if (!render || (!ts.isArrowFunction(render) && !ts.isFunctionExpression(render)))
-        throw problem(call, "component requires an inline render function to discover its elements");
-      definition = { call, parts: [], elements: [] };
-      discover(render.body, `${plugin}.${name.text}`, definition, checker);
-      for (const { node, part } of definition.elements) if (part) named.add(node);
-      definitions.set(call, definition);
-      const file = call.getSourceFile();
-      const list = files.get(file) ?? [];
-      list.push(definition);
-      files.set(file, list);
+  const exported = new Map(
+    (module ? checker.getExportsOfModule(module) : []).map((symbol) => [
+      unalias(checker, symbol),
+      symbol.name,
+    ]),
+  );
+  const entryImport = JSON.stringify(
+    "../" + relative(dirname(entry.fileName), entry.fileName).replace(/\.tsx?$/, ""),
+  );
+
+  const sources = program
+    .getSourceFiles()
+    .filter((file) => !file.isDeclarationFile && inSource(root, file.fileName))
+    .sort((a, b) => a.fileName.localeCompare(b.fileName));
+  const { propsType, privateDeclarations } = partProps(entry, checker, root, sources);
+  const aliases = new Map<string, string>();
+  for (const source of sources) {
+    const elements = new Map<Element, Part>();
+    const pending: Binding[] = [];
+    const base: Scope = { tree, path: plugin, props: "{}", type: () => "{}" };
+
+    function visit(node: ts.Node, scope: Scope) {
+      if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+        const variable = ts.isVariableDeclaration(node.parent)
+          ? node.parent
+          : ts.isCallExpression(node.parent) && ts.isVariableDeclaration(node.parent.parent)
+            ? node.parent.parent
+            : undefined;
+        const name = ts.isFunctionDeclaration(node) ? node.name : variable?.name;
+        const isDefault =
+          ts.isExportAssignment(node.parent) ||
+          (ts.isFunctionDeclaration(node) &&
+            node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword));
+        if ((isDefault || (name && ts.isIdentifier(name))) && node.body) {
+          // Named functions own their JSX; inline callbacks retain the enclosing element and props.
+          const declared = name && checker.getSymbolAtLocation(name);
+          const publicName = isDefault ? "default" : declared && exported.get(declared);
+          const parameter = node.parameters[0];
+          const props = parameter ? "__tokamakProps" : "{}";
+          let group: ReturnType<typeof child>;
+          const identity = () => (group ??= child(tree, segment(name?.getText(source) ?? "Default")));
+          let type: string;
+          scope = {
+            get tree() {
+              return identity().tree;
+            },
+            get path() {
+              return `${plugin}.${identity().key}`;
+            },
+            props,
+            type: () => {
+              if (type) return type;
+              if (!parameter) return "{}";
+              pending.push({ node: node.body!, parameter });
+              const callable = declared && checker.getTypeOfSymbolAtLocation(declared, node);
+              const shape =
+                publicName && callable && (!ts.isCallExpression(node.parent) || brand(callable, "viewBrand"))
+                  ? `Parameters<typeof import(${entryImport})[${JSON.stringify(publicName)}]>[0]`
+                  : propsType(parameter);
+              if (shape === "{}") return (type = shape);
+              type = aliases.get(shape) ?? `Props${aliases.size + 1}`;
+              aliases.set(shape, type);
+              return type;
+            },
+          };
+          visit(node.body, scope);
+          return;
+        }
+      }
+
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = (ts.isJsxElement(node) ? node.openingElement : node).tagName;
+        const { tree: group, key } = child(scope.tree, segment(tag.getText(source)));
+        const target = `${scope.path}.${key}`;
+        const part = { target, props: scope.props, type: scope.type() };
+        group.part = part;
+        paths.add(target);
+        scope = { ...scope, tree: group, path: target };
+        ts.forEachChild(node, (child) => visit(child, scope));
+        elements.set(node, part);
+      } else ts.forEachChild(node, (child) => visit(child, scope));
     }
-    published.set(exported.name, definition);
+    visit(source, base);
+    if (elements.size) files.set(source, elements);
+    if (pending.length) bindings.set(source, pending);
+  }
+
+  function describe(node: Tree, value: (part: Part) => string, indent = ""): string {
+    const next = indent + "  ";
+    const parts = [...node.children].flatMap(([name, child]) => {
+      const children = describe(child, value, next);
+      if (!child.part && !children) return [];
+      return [
+        `${next}readonly ${JSON.stringify(name)}: ${child.part ? value(child.part) + (children ? " & " : "") : ""}${children};`,
+      ];
+    });
+    return parts.length ? `{\n${parts.join("\n")}\n${indent}}` : "";
+  }
+
+  function values(node: Tree): object {
+    return Object.fromEntries([
+      ...(node.part ? [["target", node.part.target]] : []),
+      ...[...node.children].flatMap(([name, child]) =>
+        child.part || child.children.size ? [[name, values(child)]] : [],
+      ),
+    ]);
   }
 
   return {
-    has: (node: Element) => named.has(node),
-    part(exported: string, name: string) {
-      return published.get(exported)?.parts.find((p) => p.name === name);
-    },
-    transform(source: ts.SourceFile, output: MagicString, mounts?: ReadonlyMap<Element, ElementMount>) {
-      const list = files.get(source);
-      if (!list) return false;
-      for (const { call, parts, elements } of list) {
-        output.overwrite(call.expression.getStart(source), call.expression.end, "__tokamakDefineComponent");
-        output.appendLeft(
-          call.arguments.at(-1)!.end,
-          ", " +
-            JSON.stringify(
-              Object.fromEntries(parts.map(({ name, target, locked }) => [name, { target, locked }])),
-            ),
-        );
-        for (const { node, part, markers } of elements) {
-          for (const marker of markers) output.remove(marker.getStart(source), marker.end);
-          if (part) transformElement(node, part, output, source, mounts?.get(node));
+    has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
+    part: (names: string[]) => paths.has(`${plugin}.${names.join(".")}`),
+    transform(
+      source: ts.SourceFile,
+      output: MagicString,
+      mounts: ReadonlyMap<Element, ElementMount> | undefined,
+      erased: (node: ts.Node) => boolean,
+    ) {
+      const elements = files.get(source);
+      if (elements) {
+        for (const { node, parameter } of bindings.get(source) ?? []) {
+          if (erased(node)) continue;
+          const name = "__tokamakProps";
+          const binding = parameter.name.getText(source);
+          const destructured = !ts.isIdentifier(parameter.name);
+          if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
+          const capture = destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`;
+          if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, capture);
+          else output.prependLeft(node.getStart(source), `{ ${capture} return (`);
         }
+        for (const [node, part] of elements) {
+          if (!erased(node)) transformElement(node, part, output, source, mounts?.get(node));
+        }
+        for (const { node } of bindings.get(source) ?? []) {
+          if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
+        }
+        output.prepend('import { __renderPart as __tokamakRenderPart } from "@tokamak/sdk/client";\n');
       }
-      output.prepend(
-        'import { __defineComponent as __tokamakDefineComponent, __renderPart as __tokamakRenderPart } from "@tokamak/sdk/client";\n',
-      );
-      return true;
+      if (source === entry && paths.size)
+        output.append(
+          `\nconst __tokamakParts = ${JSON.stringify(values(tree))};\nexport { __tokamakParts as parts };\n`,
+        );
+      return !!elements || (source === entry && paths.size > 0);
     },
-    publish(warn: (message: string) => void) {
+    publish(warn: (message: string) => void, catalog?: string) {
       const path = join(dirname(entry.fileName), "_generated/components.d.ts");
-      let previous = "";
-      try {
-        previous = readFileSync(path, "utf8");
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      if (!published.size && !previous) return;
-      const module = JSON.stringify(
-        "../" + relative(dirname(entry.fileName), entry.fileName).replace(/\.tsx?$/, ""),
+      const shape = describe(
+        tree,
+        ({ target, type }) =>
+          `import("@tokamak/sdk/client").ComponentPart<${JSON.stringify(target)}, ${type}>`,
       );
-      const lines = [
-        "// Generated plugin component paths. Commit this file.",
-        `export * from ${module};`,
-        // An explicit declaration takes precedence over the entry's unaugmented export.
-        ...[...published]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([name, { parts }]) => {
-            const type = `(typeof import(${module}))[${JSON.stringify(name)}]`;
-            const properties = [...parts]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map(
-                (p) =>
-                  `  readonly ${JSON.stringify(p.name)}: { readonly target: ${JSON.stringify(p.target)}; readonly locked: ${p.locked} };`,
-              );
-            return `declare const _part_${name}: import("@tokamak/sdk/client").ComponentParts<${type}, {\n${properties.join("\n")}\n}>;\nexport { _part_${name} as ${name} };`;
-          }),
-      ];
-      const next = lines.join("\n") + "\n";
-      const available = new Set([...definitions.values()].flatMap((d) => d.parts.map((p) => p.target)));
-      for (const target of previousTargets(path, previous)) {
-        if (!available.has(target)) warn(`Published component element no longer exists: ${target}`);
+      const previous = readOptional(path);
+      if (!shape && !previous) return;
+      const declarations =
+        privateDeclarations() +
+        [...aliases]
+          .map(([shape, name]) => `type ${name} = Extract<NonNullable<${shape}>, object>;\n`)
+          .join("");
+      const next = `// Generated plugin screen paths. Commit this file.\nexport * from ${entryImport};\n${shape ? `${declarations}export declare const parts: ${shape};\n` : ""}`;
+      const reported = new Set<string>();
+      const catalogs = new Set([
+        dirname(root),
+        process.env.TOKAMAK_PLUGIN_DIR,
+        catalog && resolve(root, catalog),
+      ]);
+      for (const directory of catalogs) {
+        if (!directory || !ts.sys.directoryExists(directory)) continue;
+        const folders = readdirSync(directory, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+          .map((entry) => resolve(directory, entry.name));
+        for (const folder of [directory, ...folders]) {
+          const manifest =
+            readOptional(resolve(folder, "manifest.json")) ??
+            readOptional(resolve(folder, "dist/manifest.json"));
+          if (!manifest) continue;
+          let installed;
+          try {
+            installed = JSON.parse(manifest).plugin;
+          } catch {
+            continue; // The catalog reports invalid artifacts.
+          }
+          for (const { target } of installed?.contributes?.["component-action"] ?? []) {
+            if (typeof target !== "string" || !target.startsWith(plugin + ".") || paths.has(target)) continue;
+            const message = `Plugin "${installed.id}" targets missing screen part ${target}; skipping this addition`;
+            if (reported.has(message)) continue;
+            reported.add(message);
+            warn(message);
+          }
+        }
       }
       if (next !== previous) {
         mkdirSync(dirname(path), { recursive: true });
@@ -138,132 +232,12 @@ export function componentParts(entry: ts.SourceFile, checker: ts.TypeChecker, pl
   };
 }
 
-function previousTargets(path: string, text: string) {
-  // The declaration is the published schema; read its type structure so changes
-  // to indentation or quoting do not hide deleted paths.
-  const file = ts.createSourceFile(path, text, ts.ScriptTarget.Latest);
-  const targets = new Set<string>();
-  for (const statement of file.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      const type = declaration.type;
-      if (!type || !ts.isImportTypeNode(type) || type.qualifier?.getText(file) !== "ComponentParts") continue;
-      const shape = type.typeArguments?.[1];
-      if (!shape || !ts.isTypeLiteralNode(shape)) continue;
-      for (const member of shape.members) {
-        if (!ts.isPropertySignature(member) || !member.type) continue;
-        const part = member.type;
-        const target = ts.isTypeLiteralNode(part)
-          ? part.members.find(
-              (p): p is ts.PropertySignature =>
-                ts.isPropertySignature(p) && ts.isIdentifier(p.name) && p.name.text === "target",
-            )?.type
-          : ts.isTypeOperatorNode(part) && ts.isTupleTypeNode(part.type)
-            ? part.type.elements[0] // Read declarations from before the object format, too.
-            : undefined;
-        if (target && ts.isLiteralTypeNode(target) && ts.isStringLiteral(target.literal)) {
-          targets.add(target.literal.text);
-        }
-      }
-    }
+function readOptional(path: string) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  return targets;
-}
-
-function isSolidBuiltin(tag: ts.JsxTagNameExpression, checker: ts.TypeChecker) {
-  if (ts.isPropertyAccessExpression(tag)) {
-    // Check the original tag name for a direct namespace import such as <Flow.Show>.
-    const namespace = checker.getSymbolAtLocation(tag.expression)?.declarations?.find(ts.isNamespaceImport);
-    if (solidBuiltins.has(tag.name.text) && solidModules.has(importModule(namespace) ?? "")) return true;
-  } else {
-    const binding = checker.getSymbolAtLocation(tag)?.declarations?.find(ts.isImportSpecifier);
-    if (
-      binding &&
-      solidBuiltins.has((binding.propertyName ?? binding.name).text) &&
-      solidModules.has(importModule(binding) ?? "")
-    )
-      return true;
-  }
-  // Follow a plugin's re-export (e.g. export { Show as Visible } from "solid-js").
-  const symbol = checker.getSymbolAtLocation(tag);
-  if (!symbol) return false;
-  const original = unalias(checker, symbol);
-  return (
-    solidBuiltins.has(original.name) &&
-    !!original.declarations?.some((d) =>
-      /[/\\]node_modules[/\\](?:solid-js|@solidjs[/\\]web)[/\\]/.test(d.getSourceFile().fileName),
-    )
-  );
-}
-
-function discover(root: ts.Node, path: string, definition: Definition, checker: ts.TypeChecker) {
-  const names = new Set<string>();
-  function visit(node: ts.Node) {
-    ts.forEachChild(node, visit);
-    if (!ts.isJsxElement(node) && !ts.isJsxSelfClosingElement(node)) return;
-    const opening = ts.isJsxElement(node) ? node.openingElement : node;
-    const markers = opening.attributes.properties.filter(
-      (p): p is ts.JsxAttribute => ts.isJsxAttribute(p) && ["part", "locked"].includes(p.name.getText()),
-    );
-    const explicit = markers.find((p) => p.name.getText() === "part");
-    const tag = opening.tagName.getText().split(".").at(-1)!;
-    let name: string | undefined;
-    if (explicit) {
-      // <Show part="results"> → public results; <button part="send"> → public send.
-      const value = explicit.initializer;
-      const literal = value && ts.isJsxExpression(value) ? value.expression : value;
-      if (!literal || !ts.isStringLiteralLike(literal) || !namePattern.test(literal.text))
-        throw problem(explicit, "part requires a literal identifier");
-      name = literal.text;
-    } else if (
-      (/^[A-Z]/.test(tag) || ts.isPropertyAccessExpression(opening.tagName)) &&
-      !isSolidBuiltin(opening.tagName, checker)
-    ) {
-      // <SendButton> → public sendButton. Lowercase the initial acronym as a
-      // word (<URLField> → urlField, <URL> → url), leaving the next capital intact.
-      name = tag.replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^[A-Z]/, (prefix) => prefix.toLowerCase());
-    }
-    // <Show> and <button> without part stay private. Strip any compiler-only
-    // marker before Solid sees it, e.g. <button locked> → <button>.
-    const lock = markers.find((p) => p.name.getText() === "locked");
-    const value = lock?.initializer;
-    if (value && (!ts.isJsxExpression(value) || value.expression?.kind !== ts.SyntaxKind.TrueKeyword))
-      throw problem(lock!, "Use locked or locked={true} to protect an element");
-    // <Send locked /> → a typed send path with locked: true; actions fail at build time.
-    let part: Part | undefined;
-    if (name) {
-      if (reserved.has(name))
-        throw problem(node, `Element name "${name}" is reserved; use part to rename it`);
-      if (names.has(name))
-        throw problem(node, `Element "${name}" is named twice in ${path}; use part to give it a unique name`);
-      names.add(name);
-      // <SendButton>{(added) => …}</SendButton> looks like a render prop to Solid.
-      // Put the placement callback in <div part="send">{(added) => …}</div> instead.
-      if (!isNative(opening.tagName)) {
-        const callback = childCallback(node);
-        const param = callback?.parameters[0];
-        if (
-          callback &&
-          param &&
-          ((ts.isIdentifier(param.name) && param.name.text === "added") ||
-            (param.type && checker.getTypeAtLocation(param.type).getSymbol()?.name === "PartAdditions"))
-        ) {
-          throw problem(
-            callback,
-            "PartAdditions placement callbacks require a named native element; use a render prop for the component's own data",
-          );
-        }
-      }
-      part = { name, target: `${path}.${name}`, locked: !!lock };
-      definition.parts.push(part);
-    }
-    if (part || markers.length) definition.elements.push({ node, part, markers });
-  }
-  visit(root);
-}
-
-function isNative(tag: ts.JsxTagNameExpression) {
-  return ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
 }
 
 function childrenAttribute(opening: ts.JsxOpeningLikeElement) {
@@ -300,8 +274,8 @@ function transformElement(
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const target = part.locked ? "null" : JSON.stringify(part.target);
-  const prefix = `${child ? "{" : ""}__tokamakRenderPart(${target}, (__tokamakContents) => `;
+  const target = JSON.stringify(part.target);
+  const prefix = `${child ? "{" : ""}__tokamakRenderPart(${target}, ${part.props} ?? {}, (__tokamakContents) => `;
   const suffix = `)${child ? "}" : ""}`;
   output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
   const endMount = mount?.suffix ?? "";
@@ -309,12 +283,20 @@ function transformElement(
   if (ts.isJsxSelfClosingElement(node)) {
     const tag = node.tagName.getText(source);
     if (voidTags.has(tag)) {
-      // <input part="search" /> → renderPart(…, () => <input />): a void tag
+      // <input /> → renderPart(…, () => <input />): a void tag
       // stays self-closing so outside actions do not create invalid children.
       output.appendLeft(node.end, endMount + suffix);
       return;
     }
     const attribute = childrenAttribute(node);
+    const spread = node.attributes.properties.filter(ts.isJsxSpreadAttribute).at(-1);
+    if (!attribute && spread) {
+      // A caller can supply children through forwarded attributes, such as a render prop.
+      output.prependLeft(spread.expression.getStart(source), "__tokamakContents.spread(");
+      output.appendLeft(spread.expression.end, ")");
+      output.appendLeft(node.end, endMount + suffix);
+      return;
+    }
     const value = attribute?.initializer;
     const expression = value && ts.isJsxExpression(value) ? value : undefined;
     // Include the braces when slicing so inserts at the start of a nested
@@ -328,15 +310,8 @@ function transformElement(
     // <Region /> → <Region>{contents()}</Region> to allow inside additions.
     // <For children={row => …} /> → <For>{row => contents(() => renderRow(row))}</For>.
     const callback = childCallback(node);
-    const place = callback && authored && isNative(node.tagName);
-    const contents = callback && authored && !place ? renderProp(callback, authored) : "__tokamakContents()";
-    // <div children={added => …} /> puts that callback in renderPart's placement
-    // argument; <div children={<b />} /> goes through the lazy default () => <b />.
-    const original = place
-      ? `, undefined, ${authored}`
-      : authored && !callback
-        ? `, () => (${authored})`
-        : "";
+    const contents = callback && authored ? renderProp(callback, authored) : "__tokamakContents()";
+    const original = authored && !callback ? `, () => (${authored})` : "";
     output.overwrite(node.end - 2, node.end, `>{${contents}}</${tag}>${endMount}${original}${suffix}`);
     return;
   }
@@ -346,22 +321,9 @@ function transformElement(
   const tag = opening.tagName.getText(source);
   const callback = childCallback(node);
   if (callback) {
-    if (isNative(opening.tagName)) {
-      // <div>{added => <b>{added.append}</b>}</div> →
-      // renderPart(…, contents => <div>{contents()}</div>, undefined, added => <b>…</b>).
-      output.overwrite(
-        opening.end,
-        callback.getStart(source),
-        `{__tokamakContents()}</${tag}>${endMount}, undefined, `,
-      );
-      output.overwrite(callback.end, close.end, suffix);
-    } else {
-      // <For>{row => <b>{row}</b>}</For> →
-      // <For>{row => contents(() => renderRow(row))}</For>.
-      const { prefix, suffix: end } = renderPropCall(callback);
-      output.overwrite(opening.end, callback.getStart(source), `{${prefix}`);
-      output.overwrite(callback.end, close.end, `${end}}</${tag}>${endMount}${suffix}`);
-    }
+    const { prefix, suffix: end } = renderPropCall(callback);
+    output.overwrite(opening.end, callback.getStart(source), `{${prefix}`);
+    output.overwrite(callback.end, close.end, `${end}}</${tag}>${endMount}${suffix}`);
   } else {
     // <div><b>Text</b></div> → renderPart(…, contents => <div>{contents()}</div>,
     // () => <><b>Text</b></>): hide and replace can now skip the original children.
@@ -375,14 +337,16 @@ function inlineCallback(node: ts.Expression | undefined) {
 }
 
 function renderPropCall(callback: ts.ArrowFunction | ts.FunctionExpression) {
-  // <Show>{value => …}</Show> needs value => contents(() => render(value));
-  // <Show>{() => …}</Show> needs () => contents(() => render()). Solid uses
-  // Function.length to distinguish a render prop from a child accessor.
+  // Solid uses Function.length to distinguish render props and provide a list index.
+  const optional = callback.parameters.findIndex(
+    (parameter) => parameter.initializer || parameter.dotDotDotToken,
+  );
+  const required = optional === -1 ? callback.parameters.length : optional;
+  const args = Array.from({ length: required }, (_, i) => `__tokamakArg${i}`);
+  const params = [...args, "...__tokamakRest"].join(", ");
   return {
-    prefix: callback.parameters.length
-      ? "(__tokamakValue, ...__tokamakArgs) => __tokamakContents(() => ("
-      : "() => __tokamakContents(() => (",
-    suffix: callback.parameters.length ? ")(__tokamakValue, ...__tokamakArgs))" : ")())",
+    prefix: `(${params}) => __tokamakContents(() => (`,
+    suffix: `)(${params}))`,
   };
 }
 

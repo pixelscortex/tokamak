@@ -2,7 +2,6 @@ import { ListboxItem } from "@ui-sdk/solid/listbox";
 import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { Id } from "@tokamak/sdk";
-import { component } from "@tokamak/sdk/client";
 import { Icon, Kbd, Row, RowList, cn, rowVariants } from "@tokamak/ui";
 import type { Thread } from "../lib/api";
 import { glyphs } from "../lib/icons";
@@ -24,29 +23,25 @@ const slots = rowVariants({ kind: "single", lead: true });
  * The row is drawn here rather than with RowList.Option so the detail line
  * can stay in the row's box and take no room while empty.
  */
-export const ThreadRow = component("threadRow", {}, (props: ThreadRowProps) => (
-  <ListboxItem
-    part="row"
-    value={props.thread._id}
-    class="group/row flex cursor-pointer flex-col rounded-sm focus-ring"
-  >
+export const ThreadRow = (props: ThreadRowProps) => (
+  <ListboxItem value={props.thread._id} class="group/row flex cursor-pointer flex-col rounded-sm focus-ring">
     <span
       data-slot="row-box"
       class="flex min-w-0 min-h-8 flex-col justify-center rounded-sm px-row py-1 text-start text-row text-ink-2 group-hover/row:bg-hover group-data-selected/row:bg-selected group-data-selected/row:text-ink"
     >
       <span class={slots.line()}>
-        <span part="status" data-part="status" class={slots.lead()} />
-        <span part="title" data-part="title" class={slots.title()}>
+        <span data-part="status" class={slots.lead()} />
+        <span data-part="title" class={slots.title()}>
           {props.thread.title}
         </span>
-        <span part="age" data-part="age" class={slots.trail()}>
+        <span data-part="age" class={slots.trail()}>
           {age(props.thread.updatedAt, props.now)}
         </span>
       </span>
-      <span part="detail" data-part="detail" class={cn(slots.detail(), "pb-1 empty:hidden")} />
+      <span data-part="detail" class={cn(slots.detail(), "pb-1 empty:hidden")} />
     </span>
   </ListboxItem>
-));
+);
 
 /** "New thread ⌘N", then one list of threads with no groups, newest first. */
 export function ThreadList(props: {
