@@ -1,0 +1,19 @@
+packages/build/tests/boundary.test.mjs
+  s_040e9b5fc04cd5::t_a18c00448be507 400-415
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d74375c4604aa37a7c64cb0b4546c0bfd62c5e6b",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
