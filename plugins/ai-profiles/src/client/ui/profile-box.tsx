@@ -155,7 +155,7 @@ function Entry(props: {
       </Show>
       <span class="min-w-0 flex-1 truncate text-row font-medium text-ink">{title()}</span>
       <span class="truncate text-label text-ink-3">{note()}</span>
-      <span class="opacity-0 transition group-hover/entry:opacity-100 group-focus-within/entry:opacity-100">
+      <span class="opacity-0 transition group-hover/entry:opacity-100 group-focus-within/entry:opacity-100 has-data-open:opacity-100">
         <Menu.Root
           onAction={(value: string) => {
             if (value === "up") void props.builder.move(props.profile.id, props.id, props.position - 1);

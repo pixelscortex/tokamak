@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal } from "solid-js";
 import { Portal, type JSX } from "@solidjs/web";
 import { Button, icons } from "@tokamak/ui";
 import type { Subscription } from "../lib/api";
-import type { Builder } from "../lib/builder";
+import type { Builder, Profile } from "../lib/builder";
 import { titleOf } from "../lib/format";
 import { CompanyMark } from "./company-mark";
 import { ProfileBox } from "./profile-box";
@@ -50,8 +50,9 @@ export function ProfilesSection(props: {
         )}
       </Show>
       <div class="grid grid-cols-3 items-start gap-3">
-        <For each={builder().profiles()}>
-          {(profile) => <ProfileBox profile={profile} builder={builder()} subscriptions={byId()} />}
+        {/* Keyed by id: every change brings a fresh list, and a box must stay the same element. */}
+        <For each={builder().profiles()} keyed={(profile: Profile) => profile.id}>
+          {(profile) => <ProfileBox profile={profile()} builder={builder()} subscriptions={byId()} />}
         </For>
       </div>
       <Show when={builder().profiles().length === 0 && !builder().error()}>

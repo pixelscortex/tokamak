@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Icon, Menu, icons } from "@tokamak/ui";
 import type { Subscription } from "../lib/api";
@@ -26,10 +26,11 @@ export function CardProfiles(props: { subscription: Subscription; builder: Build
           </span>
         )}
       </For>
-      <span class="opacity-0 transition group-hover/card:opacity-100 group-focus-within/card:opacity-100">
+      <span class="opacity-0 transition group-hover/card:opacity-100 group-focus-within/card:opacity-100 has-data-open:opacity-100">
         <Menu.Root
-          onOpenChange={(open: boolean) => props.builder.setOffered(open ? id() : undefined)}
-          onAction={(profile: string) => void props.builder.add(profile, id())}
+          // The menu calls these from its own effects: read the id without tracking it.
+          onOpenChange={(open: boolean) => props.builder.setOffered(open ? untrack(id) : undefined)}
+          onAction={(profile: string) => void props.builder.add(profile, untrack(id))}
         >
           <Menu.Trigger
             variant="ghost"
@@ -38,26 +39,28 @@ export function CardProfiles(props: { subscription: Subscription; builder: Build
             label={`Add ${props.builder.nameOf(id())} to a profile`}
           />
           <Menu.Content>
-            <Menu.GroupLabel>Add to profile</Menu.GroupLabel>
-            <For each={props.builder.profiles()}>
-              {(profile) => {
-                const holds = () => profile.subscriptions.includes(id());
-                return (
-                  <Menu.Item value={profile.id} disabled={holds()}>
-                    <span class="text-code">{profile.code}</span>
-                    <span class="min-w-0 flex-1 truncate">{profile.name}</span>
-                    <Show when={holds()}>
-                      <span class="text-label text-ink-3">added</span>
-                    </Show>
-                  </Menu.Item>
-                );
-              }}
-            </For>
-            <Show when={!props.builder.profiles().length}>
-              <Menu.Item value="" disabled>
-                No profiles yet
-              </Menu.Item>
-            </Show>
+            <Menu.Group>
+              <Menu.GroupLabel>Add to profile</Menu.GroupLabel>
+              <For each={props.builder.profiles()}>
+                {(profile) => {
+                  const holds = () => profile.subscriptions.includes(id());
+                  return (
+                    <Menu.Item value={profile.id} disabled={holds()}>
+                      <span class="text-code">{profile.code}</span>
+                      <span class="min-w-0 flex-1 truncate">{profile.name}</span>
+                      <Show when={holds()}>
+                        <span class="text-label text-ink-3">added</span>
+                      </Show>
+                    </Menu.Item>
+                  );
+                }}
+              </For>
+              <Show when={!props.builder.profiles().length}>
+                <Menu.Item value="" disabled>
+                  No profiles yet
+                </Menu.Item>
+              </Show>
+            </Menu.Group>
           </Menu.Content>
         </Menu.Root>
       </span>
