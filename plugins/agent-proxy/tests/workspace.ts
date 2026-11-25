@@ -81,8 +81,12 @@ export interface Workspace {
   stop(): Promise<void>;
 }
 
-/** A change to the installed copy of agent-proxy's server code: `find` is replaced by `replace`. */
+/**
+ * A change to the installed copy of a plugin's server code (agent-proxy's
+ * unless `plugin` names another): `find` is replaced by `replace`.
+ */
 export interface Patch {
+  readonly plugin?: string;
   readonly find: string;
   readonly replace: string;
 }
@@ -118,15 +122,21 @@ export async function startWorkspace(
       await writeFile(path, patched);
       manifest.hashes[file] = createHash("sha256").update(patched).digest("hex");
     }
-  for (const file of patches.length ? ["bundle.js", "transactions.js"] : []) {
-    const path = join(installation, "plugins/agent-proxy/dist", file);
-    let code = await readFile(path, "utf8");
-    for (const { find, replace } of patches) {
-      if (!code.includes(find)) throw new Error(`Nothing to patch in ${file}: ${find}`);
-      code = code.replace(find, replace);
+  for (const id of new Set(patches.map((patch) => patch.plugin ?? "agent-proxy"))) {
+    const dist = join(installation, "plugins", id, "dist");
+    const own =
+      id === "agent-proxy" ? manifest : JSON.parse(await readFile(join(dist, "manifest.json"), "utf8"));
+    for (const file of ["bundle.js", "transactions.js"]) {
+      const path = join(dist, file);
+      let code = await readFile(path, "utf8");
+      for (const { find, replace } of patches.filter((patch) => (patch.plugin ?? "agent-proxy") === id)) {
+        if (!code.includes(find)) throw new Error(`Nothing to patch in ${id}/${file}: ${find}`);
+        code = code.replace(find, replace);
+      }
+      await writeFile(path, code);
+      own.hashes[file] = createHash("sha256").update(code).digest("hex");
     }
-    await writeFile(path, code);
-    manifest.hashes[file] = createHash("sha256").update(code).digest("hex");
+    if (own !== manifest) await writeFile(join(dist, "manifest.json"), JSON.stringify(own));
   }
   await writeFile(manifestPath, JSON.stringify(manifest));
   await writeFile(join(installation, ".env.local"), `${addressesVariable}='${JSON.stringify(addresses)}'\n`);
