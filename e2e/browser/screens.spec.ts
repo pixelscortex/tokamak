@@ -288,7 +288,7 @@ async function unlinkGo(folder: string) {
 }
 
 // The Profiles screen and the add-subscription dialog, signed in against the
-// fake Claude sign-in. They run on a copy of the plugins with agent-proxy,
+// fake Claude and ChatGPT sign-ins. They run on a copy of the plugins with agent-proxy,
 // ai-profiles and claude added (browser.ts builds them), so Claude's own mark
 // is the logo and the other screens keep the rail they are drawn with.
 test("profiles screens", async ({ browser }) => {
@@ -369,6 +369,31 @@ test("profiles screens", async ({ browser }) => {
     await expect(subscriptions.getByRole("article", { name: "Claude, awaiting sign-in" })).toBeVisible();
     await rest();
     await shot(page, "profiles-awaiting");
+
+    // TKM-262: the same steps for OpenAI, ending with a ChatGPT card beside the Claude one.
+    // Starting it replaces the waiting Claude sign-in (one new sign-in waits at a time).
+    fake.addAccount("openai", "chatgpt");
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    await dialog.getByRole("button", { name: /OpenAI/ }).click();
+    await expect(dialog.getByRole("button", { name: /ChatGPT subscription/ })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-method-openai");
+    await dialog.getByRole("button", { name: /ChatGPT subscription/ }).click();
+    const openai = dialog.getByRole("link", { name: "Open sign-in page" });
+    await expect(openai).toBeVisible();
+    fake.nextSignIn("chatgpt");
+    const returned = await fetch((await openai.getAttribute("href"))!, { redirect: "manual" });
+    await dialog
+      .getByRole("textbox", { name: /Address the sign-in ended on/ })
+      .fill(returned.headers.get("location")!);
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connected" })).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Label" }).fill("Personal");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(subscriptions.getByRole("article", { name: "ChatGPT Plus, Personal" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-both-companies");
   } finally {
     await context.close();
     await fake.stop();
