@@ -117,9 +117,11 @@ row of `Profiles · add · company` and the empty-state line are matched to
   `code#state` or bare code is still accepted. Which redirect to use (this one,
   or Claude's hosted manual-code page) is the owner's call; the drawing can go
   back to the folded field if the hosted page is chosen. ChatGPT has no hosted
-  code page: its return is always `http://localhost:1455/auth/callback`, so the
-  paste stays until a forwarder in the Runner receives both companies' returns
-  (`design/agent-proxy.md`, "Known limits").
+  code page: its return is always `http://localhost:1455/auth/callback`. The
+  desktop app listens for both companies' returns (TKM-295, separate branch);
+  without it the address is pasted (`design/agent-proxy.md`, "Known limits").
+  A plan the company did not name is stored empty: the card and the
+  connected step then say "ChatGPT" or "Claude" without a plan word.
 - The company rows' 2 px gap, the method row's 18 px icon and its band-on-hover
   are not available without restyling `Row` or `Icon` (see above).
 
