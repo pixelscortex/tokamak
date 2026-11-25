@@ -32,7 +32,9 @@ export function ProfileBox(props: {
   /** The rows as drawn: a row carried inside this profile leaves its place; the slot shows where it lands. */
   const rows = () => {
     const carried = carry();
-    return profile().subscriptions.filter((id) => !(carried?.from === profile().id && carried.subscription === id));
+    return profile().subscriptions.filter(
+      (id) => !(carried?.from === profile().id && carried.subscription === id),
+    );
   };
   const slot = () => over()?.index;
   const pointedHere = () => builder().pointed() === profile().id && !carry();
@@ -54,7 +56,10 @@ export function ProfileBox(props: {
       onPointerLeave={() => builder().pointed() === profile().id && builder().setPointed(undefined)}
       onFocusIn={() => builder().setPointed(profile().id)}
       onFocusOut={(event: FocusEvent & { currentTarget: HTMLElement }) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && builder().pointed() === profile().id)
+        if (
+          !event.currentTarget.contains(event.relatedTarget as Node | null) &&
+          builder().pointed() === profile().id
+        )
           builder().setPointed(undefined);
       }}
     >
@@ -64,7 +69,10 @@ export function ProfileBox(props: {
           <span class="text-code font-medium text-ink">{profile().code}</span>
           <span class="min-w-0 truncate text-row text-ink-2">{profile().name}</span>
         </h3>
-        <Show when={builder().added(profile())} fallback={<span class="text-label text-ink-3">Fill first</span>}>
+        <Show
+          when={builder().added(profile())}
+          fallback={<span class="text-label text-ink-3">Fill first</span>}
+        >
           <span class="flex items-center gap-1 text-label text-ink-3">
             <Icon path={icons.check} size={12} />
             added
@@ -126,7 +134,9 @@ function Entry(props: {
     const subscription = props.subscription;
     if (!subscription) return "";
     if (!subscription.enabled) return "Off";
-    return subscription.accounts.length > 1 ? countOf(subscription.accounts.length, "account") : subscription.label;
+    return subscription.accounts.length > 1
+      ? countOf(subscription.accounts.length, "account")
+      : subscription.label;
   };
   const name = () => [title(), props.subscription?.label].filter(Boolean).join(", ");
   return (
@@ -140,14 +150,17 @@ function Entry(props: {
     >
       <Icon path={gripGlyph} size={12} class="text-ink-3" />
       <span class="w-3 shrink-0 text-data text-ink-3">{props.position + 1}</span>
-      <Show when={props.subscription}>{(subscription) => <CompanyMark company={subscription().company} size={16} />}</Show>
+      <Show when={props.subscription}>
+        {(subscription) => <CompanyMark company={subscription().company} size={16} />}
+      </Show>
       <span class="min-w-0 flex-1 truncate text-row font-medium text-ink">{title()}</span>
       <span class="truncate text-label text-ink-3">{note()}</span>
       <span class="opacity-0 transition group-hover/entry:opacity-100 group-focus-within/entry:opacity-100">
         <Menu.Root
           onAction={(value: string) => {
             if (value === "up") void props.builder.move(props.profile.id, props.id, props.position - 1);
-            else if (value === "down") void props.builder.move(props.profile.id, props.id, props.position + 1);
+            else if (value === "down")
+              void props.builder.move(props.profile.id, props.id, props.position + 1);
             else void props.builder.remove(props.profile.id, props.id);
           }}
         >

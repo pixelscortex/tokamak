@@ -34,7 +34,9 @@ export function ProfilesSection(props: {
             <span class="text-row font-medium text-ink">Profiles</span>
             <span class="text-data text-ink-3">{builder().profiles().length}</span>
           </h2>
-          <p class="m-0 ps-2 text-label text-ink-3">Drag subscriptions into a profile. Top one is used first.</p>
+          <p class="m-0 ps-2 text-label text-ink-3">
+            Drag subscriptions into a profile. Top one is used first.
+          </p>
         </div>
         <Button variant="ghost" icon={icons.add} onClick={() => setCreating(true)}>
           New profile
@@ -58,7 +60,9 @@ export function ProfilesSection(props: {
       <p aria-live="polite" class="sr-only">
         {builder().said()}
       </p>
-      <Show when={carried()}>{(subscription) => <Ghost subscription={subscription()} builder={builder()} />}</Show>
+      <Show when={carried()}>
+        {(subscription) => <Ghost subscription={subscription()} builder={builder()} />}
+      </Show>
       <ProfileDialog open={creating()} onClose={() => setCreating(false)} create={builder().create} />
     </section>
   );
@@ -78,7 +82,7 @@ function Ghost(props: { subscription: Subscription; builder: Builder }): JSX.Ele
   return (
     <Portal>
       <div
-        ref={ghost}
+        ref={(element: HTMLDivElement) => (ghost = element)}
         aria-hidden="true"
         class="pointer-events-none fixed top-0 left-0 z-50 flex w-max -rotate-2 items-center gap-2 rounded-md bg-band px-3 py-1 text-ink shadow-raised inset-ring inset-ring-edge"
       >
