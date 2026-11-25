@@ -1,0 +1,23 @@
+e2e/fake-agent/harness.mjs
+  s_419b7bad57fe38::t_a50702616d6805 125,136
+packages/server/tests/fixtures/plugin-machines/outsider/src/api.ts
+  s_419b7bad57fe38::t_a50702616d6805 1
+packages/server/tests/triggers-driver.mjs
+  s_419b7bad57fe38::t_a50702616d6805 79-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6bdf3a41b4e54ca2aaf577c8279890684e1dfc35",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
