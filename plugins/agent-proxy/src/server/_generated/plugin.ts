@@ -5,6 +5,7 @@ type References = {
     readonly "addAccount": ReferenceFromDefinition<typeof import("../manage")["addAccount"]>;
     readonly "checkAgain": ReferenceFromDefinition<typeof import("../manage")["checkAgain"]>;
     readonly "removeSubscription": ReferenceFromDefinition<typeof import("../manage")["removeSubscription"]>;
+    readonly "signInAccount": ReferenceFromDefinition<typeof import("../manage")["signInAccount"]>;
     readonly "signOutAccount": ReferenceFromDefinition<typeof import("../manage")["signOutAccount"]>;
   };
   readonly "signins": {
@@ -23,6 +24,7 @@ export const plugin: References = createApi("agent-proxy", [
   "manage:addAccount",
   "manage:checkAgain",
   "manage:removeSubscription",
+  "manage:signInAccount",
   "manage:signOutAccount",
   "signins:cancelSignIn",
   "signins:finishSignIn",

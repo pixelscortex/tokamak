@@ -54,6 +54,7 @@ export interface SubscriptionView {
   readonly company: "anthropic";
   readonly method: "subscription";
   readonly label: string;
+  /** Empty while the plan is unknown: no read of it has succeeded yet. */
   readonly plan: string;
   readonly enabled: boolean;
   /**
@@ -87,6 +88,8 @@ export interface SignInView {
   readonly startedAt: number;
   /** The subscription it repairs in place. */
   readonly repair?: string;
+  /** The account of `repair` it signs in again, when one was named. */
+  readonly repairAccount?: string;
   /** The subscription it adds another provider account to. */
   readonly addTo?: string;
   /** Older than 15 minutes: it can no longer finish; the person starts again. */
@@ -101,6 +104,7 @@ export function signInViewOf(row: Doc<Model, "signIns">, now: number): SignInVie
     link: row.link,
     startedAt: row.startedAt,
     ...(row.repair !== undefined && { repair: row.repair }),
+    ...(row.repairAccount !== undefined && { repairAccount: row.repairAccount }),
     ...(row.addTo !== undefined && { addTo: row.addTo }),
     expired: isExpired(row, now),
   };
