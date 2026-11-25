@@ -91,7 +91,8 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     try {
       const result = await call();
       if (isFailure(result)) {
-        const message = (result.data as { message?: string } | undefined)?.message ?? "That change did not save.";
+        const message =
+          (result.data as { message?: string } | undefined)?.message ?? "That change did not save.";
         refocus = undefined;
         setProblem(message);
         say(message);
@@ -138,7 +139,7 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     return run(
       () => client.mutation(api.profiles.remove, { profile: profile.id, subscription }),
       () => `${nameOf(subscription)} removed from ${profile.code}.`,
-      `[data-profile="${CSS.escape(profile.id)}"]`,
+      `[data-profile="${profile.id}"]`,
     );
   }
 
@@ -182,6 +183,6 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
 
 export type Builder = ReturnType<typeof createBuilder>;
 
-/** The selector of a row's menu button, so focus can come back to it after a move. */
+/** The selector of a row's menu button, so focus can come back to it after a move (ids hold no quotes). */
 export const entryMenu = (profile: string, subscription: string) =>
-  `[data-entry-menu="${CSS.escape(`${profile} ${subscription}`)}"]`;
+  `[data-entry-menu="${profile} ${subscription}"]`;

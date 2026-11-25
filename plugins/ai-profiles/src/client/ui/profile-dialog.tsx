@@ -57,7 +57,9 @@ export function ProfileDialog(props: {
               value={name()}
               invalid={problem()?.field === "name"}
               aria-describedby="profile-problem"
-              onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) => setName(event.currentTarget.value)}
+              onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>
+                setName(event.currentTarget.value)
+              }
             />
           </div>
           <div class="flex flex-col gap-2">

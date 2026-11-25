@@ -76,7 +76,10 @@ const rowsOf = (ctx: Reader, owner: string) =>
     .withIndex("by_owner", (q) => q.eq("owner", owner))
     .collect();
 
-function viewOf(row: Pick<Row, "_id" | "name" | "code" | "entries" | "createdAt">, live: ReadonlyMap<string, unknown>): ProfileView {
+function viewOf(
+  row: Pick<Row, "_id" | "name" | "code" | "entries" | "createdAt">,
+  live: ReadonlyMap<string, unknown>,
+): ProfileView {
   return {
     id: row._id,
     name: row.name,
@@ -117,7 +120,12 @@ async function editable(ctx: MutationContext<Model>, profile: string) {
   return { row: fresh, live, ids: fresh.entries.map((entry) => entry.subscription) } as const;
 }
 
-async function save(ctx: MutationContext<Model>, row: Row, ids: string[], live: ReadonlyMap<string, unknown>) {
+async function save(
+  ctx: MutationContext<Model>,
+  row: Row,
+  ids: string[],
+  live: ReadonlyMap<string, unknown>,
+) {
   const entries = ids.map((subscription) => ({ subscription }));
   await ctx.db.patch(row._id, { entries });
   return viewOf({ ...row, entries }, live);

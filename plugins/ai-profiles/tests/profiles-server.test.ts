@@ -15,10 +15,15 @@ import { api } from "../src/server/_generated/api";
 // the subscription being gone.
 
 const available = builds();
-if (!available.length) console.log("Skipping: build the server and tokamak-plugin-host to run the profile tests");
+if (!available.length)
+  console.log("Skipping: build the server and tokamak-plugin-host to run the profile tests");
 
 /** A failure a person can read: one line, no stack trace, no source path. */
-const plain = (kind: string) => ({ failed: true, kind, data: expect.objectContaining({ message: expect.stringMatching(/^[^\n/]*$/) }) });
+const plain = (kind: string) => ({
+  failed: true,
+  kind,
+  data: expect.objectContaining({ message: expect.stringMatching(/^[^\n/]*$/) }),
+});
 
 describe.skipIf(!available.length).each(available)("$name", (build) => {
   let fake: Awaited<ReturnType<typeof startFakeCompanies>>;
@@ -96,9 +101,9 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     await owner.mutation(api.profiles.add, { profile: work.id, subscription: c, at: 1 });
     expect(await order()).toEqual([b, c, a]);
     // Already in: refused, and nothing moves.
-    expect(await owner.mutation(api.profiles.add, { profile: work.id, subscription: a, at: 0 })).toMatchObject(
-      plain("AlreadyAdded"),
-    );
+    expect(
+      await owner.mutation(api.profiles.add, { profile: work.id, subscription: a, at: 0 }),
+    ).toMatchObject(plain("AlreadyAdded"));
     await owner.mutation(api.profiles.move, { profile: work.id, subscription: a, to: 0 });
     expect(await order()).toEqual([a, b, c]);
     await owner.mutation(api.profiles.move, { profile: work.id, subscription: a, to: 99 });
@@ -164,12 +169,12 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     const other = await workspace.member("alex");
     expect(await list(other)).toEqual([]);
     const first = work.subscriptions[0]!;
-    expect(await other.mutation(api.profiles.remove, { profile: work.id, subscription: first })).toMatchObject(
-      plain("NotFound"),
-    );
-    expect(await other.mutation(api.profiles.move, { profile: work.id, subscription: first, to: 1 })).toMatchObject(
-      plain("NotFound"),
-    );
+    expect(
+      await other.mutation(api.profiles.remove, { profile: work.id, subscription: first }),
+    ).toMatchObject(plain("NotFound"));
+    expect(
+      await other.mutation(api.profiles.move, { profile: work.id, subscription: first, to: 1 }),
+    ).toMatchObject(plain("NotFound"));
     // Their own profile with the same code, and the owner's subscription cannot go in it.
     const theirs = await create(other, "Work", "WORK");
     expect(await other.mutation(api.profiles.add, { profile: theirs.id, subscription: first })).toMatchObject(
