@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildWorkerBundles, workerSources } from "./worker.mjs";
+import { buildLocalBundle, transactionSources } from "./worker.mjs";
 import { bunPluginBoundary, checkPluginImports, featurePluginRoot } from "./plugin-boundary.mjs";
 import ts from "typescript";
 import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plugin-compiler.mjs";
@@ -15,7 +15,7 @@ import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plu
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 import { functionPlacement, lanes, placedModules, placementTransform, registrySource } from "./placement.mjs";
 import { contractEntry, contractManifest } from "./contracts.mjs";
-import { isFileOrProcessModule, serverBuiltins } from "./server-builtins.mjs";
+import { serverBuiltins } from "./server-builtins.mjs";
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const quote = JSON.stringify;
@@ -161,7 +161,7 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, worker = false) {
+export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
@@ -196,91 +196,93 @@ export async function bundleFeature(folder, namespace, worker = false) {
   try {
     const hasSchema = await Bun.file(join(root, "schema.ts")).exists();
     const entry = join(temporary, "entry.ts");
-    let source = registrySource({
+    const source = registrySource({
       root,
       modules: split ? server : files.map((file, i) => [join(root, file), modules[i]]),
       hasSchema,
       providers,
       header,
     });
-    let workerPlugins = [];
-    if (worker) {
-      const result = await workerSources({
+    await Bun.write(entry, source);
+
+    const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
+    if (hasLocal) {
+      await buildLocalBundle({
+        root,
+        sdkRoot,
+        pluginRoot,
+        source: registrySource({ root, modules: local, providers, lane: lanes.local, worker: true, header }),
+        plugins: [placementTransform(placement, lanes.local)],
+      });
+      // Preserve the installed-artifact and socket entryHash contract. No
+      // executable entry is needed: the plugin process loads local.js.
+      await Bun.write(join(root, "dist/local-entry.js"), "");
+    }
+    async function buildServer(naming, contents, plugins) {
+      const built = await Bun.build({
+        entrypoints: ["tokamak-feature:entry"],
+        target: "browser",
+        format: "esm",
+        splitting: false,
+        sourcemap: "linked",
+        naming,
+        outdir: join(root, "dist"),
+        packages: "bundle",
+        env: "disable",
+        allowUnresolved: [],
+        plugins: [
+          bunPluginBoundary(pluginRoot),
+          ...plugins,
+          {
+            name: "stable-feature-entry",
+            setup(build) {
+              build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
+                path: "entry",
+                namespace: "tokamak-feature",
+              }));
+              build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
+                contents,
+                loader: "ts",
+                resolveDir: root,
+              }));
+            },
+          },
+          {
+            name: "portable-sdk",
+            setup(build) {
+              build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
+                path: join(sdkRoot, "src/index.ts"),
+              }));
+            },
+          },
+        ],
+      });
+      if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
+      return built;
+    }
+    const built = await buildServer("bundle.js", source, [
+      ...(placement ? [placementTransform(placement, lanes.server)] : []),
+      serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
+    ]);
+    if (splitActions) {
+      const descriptor = transactionSources({
         root,
         files,
         modules,
         hasSchema,
-        sdkRoot,
         header,
         pluginRoot,
         placement: split ? placement : undefined,
       });
-      source = result.source;
-      workerPlugins = result.plugins;
-    } else {
-      workerPlugins = [
-        ...(placement ? [placementTransform(placement, lanes.server)] : []),
-        serverBuiltins("server-local-boundary"),
-      ];
+      await buildServer("transactions.js", descriptor.source, descriptor.plugins);
     }
-    await Bun.write(entry, source);
-
-    const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
-    await checkFeature(root, temporary, generated, files, entry, worker || hasLocal, providers);
+    // Report unsupported imports before TypeScript reports missing Node declarations.
+    await checkFeature(root, temporary, generated, files, entry, hasLocal, providers);
     if (namespace !== undefined)
       await Bun.write(
         join(root, "dist/contracts.json"),
         JSON.stringify(contractManifest(pluginRoot, namespace, providers)),
       );
-    if (hasLocal) {
-      await buildWorkerBundles({
-        root,
-        sdkRoot,
-        pluginRoot,
-        name: "local",
-        source: registrySource({ root, modules: local, providers, lane: lanes.local, worker: true, header }),
-        plugins: [placementTransform(placement, lanes.local)],
-      });
-    }
-    const built = await Bun.build({
-      entrypoints: ["tokamak-feature:entry"],
-      target: "browser",
-      format: "esm",
-      splitting: false,
-      sourcemap: "linked",
-      naming: "bundle.js",
-      outdir: join(root, "dist"),
-      packages: "bundle",
-      env: "disable",
-      allowUnresolved: [],
-      plugins: [
-        bunPluginBoundary(pluginRoot),
-        ...workerPlugins,
-        {
-          name: "stable-feature-entry",
-          setup(build) {
-            build.onResolve({ filter: /^tokamak-feature:entry$/ }, () => ({
-              path: "entry",
-              namespace: "tokamak-feature",
-            }));
-            build.onLoad({ filter: /.*/, namespace: "tokamak-feature" }, () => ({
-              contents: source,
-              loader: "ts",
-              resolveDir: root,
-            }));
-          },
-        },
-        {
-          name: "portable-sdk",
-          setup(build) {
-            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({
-              path: join(sdkRoot, "src/index.ts"),
-            }));
-          },
-        },
-      ],
-    });
-    if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
     const chunks = built.outputs.filter((output) => output.kind !== "sourcemap");
     if (chunks.length !== 1 || !built.outputs.some((output) => output.kind === "sourcemap"))
       throw new Error("Feature build must produce exactly one ESM file and its source map");
@@ -301,14 +303,7 @@ export async function bundleFeature(folder, namespace, worker = false) {
 }
 
 if (import.meta.main) {
-  if (
-    process.argv.length !== 3 &&
-    !(
-      [5, 6].includes(process.argv.length) &&
-      process.argv[3] === "--plugin" &&
-      (process.argv.length === 5 || process.argv[5] === "--worker")
-    )
-  ) {
+  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
@@ -316,7 +311,7 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], process.argv[5] === "--worker");
+  await bundleFeature(feature, process.argv[4], true);
 }
 
 async function scanFiles(root) {
@@ -337,7 +332,7 @@ async function scanFiles(root) {
   return files;
 }
 
-async function checkFeature(root, temporary, generated, files, entry, worker, providers) {
+async function checkFeature(root, temporary, generated, files, entry, hasLocal, providers) {
   const config = join(temporary, "tsconfig.json");
   // Inherit resolution options unchanged, including paths relative to the
   // config that declared them. A build-only SDK alias or TS-extension opt-in
@@ -356,8 +351,8 @@ async function checkFeature(root, temporary, generated, files, entry, worker, pr
     JSON.stringify({
       extends: parentConfig,
       compilerOptions: {
-        lib: worker ? ["ES2022", "DOM"] : ["ES2022"],
-        types: worker ? ["node"] : [],
+        lib: hasLocal ? ["ES2022", "DOM"] : ["ES2022"],
+        types: hasLocal ? ["node"] : [],
         paths,
         noEmit: true,
         strict: true,
@@ -387,7 +382,7 @@ async function checkFeature(root, temporary, generated, files, entry, worker, pr
     if (
       /Property 'proc' does not exist on type .*?(?:Query|Mutation|Action)Context/.test(diagnostics) ||
       [...diagnostics.matchAll(/Cannot find module '([^']+)'/g)].some(([, path]) =>
-        isFileOrProcessModule(path),
+        /^(?:node:)?fs\/promises$/.test(path),
       )
     )
       advice.push(useLocal);

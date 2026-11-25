@@ -15,6 +15,8 @@ path = "src/bin/export-protocol.rs"
 required-features = ["protocol-codegen"]
 
 [features]
+default = ["local-runtime"]
+local-runtime = ["tokamak-worker/local-runtime"]
 protocol-codegen = ["dep:ts-rs"]
 
 [dependencies]
@@ -28,7 +30,8 @@ subtle = "2.6.1"
 mime_guess = "2.0.5"
 percent-encoding = "2.3.2"
 semver = "1.0.28"
-reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
+# Match the Runner's JSON support for a shared reqwest build.
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
 axum = { version = "0.8.9", default-features = false, features = [
   "ws",
   "http1",
@@ -44,6 +47,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 ts-rs = { version = "12.0.1", optional = true, default-features = false, features = ["serde-json-impl"] }
 # Direct storage/catalog/index APIs are pinned together: their contracts are internal.
 anyhow = "1"
+arc-swap = "1.9.3"
 uuid = { version = "1", features = ["v4"] }
 surrealdb-types = { version = "=4.0.0", default-features = false }
 surrealdb-datastore = { version = "=4.0.0", default-features = false }
@@ -51,8 +55,9 @@ surrealdb-idx = { version = "=4.0.0", default-features = false, features = ["vec
 surrealdb-kvs = { version = "=4.0.0", default-features = false }
 surrealdb-kvs-any = { version = "=4.0.0", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 engine = { path = "../engine" }
-tokamak-worker = { path = "../worker" }
-serde_json = "1.0.154"
+tokamak-worker = { path = "../worker", default-features = false }
+# Decode the plugin host's JSON frames without changing their JavaScript numbers.
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 tokio = { version = "1.54.1", default-features = false, features = [
   "rt-multi-thread",
   "macros",
@@ -73,3 +78,40 @@ tokio-tungstenite = { version = "0.29.0", default-features = false, features = [
 
 [lints]
 workspace = true
+
+
+[[test]]
+name = "ai_liveness"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "ai_threads"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "ai_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "chat_threads"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "claude_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "code_changes"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "code_snapshots"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "codex_turns"
+required-features = ["local-runtime"]
+
+[[test]]
+name = "local_functions"
+required-features = ["local-runtime"]

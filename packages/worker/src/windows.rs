@@ -1,7 +1,5 @@
-use super::Lane;
 use std::{
-    collections::BTreeMap,
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     io,
     marker::PhantomData,
     os::windows::{
@@ -38,14 +36,7 @@ impl Child {
     }
 }
 
-pub(super) fn spawn(
-    bun: &Path,
-    entry: &Path,
-    code: &Path,
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
-    lane: Lane,
-) -> io::Result<(Child, OwnedHandle)> {
+pub(super) fn spawn_runner(path: &Path, args: &[&OsStr]) -> io::Result<(Child, OwnedHandle)> {
     let (input, stdin) = io::pipe()?;
     let (stdout, output) = io::pipe()?;
     let (stderr, errors) = io::pipe()?;
@@ -59,7 +50,7 @@ pub(super) fn spawn(
         output.as_raw_handle(),
         errors.as_raw_handle(),
     ];
-    let handle = create_process(bun, [entry, code], cwd, env, &job, pipes, lane)?;
+    let handle = create_process(path, args, &job, pipes)?;
     let exit = spawn_blocking(move || {
         // SAFETY: The process handle is owned by this wait until it completes.
         unsafe {
@@ -101,25 +92,48 @@ fn create_job() -> io::Result<OwnedHandle> {
 }
 
 fn create_process(
-    bun: &Path,
-    [entry, code]: [&Path; 2],
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
+    path: &Path,
+    args: &[&OsStr],
     job: &OwnedHandle,
     pipes: [HANDLE; 3],
-    lane: Lane,
 ) -> io::Result<OwnedHandle> {
-    let application = wide(bun.as_os_str())?;
-    let directory = wide(std::path::absolute(cwd)?.as_os_str())?;
-    let mut command = OsString::new();
-    for path in [bun, entry, code] {
-        // These are file paths, so none can end in a backslash or contain quotes.
-        command.push("\"");
-        command.push(path);
-        command.push("\" ");
+    let application = wide(path.as_os_str())?;
+    let mut command = Vec::new();
+    for arg in std::iter::once(path.as_os_str()).chain(args.iter().copied()) {
+        // Quote each argument according to the Windows C runtime's argv rules.
+        if !command.is_empty() {
+            command.push(b' ' as u16);
+        }
+        command.push(b'"' as u16);
+        let mut slashes = 0;
+        for unit in arg.encode_wide() {
+            match unit {
+                0 => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Unexpected NUL",
+                    ));
+                }
+                92 => slashes += 1,
+                _ => {
+                    command.extend(std::iter::repeat_n(
+                        92,
+                        slashes
+                            + if unit == 34 {
+                                slashes + 1
+                            } else {
+                                0
+                            },
+                    ));
+                    slashes = 0;
+                    command.push(unit);
+                }
+            }
+        }
+        command.extend(std::iter::repeat_n(92, slashes * 2));
+        command.push(b'"' as u16);
     }
-    let mut command = wide(&command)?;
-    let environment = environment_block(env, lane)?;
+    command.push(0);
     let job_list = [job.as_raw_handle()];
     let mut attributes = Attributes::new()?;
     attributes.add(PROC_THREAD_ATTRIBUTE_JOB_LIST, &job_list)?;
@@ -141,7 +155,7 @@ fn create_process(
             check(SetHandleInformation(pipe, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) != 0)?;
         }
         // JOB_LIST assigns the job as part of CreateProcessW (Windows 10+),
-        // before any worker code can run. There is no uncontained process even
+        // before any Runner code can run. There is no uncontained process even
         // if the server dies during startup. Neither breakaway flag is enabled.
         check(
             CreateProcessW(
@@ -150,9 +164,9 @@ fn create_process(
                 null(),
                 null(),
                 1,
-                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-                environment.as_ptr().cast(),
-                directory.as_ptr(),
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+                null(),
+                null(),
                 (&raw const startup).cast(),
                 &mut process,
             ) != 0,
@@ -160,28 +174,6 @@ fn create_process(
         drop(OwnedHandle::from_raw_handle(process.hThread));
         Ok(OwnedHandle::from_raw_handle(process.hProcess))
     }
-}
-
-fn environment_block(env: &BTreeMap<String, String>, lane: Lane) -> io::Result<Vec<u16>> {
-    // Windows expects case-insensitively sorted entries and a double NUL.
-    let sorted: BTreeMap<_, _> = env
-        .iter()
-        .map(|(name, value)| (name.as_str(), value.as_str()))
-        .chain([lane.env()])
-        .map(|(name, value)| (name.to_ascii_uppercase(), (name, value)))
-        .collect();
-    let mut environment = Vec::new();
-    for (name, value) in sorted.values() {
-        if name.is_empty() || name.contains('=') {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid environment key",
-            ));
-        }
-        environment.extend(wide(OsStr::new(&format!("{name}={value}")))?);
-    }
-    environment.resize(environment.len().max(1) + 1, 0);
-    Ok(environment)
 }
 
 fn check(success: bool) -> io::Result<()> {

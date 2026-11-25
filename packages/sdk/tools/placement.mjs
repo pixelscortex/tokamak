@@ -29,7 +29,6 @@ export const lanes = {
     provider: serverProvider,
     method: (kind) => serverFunction(kind) && !action(kind),
   },
-  worker: { keep: serverFunction, provider: serverProvider, method: action },
 };
 
 export function functionPlacement(root, selected) {

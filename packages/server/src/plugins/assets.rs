@@ -210,24 +210,26 @@ pub(super) fn asset(
 }
 
 fn artifact_path(root: &Path, name: &str) -> Result<PathBuf, Error> {
-    let relative = Path::new(name);
-
-    if relative.is_absolute()
-        || relative
-            .components()
-            .any(|c| !matches!(c, std::path::Component::Normal(_)))
-    {
-        return Err(invalid("Artifact paths must stay inside their directory"));
-    }
-
-    let path = root
-        .join(relative)
+    let requested = root.join(relative_asset_path(name)?);
+    let path = requested
         .canonicalize()
-        .map_err(|e| invalid(e.to_string()))?;
+        .map_err(|e| invalid(format!("Read {}: {e}", requested.display())))?;
 
     if !path.starts_with(root) {
         return Err(invalid("Artifact symlink escapes its directory"));
     }
 
+    Ok(path)
+}
+
+pub(super) fn relative_asset_path(name: &str) -> Result<&Path, Error> {
+    let path = Path::new(name);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err(invalid("Artifact paths must stay inside their directory"));
+    }
     Ok(path)
 }

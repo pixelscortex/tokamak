@@ -13,25 +13,44 @@ and typed API references. Do not author the artifact manifest by hand.
 
 ```sh
 proto run bun -- packages/build/src/build.ts path/to/plugins/notes
-cargo build --locked -p server --bin tokamak-server --jobs 2
-target/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
+cargo build --locked --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
+target/cloud/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/private-server
 ```
 
-The local directory requires the same private `server.token` as the client
-launcher. Never pass the token in arguments. The app ships Chat, AI, Code,
+The Server runs queries, mutations and actions. Use the [Runner](../runner/README.md)
+for local functions. The Server's `/local-worker` endpoint returns 401 without
+credentials. An authenticated plain HTTP request returns 501 with “This server
+has no local runtime”; an authenticated WebSocket caller receives that reason in
+the startup refusal. Keep the matching
+actions-only host alongside `tokamak-server`, or set `TOKAMAK_PLUGIN_HOST` to it.
+To package a plugin for the Server, run
+`proto run bun -- packages/build/src/stage-server-plugin.ts <built-dist> <destination>`
+with a new destination. The Server doesn't open local bundles.
+Staging omits those files but keeps the manifest and hashes so the Runner can
+match its own installed copy.
+
+Legacy `--local-dir` mode requires a private `server.token`. Never pass a token
+in arguments. The app ships Chat, AI, Code,
 Claude, Codex and Password sign-in as its starter set.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
-target/debug/tokamak-server plugin create plugins/acme.notes
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin list
-TOKAMAK_SERVER_DIR=path/to/private-server target/debug/tokamak-server plugin reload acme.notes
+target/cloud/debug/tokamak-server plugin create plugins/acme.notes
+TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin list
+TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin reload acme.notes
 ```
 
 Create writes a descriptor, a sample query and a skill file in a new folder.
 Run `proto run bun -- install` in the checkout to link the SDK before building it.
 
-The control CLI validates loopback discovery, uses bearer authentication, disables
+To target a running desktop Runner, point `TOKAMAK_SERVER_DIR` at its private
+data directory. The CLI finds the address in `runner.json` and reads
+`runner.control`. The Runner rotates the credential on every start and removes
+both files on clean exit. This credential can only list and reload plugins; it
+cannot read workspace data or UI assets, open a socket, or stop the Runner.
+The CLI falls back to legacy server discovery when there is no `runner.json`.
+
+The CLI validates loopback discovery, uses bearer authentication, disables
 proxies and redirects, and does not replay requests. The server exposes:
 
 - `GET /plugins`: live manifest/function metadata and generation revision.
@@ -151,8 +170,8 @@ live clock and randomness. Clock-dependent queries do not automatically refresh
 as time passes; subscriptions rerun when their data dependencies change.
 
 Delegation evaluates self-contained modules in the same invocation world, heap
-and time budget; it never awaits a second worker from a bounded worker pool.
-One-worker operation is tested. Results cross as JSON-compatible values, not
+and time budget; it never awaits a second slot in the transaction engine.
+Delegation with a single slot is tested. Results cross as JSON-compatible values, not
 JavaScript capabilities. Call-path cycles fail; engine limits also cap delegation
 at 16 levels / 256 calls per root invocation. This shares a JS realm between
 trusted plugins and is not a realm-isolation security guarantee.
@@ -168,7 +187,7 @@ not an upsert and is not exposed through the JavaScript database API.
 
 **Network access belongs to actions only.** A `net:<host>` declaration is an
 exact-host grant for `fetch` inside `action` functions; there is no `net:*`
-wildcard (see `packages/engine/WEB_APIS.md`). Actions run on a separate worker
+wildcard (see `packages/engine/WEB_APIS.md`). Actions run in the action process
 lane and reach data only through `ctx.runQuery` / `ctx.runMutation`. Queries and
 mutations cannot call actions or `fetch`, so they gain no external effects that
 could repeat during transaction retries. Reload cancels old-generation actions.
@@ -227,7 +246,7 @@ Legacy owner-issued invite keys still work.
 ## Evidence
 
 `cargo test --locked -p server --test plugins --jobs 2` builds real SDK plugins
-through the public artifact command. It tests one-worker nested calls, atomic
+through the public artifact command. It tests nested calls with one engine slot, atomic
 rollback after caught callee failure, scoped IDs, query-to-mutation denial, call
 cycles, two interface providers, transitive subscriptions, edited-code reload,
 failed-reload preservation, permission-change rejection and subscription refresh.
@@ -235,7 +254,7 @@ It also runs the real standalone binary/control CLI against isolated disk storag
 checking authentication, Origin rejection and backend-source non-exposure.
 
 `plugins::tests` covers static resolver failures, traversal/symlink/hash checks
-and immutable UI snapshots. Engine module tests cover shared-worker delegation
+and immutable UI snapshots. Engine module tests cover delegation in one invocation
 and caught/abandoned child error observation. These are self-authored tests,
 not an independent review or proof of hybrid sync/long-running AI.
 
@@ -263,11 +282,33 @@ the provider's database, grants and the authenticated caller. Only the plugin
 which defined the contract may list or invoke those registrations. A reload
 rebuilds the active registrations; an optional provider stays installed when
 its contract owner is absent. The client catalog only carries registrations
-needed by the local part. The client snapshots matching installed provider
-bundles into the defining plugin's Bun worker so local contracts can pass
-JavaScript objects containing callbacks without serializing them. Removing or
-changing a loaded provider retires the importing worker to unload its module.
-The catalog verifies the provider's declaration hash against the owner's.
+needed by the local part. The catalog verifies the provider's declaration hash
+against the owner's. A local contract must declare `dataMethods: true`. The
+build records this on both the declaration and provider registrations. QuickJS
+rejects legacy local registrations without that marker before starting a host;
+rebuild the provider to update its manifest.
+The window authorizes the route using the catalog, and the QuickJS Runner
+routes JSON arguments and results between plugin processes. The provider
+handles the call with the caller's signed-in member and device. Turn hooks and
+thread deletion hooks use this route.
+
+On QuickJS, each agent starts its CLI in its own process. Its SDK adapts the
+author's live `Run` to plain-data messages over the link established by the
+routed start. The Runner cancels that call if ai's process dies. The agent
+host can fail independently; its in-flight turns report the failure in their
+threads. “Always allow this session” grants live in ai's module state and
+survive agent reloads.
+
+On QuickJS, turn hook inputs cross as data and the SDK supplies the
+provider invocation's abort signal as `turn.signal`. Stop cancels a pending
+before hook. After hooks share one deadline and can also be cancelled if
+the turn is lost. Code pairs its snapshots using the before ref, which
+survives a provider restart. Reloading Code, like reloading an agent, does
+not replace ai's process or clear its session grants.
+
+The build rejects local contracts that declare live methods. QuickJS also
+refuses an already built plugin with a live local contract; rebuild or update
+it to run on QuickJS.
 
 A function wrapped in `pluginOnly(...)` has an explicit cross-plugin export
 in `pluginFunctions` if re-exported by the public server module. It is

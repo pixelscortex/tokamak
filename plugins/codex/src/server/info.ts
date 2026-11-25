@@ -1,6 +1,7 @@
 import type { LocalContext } from "@tokamak/sdk";
+import { agentCommand } from "@tokamak/sdk/agent-turn";
 import type { Info } from "plugin:ai/contracts";
-import { AppServer } from "./rpc";
+import { AppServer, isRecord } from "./rpc";
 
 const MINIMUM_VERSION = "0.170.0";
 const INSTALL = "npm install -g @openai/codex";
@@ -15,21 +16,30 @@ const UNAVAILABLE: Info = {
   speeds: [],
 };
 
-export async function codexInfo(ctx: LocalContext): Promise<Info> {
-  if (!(await supported(ctx))) return UNAVAILABLE;
+export async function codexInfo(ctx: LocalContext, setupDeadline?: number): Promise<Info> {
+  const remaining = (fallback: number) =>
+    setupDeadline === undefined ? fallback : Math.max(0, setupDeadline - Date.now());
+  const version = await support(ctx, remaining(5_000));
+  if (version === undefined || (setupDeadline !== undefined && version === "old"))
+    throw new Error("Could not check the Codex version");
+  if (version !== "ready") return UNAVAILABLE;
+  if (remaining(Infinity) === 0) throw new Error("Could not check Codex sign-in");
   const app = new AppServer(ctx);
   const available = { ...UNAVAILABLE, installed: true };
   try {
-    await app.initialize();
+    await app.initialize(remaining(30_000));
     const { account, requiresOpenaiAuth } = await app.call<{
-      account: object | null;
-      requiresOpenaiAuth: boolean;
-    }>("account/read", { refreshToken: false });
-    if (!account && requiresOpenaiAuth !== false) return available;
+      account: unknown;
+      requiresOpenaiAuth: unknown;
+    }>("account/read", { refreshToken: false }, remaining(30_000));
+    if (account === null && requiresOpenaiAuth === true) return available;
+    if (!isRecord(account) && !(account === null && requiresOpenaiAuth === false))
+      throw new Error("Could not check Codex sign-in");
+    if (setupDeadline !== undefined) return { ...available, signedIn: true };
     const [{ models, speeds }, modes] = await Promise.all([listModels(app), listModes(app)]);
     return { ...available, signedIn: true, models, modes, speeds };
   } finally {
-    app.close();
+    app.stop();
   }
 }
 
@@ -78,31 +88,14 @@ async function listModes(app: AppServer) {
   return ["default", "plan"].filter((mode) => data.some((preset) => preset.mode === mode));
 }
 
-async function supported(ctx: LocalContext): Promise<boolean> {
-  try {
-    const child = ctx.proc(["codex", "--version"]);
-    child.closeInput();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        (async () => {
-          let version: RegExpMatchArray | null = null;
-          for await (const line of child.stdout) {
-            version ??= line.match(/^codex-cli (\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?(?:\+[\w.-]+)?$/);
-          }
-          if ((await child.exited) !== 0 || !version) return false;
-          const minimum = MINIMUM_VERSION.split(".").map(Number);
-          const installed = version.slice(1).map(Number);
-          const firstDifference = installed.findIndex((part, i) => part !== minimum[i]);
-          return firstDifference === -1 || installed[firstDifference]! > minimum[firstDifference]!;
-        })(),
-        new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), 5_000))),
-      ]);
-    } finally {
-      clearTimeout(timer);
-      child.stop();
-    }
-  } catch {
-    return false;
-  }
+async function support(ctx: LocalContext, timeout: number) {
+  const answer = await agentCommand(ctx, ["codex", "--version"], timeout);
+  if (answer === "missing") return answer;
+  if (answer?.code !== 0) return;
+  const version = answer.stdout.match(/^codex-cli (\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?(?:\+[\w.-]+)?$/m);
+  if (!version) return;
+  const minimum = MINIMUM_VERSION.split(".").map(Number);
+  const installed = version.slice(1).map(Number);
+  const firstDifference = installed.findIndex((part, i) => part !== minimum[i]);
+  return firstDifference === -1 || installed[firstDifference]! > minimum[firstDifference]! ? "ready" : "old";
 }

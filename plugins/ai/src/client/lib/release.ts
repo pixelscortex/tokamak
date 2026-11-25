@@ -2,7 +2,7 @@ import type { TokamakClient } from "@tokamak/sdk";
 import { BEAT_MS } from "../../shared/turn-timing";
 import { api } from "./agents";
 
-/** A relaunch asks a few beats long: turns that beat until the quit need that long to fall silent. */
+/** Allow time for the old window's calls to close and its last beat to go stale. */
 const TRIES = 4;
 
 /**
@@ -15,7 +15,9 @@ export async function releaseOrphanedTurns(client: TokamakClient): Promise<void>
   if (!client.hasLocal) return;
   for (let attempt = 0; attempt < TRIES; attempt++) {
     const running = (await client.local(api.working.list, {})).map((turn) => turn.turnId);
-    if ((await client.mutation(api.liveness.release, { running })) === 0) return;
+    const pending = await client.mutation(api.liveness.release, { running });
+    // A reconnect can still see calls from the old window while its socket is closing.
+    if (pending === 0 && running.length === 0) return;
     await new Promise((resolve) => setTimeout(resolve, BEAT_MS));
   }
 }

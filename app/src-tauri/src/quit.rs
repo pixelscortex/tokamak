@@ -3,8 +3,7 @@
 //! handed to the window, which asks plugins whether anything still runs on
 //! this computer (`onQuit` in the SDK) and shows "Claude is still working in 1
 //! thread · Stop and quit · Cancel" when it does. On the way out every local
-//! worker is closed; each agent program dies with its worker (its group's
-//! watchdog), so quitting leaves no agent process behind.
+//! worker is closed by the Runner, and each agent program dies with its worker.
 //!
 //! The window must keep running while hidden or minimized for this (and for
 //! the turns' sign of life): tauri.conf.json turns WebKit's background
@@ -32,6 +31,7 @@ pub struct Quit {
     window: Mutex<Option<Channel<Value>>>,
     /// The person (or a window with nothing running) has agreed: let the exit through.
     confirmed: AtomicBool,
+    finished: AtomicBool,
     /// Counts quit requests, so a late timer from an earlier one does nothing.
     asked: AtomicU64,
     /// The window answered the latest request (holding it for a dialog, or cancelling).
@@ -83,8 +83,13 @@ impl Quit {
     }
 
     /// From now on every exit goes through.
-    pub fn confirm(&self) {
-        self.confirmed.store(true, Ordering::SeqCst);
+    pub fn confirm(&self) -> bool {
+        !self.confirmed.swap(true, Ordering::SeqCst)
+    }
+
+    /// Only release the platform exit after the Runner has shut down.
+    pub fn finished(&self) -> bool {
+        self.finished.load(Ordering::SeqCst)
     }
 }
 
@@ -113,11 +118,14 @@ pub fn request(app: &tauri::AppHandle) {
     });
 }
 
-/// Closes every local worker (and with it every agent program), then exits.
+/// Stops the Runner before allowing the platform exit.
 fn exit(app: tauri::AppHandle) {
-    app.state::<Quit>().confirm();
+    if !app.state::<Quit>().confirm() {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
-        app.state::<crate::local::Workers>().close_all().await;
+        crate::runner::shutdown(&app).await;
+        app.state::<Quit>().finished.store(true, Ordering::SeqCst);
         app.exit(0);
     });
 }

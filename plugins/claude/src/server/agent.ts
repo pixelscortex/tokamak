@@ -1,4 +1,8 @@
+/// <reference types="node" />
 /// <reference path="./svg.d.ts" />
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import { agentInfoCache } from "@tokamak/sdk/agent-turn";
 import { local, provide, type LocalContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { killAfter, minimumVersion, open, parse, signedIn, speeds, streamArgs, usableVersion } from "./wire";
@@ -7,31 +11,45 @@ import { turn } from "./turn";
 import icon from "./icons/claude.svg" with { type: "text" };
 
 const updateRequired = `Claude needs Claude Code ${minimumVersion} or later.`;
+const setup = { install: "curl -fsSL https://claude.ai/install.sh | bash", signIn: "claude auth login" };
+const noCatalog = { models: [], modes: [], speeds: [] } as const;
 
-const info = local({
-  handler: async (ctx): Promise<ai.Info> => {
-    const setup = { install: "curl -fsSL https://claude.ai/install.sh | bash", signIn: "claude auth login" };
-    const version = await usableVersion(ctx);
-    if (version !== "ready") {
-      return {
-        installed: false,
-        signedIn: false,
-        ...setup,
-        ...(version === "old" && { install: "claude update", updateRequired }),
-        models: [],
-        modes: [],
-        speeds: [],
-      };
-    }
-    const ready = await signedIn(ctx);
+async function claudeInfo(ctx: LocalContext, setupDeadline?: number): Promise<ai.Info> {
+  const remaining = () => (setupDeadline === undefined ? undefined : setupDeadline - Date.now());
+  const version = await usableVersion(ctx, remaining());
+  if (version === undefined || (setupDeadline !== undefined && version === "old"))
+    throw new Error("Could not check the Claude Code version");
+  if (version !== "ready") {
     return {
-      installed: true,
-      signedIn: ready,
+      installed: false,
+      signedIn: false,
       ...setup,
-      ...(ready ? await choices(ctx) : { models: [], speeds: [] }),
-      modes: [],
+      ...(version === "old" && { install: "claude update", updateRequired }),
+      ...noCatalog,
     };
-  },
+  }
+  const ready = await signedIn(ctx, remaining());
+  if (ready === undefined) throw new Error("Could not check Claude Code sign-in");
+  return {
+    installed: true,
+    signedIn: ready,
+    ...setup,
+    ...noCatalog,
+    ...(ready && setupDeadline === undefined && (await choices(ctx))),
+  };
+}
+
+const discovery = agentInfoCache(claudeInfo, async () => {
+  const path = join(
+    process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".claude"),
+    ".credentials.json",
+  );
+  const stamp = await stat(path).catch(() => undefined);
+  return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
+});
+const info = local({
+  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
+    setupDeadline === undefined ? discovery.read(ctx) : claudeInfo(ctx, setupDeadline),
 });
 
 /**
@@ -108,9 +126,16 @@ async function choices(ctx: LocalContext): Promise<Pick<ai.Info, "models" | "spe
 
 const start = local({
   handler: async (ctx, run: ai.Run) => {
-    const version = await usableVersion(ctx);
-    if (version !== "ready") throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
-    return turn(ctx, run);
+    try {
+      const version = await usableVersion(ctx);
+      if (version === undefined) throw new Error("Could not check the Claude Code version");
+      if (version !== "ready")
+        throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
+      return await turn(ctx, run);
+    } catch (error) {
+      discovery.invalidate();
+      throw error;
+    }
   },
 });
 

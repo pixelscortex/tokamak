@@ -1,17 +1,12 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
-import {
-  agentHarness,
-  build,
-  bunPath,
-  connect,
-  localLauncher,
-  workspace,
-} from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
+import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
 const real = process.argv[3] === "--real" && !process.env.CI;
@@ -21,8 +16,8 @@ await scanReplays("codex");
 const h = await agentHarness({ binary: process.argv[2], name: "codex" });
 const cleanup = [];
 const path = join(h.scratch, "bin");
-const status = join(h.home, "codex-status");
 const codexHome = join(h.home, ".codex");
+const status = join(codexHome, "auth.json");
 const inherited = {
   HOME: h.home,
   PATH: `${path}${delimiter}/usr/bin${delimiter}/bin`,
@@ -35,15 +30,32 @@ const longPrompt = "Write a long reply containing 100 numbered facts about apple
 const planPrompt = "Make a concrete plan for adding a second test marker. Do not edit any files.";
 
 try {
+  await h.assertLocalRuntime();
   build(module);
   await cp(join(module, "dist"), join(h.plugins, "codex"), { recursive: true });
   if (!real) await replayExecutable();
 
   const { ai } = h.api;
-  const address = await h.serve("server");
-  const connectClient = (env) =>
-    connect(address, { cleanup, launch: localLauncher((id) => join(h.plugins, id), env) });
-  const replayClient = await connectClient(inherited);
+  const binary = process.argv[2];
+  const runner = binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
+  const address = runner ? undefined : await h.serve("server");
+  const connectClient = async (env) => {
+    if (address) return h.connect(address, { local: true, env });
+    const dir = await h.folder("runners");
+    const instance = await startRunner({
+      binary,
+      plugins: h.plugins,
+      directory: join(dir, crypto.randomUUID()),
+      env: { ...env, TOKAMAK_OWNER_NAME: "Sam" },
+    });
+    cleanup.push(instance.stop);
+    return connect(instance.endpoint.ws, {
+      cleanup,
+      launch: instance.launch,
+      token: instance.endpoint.token,
+    });
+  };
+  const replayClient = real ? undefined : await connectClient(inherited);
   const agentClient = real
     ? await connectClient({
         ...inherited,
@@ -59,8 +71,10 @@ try {
     return codex.info;
   };
 
-  const missing = await connectClient({ ...inherited, PATH: h.home });
+  const missingPath = runner ? await missingCodexPath() : h.home;
+  const missing = await connectClient({ ...inherited, PATH: missingPath });
   assert.equal((await info(missing)).installed, false);
+  passed("missing Codex reports not installed");
   if (real) {
     await mkdir(codexHome);
     const signedOut = await connectClient({ ...inherited, PATH: process.env.PATH });
@@ -68,12 +82,17 @@ try {
     assert.equal(infoOut.installed, true);
     assert.equal(infoOut.signedIn, false);
   } else {
+    await mkdir(codexHome);
     await writeFile(status, "old\n");
     assert.equal((await info(replayClient)).installed, false);
     await writeFile(status, "signed-out\n");
     assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "prerelease\n");
     assert.equal((await info(replayClient)).signedIn, true);
+    // A positive discovery answer was just cached. Changing the credential
+    // file must make the same provider notice that the account signed out.
+    await writeFile(status, "signed-out\n");
+    assert.equal((await info(replayClient)).signedIn, false);
     await writeFile(status, "signed-in\n");
   }
 
@@ -98,6 +117,15 @@ try {
     timeout: real ? 120_000 : undefined,
   });
   const run = async (tape, prompt, options) => turns.run(await h.folder(tape), prompt, options);
+
+  const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
+  if (greeting) {
+    assert.equal(await readFile(join(greeting.folder, "session-flushed"), "utf8"), "flushed");
+    assert.equal(greeting.text, "Hello from Codex.");
+    assert.equal(greeting.row.sessionId, "codex-session");
+    assert.deepEqual(greeting.reply.usage, { inputTokens: 18208, cachedInputTokens: 0, outputTokens: 54 });
+  }
+
   const recorded = await run(
     "edit",
     real
@@ -174,7 +202,10 @@ try {
   passed("resumed session and plan");
 
   const steerText = "Stop the list and reply exactly: STEERED";
-  const steered = await follow("steer", longPrompt, {
+  const driveSteer = real
+    ? follow
+    : (tape, prompt, options) => run(tape, prompt, { ...options, threadId: greeting.threadId });
+  const steered = await driveSteer("steer", longPrompt, {
     async during(turn) {
       await turn.firstText();
       await turn.steer(steerText);
@@ -188,6 +219,11 @@ try {
       { inputTokens: 21_781, outputTokens: 7, cachedInputTokens: 21_376 },
       "without an earlier usage notification, the first total is the baseline",
     );
+  if (!real) {
+    // The steer starts a new Codex message; it does not run into the text before it.
+    assert.equal(steered.text, "1. The\n\nSTEERED");
+    assert.equal(steered.row.sessionId, greeting.row.sessionId);
+  }
   passed("steer while streaming");
   const stopped = await follow("stop", longPrompt, {
     state: "stopped",
@@ -336,12 +372,27 @@ function shellQuote(value) {
   return "'" + value.replaceAll("'", "'\"'\"'") + "'";
 }
 
+async function missingCodexPath() {
+  const bin = await h.folder("missing-codex-bin");
+  // The temporary home hides user installs. If the machine also has a
+  // system-wide Codex, reproduce an exec failure in an empty search path
+  // so the offline test never calls the real program.
+  if (["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].some(existsSync)) {
+    await writeFile(
+      join(bin, "codex"),
+      "#!/bin/sh\nPATH=/dev/null exec /bin/sh -c 'exec codex' tokamak-program\n",
+      { mode: 0o755 },
+    );
+  }
+  return bin;
+}
+
 async function replayExecutable() {
   const replay = join(workspace, "e2e/fake-agent/program.mjs");
   await writeFile(
     join(path, "codex"),
     `#!/bin/sh
-status=$(cat "$HOME/codex-status")
+status=$(cat "$CODEX_HOME/auth.json")
 case "$1" in
   --version)
     case "$status" in
@@ -351,13 +402,21 @@ case "$1" in
     esac
     ;;
   app-server)
-    case "\${PWD##*/}" in
-      home)
-        if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
-        ;;
-      *) tape="\${PWD##*/}" ;;
-    esac
-    exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    # Discovery runs from HOME with the direct launcher and from the plugin
+    # root's parent with Runner. A turn has its own explicit working folder.
+    if [ "$PWD" -ef "$HOME" ] || [ "$PWD/home" -ef "$HOME" ]; then
+      if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
+    else
+      tape="\${PWD##*/}"
+    fi
+    if [ "$tape" = hello ]; then
+      trap '' TERM
+      ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+      /bin/sleep 0.4
+      printf flushed > session-flushed
+    else
+      exec ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"
+    fi
     ;;
   *) exit 2 ;;
 esac

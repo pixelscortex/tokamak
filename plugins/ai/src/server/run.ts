@@ -1,18 +1,35 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
 import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
-import { agent, type Helper, type Run, type Task, type Tool, type Usage } from "../contracts";
-import { errorText } from "../shared/turn-shared";
+import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
+import { agent, type Run, type Usage } from "../contracts";
+import { errorText, setupReason } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
-import { infoOf } from "./agents";
-import { append, fit, jsonBytes, line, PLAN_BYTES, TASKS_MAX, TEXT_BYTES, WRITE_BYTES } from "./limits";
+import { infoAfterStartFailure, infoOf } from "./agents";
+import { startAgent } from "./agent-turn";
+import {
+  append,
+  check,
+  checkedHelper,
+  checkedTasks,
+  checkedText,
+  checkedTool,
+  checkedUsage,
+  fit,
+  jsonBytes,
+  PLAN_BYTES,
+  TEXT_BYTES,
+  WRITE_BYTES,
+} from "./limits";
 import { asking, pendingQuestion, sessionKey, settle } from "./questions";
 import { access, answer as answerValue, type stepReport } from "./schema";
 import { keepAlive } from "./keep-alive";
 import { hooksFor } from "./turn-hooks";
 import { workingOn } from "./working";
+
+import { RELOADED } from "../shared/turn-timing";
 
 /**
  * One turn, run on the sender's own computer: begin it (one writer per
@@ -26,6 +43,7 @@ export const turn = local({
   args: {
     threadId: v.string(),
     messageId: v.string(),
+    replyToken: v.optional(v.string()),
     /** The thread's folder on this computer, from chat's `onSent`. */
     folder: v.string(),
     agentId: v.string(),
@@ -40,13 +58,13 @@ export const turn = local({
     /** Every thread starts on Full access. */
     access: v.optional(access),
   },
-  handler: async (ctx, { threadId, messageId, folder, agentId, access, ...picked }) => {
+  handler: async (ctx, { threadId, messageId, replyToken, folder, agentId, access, ...picked }) => {
     // The labels `turns:begin` records are checked here, against what the provider offers.
     const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
     agentId = queued?.agent.id ?? agentId;
-    const provider = await agent.get(agentId);
+    const provider = await agent.get(agentId, ctx);
     if (!provider) return fail("NoAgent", { agentId });
-    const info = await infoOf(provider);
+    const info = await infoOf(provider, true);
     if (!info.installed)
       return fail("NotInstalled", {
         agent: provider.name,
@@ -60,14 +78,20 @@ export const turn = local({
     const begun = await ctx.runMutation(api.turns.begin, {
       threadId,
       messageId,
+      ...(hasLocalChannel(provider) && { folder }),
       agent: { id: provider.id, name: provider.name },
       ...settings,
       ...(model !== undefined && { modelName: model.name }),
-      replyToken: randomBytes(32).toString("hex"),
+      replyToken: replyToken ?? randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
+    if ("state" in begun) {
+      const failed: { turnId: typeof begun.turnId; state: "failed"; hookNotice?: string; ended?: string } =
+        begun;
+      return failed;
+    }
     const { turnId, prompt, history, sessionId } = begun;
-    const hooks = hooksFor({ threadId: threadId as Id<"threads">, turnId, folder });
+    const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
     // device), so "Always allow this session" answers hold across turns exactly while the session does.
@@ -78,66 +102,94 @@ export const turn = local({
       carried: sessionId,
     });
     // Stop answers a waiting question "cancel" first: an agent may wait for the answer before it stops.
-    const control = turnControl(turnId, ctx.auth, questions.cancel);
+    const control = turnControl(turnId, ctx.auth, questions.cancel, hooks.stopBefore);
     // From here until the turn is settled, the server hears from this computer (liveness.ts), and
     // quitting the app asks first (working.ts). Both are released however the turn ends.
     let lost: string | undefined;
-    const alive = keepAlive(ctx, turnId, (reason) => {
+    const loseTurn = (reason: string) => {
+      if (!control.active) {
+        hooks.skipAfter();
+        return;
+      }
+      if (lost !== undefined) return;
       lost = reason;
-      void control.forceStop();
+      hooks.cancel(reason);
+      void control.forceStop().catch(() => {});
+    };
+    const alive = keepAlive(ctx, turnId, loseTurn);
+    const reloaded = () => loseTurn(RELOADED);
+    ctx.retiring?.addEventListener("abort", reloaded, { once: true });
+    if (ctx.retiring?.aborted) reloaded();
+    const unregister = workingOn(turnId, {
+      threadId,
+      agent: provider.name,
+      control,
+      skipAfter: hooks.skipAfter,
     });
-    const unregister = workingOn(turnId, { threadId, agent: provider.name, control });
     try {
-      let ending: { state: "done" | "failed" | "stopped"; error?: string; sessionId?: string };
-      let hookNotice = await hooks.before();
-      if (hookNotice !== undefined) {
-        ending = { state: "failed", error: hookNotice };
-      } else if (lost !== undefined) {
-        // The turn ended (or the server went away) while the hook ran: the agent never starts.
-        ending = { state: "failed", error: lost };
+      let ending: Pick<ArgsOf<typeof api.turns.finish>, "state" | "error" | "sessionId">;
+      const beforeError = lost === undefined ? await hooks.before() : lost;
+      const lostBefore = lost;
+      if (lostBefore !== undefined) {
+        ending = { state: "interrupted", error: lostBefore };
+      } else if (hooks.stoppedBefore) {
+        ending = { state: "stopped" };
+      } else if (beforeError !== undefined) {
+        ending = { state: "failed", error: beforeError };
       } else {
         try {
-          const result = await ctx.withPrograms((kill) => {
-            // A write the server refused twice: stop the agent's programs now, as Force stop does.
-            void writer.broke.then(() => control.forceStop());
-            return control.run(
-              () =>
-                provider.start({
-                  folder,
-                  prompt,
-                  ...settings,
-                  history,
-                  ...(sessionId === undefined ? {} : { sessionId }),
-                  ...writer.reports,
-                  ask: questions.ask,
-                  sessionChanged: questions.sessionChanged,
-                  onSteer: control.onSteer,
-                  onStop: control.onStop,
-                }),
-              kill,
-            );
-          });
+          // A write the server refused twice: stop the agent's programs now, as Force stop does.
+          void writer.broke.then(() => control.forceStop()).catch(() => {});
+          const input = {
+            folder,
+            prompt,
+            ...settings,
+            history,
+            ...(sessionId === undefined ? {} : { sessionId }),
+          };
+          const reports = { ...writer.reports, sessionChanged: questions.sessionChanged };
+          const result = await startAgent(
+            provider,
+            { threadId, turnId, ...input },
+            reports,
+            questions,
+            control,
+          );
           ending = result
             ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
             : { state: "stopped" };
         } catch (cause) {
-          ending = { state: "failed", error: errorText(cause) };
+          const current = lost === undefined ? await infoAfterStartFailure(provider) : undefined;
+          ending = {
+            state: "failed",
+            error: (current && setupReason(provider.name, current)) ?? errorText(cause),
+          };
         }
       }
-      if (lost !== undefined) ending = { ...ending, state: "failed", error: lost };
+      if (lost !== undefined) ending = { ...ending, state: "interrupted", error: lost };
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
-      control.close();
+      control.finish();
+      finishing.add(turnId);
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
-      if (broken !== undefined)
+      if (broken !== undefined && lost === undefined)
         ending = { ...ending, state: "failed", error: `Could not save the reply: ${errorText(broken)}` };
       // Force stop only closes the agent's program scope. Run after hooks before releasing the queue.
-      if (hookNotice === undefined) hookNotice = await hooks.after();
+      const hookNotice =
+        hooks.stoppedBefore && lostBefore === undefined
+          ? undefined
+          : (lostBefore ?? beforeError ?? (lost === undefined ? await hooks.after() : hooks.notice()));
       let state;
       try {
-        state = await ctx.runMutation(api.turns.finish, { turnId, ...ending, finishedAt: Date.now() });
+        const acknowledgedSteer = control.acknowledgedSteer();
+        state = await ctx.runMutation(api.turns.finish, {
+          turnId,
+          ...ending,
+          finishedAt: Date.now(),
+          ...(acknowledgedSteer === undefined ? {} : { acknowledgedSteer }),
+        });
       } catch {
         // The server cannot be reached or already ended the turn; the interrupt rule frees the thread.
         // `ended` says why in the person's words when this computer had to stop the agent.
@@ -148,9 +200,16 @@ export const turn = local({
           ...(lost !== undefined && { ended: lost }),
         };
       }
-      return { turnId, state, ...(hookNotice !== undefined && { hookNotice }) };
+      return {
+        turnId,
+        state,
+        ...(hookNotice !== undefined && { hookNotice }),
+        ...(lost !== undefined && { ended: lost }),
+      };
     } finally {
+      ctx.retiring?.removeEventListener("abort", reloaded);
       control.close();
+      finishing.delete(turnId);
       alive.stop();
       unregister();
     }
@@ -165,19 +224,26 @@ export const steer = local({
     if (!control) return noRunningTurn(turnId);
     const steerText = text.trim();
     if (!steerText) return fail("EmptySteer", { turnId });
-    return control.steer(steerText, () => ctx.runMutation(api.turns.steer, { turnId, text: steerText }));
+    return control.steer(steerText, (text, delivery) =>
+      ctx.runMutation(api.turns.steer, { turnId, text, ...(delivery && { delivery }) }),
+    );
   },
 });
+
+/** Turns whose agent has settled and whose after hooks are still running. */
+const finishing = new Set<string>();
 
 /** Marks Stop on the server before asking the provider to end, so its final reply is stopped. */
 export const stop = local({
   args: { turnId: v.id("turns") },
   handler: async (ctx, { turnId }) => {
     const control = controlFor(turnId, ctx.auth);
-    if (!control) return noRunningTurn(turnId);
-    await ctx.runMutation(api.turns.requestStop, { turnId });
-    await control.requestStop();
-    return null;
+    // The agent has settled and only after hooks remain: nothing is left to stop.
+    if (!control || !control.active)
+      return finishing.has(turnId) ? fail("NotRunning", { turnId, finishing: true }) : noRunningTurn(turnId);
+    return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
+      ? null
+      : noRunningTurn(turnId);
   },
 });
 
@@ -226,24 +292,6 @@ type StepReport = Infer<typeof stepReport>;
 type WriteArgs = ArgsOf<typeof api.turns.write>;
 /** The report methods of a `Run`: what the agent calls while it works. */
 type Reports = Pick<Run, "text" | "thinking" | "tool" | "tasks" | "plan" | "helper" | "usage">;
-
-const KINDS: readonly string[] = [
-  "command",
-  "read",
-  "edit",
-  "search",
-  "web",
-  "other",
-] satisfies Tool["kind"][];
-const STATES: readonly string[] = ["running", "done", "failed"] satisfies Tool["state"][];
-const TASK_STATES: readonly string[] = ["pending", "running", "done"];
-
-/** Refuses a malformed report back to the agent that made it, before anything is stored. */
-function check(ok: unknown, what: string): asserts ok {
-  if (!ok) throw new TypeError(`ai: ${what}`);
-}
-const isText = (value: unknown): value is string => typeof value === "string";
-const isCount = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 /** The reports that replace what is stored: the to-do list, the plan, usage. */
 type Latest = { tasks?: WriteArgs["tasks"]; plan?: string; usage?: Usage };
@@ -350,6 +398,8 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
             broken = cause;
             onBroken();
           });
+        // Let buffered agent reports arrive before taking the next write, without delaying the first.
+        if (broken === undefined) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
       flight = undefined;
     })();
@@ -379,12 +429,14 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
     },
     tool(tool) {
       open();
-      unsent.step(checkedTool(tool));
+      const { id: key, ...step } = checkedTool(tool);
+      unsent.step({ key, type: "tool", ...step });
       pump();
     },
     helper(helper) {
       open();
-      unsent.step(checkedHelper(helper));
+      const { id: key, ...step } = checkedHelper(helper);
+      unsent.step({ key, type: "helper", ...step });
       pump();
     },
     tasks(list) {
@@ -413,63 +465,5 @@ function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
       closed = true;
       return broken;
     },
-  };
-}
-
-function checkedText(value: unknown, what: string): string {
-  check(isText(value), `${what} takes a string`);
-  return value;
-}
-
-function checkedTool(tool: Tool): Omit<StepReport, "startedAt" | "finishedAt"> {
-  check(isText(tool?.id) && tool.id !== "", "a tool needs an id");
-  check(KINDS.includes(tool.kind), `a tool's kind is one of ${KINDS.join(", ")}`);
-  check(isText(tool.title), "a tool needs a title");
-  check(tool.detail === undefined || isText(tool.detail), "a tool's detail is a string");
-  check(STATES.includes(tool.state), `a tool's state is one of ${STATES.join(", ")}`);
-  const { id, kind, title, detail, state } = tool;
-  return {
-    key: id,
-    type: "tool",
-    kind,
-    title: line(title),
-    ...(detail !== undefined && { detail: line(detail) }),
-    state,
-  };
-}
-
-function checkedHelper(helper: Helper): Omit<StepReport, "startedAt" | "finishedAt"> {
-  check(isText(helper?.id) && helper.id !== "", "a helper needs an id");
-  check(isText(helper.name) && isText(helper.title), "a helper needs a name and a title");
-  check(helper.text === undefined || isText(helper.text), "a helper's text is a string");
-  check(STATES.includes(helper.state), `a helper's state is one of ${STATES.join(", ")}`);
-  const { id, name, title, state, text } = helper;
-  return {
-    key: id,
-    type: "helper",
-    name: line(name),
-    title: line(title),
-    ...(text !== undefined && { text: append("", text, TEXT_BYTES) }),
-    state,
-  };
-}
-
-function checkedTasks(list: readonly Task[]): NonNullable<WriteArgs["tasks"]> {
-  check(Array.isArray(list), "tasks(list) takes an array");
-  for (const item of list)
-    check(isText(item?.text) && TASK_STATES.includes(item.state), "a task is { text, state }");
-  return list.slice(0, TASKS_MAX).map(({ text, state }) => ({ text: line(text), state }));
-}
-
-function checkedUsage(usage: Usage): Usage {
-  const { inputTokens, outputTokens, cachedInputTokens, costUsd } = usage ?? ({} as Usage);
-  check(isCount(inputTokens) && isCount(outputTokens), "usage needs inputTokens and outputTokens (counts)");
-  check(cachedInputTokens === undefined || isCount(cachedInputTokens), "cachedInputTokens is a count");
-  check(costUsd === undefined || isCount(costUsd), "costUsd is a non-negative number");
-  return {
-    inputTokens,
-    outputTokens,
-    ...(cachedInputTokens !== undefined && { cachedInputTokens }),
-    ...(costUsd !== undefined && { costUsd }),
   };
 }

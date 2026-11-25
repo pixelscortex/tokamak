@@ -20,6 +20,7 @@ const AGENT = { id: "fake-agent", name: "Fake agent" };
 const replyOf = (turn) => (messages) => messages.find((message) => message._id === turn.replyId);
 
 try {
+  await h.assertLocalRuntime();
   await localServer();
   await reportsReachTheReply();
   await steerTurn();
@@ -546,9 +547,33 @@ async function steerTurn() {
     "agent ready",
     (list) => replyOf(turn)(list)?.parts[0]?.text === "Ready for steering.",
   );
+  const other = await desk.mutation(chat.threads.start, { text: "Stop this turn", folder: { kind: "own" } });
+  const otherTurns = h.watch(desk, ai.turns.list, { threadId: other.threadId });
+  const otherMessages = h.watch(desk, chat.messages.list, { threadId: other.threadId });
+  const otherRunning = desk.local(ai.run.turn, {
+    threadId: other.threadId,
+    messageId: other.messageId,
+    folder: await h.folder("steering-overlap"),
+    agentId: AGENT.id,
+    model: "stop",
+  });
+  void otherRunning.catch(() => {});
+  const [otherTurn] = await otherTurns.until("second turn running", (list) => list.length === 1);
+  await otherMessages.until(
+    "second agent ready",
+    (list) => replyOf(otherTurn)(list)?.parts[0]?.text === "Partial reply.",
+  );
+
   const text = "Take the other route ✓";
   const followup = "Keep these notes too";
   await desk.local(ai.run.steer, { turnId: turn._id, text });
+  await desk.local(ai.run.stop, { turnId: otherTurn._id });
+  assert.equal((await otherRunning).state, "stopped");
+  const otherTranscript = await desk.query(chat.messages.list, { threadId: other.threadId });
+  assert.equal(replyOf(otherTurn)(otherTranscript).parts[0].text, "Partial reply.stop");
+  // The agent's answer to the first steer is stored before the second is sent, so its offset is exact.
+  const answered = `Ready for steering. Steered: ${text}`;
+  await messages.until("first steer answered", (list) => replyOf(turn)(list)?.parts[0]?.text === answered);
   await desk.local(ai.run.steer, { turnId: turn._id, text: followup });
   assert.equal((await running).state, "done");
   const [done] = await desk.query(ai.turns.list, { threadId: sent.threadId });
@@ -558,6 +583,9 @@ async function steerTurn() {
     `Ready for steering. Steered: ${text} Then: ${followup}`,
   );
   assert.deepEqual(done.steers, [text, followup]);
+  // Each steer keeps where the reply's text stood when it was sent, so the reply draws it there.
+  assert.deepEqual(done.steerOffsets, ["Ready for steering.".length, answered.length]);
+  assert.equal(done.pendingSteerOffset, undefined);
   assert.deepEqual(await desk.query(ai.turns.replySteers, { replyId: turn.replyId }), [text, followup]);
   assert.equal(transcript.length, 2, "a steer does not create a chat message");
 }
@@ -615,7 +643,7 @@ async function stopTurns() {
     if (model === "ignore-stop") {
       const pids = JSON.parse(await readFile(join(folder, "process-tree.json"), "utf8"));
       const alive = (pid) => {
-        const ps = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)]);
+        const ps = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)]);
         const stat = ps.stdout.toString().trim();
         return stat !== "" && !stat.startsWith("Z");
       };
@@ -901,7 +929,7 @@ async function memberSignsInAndRuns(address) {
   assert.equal((await within(closed, "revoked member socket closes")).code, 4001);
   await within(lost, "revoked member local call cancelled");
   const alive = (pid) => {
-    const state = spawnSync("ps", ["-o", "stat=", "-p", String(pid)])
+    const state = spawnSync("ps", ["-ww", "-o", "stat=", "-p", String(pid)])
       .stdout.toString()
       .trim();
     return state && !state.startsWith("Z");

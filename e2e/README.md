@@ -61,15 +61,31 @@ rejection. The existing server suite still covers persistence and CPU budgets.
 Desktop window automation, OS integration, signing and external agents are outside
 this browser suite.
 
+## Turn replays and startup time
+
+The offline replays run once through the QuickJS Runner. They check the turns
+stored by the real server and database.
+
+After building `tokamak-runner` and its matching `tokamak-plugin-host`, run:
+
+```sh
+proto run bun -- packages/runner/tests/measure-first-text.mjs target/debug/tokamak-runner
+```
+
+Add `--real` with a signed-in Codex CLI to measure actual turns outside CI.
+The script times delivery of the first text to a Chat subscription and reports
+cold (first turn after launch) and warm (second turn) separately.
+
 ## Fresh starter installation
 
 Build the server binary, then run the starter smoke in a disposable directory:
 
 ```sh
-CARGO_BUILD_JOBS=2 cargo build --locked -p server --bin tokamak-server
+CARGO_BUILD_JOBS=2 cargo build --locked -p server -p tokamak-plugin-host
 proto run bun -- e2e/starter.mjs
 ```
 
 To opt in to one real turn through each installed CLI using its existing login,
-run `proto run bun -- e2e/starter.mjs --real claude codex`. Pass only one name
-to run one provider. This mode refuses CI.
+also build `tokamak-runner`, then run
+`proto run bun -- e2e/starter.mjs --real claude codex`. Pass only one name to
+run one provider. Real turns use the Runner; this mode refuses CI.

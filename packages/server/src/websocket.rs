@@ -32,6 +32,7 @@ use tokio::{
     sync::Semaphore,
 };
 
+use subtle::ConstantTimeEq as _;
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 pub use crate::web::HostedWeb;
@@ -47,7 +48,8 @@ const CONNECTIONS: u32 = 64;
 const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
 const DEVICE_SIGNED_OUT: u16 = 4001;
 const DEVICE_STREAM_PATH: &str = "/devices/live";
-const WS_PROTOCOL: &str = "tokamak";
+pub const WS_PROTOCOL: &str = "tokamak";
+const RUNNER_WORKER_PATH: &str = "/local-worker";
 const WS_BEARER_PREFIX: &str = "tokamak.bearer.";
 const DEVICE_REVOKE_PATH: &str = "/devices/{id}/revoke";
 const LAST_SEEN_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
@@ -61,6 +63,7 @@ struct Adapter {
     access: Option<LocalAccess>,
     origins: Arc<Vec<String>>,
     hosted: bool,
+    runner_control: Option<Arc<str>>,
     identities: Arc<Identities>,
     profile_updates: Arc<tokio::sync::Mutex<()>>,
     // Keep management permission checks and writes ordered while a provider runs.
@@ -170,6 +173,44 @@ pub async fn serve_with_identities(
     web: Option<HostedWeb>,
     identities: Arc<Identities>,
 ) -> std::io::Result<()> {
+    serve_inner(listener, server, shutdown, access, web, identities, None).await
+}
+
+#[cfg(feature = "local-runtime")]
+/// Adds the Runner's plugin process socket to the authenticated loopback listener.
+pub async fn serve_runner(
+    listener: TcpListener,
+    server: Arc<Server>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    access: LocalAccess,
+    control: String,
+    worker: axum::routing::MethodRouter,
+) -> io::Result<()> {
+    let identities = Arc::new(Identities::local(Some(&access.token)));
+    serve_inner(
+        listener,
+        server,
+        shutdown,
+        Some(access),
+        None,
+        identities,
+        Some((control, worker)),
+    )
+    .await
+}
+
+async fn serve_inner(
+    listener: TcpListener,
+    server: Arc<Server>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+    access: Option<LocalAccess>,
+    web: Option<HostedWeb>,
+    identities: Arc<Identities>,
+    runner: Option<(String, axum::routing::MethodRouter)>,
+) -> io::Result<()> {
+    let (runner_control, worker) = runner.map_or((None, None), |(control, worker)| {
+        (Some(Arc::from(control)), Some(worker))
+    });
     if web.is_some()
         && access
             .as_ref()
@@ -198,31 +239,21 @@ pub async fn serve_with_identities(
     let adapter = Adapter {
         server,
         hosted,
+        runner_control,
         identities: identities.clone(),
         profile_updates: Arc::default(),
         member_edits: Arc::default(),
         credentials: Arc::default(),
         owner_setup: Arc::default(),
         sign_in_limit: Arc::default(),
-        trusted_sign_in_proxies: std::env::var("TOKAMAK_TRUSTED_PROXY")
-            .unwrap_or_default()
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(|value| {
-                value
-                    .parse::<std::net::IpAddr>()
-                    .map(|ip| ip.to_canonical())
-            })
-            .collect::<Result<_, _>>()
-            .map_err(io::Error::other)?,
+        trusted_sign_in_proxies: trusted_sign_in_proxies()?,
         stopping: stopping.clone(),
         connections: connections.clone(),
         snapshot_streams: Arc::new(Semaphore::new(CONNECTIONS as usize)),
         access,
         origins: allowed_origins(web.as_ref()),
     };
-    let app = routes(adapter, web);
+    let app = routes(adapter, web, worker);
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -258,7 +289,26 @@ pub async fn serve_with_identities(
     result
 }
 
-fn routes(adapter: Adapter, web: Option<HostedWeb>) -> Router {
+fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
+    std::env::var("TOKAMAK_TRUSTED_PROXY")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .parse::<std::net::IpAddr>()
+                .map(|ip| ip.to_canonical())
+        })
+        .collect::<Result<_, _>>()
+        .map_err(io::Error::other)
+}
+
+fn routes(
+    adapter: Adapter,
+    web: Option<HostedWeb>,
+    worker: Option<axum::routing::MethodRouter>,
+) -> Router {
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
@@ -279,9 +329,21 @@ fn routes(adapter: Adapter, web: Option<HostedWeb>) -> Router {
             .route("/shutdown", post(stop))
             .route("/plugins/{id}/reload", post(reload_plugin));
     }
-    let app = app
+    #[cfg(not(feature = "local-runtime"))]
+    {
+        app = app.route(RUNNER_WORKER_PATH, get(refuse_local_worker));
+    }
+    let mut app = app
         .layer(middleware::from_fn_with_state(adapter.clone(), authorize))
-        .with_state(adapter);
+        .with_state(adapter.clone());
+    if let Some(worker) = worker {
+        // Its handlers use Runner state; authorization still uses workspace state.
+        app = app.merge(
+            Router::new()
+                .route(RUNNER_WORKER_PATH, worker)
+                .layer(middleware::from_fn_with_state(adapter, authorize)),
+        );
+    }
     if let Some(web) = web {
         app.fallback_service(
             Router::new()
@@ -290,6 +352,25 @@ fn routes(adapter: Adapter, web: Option<HostedWeb>) -> Router {
         )
     } else {
         app
+    }
+}
+
+#[cfg(not(feature = "local-runtime"))]
+async fn refuse_local_worker(
+    upgrade: Result<WebSocketUpgrade, axum::extract::ws::rejection::WebSocketUpgradeRejection>,
+) -> Response {
+    const REASON: &str = "This server has no local runtime";
+    match upgrade {
+        Ok(upgrade) => upgrade
+            .protocols([WS_PROTOCOL])
+            .on_upgrade(|mut socket| async move {
+                // A browser WebSocket cannot read an HTTP rejection body. Use the
+                // Runner's startup refusal frame so a misdirected caller sees why.
+                let refusal = serde_json::json!({"type": "closed", "reason": REASON});
+                let _ = socket.send(Message::Text(refusal.to_string().into())).await;
+                let _ = socket.send(Message::Close(None)).await;
+            }),
+        Err(_) => (StatusCode::NOT_IMPLEMENTED, REASON).into_response(),
     }
 }
 
@@ -334,7 +415,9 @@ async fn authorize(
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
     let members_route = adapter.hosted && members::matches_path(path);
-    let browser_route = members_route
+    let worker_route = path == Some(RUNNER_WORKER_PATH);
+    let browser_route = worker_route
+        || members_route
         || request.uri().path() == "/account"
         || request.uri().path() == "/ws"
         || request.uri().path().starts_with("/devices/")
@@ -365,13 +448,26 @@ async fn authorize(
         && (request.uri().path() == "/health"
             || matches!(path, Some(sign_in::METHODS | sign_in::SIGN_IN)));
     if !public {
-        let socket_bearer = (path == Some("/ws"))
+        let socket_bearer = (worker_route || path == Some("/ws"))
             .then(|| websocket_bearer(&headers))
             .flatten();
         let bearer = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "));
+        // A control credential authorizes exactly these operations and never
+        // establishes a workspace identity or authenticates a socket.
+        if matches!(
+            (request.method(), path),
+            (&Method::GET, Some("/plugins")) | (&Method::POST, Some("/plugins/{id}/reload"))
+        ) && bearer
+            .zip(adapter.runner_control.as_deref())
+            .is_some_and(|(actual, expected)| {
+                bool::from(actual.as_bytes().ct_eq(expected.as_bytes()))
+            })
+        {
+            return with_origin(next.run(request).await, origin);
+        }
         let actual = bearer.or(socket_bearer.as_deref()).unwrap_or_default();
         let Some(auth) = adapter.identities.authenticate(actual) else {
             // An allowed origin may read the 401, so a client can tell a rejected

@@ -14,19 +14,30 @@ impl Coordinator {
             return;
         }
 
-        let (bundle, local_name, owner) = if let Some(loaded) = &self.plugins {
+        let process = match self.action_process() {
+            Ok(process) => process.clone(),
+            Err(error) => {
+                self.respond(session, id, Err(error.into()));
+                return;
+            }
+        };
+        let (local_name, owner) = if let Some(loaded) = &self.plugins {
             let target = &loaded.targets[&name];
-            (
-                target.bundle.clone(),
-                target.local_name.clone(),
-                Some(target.owner.clone()),
-            )
+            (target.local_name.clone(), Some(target.owner.clone()))
         } else {
-            (
-                self.bundle.clone().expect("legacy bundle"),
-                name.clone(),
-                None,
-            )
+            (name.clone(), None)
+        };
+        let source = match (&self.plugins, &owner) {
+            (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
+            _ => self.legacy_action_source.clone(),
+        };
+        let Some(source) = source else {
+            self.respond(
+                session,
+                id,
+                Err("Plugin action has no action process bundle".into()),
+            );
+            return;
         };
 
         let environment = Arc::new(crate::environment::Snapshot::new(
@@ -38,7 +49,7 @@ impl Coordinator {
             self.plugins.clone(),
             owner.clone(),
             environment.clone(),
-            self.action_pool.limits().clone(),
+            process.clone(),
             vec![name.clone()],
             Some(auth),
         ) {
@@ -48,49 +59,30 @@ impl Coordinator {
                 return;
             }
         };
-        let worker = self
-            .plugins
+        self.action_jobs.spawn(async move {
+            (
+                session,
+                id,
+                process
+                    .invoke(source, local_name, args, ops)
+                    .await
+                    .map_err(|error| environment.redact(error)),
+            )
+        });
+    }
+
+    pub(super) fn action_process(
+        &self,
+    ) -> Result<&Arc<crate::host::action_process::Supervisor>, &'static str> {
+        tokamak_worker::require_plugin_platform(std::env::consts::OS)?;
+        self.action_process
             .as_ref()
-            .and_then(|p| owner.as_ref().and_then(|owner| p.workers.get(owner)))
-            .cloned();
-        if let Some(worker) = worker {
-            self.action_jobs.spawn(async move {
-                (
-                    session,
-                    id,
-                    worker
-                        .invoke(local_name, args, ops)
-                        .await
-                        .map_err(|e| environment.redact(e)),
-                )
-            });
-            return;
-        }
-        match self.action_pool.submit(
-            bundle,
-            "invoke",
-            serde_json::json!({"name":local_name,"args":args}),
-            ops,
-        ) {
-            Ok(pending) => {
-                self.action_jobs.spawn(async move {
-                    (
-                        session,
-                        id,
-                        pending.await.map_err(|e| environment.redact(e.to_string())),
-                    )
-                });
-            }
-            Err(error) => self.respond(session, id, Err(environment.redact(error.to_string()))),
-        }
+            .ok_or("Action process unavailable")
     }
 
     pub(super) async fn stop_actions(&mut self) {
-        self.action_pool.cancel_actions();
-        if let Some(loaded) = &self.plugins {
-            for worker in loaded.workers.values() {
-                worker.stop().await;
-            }
+        if let Some(process) = &self.action_process {
+            process.stop().await;
         }
 
         while let Some(completion) = self.action_jobs.join_next().await {
@@ -123,7 +115,10 @@ impl Coordinator {
 
     fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
         let actual = match (&self.plugins, &call.generation, &call.owner) {
-            (Some(current), Some(generation), Some(owner)) if Arc::ptr_eq(current, generation) => {
+            (Some(current), Some(generation), Some(owner))
+                if Arc::ptr_eq(current, generation)
+                    || current.same_action_source(generation, owner) =>
+            {
                 let target = current.target(
                     owner,
                     &call.name,
@@ -131,6 +126,14 @@ impl Coordinator {
                     &[],
                     call.contract.as_deref(),
                 )?;
+
+                if !Arc::ptr_eq(current, generation)
+                    && !current.same_plugin(generation, &target.owner)
+                {
+                    return Err(
+                        "nested action target belongs to a retired plugin generation".into(),
+                    );
+                }
 
                 if call.auth.is_none() {
                     target.check_anonymous_scope(owner)?;

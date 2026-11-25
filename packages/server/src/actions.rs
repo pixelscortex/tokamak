@@ -1,11 +1,12 @@
 //! Actions receive command capabilities, never a database handle or transaction.
 //! A nested call rejoins the ordered coordinator and gets its own normal world.
 
+use crate::host::action_process::Supervisor;
 use crate::{
     plugins::Loaded,
     service::{Command, FunctionKind},
 };
-use engine::{Limits, OpRegistry, Pool, PoolConfig};
+use engine::OpRegistry;
 use serde_json::Value as Json;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -26,7 +27,7 @@ pub(crate) fn operations(
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
-    limits: Limits,
+    process: Arc<Supervisor>,
     path: Vec<String>,
     auth: Option<crate::identity::AuthContext>,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
@@ -63,7 +64,7 @@ pub(crate) fn operations(
             loaded.clone(),
             owner.clone(),
             commands,
-            limits,
+            process,
             path,
             auth,
         )?;
@@ -136,7 +137,7 @@ fn register_plugin_call(
     loaded: Arc<Loaded>,
     owner: String,
     commands: mpsc::WeakSender<Command>,
-    limits: Limits,
+    process: Arc<Supervisor>,
     path: Vec<String>,
     auth: Option<crate::identity::AuthContext>,
 ) -> Result<(), engine::Error> {
@@ -146,7 +147,7 @@ fn register_plugin_call(
         let loaded = catalog.clone();
         let owner = caller.clone();
         let commands = commands.clone();
-        let limits = limits.clone();
+        let process = process.clone();
         let mut path = path.clone();
         let auth = auth.clone();
         async move {
@@ -185,40 +186,25 @@ fn register_plugin_call(
                 Some(&loaded),
                 Some(&target.owner),
             ));
-            let worker = loaded.workers.get(&target.owner).cloned();
+            let source = loaded
+                .action_sources
+                .get(&target.owner)
+                .cloned()
+                .ok_or("Plugin action has no action process bundle")?;
             let ops = operations(
                 commands,
                 Some(loaded),
                 Some(target.owner),
                 environment.clone(),
-                limits.clone(),
+                process.clone(),
                 path,
                 auth,
             )
             .map_err(|e| e.to_string())?;
-            if let Some(worker) = worker {
-                return worker
-                    .invoke(target.local_name, args, ops)
-                    .await
-                    .map_err(|e| environment.redact(e));
-            }
-            // A separate, invocation-owned lane avoids recursive waits on the
-            // bounded root action pool. Dropping it cancels the child on reload.
-            let pool = Pool::new_actions(PoolConfig {
-                workers: 1,
-                queue_capacity: 1,
-                limits,
-            })
-            .map_err(|e| e.to_string())?;
-            let pending = pool
-                .submit(
-                    target.bundle,
-                    "invoke",
-                    serde_json::json!({"name": target.local_name, "args": args}),
-                    ops,
-                )
-                .map_err(|e| e.to_string())?;
-            pending.await.map_err(|e| environment.redact(e.to_string()))
+            process
+                .invoke(source, target.local_name, args, ops)
+                .await
+                .map_err(|error| environment.redact(error))
         }
     })?;
 

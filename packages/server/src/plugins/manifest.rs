@@ -170,7 +170,9 @@ impl Manifest {
             || (self.plugin.runtime.as_deref() == Some("worker")) != self.entries.worker.is_some()
             || (self.entries.worker.is_some() && self.entries.server.is_none())
         {
-            return Err(invalid("Invalid plugin worker runtime/entry"));
+            return Err(invalid(
+                "Action process entry does not match the declared plugin runtime",
+            ));
         }
         self.validate_contracts()?;
         self.validate_entries()

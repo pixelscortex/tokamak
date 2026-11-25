@@ -18,8 +18,9 @@ SDK WebSocket transport          embedded SurrealDB / SurrealKV
 Server plugins use the portable `@tokamak/sdk` API. Queries read snapshots;
 mutations share a transaction across nested calls. Committed footprints drive
 live query invalidation. Actions perform external effects through host
-capabilities. Opted-in worker plugins run actions in Bun; queries and mutations
-stay in QuickJS. The client uses the system webview’s JavaScript engine.
+capabilities in the QuickJS action process. Queries and mutations run in the
+server's QuickJS transaction engine. The Runner runs local functions in a
+QuickJS plugin process. The client uses the system webview’s JavaScript engine.
 
 The server validates plugin identities, dependencies, hashes, and public
 contracts before installation. Assets are served from verified immutable

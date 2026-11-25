@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { symlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
-import { Readable } from "node:stream";
-import { createApi, TokamakClient, WebSocketTransport } from "../../sdk/src/index.ts";
-import { LocalFunctions } from "../../runtime/js/local.ts";
+import { createApi, WebSocketTransport } from "../../sdk/src/index.ts";
 
 const target = join(import.meta.dir, "../target");
 await mkdir(target, { recursive: true });
@@ -16,7 +12,9 @@ await mkdir(installs);
 const owner = "fixture-owner";
 const providers = ["fixture-one", "fixture-two"];
 const builds = new Map();
-let server, socket, transport, local;
+let server, socket, transport, desktop;
+import { connect, startRunner } from "../../../e2e/fake-agent/harness.mjs";
+const cleanup = [];
 
 async function build(id, requirements, files) {
   const root = join(scratch, id);
@@ -50,20 +48,14 @@ function provider(id, value) {
       import { internalAction, internalQuery, local, query, v } from "@tokamak/sdk";
       import { provide } from "@tokamak/sdk";
       import * as ai from "plugin:${owner}/contracts";
-      import { type Run, type TurnCtx } from "plugin:${owner}/contracts";
+      import { type TurnCtx } from "plugin:${owner}/contracts";
 
       export const status = query({ handler: () => "${value}" });
       export const localStatus = local({ handler: () => "${value}" });
       const id = "${id}";
       const name = "${value}";
       const info = local({ handler: (ctx) => ctx.auth.user.id });
-      const start = local({
-          handler: async (ctx, run${value === "alpha" ? "" : ": Run"}) => {
-            await run.report("${value}:" + ctx.auth.user.id);
-            return "${value}";
-          },
-      });
-      export const localProvider = provide(ai.agent, { id, name, info, start });
+      export const localProvider = provide(ai.agent, { id, name, info });
       export const hooks = provide(ai.turnHooks, {
         before: local({ handler: async (ctx, t: TurnCtx) => {
           const process = ctx.proc(["git", "--version"], { cwd: t.folder });
@@ -85,10 +77,9 @@ async function checkReloads() {
   await build(owner, "", {
     "contracts.ts": `
       import { contract } from "@tokamak/sdk";
-      export type Run = { report(text: string): Promise<void> };
       export type TurnCtx = { folder: string };
-      export const agent = contract<{ id: string; name: string; start: (run: Run) => Promise<string>; info: () => string }>("agent", { place: "local" });
-      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { place: "local" });
+      export const agent = contract<{ id: string; name: string; info: () => Promise<string> }>("agent", { place: "local", dataMethods: true });
+      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { place: "local", dataMethods: true });
       export const service = contract<{ id: string; name: string; inspect: () => string; call: (a: { text: string }) => Promise<string> }>("service");
     `,
     "main.ts": `
@@ -97,22 +88,15 @@ async function checkReloads() {
       let counter = 0;
       export const localCall = local({
         args: { id: v.string() },
-        handler: async (_ctx, { id }) => {
-          const all = await agent.list();
-          const reports: string[] = [];
-          const selected = await agent.get(id);
-          const assertIdentity = () => {
-            if (selected?.info() !== "local") throw new Error("Provider lost its caller");
-          };
-          const result = selected && await agent.get(id).start({
-            report: async (text) => { reports.push(text); assertIdentity(); },
-          });
-          return { ids: all.map((provider) => provider.id), result: result ?? null, reports, calls: ++counter };
+        handler: async (ctx, { id }) => {
+          const all = await agent.list(ctx);
+          const selected = await agent.get(id, ctx);
+          return { ids: all.map((provider) => provider.id), result: (await selected?.info()) ?? null, calls: ++counter };
         },
       });
       export const hooks = local({
         args: { folder: v.string() },
-        handler: async (_ctx, t) => Promise.all((await turnHooks.list()).map((p) => p.before?.(t))),
+        handler: async (ctx, t) => Promise.all((await turnHooks.list(ctx)).map((p) => p.before?.(t))),
       });
       export const list = query({ handler: async () => {
         const all = await service.list();
@@ -121,8 +105,9 @@ async function checkReloads() {
       } });
       export const invoke = action({
         args: { id: v.string() },
-        handler: async (_ctx, { id }) => (await (await service.get(id))?.call({ text: "hello" })) ?? null,
+        handler: async (ctx, { id }) => (await (await service.get(id, ctx))?.call({ text: "hello" })) ?? null,
       });
+      export const withoutContext = action({ handler: () => service.list() });
     `,
   });
   const ownerDeclaration = join(scratch, owner, "src/contracts.ts");
@@ -139,7 +124,7 @@ async function checkReloads() {
     [copiedDeclaration]: declaration + "\n// stale declaration\n",
   });
   await rename(hidden, ownerDeclaration);
-  await build(providers[1], `depends: ["${owner}"], runtime: "worker"`, provider("two", "beta"));
+  await build(providers[1], `depends: ["${owner}"]`, provider("two", "beta"));
   await rename(builds.get(providers[0]), join(installs, providers[0]));
   const privateDir = join(scratch, "server");
   await mkdir(privateDir);
@@ -183,55 +168,13 @@ async function checkReloads() {
     const response = await fetch(new URL(`/plugins/${id}/reload`, http), { method: "POST", headers });
     assert.equal(response.status, 200, await response.text());
   }
-  let ownerStarts = 0;
-  async function verified(artifact) {
-    const root = join(installs, artifact.id);
-    for (const [name, hash] of [
-      ["local-entry.js", artifact.entryHash],
-      ["local.js", artifact.codeHash],
-    ])
-      assert.equal(
-        createHash("sha256")
-          .update(await readFile(join(root, name)))
-          .digest("hex"),
-        hash,
-      );
-    return root;
-  }
-  local = new LocalFunctions(transport, async (artifact, receive, closed) => {
-    if (artifact.id === owner) ownerStarts++;
-    const root = await verified(artifact);
-    const worker = Bun.spawn([process.execPath, join(root, "local-entry.js"), join(root, "local.js")], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "inherit",
-      cwd: scratch,
-      env: { ...process.env, TOKAMAK_WORKER_LANE: "local" },
-    });
-    void (async () => {
-      try {
-        for await (const line of createInterface({ input: Readable.fromWeb(worker.stdout) }))
-          receive(JSON.parse(line));
-        closed("Local worker exited");
-      } catch (error) {
-        closed(String(error));
-      }
-    })();
-    return {
-      async load(artifact) {
-        return join(await verified(artifact), "local.js");
-      },
-      async send(value) {
-        worker.stdin.write(JSON.stringify(value) + "\n");
-      },
-      async close() {
-        worker.kill();
-        worker.stdin.end();
-        await worker.exited;
-      },
-    };
+  desktop = await startRunner({
+    binary: process.argv[3],
+    plugins: installs,
+    directory: join(scratch, "desktop"),
+    env: { TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST ?? process.env.TOKAMAK_PLUGIN_HOST },
   });
-  const client = new TokamakClient(transport, local);
+  const client = await connect(url, { token, launch: desktop.launch, cleanup });
   const api = createApi(owner);
   const first = createApi(providers[0]);
   assert.equal(await client.query(first.provider.status, {}), "alpha");
@@ -242,10 +185,10 @@ async function checkReloads() {
   assert.deepEqual(await client.local(api.main.hooks, { folder: scratch }), [true]);
   assert.deepEqual(await client.query(api.main.list, {}), [["alpha", "alpha"]]);
   assert.equal(await client.action(api.main.invoke, { id: "one" }), "alpha:hello:local");
+  await assert.rejects(client.action(api.main.withoutContext, {}), /pass ctx/);
   assert.deepEqual(await client.local(api.main.localCall, { id: "one" }), {
     ids: ["one"],
-    result: "alpha",
-    reports: ["alpha:local"],
+    result: "local",
     calls: 1,
   });
 
@@ -258,8 +201,7 @@ async function checkReloads() {
   assert.equal(await client.action(api.main.invoke, { id: "two" }), "beta:hello:local");
   assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
     ids: ["one", "two"],
-    result: "beta",
-    reports: ["beta:local"],
+    result: "local",
     calls: 2,
   });
   const manifest = JSON.parse(await readFile(join(installs, providers[1], "manifest.json"), "utf8"));
@@ -274,10 +216,8 @@ async function checkReloads() {
   assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
     ids: ["one"],
     result: null,
-    reports: [],
-    calls: 1,
+    calls: 3, // Changing the provider leaves the owner process running.
   });
-  assert.equal(ownerStarts, 2, "retire the worker that loaded the removed provider");
   await rename(builds.get("fixture-stale"), join(installs, "fixture-stale"));
   const rejected = await fetch(new URL("/plugins/fixture-stale/reload", http), { method: "POST", headers });
   assert.notEqual(rejected.status, 200);
@@ -303,14 +243,17 @@ async function prepareAuth(install) {
       });
     `,
   });
-  await rename(builds.get(id), join(install, id));
+  // The Rust test starts the server after this copy and can put its fixture
+  // on a different filesystem from the build directory.
+  await cp(builds.get(id), join(install, id), { recursive: true });
 }
 
 try {
   if (process.argv[2] === "--prepare-auth") await prepareAuth(process.argv[3]);
   else await checkReloads();
 } finally {
-  await local?.close();
+  for (const close of cleanup.reverse()) await close();
+  await desktop?.stop();
   transport?.close();
   socket?.close();
   if (server) {

@@ -27,6 +27,10 @@ impl Drop for ChildGuard {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "support/local_runtime.rs"]
+mod local_runtime;
+
 #[path = "support/sdk.rs"]
 mod sdk;
 use sdk::{bun_script, bundle, root};
@@ -150,13 +154,14 @@ fn startup_failure_and_cancelled_repeated_shutdown_release_disk() {
         std::fs::create_dir_all(&directory).unwrap();
         let storage = Storage::Disk(directory.join("db"));
         let mut invalid = config(storage.clone());
-        invalid.bundle = Arc::new(
+        let broken = || {
             Bundle::new(
                 "export function describe() { throw new Error('TKM7 startup sentinel'); }",
                 None,
             )
-            .unwrap(),
-        );
+            .unwrap()
+        };
+        invalid.bundle = Arc::new(broken().with_transactions(broken()));
         let failure = Backend::start(invalid)
             .await
             .err()
@@ -539,11 +544,13 @@ type PauseGate = Arc<
     >,
 >;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn headless_binary_discovers_and_calls_contract_providers_across_reload() {
     run(async {
         let status = tokio::process::Command::from(bun_script("contracts-driver.mjs"))
             .arg(env!("CARGO_BIN_EXE_tokamak-server"))
+            .arg(local_runtime::runner())
             .kill_on_drop(true)
             .status()
             .await

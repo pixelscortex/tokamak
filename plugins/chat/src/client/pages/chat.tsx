@@ -48,7 +48,8 @@ export const Chat = view({ route: "/", icon: chatIcon }, () => {
     error.set(undefined);
     focusComposer();
   }
-  onCleanup(shortcuts.registerShortcut("Meta+n", newThread));
+  const apple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  onCleanup(shortcuts.registerShortcut(apple ? "Meta+n" : "Control+n", newThread));
 
   return (
     <>

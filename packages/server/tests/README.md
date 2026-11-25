@@ -30,11 +30,23 @@ Disk scenarios use unique directories under
 ignored `packages/server/target/tkm5-databases` and remove them after awaited shutdown.
 There are no added dependencies or enlarged native stacks.
 
+## QuickJS test matrix
+
+`bash .ci/check.sh rust` runs the Runner's lifecycle and local plugin suites
+with the full plugin host. Agent replays exercise the real Runner, workspace
+server and database. Standalone Server fixtures that need local calls use a
+separate Runner for those calls.
+
+The cloud build runs the server and action suites once with the actions-only
+host. Shared-server routing tests confirm the cloud Server can serve a window
+whose local calls are run by a separate Runner. The symbol check uses the
+Runner, its full host and the lifecycle test binary as positive controls.
+
 ## Codex replay
 
 `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` builds
 and installs the Codex provider in a real server and drives it through the
-client's local worker against sanitized app-server replays. It runs in CI and
+client's plugin process against sanitized app-server replays. It runs in CI and
 does not require a Codex executable or login. See the
 [Codex test instructions](../../../plugins/codex/README.md) for the separate
 opt-in real program check and the replay privacy scan.
@@ -85,7 +97,7 @@ normal production-sized host/worker stacks.
 The normal `server:check` dependency executes generated protocol drift checking.
 The native bridge serializes the actual Rust protocol events, so SDK/native/WS
 interoperability does not depend on a second hand-maintained test protocol.
-The driver requires Bun and, for headless shutdown coverage, Unix SIGTERM.
+Run the driver with the pinned developer toolchain. Headless shutdown coverage uses Unix SIGTERM.
 All builds and data directories belong to the local worktree; no parent target
 or live application storage is modified.
 

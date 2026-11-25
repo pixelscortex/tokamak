@@ -97,9 +97,10 @@ writes and schema migrations remain deferred.
 
 ## Actions
 
-`action({...})` (also returned by `createFunctions`) runs on a separate worker
-lane, with a heap cap and no load/call deadline. Actions keep the real clock and
-randomness. They have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
+`action({...})` (also returned by `createFunctions`) runs separately from
+queries and mutations. See [Plugin process and action process](#plugin-process-and-action-process)
+for action process budgets. Actions keep the real clock and randomness. They
+have no `ctx.db`: each `ctx.runQuery` or `ctx.runMutation`
 call rejoins the serialized coordinator and owns its own transaction. The action
 itself is never retried; external effects and earlier mutations remain after a
 later failure. Queries and mutations cannot call actions or fetch.
@@ -176,7 +177,7 @@ already called. Throw for unexpected errors.
 
 ## Local functions
 
-`local({ args, handler })` runs in the desktop client's Bun worker. Put it
+`local({ args, handler })` runs in the client's local part. Put it
 under the plugin's `src/`; it can share a module with server functions.
 The plugin build emits its own `local.js` and a typed reference in the
 generated `api`. The desktop client uses the matching plugin build installed
@@ -205,11 +206,24 @@ work is optional.
 `ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
 one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
 a signal. The invocation stays alive until the handler settles. To cancel
-from the window, pass `{ signal }` to `client.local`; the worker stops programs
+from the window, pass `{ signal }` to `client.local`; the plugin process stops programs
 still running for that invocation. Use `node:fs/promises` for local files.
-Use `ctx.withPrograms(async (stopPrograms) => { … })` to group the programs
-started in one part of an invocation. Calling `stopPrograms()` ends those
-process groups without cancelling the invocation or its other programs.
+
+**Await the programs you need finished before returning.** Any
+call (including a routed contract method) can return while its unawaited
+programs are still being reaped. These programs still count toward the host's
+256-program limit. Normal cleanup sends TERM and gives a live process group
+up to two seconds before sending KILL.
+
+Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
+started through `scoped.proc` and providers selected with `scoped`. Calling
+`forceStop()` ends those process groups without cancelling the invocation
+or its other programs. `withPrograms` can return while the scope
+is still being reaped. Force stop sends KILL immediately, including to groups
+already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
+local functions and server actions so the lookup follows the caller across awaits.
+Queries and mutations still use `contract.list()` and `contract.get(id)`.
+
 Local functions have no database context. Use `ctx.runQuery`,
 `ctx.runMutation`, or `ctx.runAction` with references from the public `api` to
 call the connected server. Only server functions can use `_generated/internal`.
@@ -228,6 +242,8 @@ The bundle task writes:
 
 - `FEATURE/dist/bundle.js`: one self-contained ESM module.
 - `FEATURE/dist/bundle.js.map`: linked source map with source contents.
+- `FEATURE/dist/transactions.js` and its map: the companion for the QuickJS action process.
+  It contains queries, mutations and inspection metadata.
 - `FEATURE/_generated/api.ts`: typed public references.
 - `FEATURE/_generated/internal.ts`: references for the plugin's server code.
 
@@ -387,14 +403,71 @@ The SDK changes do not link JavaScript bundles into the native binary. Native
 size measurements therefore measure the inherited host only; real QuickJS and
 SurrealDB integration remains for the host issues and their tests.
 
-## Plugin actions in Bun
+## Plugin process and action process
 
-Set `runtime: "worker"` in `definePlugin` to build actions for a long-lived Bun
-process. Queries and mutations stay in QuickJS. Use `ctx.runQuery`,
+On macOS and Linux, a plugin process runs local functions and the action
+process runs server actions in `tokamak-plugin-host`. Queries and mutations run
+in the server's engine. On Windows, local functions and server actions report
+“Plugin code is not supported on Windows yet.”
+
+Local functions can import `node:path`, `node:os`, `node:crypto`,
+`node:url`, and `node:fs/promises`. The server part cannot import Node modules. The build checks imports,
+including bare names such as `path`. Unsupported imports such as `node:timers`,
+`events`, or `node:path/posix` fail the build. Built-ins reached indirectly,
+such as `process.getBuiltinModule`, `import.meta.require`, `process.binding`,
+or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a local
+function to run a separate program when needed.
+
+Local functions get `process.platform` (`darwin` or `linux`), an
+empty `process.versions`, and a snapshot in `process.env`. Writing to that
+object does not change the environment of later programs. Pass `env` to
+`ctx.proc` instead. The local host supplies global timers and fetch. It caps
+the heap at 256 MiB by default, allows up to 128 calls and 256 live programs,
+and interrupts JavaScript that runs for five seconds without yielding. See the
+[host reference](../host/README.md) for filesystem, timers, I/O, and memory limits.
+
+Root local calls also get `ctx.retiring`. It aborts when the window
+replaces the plugin's own build. The call can still use its context to settle
+work until the old connection closes. Routed provider calls do not
+receive this signal.
+
+### Server actions
+
+All plugins’ actions run in one action process. Every action call has its own
+QuickJS runtime and starts with fresh module state. Use `ctx.runQuery`,
 `ctx.runMutation`, and `ctx.use` for host-mediated data and plugin calls;
-`ctx.signal` observes cancellation. Module state persists until reload, disable,
-or process exit. Bun must be installed on the host. See the root README's
-[worker protocol](../../README.md#plugin-workers) for lifecycle and environment details.
+`ctx.signal` observes cancellation. There is no `process` or `process.env`;
+use `await ctx.env(name)` and declare `env:<name>`. Declare `net:<hostname>`
+for every host you fetch from. Actions have the engine's web APIs, including
+global timers and [fetch](../engine/WEB_APIS.md). See the host reference for
+wall and CPU deadlines. The action process supplies no local file or program
+capabilities.
+
+The server runs up to 64 signed-in calls per plugin and 128 total, with no
+queue. Anonymous sign-in counts toward the total and has four slots across all
+plugins outside the per-plugin limit; a fifth request is refused as busy.
+
+The default QuickJS heap limit is 64 MiB per call. The process-wide worst case
+is 128 times that limit (8 GiB by default), if every call fills its heap. The
+Linux allocator may keep some freed memory per thread. Every call compiles its
+action bundle again, as the server's engine did for default actions. In a
+release build on an Apple M4 Pro, 100 sequential calls took 0.569 s with a
+trivial bundle and 12.343 s with a 1.30 MB bundle of 9,976 distinct functions
+(5.69 and 123.43 ms per call, respectively). Compilation counts toward the
+one-second default sign-in budget.
+
+At each startup, the plugin host evaluates each plugin's action bundle once in
+a separate process with no permissions, no network and no host operations. A
+bundle that needs network access to load fails this check.
+
+Queries, mutations, and the top-level code of modules they import, including
+modules shared with actions, still run in the server. Action definitions,
+helpers, and imports used only by actions are not loaded by the server. The
+server trusts the action process to identify which call owns each host
+operation. A memory-safety bug in QuickJS could expose other plugins' network
+permissions and in-flight calls in the action process. The server itself does
+not run those actions. See [Plugin host](../host/README.md#action-process)
+for deadlines, limits, and recovery.
 
 ## Web client entries
 
@@ -436,7 +509,8 @@ Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and
 `name`). Nested calls keep the same caller on signed-in requests. Before
 sign-in, an `auth.method` action and its nested calls are anonymous:
 `ctx.auth` throws, and nested calls can only access private queries and mutations
-of that provider.
+of that provider. On the QuickJS action process, the short sign-in
+time budget includes starting the call's QuickJS runtime and evaluating the bundle.
 
 In a window component, call `auth.me()` during setup. It returns a live object
 with `id`, `name`, `role`, and `device`. Read the fields in reactive code so they
@@ -546,21 +620,85 @@ export default provide(agent, {
 });
 ```
 
-In a function belonging to the defining plugin, call `await agent.list()`,
-`await agent.get(id)` (returns `undefined` when absent), or
-`await agent.get(id).start(run)` for a required method. Use the awaited
+In a local function or server action belonging to the defining plugin, pass
+the handler's `ctx`: call `await agent.list(ctx)`, `await agent.get(id, ctx)`
+(returns `undefined` when absent), or `await agent.get(id, ctx).start(run)`
+for a required method. Queries and mutations leave `ctx` out. Use the awaited
 provider to read data or check optional methods. Lookups use the current
 catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
-A local contract is called from `local`. Plain methods can receive callbacks
-and other in-process objects, and can use ordinary local imports. Use
-`local({ handler: (ctx, run: Run) => ... })` when a method needs local
-context (such as `ctx.proc`). Declare it as a private constant and pass it
-to `provide`. The contract passes the live argument in the same worker;
-window calls to exported local functions use their JSON validators. A matching
-provider build must also be installed on the client. Changing or removing an
-imported provider retires its worker so the old module unloads.
+A local contract is called from `local`. Declare
+`{ place: "local", dataMethods: true }`. The Runner routes every call
+to the provider's process, reusing the caller's host when the provider is the
+same plugin. Lookups read provider data
+and available method names from that process. Keep the fields static for a
+build; the caller can reuse them after a process restarts. Arguments and
+results must be plain JSON. A value JSON would change or lose fails with the
+contract and method name. Size and nesting limits apply, and a void result
+becomes `null` across processes.
+
+Pass `{ signal }` to a local contract lookup to cancel its pending routed
+calls without ending the caller's invocation. A method that accepts one object
+can also take that same signal as `input.signal`. QuickJS sends only the other
+fields and assigns the provider invocation's signal to `input.signal` before
+calling the regular `local({ handler })` definition. If the live input uses a different signal than the
+routed call, use `inputSignal` to identify the value to keep off the wire.
+A provider can use `{ unavailable: "…" }` in
+`provide()` to supply a notice for the lookup's `onUnavailable` callback even
+when its process cannot start; errors thrown by the handler still reject.
+
+The plugin build rejects local contracts without `dataMethods: true`, including
+old declarations that mark only some methods as data. QuickJS also refuses
+older built plugins that declare live methods.
+
+Turn hook authors declare a regular `local({ handler })` and read
+`turn.signal`. The SDK attaches the hook invocation's signal
+as described above. Stop cancels the before hook; after hooks run together
+under one deadline and are also cancelled if the turn is lost. Code stores
+the before snapshot under a Git ref scoped to the thread and turn ID, so a
+replacement Code process can pair it with the after snapshot.
+
+Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
+such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
+All local methods receive the calling member and device in their context. A
+matching provider build must be installed on the client.
+
+The `ai` agent contract uses the author's `start(ctx, run)` API. The provider SDK builds the `Run` in the agent's plugin process.
+`run.text` and other reports are batched, `run.ask` waits for the sender's
+answer, and `run.onSteer` and `run.onStop` register handlers in that host.
+CLI programs opened by the agent's `ctx.proc` belong to the turn and are
+reaped on force stop or when its manager's call is cancelled. While the
+manager settles a turn, Force stop can also kill groups left by a completed
+`start`. Await the CLI's exit before returning from `start` if the next turn
+needs a session file the CLI is still writing. Agent authors
+do not implement the message transport.
+
+The adapter in `packages/sdk/worker/contracts.ts` special-cases
+`owner === "ai" && name === "agent" && method === "start"` to build that
+`Run`. The Runner's linked call transport is general and does not inspect
+agent messages. The start carries a protocol version so an old ai bundle
+and a host with a different wire format fail with a version error. Reports
+are validated as a batch and acknowledged in order before the agent returns
+its final result. The 1008 KiB start payload keeps the full prompt and drops
+the oldest history as needed. A message that cannot fit even without history
+fails once, including when it is at the head of the queue.
+
+QuickJS allows up to 64 concurrent turns per Runner and up to 32 on an
+individual agent host, within the 128 invocation slots per host. The Runner
+enforces both limits. Reports and questions wait for space in bounded queues.
+The adapter merges consecutive text or thinking deltas and replaces unsent
+tasks, plan, and usage snapshots. It sends batches below 640 KiB and allows
+768 KiB per turn (JSON bytes plus 64 bytes per buffered event, including the
+batch awaiting acknowledgement). At 32 turns that accounts for 24 MiB of
+reports per host. The reporting API stays synchronous; if coalescing cannot
+keep the buffer below its limit, only that turn fails with “The agent produced
+output faster than it could be saved.”
+
+If Force stop cannot drain
+reports within 750 ms, the host can still kill the invocation's programs
+without running JavaScript. A stuck realm may subsequently be reset by the
+watchdog, which also ends its other invocations.
 
 A server contract defaults to `place: "server"`. For each
 method provide a server function definition such as `internalAction` or
@@ -573,7 +711,9 @@ installed. The compiler only needs its public contract types. If the defining
 plugin's source is unavailable, check in an exact copy of its public contract
 declaration at `contracts/<id>.ts` in the provider. That copy supplies types
 and a contract key. The implementation stays inactive until the owner is in
-the installed catalog, which refuses a mismatched declaration hash.
+the installed catalog. For a local contract, the client skips an incompatible
+provider individually; the ai agent list shows the provider as unavailable.
+For a server contract, the server refuses a mismatched declaration hash.
 
 For a direct server-to-server export, wrap a query, mutation or action in
 `pluginOnly(...)` and re-export it from `src/server/api.ts` as usual.

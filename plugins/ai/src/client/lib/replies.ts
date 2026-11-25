@@ -22,6 +22,8 @@ interface Thread {
   stop: () => void;
 }
 const threads = new Map<string, Thread>();
+/** Bumped when a thread's subscription starts or stops, so `shownTurn` notices one that appears. */
+const [threadsChanged, setThreadsChanged] = createSignal(0, { ownedWrite: true });
 
 /**
  * The turn that wrote this reply, live. Every part of every reply in a thread
@@ -45,6 +47,7 @@ export function useTurn(client: TokamakClient, props: MessageProps): Accessor<Tu
     });
     thread = { users: 0, byReply, stop };
     threads.set(threadId, thread);
+    setThreadsChanged((n) => n + 1);
   }
   const shared = thread;
   shared.users += 1;
@@ -53,8 +56,20 @@ export function useTurn(client: TokamakClient, props: MessageProps): Accessor<Tu
     if (shared.users > 0) return;
     shared.stop();
     threads.delete(threadId);
+    setThreadsChanged((n) => n + 1);
   });
   return () => shared.byReply().get(props.message._id);
+}
+
+/**
+ * The turn that wrote this reply, read from the thread's subscription when one
+ * of the reply's parts holds it, without subscribing; reactive. For an action's
+ * `when`, which cannot own a subscription. The reply's other parts (`useTurn`)
+ * open it, so it is there whenever the reply is drawn.
+ */
+export function shownTurn(props: MessageProps): Turn | undefined {
+  threadsChanged();
+  return threads.get(props.threadId)?.byReply().get(props.message._id);
 }
 
 /** The current time, every second while `active` holds, for a running clock; still otherwise. */
@@ -114,8 +129,13 @@ function trim(value: number): string {
   return value >= 100 ? String(Math.round(value)) : String(Number(value.toFixed(1)));
 }
 
-/** The usage line at the end of a reply: "12.4k in · 1.1k out · $0.04". */
-export function usageLine(usage: NonNullable<Turn["usage"]>): string {
+/**
+ * The usage line at the end of a reply: "12.4k in · 1.1k out · $0.04".
+ * Undefined when the agent reported no tokens at all (a turn stopped before
+ * it was counted), where "0 in · 0 out" would say nothing.
+ */
+export function usageLine(usage: NonNullable<Turn["usage"]>): string | undefined {
+  if (usage.inputTokens === 0 && usage.outputTokens === 0) return undefined;
   const parts = [`${tokens(usage.inputTokens)} in`, `${tokens(usage.outputTokens)} out`];
   if (usage.costUsd !== undefined)
     parts.push(usage.costUsd < 0.01 ? "<$0.01" : `$${usage.costUsd.toFixed(2)}`);

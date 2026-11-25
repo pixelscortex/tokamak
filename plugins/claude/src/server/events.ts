@@ -40,56 +40,93 @@ function textResult(content: unknown): string | undefined {
 
 export class ReplyEvents {
   readonly #run: Run;
+  readonly #stoppedTools: ReadonlySet<string>;
   readonly #tools = new Map<string, PendingTool>();
+  readonly #toolUses = new Set<string>();
   readonly #helpers = new Map<string, Helper>();
   readonly #tasks = new Map<string, Task>();
+  #toolErrors: Block[] = [];
   #blocks: TextBlock[] = [];
   #messageId?: string;
+  #streaming = false;
   #plan?: string;
   #hasText = false;
+  #hasResultText = false;
+  #textTail = "";
+  #separateText = false;
   #hasThinking = false;
   #usage: Usage = { inputTokens: 0, outputTokens: 0 };
 
-  constructor(run: Run) {
+  constructor(run: Run, stoppedTools: ReadonlySet<string>) {
     this.#run = run;
+    this.#stoppedTools = stoppedTools;
   }
 
-  #delta(kind: TextKind, value: string) {
-    if (!value) return;
-    if (kind === "text") {
-      this.#hasText = true;
-      this.#run.text(value);
-    } else {
-      this.#hasThinking = true;
-      this.#run.thinking(value);
+  get canInterrupt() {
+    return this.#streaming && this.#toolUses.size === 0;
+  }
+
+  steered() {
+    this.#separateText = this.#hasText;
+  }
+
+  #text(value: string) {
+    this.#hasResultText = true;
+    // Hold trailing newlines until the next text so a steered reply can use
+    // exactly one blank line, even when either side supplies its own newlines.
+    const first = value.search(/[^\n]/);
+    if (first < 0) {
+      if (!this.#separateText) this.#textTail += value;
+      return;
     }
+    let end = value.length;
+    while (value[end - 1] === "\n") end--;
+    const prefix = this.#separateText ? "\n\n" : this.#textTail;
+    this.#run.text(prefix + value.slice(this.#separateText ? first : 0, end));
+    this.#textTail = value.slice(end);
+    this.#separateText = false;
+    this.#hasText = true;
   }
 
   #blockDelta(kind: TextKind, value: string, alreadySent = "") {
-    if (value && kind === "thinking" && !alreadySent && this.#hasThinking) {
+    if (!value) return;
+    if (kind === "text") {
+      this.#text(value);
+      return;
+    }
+    if (!alreadySent && this.#hasThinking) {
       // Separate distinct thinking blocks without changing their deltas.
       this.#run.thinking("\n\n");
     }
-    this.#delta(kind, value);
+    this.#hasThinking = true;
+    this.#run.thinking(value);
   }
 
   #stream(event: NonNullable<Frame["event"]>) {
     if (event.type === "message_start") {
       this.#messageId = event.message?.id;
       this.#blocks = [];
+      this.#streaming = false;
     } else if (event.type === "content_block_start" && typeof event.index === "number") {
-      const kind = event.content_block?.type;
+      const part = event.content_block;
+      if (!part) return;
+      const kind = part.type;
+      if (kind === "tool_use" && part.id) this.#toolUses.add(part.id);
       if (kind !== "text" && kind !== "thinking") return;
-      const sent = event.content_block?.[kind] ?? "";
+      const sent = part[kind] ?? "";
       this.#blocks.push({ index: event.index, kind, sent });
+      this.#streaming = !!sent;
       this.#blockDelta(kind, sent);
     } else if (event.type === "content_block_delta") {
       const block = this.#blocks.find((block) => block.index === event.index);
       const delta = event.delta;
       if (!block || delta?.type !== `${block.kind}_delta`) return;
       const value = delta[block.kind] ?? "";
+      if (value) this.#streaming = true;
       this.#blockDelta(block.kind, value, block.sent);
       block.sent += value;
+    } else if (event.type === "content_block_stop" || event.type === "message_stop") {
+      this.#streaming = false;
     }
   }
 
@@ -111,6 +148,7 @@ export class ReplyEvents {
 
   #tool(part: Block) {
     if (!part.id || !part.name || this.#tools.has(part.id) || this.#helpers.has(part.id)) return;
+    this.#toolUses.add(part.id);
     const input = part.input ?? {};
     if (part.name === "Agent" || part.name === "Task") {
       const name = asText(input.subagent_type) ?? "Agent";
@@ -134,6 +172,8 @@ export class ReplyEvents {
   #toolResult(part: Block) {
     if (!part.tool_use_id) return;
     const id = part.tool_use_id;
+    this.#toolUses.delete(id);
+    if (part.is_error && this.#stoppedTools.has(id)) return;
     const state: StepState = part.is_error ? "failed" : "done";
     const pending = this.#tools.get(id);
     if (pending) {
@@ -184,10 +224,25 @@ export class ReplyEvents {
     this.#run.plan(value);
   }
 
-  result(frame: Frame, stopped: boolean, final: boolean) {
+  result(frame: Frame, interruption: "stop" | "steer" | undefined, final: boolean) {
+    this.#streaming = false;
+    // A tool can start between our last stream frame and the CLI receiving
+    // the interrupt. Settle those steps as we would for Stop.
+    if (interruption === "steer" && frame.terminal_reason === "aborted_tools") {
+      for (const { tool } of this.#tools.values()) this.#run.tool({ ...tool, state: "done" });
+      this.#tools.clear();
+      for (const id of this.#toolUses) {
+        if (this.#helpers.get(id)?.state === "running") this.#helper(id, "done");
+      }
+    } else if (interruption !== "stop") {
+      for (const part of this.#toolErrors) this.#toolResult(part);
+    }
+    this.#toolErrors = [];
+    this.#toolUses.clear();
     if (frame.usage) this.#reportUsage(frame.usage, frame.total_cost_usd);
-    if (final && !stopped && !frame.is_error && !this.#hasText && frame.result)
-      this.#delta("text", frame.result);
+    if (!interruption && !frame.is_error && !this.#hasResultText && frame.result) this.#text(frame.result);
+    this.#hasResultText = false;
+    if (final && this.#textTail) this.#run.text(this.#textTail);
   }
 
   #reportUsage(usage: NonNullable<Frame["usage"]>, cost?: number) {
@@ -209,11 +264,11 @@ export class ReplyEvents {
     this.#run.usage(this.#usage);
   }
 
-  frame(frame: Frame) {
+  frame(frame: Frame, steerInterrupt: boolean) {
     // Helper dialogue and tool output stay out of the main reply.
     if (frame.parent_tool_use_id) return;
     if (frame.type === "stream_event" && frame.event) this.#stream(frame.event);
-    if (frame.type === "assistant" || frame.type === "user") this.#message(frame);
+    if (frame.type === "assistant" || frame.type === "user") this.#message(frame, steerInterrupt);
     if (frame.type === "system") this.#system(frame);
   }
 
@@ -224,12 +279,15 @@ export class ReplyEvents {
     }
   }
 
-  #message(frame: Frame) {
+  #message(frame: Frame, steerInterrupt: boolean) {
     const { message, type } = frame;
     if (!Array.isArray(message?.content)) return;
     for (const part of message.content) {
       if (type === "assistant") this.#completeBlock(part, message.id);
-      else if (part.type === "tool_result") this.#toolResult(part);
+      else if (part.type === "tool_result") {
+        if (steerInterrupt && part.is_error) this.#toolErrors.push(part);
+        else this.#toolResult(part);
+      }
     }
   }
 }

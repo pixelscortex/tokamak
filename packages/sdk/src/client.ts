@@ -8,6 +8,19 @@ import { assertJson, jsonSnapshot } from "./values";
 import type { ActionSignal } from "./host";
 import { isWindowStateFunction } from "./window-state-protocol";
 
+/** An admitted local call did not settle before its old build was closed on reload. */
+export class LocalReloadTimeout extends Error {
+  constructor() {
+    super("Local plugin build retired");
+    this.name = "LocalReloadTimeout";
+  }
+}
+
+/** The runtime and the plugin may each have their own copy of the SDK. */
+export function isLocalReloadTimeout(error: unknown): boolean {
+  return error instanceof Error && error.name === "LocalReloadTimeout";
+}
+
 export interface LocalTransport {
   invoke(name: string, args: JsonValue, signal?: ActionSignal): Promise<JsonValue>;
 }

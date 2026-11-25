@@ -34,6 +34,7 @@ tasks:
     options:
       cache: true
       outputStyle: stream
+  # QuickJS integration and a separate actions-only cloud build.
   ci-rust:
     command: "bash .ci/check.sh rust"
     inputs: *ci-inputs
@@ -76,13 +77,16 @@ tasks:
       cache: false
       mutex: "cargo"
   build-release:
-    command: "cargo build --locked --release --package server --bin tokamak-server --target-dir target"
+    command: "cargo build --locked --release --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud"
     # The server depends on engine, not the UI/app/plugin bundles. Keep an
     # unrelated frontend change from forcing another release link.
     inputs:
       - "/packages/server/**/*"
       - "/packages/engine/**/*"
       - "/packages/worker/**/*"
+      - "/packages/host/**/*"
+      - "/packages/sdk/src/**/*"
+      - "/packages/sdk/worker/**/*"
       - "/Cargo.toml"
       - "/Cargo.lock"
       - "/rust-toolchain.toml"
@@ -95,7 +99,7 @@ tasks:
       - "!/.moon/cache/**"
       - "$RUSTFLAGS"
       - "$CARGO_ENCODED_RUSTFLAGS"
-    outputs: ["target/release/tokamak-server"]
+    outputs: ["target/cloud/release/tokamak-server", "target/cloud/release/tokamak-plugin-host"]
     options:
       cache: true
       mutex: "cargo"
@@ -111,7 +115,7 @@ tasks:
       - >-
         import { stat } from "node:fs/promises";
         for (const binary of ["tokamak-server"]) {
-          const path = "target/release/" + binary + (process.platform === "win32" ? ".exe" : "");
+          const path = "target/cloud/release/" + binary + (process.platform === "win32" ? ".exe" : "");
           const { size } = await stat(path);
           console.log(path + ": " + size + " bytes");
         }
@@ -127,6 +131,11 @@ tasks:
       cache: false
   lint-rust:
     command: "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
+    options:
+      cache: false
+      mutex: "cargo"
+  lint-cloud-rust:
+    command: "cargo clippy --locked --no-default-features -p server -p tokamak-plugin-host -p tokamak-worker --all-targets --target-dir target/cloud -- -D warnings"
     options:
       cache: false
       mutex: "cargo"

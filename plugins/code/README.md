@@ -4,6 +4,11 @@ Code saves the Git worktree before and after each agent turn on the client that 
 Install it alongside Chat; AI is optional. A turn that starts outside a Git worktree
 gets no snapshots, even if the agent runs `git init` during that turn.
 
+- On the QuickJS Runner, Code saves both snapshots in its own process.
+  The after hook looks up the before ref by thread and turn, using its
+  original worktree even if the selected folder has become a nested
+  repository. A new Code process can complete the pair. An unavailable
+  provider or snapshot that cannot be saved leaves the usual warning.
 - Each turn with Git gets commits at
   `refs/tokamak/threads/<thread key>/turns/<turn key>/before` and `…/after`.
   The keys are the parts of the thread and turn IDs after the colon.
@@ -18,6 +23,8 @@ gets no snapshots, even if the agent runs `git init` during that turn.
   and named under the reply. Those names are read from the local snapshot commits.
 - A failed before hook prevents the agent from starting. A failed after hook
   leaves the reply and turn outcome in place. The client shows a warning.
+  An interrupted turn keeps its before ref so the warning and the original
+  snapshot remain available until the thread is deleted.
 - Deleting from the desktop thread menu removes the thread's refs in its
   repository. When Chat opens on the desktop again, Code also checks the
   repositories recorded for that signed-in device and removes snapshot refs
@@ -41,7 +48,9 @@ These read Git through the local functions `changes:forTurn`, `changes:diff` and
 
 The local `notices:forTurn({ threadId, turnId })` reads omissions and the warning
 from Git. `src/local/git.ts` has the matching `turnRefs(threadId, turnId)` helper.
+The after hook also reads the before ref for that turn. It can recover the
+pair even if the Code process restarted while the agent was running.
 
-Run `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test code_snapshots --test code_changes` for
-snapshots and change reads with the real server and a fake agent. Run
-`proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.
+Run `bash .ci/check.sh rust` from the repository root to test snapshots and
+change reads with a Runner, the real server, and a fake agent.
+Run `proto run bun -- e2e/browser.ts code.spec.ts` for the desktop window path.

@@ -1,17 +1,43 @@
-//! Containment for the Bun worker in both the server and the client.
+//! Launch and contain the Runner and its plugin processes.
+#[cfg(feature = "local-runtime")]
 mod discovery;
-#[cfg(windows)]
+mod logs;
+mod restart;
+#[cfg(feature = "local-runtime")]
+pub mod runner;
+mod runtime;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod spawn;
+#[cfg(all(windows, feature = "local-runtime"))]
 mod windows;
 
-pub use discovery::{resolve, search_paths};
+#[cfg(feature = "local-runtime")]
+pub use discovery::search_paths;
+pub use logs::send as log;
+pub use restart::{HEALTHY_UPTIME, RestartBackoff};
+#[cfg(feature = "local-runtime")]
+pub use runtime::configured_heap_bytes;
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "linux", target_os = "macos")
+))]
+pub use runtime::require_local_host;
+pub use runtime::{configured_action_heap_bytes, require_plugin_platform};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use spawn::inherit_only;
+#[cfg(all(
+    feature = "local-runtime",
+    any(target_os = "macos", target_os = "linux")
+))]
+use std::collections::BTreeMap;
+use std::path::Path;
 #[cfg(not(windows))]
 use std::process::Stdio;
-use std::{collections::BTreeMap, path::Path};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "local-runtime"))]
 type WorkerChild = windows::Child;
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "local-runtime")))]
 type WorkerChild = Child;
 #[cfg(windows)]
 type Containment = std::os::windows::io::OwnedHandle;
@@ -23,22 +49,13 @@ pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
 
-#[derive(Clone, Copy)]
-pub enum Lane {
-    Action,
-    Local,
-}
-
-impl Lane {
-    fn env(self) -> (&'static str, &'static str) {
-        (
-            "TOKAMAK_WORKER_LANE",
-            match self {
-                Self::Action => "action",
-                Self::Local => "local",
-            },
-        )
-    }
+#[cfg(not(windows))]
+fn spawn_child(command: &mut tokio::process::Command, keep: Option<i32>) -> std::io::Result<Child> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    inherit_only(command.as_std_mut(), keep)?;
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let _ = keep;
+    command.spawn()
 }
 
 pub struct Process {
@@ -49,36 +66,156 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn launch(
-        bun: &Path,
-        entry: &Path,
+    #[cfg(feature = "local-runtime")]
+    fn launch_runner(path: &Path, args: &[&std::ffi::OsStr]) -> Result<Self, String> {
+        #[cfg(windows)]
+        let (child, containment, guardian) = {
+            let (child, job) = windows::spawn_runner(path, args).map_err(|e| e.to_string())?;
+            (child, job, None)
+        };
+        #[cfg(not(windows))]
+        let (child, containment, guardian) = {
+            let mut command = tokio::process::Command::new(path);
+            command.args(args);
+            spawn_group(command, None)?
+        };
+        Ok(Self::contained(child, containment, guardian))
+    }
+
+    #[cfg(all(
+        feature = "local-runtime",
+        any(target_os = "macos", target_os = "linux")
+    ))]
+    pub fn launch_plugin(
+        plugin: &str,
         code: &Path,
         cwd: &Path,
         env: &BTreeMap<String, String>,
-        lane: Lane,
-    ) -> Result<Self, String> {
-        #[cfg(windows)]
-        let (child, containment, mut guardian) = {
-            let (child, job) = windows::spawn(bun, entry, code, cwd, env, lane)
-                .map_err(|error| error.to_string())?;
-            (child, job, None::<Child>)
+    ) -> Result<(Self, std::os::unix::net::UnixDatagram), String> {
+        use std::os::{fd::AsRawFd, unix::net::UnixDatagram};
+
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        let host = runtime::host_path(&executable)?;
+        let (control, native) = UnixDatagram::pair().map_err(|error| error.to_string())?;
+        control
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let fd = native.as_raw_fd();
+        let mut command = tokio::process::Command::new(host);
+        command
+            .args(["--local-plugin", plugin])
+            .arg(code)
+            .arg(fd.to_string())
+            .env_clear()
+            .envs(env)
+            .current_dir(cwd);
+        if let Some(heap) = std::env::var_os("TOKAMAK_PLUGIN_HOST_HEAP_MIB") {
+            command.env("TOKAMAK_PLUGIN_HOST_HEAP_MIB", heap);
+        }
+        // Native remains open through spawn. Only this child keeps it across exec.
+        let (child, containment, guardian) = spawn_group(command, Some(fd))?;
+        Ok((Self::contained(child, containment, guardian), control))
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        // Cargo integration tests run from the target directory's deps folder.
+        let executable = if executable.parent().and_then(Path::file_name) == Some("deps".as_ref()) {
+            executable
+                .parent()
+                .ok_or("Action process executable directory missing")?
+                .with_file_name("tokamak-server")
+        } else {
+            executable
         };
-        #[cfg(not(windows))]
-        let (child, containment, mut guardian) = launch(bun, entry, code, cwd, env, lane)?;
+        runtime::host_path(&executable)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    pub fn action_host_path() -> Result<std::path::PathBuf, String> {
+        Err(runtime::unsupported_plugin_platform(std::env::consts::OS).into())
+    }
+
+    pub fn launch_actions(host: &Path) -> Result<Self, String> {
+        Self::launch_action_host(host, None, Path::new("--actions"), None)
+    }
+
+    pub fn inspect_actions(
+        host: &Path,
+        code: &Path,
+        action: Option<(usize, bool)>,
+    ) -> Result<Self, String> {
+        let options = action.map(|(heap, worker_entry)| format!("{heap}:{worker_entry}"));
+        Self::launch_action_host(
+            host,
+            Some(Path::new("--inspect-actions")),
+            code,
+            options.as_deref().map(std::ffi::OsStr::new),
+        )
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn launch_action_host(
+        host: &Path,
+        mode: Option<&Path>,
+        code: &Path,
+        inspection: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
+        let cwd = host
+            .parent()
+            .ok_or("Action process executable directory missing")?;
+        let mut command = tokio::process::Command::new(host);
+        command.args(mode).arg(code).env_clear().current_dir(cwd);
+        if let Some(options) = inspection {
+            command.env("TOKAMAK_ACTION_INSPECT", options);
+        }
+        let (child, containment, guardian) = spawn_group(command, None)
+            .map_err(|error| format!("Launch {}: {error}", host.display()))?;
+        Ok(Self::contained(child, containment, guardian))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn launch_action_host(
+        _: &Path,
+        _: Option<&Path>,
+        _: &Path,
+        _: Option<&std::ffi::OsStr>,
+    ) -> Result<Self, String> {
+        Err(runtime::unsupported_plugin_platform(std::env::consts::OS).into())
+    }
+
+    #[cfg(any(feature = "local-runtime", not(windows)))]
+    fn contained(
+        child: WorkerChild,
+        containment: Containment,
+        mut guardian: Option<Child>,
+    ) -> Self {
         let input = guardian.as_mut().and_then(|child| child.stdin.take());
-        Ok(Self {
+        Self {
             child,
             containment: Some(containment),
             guardian,
             _guardian_input: input,
-        })
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub fn id(&self) -> Option<u32> {
+        self.child.id()
     }
 
     pub fn pipes(&mut self) -> Result<(ChildStdin, ChildStdout, ChildStderr), String> {
         Ok((
-            self.child.stdin.take().ok_or("Worker stdin missing")?,
-            self.child.stdout.take().ok_or("Worker stdout missing")?,
-            self.child.stderr.take().ok_or("Worker stderr missing")?,
+            self.child.stdin.take().ok_or("Plugin host stdin missing")?,
+            self.child
+                .stdout
+                .take()
+                .ok_or("Plugin host stdout missing")?,
+            self.child
+                .stderr
+                .take()
+                .ok_or("Plugin host stderr missing")?,
         ))
     }
 
@@ -90,13 +227,13 @@ impl Process {
                     Some(child) => child.wait().await,
                     None => std::future::pending().await,
                 }
-            } => format!("worker guardian exited ({status:?})"),
+            } => format!("process guardian exited ({status:?})"),
         }
     }
 
     pub async fn stop(&mut self) {
         drop(self.containment.take());
-        #[cfg(not(windows))]
+        #[cfg(not(all(windows, feature = "local-runtime")))]
         let _ = self.child.kill().await;
         let _ = self.child.wait().await;
         if let Some(mut guardian) = self.guardian.take() {
@@ -133,10 +270,10 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
+            .kill_on_drop(true);
+        spawn_child(&mut command, None)
             .map(Some)
-            .map_err(|e| format!("Worker guardian could not start: {e}"))
+            .map_err(|e| format!("Process guardian could not start: {e}"))
     }
     #[cfg(not(unix))]
     {
@@ -146,31 +283,19 @@ fn guardian(group: u32) -> Result<Option<Child>, String> {
 }
 
 #[cfg(not(windows))]
-fn launch(
-    bun: &Path,
-    entry: &Path,
-    code: &Path,
-    cwd: &Path,
-    env: &BTreeMap<String, String>,
-    lane: Lane,
+fn spawn_group(
+    mut command: tokio::process::Command,
+    keep: Option<i32>,
 ) -> Result<(WorkerChild, Group, Option<Child>), String> {
-    let mut command = tokio::process::Command::new(bun);
     #[cfg(unix)]
     command.process_group(0);
-    command.arg(entry).arg(code);
-    let (lane_key, lane_value) = lane.env();
-    let child = command
-        .env_clear()
-        .envs(env)
-        .env(lane_key, lane_value)
-        .current_dir(cwd)
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let group = Group(child.id().ok_or("Worker has no pid")?);
+        .kill_on_drop(true);
+    let child = spawn_child(&mut command, keep).map_err(|e| e.to_string())?;
+    let group = Group(child.id().ok_or("Plugin host has no PID")?);
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
 }

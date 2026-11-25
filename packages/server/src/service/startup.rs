@@ -1,8 +1,9 @@
 use super::*;
-use crate::plugins::StartupPolicy;
+use crate::{host::action_process::Source, plugins::StartupPolicy};
 
 struct Startup {
     bundle: Option<Arc<Bundle>>,
+    legacy_action_source: Option<Arc<Source>>,
     space: DataSpace,
     descriptor: Json,
     kinds: BTreeMap<String, FunctionKind>,
@@ -27,42 +28,39 @@ impl Server {
         bundle: Arc<Bundle>,
         space: DataSpace,
     ) -> Result<Self, Error> {
+        let Some(transactions) = bundle.transactions() else {
+            let error = Error::Invalid(
+                "QuickJS actions require a transaction bundle; rebuild the feature".into(),
+            );
+            return Err(startup_error(&mut database, error).await);
+        };
         let inspected = async {
-            let inspected = inspect(&pool, bundle.clone()).await?;
+            let inspected = inspect(&pool, transactions.clone()).await?;
 
-            let schema = crate::schema::Schema::parse(&inspected.descriptor["schema"])?;
-
-            let mut tx = Box::pin(database.begin())
-                .await
-                .map_err(|e| Error::Invalid(e.to_string()))?;
-
-            match Box::pin(schema.apply(&mut tx, &space, true)).await {
-                Ok(reset) => {
-                    Box::pin(tx.commit())
-                        .await
-                        .map_err(|e| Error::Invalid(e.to_string()))?;
-                    if let Some(reason) = reset {
-                        crate::schema::log_reset(&reason);
-                    }
-                }
-                Err(error) => {
-                    Box::pin(tx.rollback()).await.map_err(|e| {
-                        Error::Invalid(format!("{error}; schema rollback failed: {e}"))
-                    })?;
-
-                    return Err(error);
-                }
-            }
-
-            Ok(inspected)
+            let legacy_action_source = if inspected
+                .kinds
+                .values()
+                .any(|kind| *kind == FunctionKind::Action)
+            {
+                let source = Source::legacy(bundle)?;
+                source.inspect().await?;
+                Some(source)
+            } else {
+                None
+            };
+            initialize_standalone_schema(&mut database, &space, &inspected.descriptor).await?;
+            Ok((inspected, legacy_action_source))
         }
         .await;
 
-        let InspectedBundle {
-            mut descriptor,
-            kinds,
-            visibility,
-        } = match inspected {
+        let (
+            InspectedBundle {
+                mut descriptor,
+                kinds,
+                visibility,
+            },
+            legacy_action_source,
+        ) = match inspected {
             Ok(inspected) => inspected,
             Err(error) => {
                 return Err(startup_error(&mut database, error).await);
@@ -84,7 +82,8 @@ impl Server {
             database,
             pool,
             Startup {
-                bundle: Some(bundle),
+                bundle: Some(transactions),
+                legacy_action_source,
                 space,
                 descriptor,
                 kinds,
@@ -140,6 +139,7 @@ impl Server {
             pool,
             Startup {
                 bundle: None,
+                legacy_action_source: None,
                 space: DataSpace::default(),
                 descriptor: loaded.descriptor.clone(),
                 kinds,
@@ -158,6 +158,7 @@ impl Server {
     ) -> Result<Self, Error> {
         let Startup {
             bundle,
+            legacy_action_source,
             space,
             descriptor,
             kinds,
@@ -184,14 +185,9 @@ impl Server {
         if let Err(error) = state {
             return Err(startup_error(&mut database, error).await);
         }
-        let action_pool = match Pool::new_actions(PoolConfig {
-            limits: pool.limits().clone(),
-            ..PoolConfig::default()
-        }) {
-            Ok(pool) => Arc::new(pool),
-            Err(error) => {
-                return Err(startup_error(&mut database, Error::Invalid(error.to_string())).await);
-            }
+        let action_process = match action_startup() {
+            Ok(process) => process,
+            Err(error) => return Err(startup_error(&mut database, error).await),
         };
 
         let changes = database.subscribe(); // Before any initial subscription run.
@@ -213,8 +209,8 @@ impl Server {
             plugins,
             plugin_root,
             changes,
-            action_pool,
-            sign_in_pool: None,
+            action_process,
+            legacy_action_source,
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
@@ -298,4 +294,46 @@ async fn startup_error(database: &mut Database, error: Error) -> Error {
         Ok(()) => error,
         Err(close) => Error::Invalid(format!("{error}; startup cleanup failed: {close}")),
     }
+}
+
+async fn initialize_standalone_schema(
+    database: &mut Database,
+    space: &DataSpace,
+    descriptor: &Json,
+) -> Result<(), Error> {
+    let schema = crate::schema::Schema::parse(&descriptor["schema"])?;
+
+    let mut tx = Box::pin(database.begin())
+        .await
+        .map_err(|e| Error::Invalid(e.to_string()))?;
+
+    match Box::pin(schema.apply(&mut tx, space, true)).await {
+        Ok(reset) => {
+            Box::pin(tx.commit())
+                .await
+                .map_err(|e| Error::Invalid(e.to_string()))?;
+            if let Some(reason) = reset {
+                crate::schema::log_reset(&reason);
+            }
+        }
+        Err(error) => {
+            Box::pin(tx.rollback())
+                .await
+                .map_err(|e| Error::Invalid(format!("{error}; schema rollback failed: {e}")))?;
+
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+fn action_startup() -> Result<Option<Arc<crate::host::action_process::Supervisor>>, Error> {
+    if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
+        return Ok(None);
+    }
+    let host = tokamak_worker::Process::action_host_path().map_err(Error::Invalid)?;
+    let heap = tokamak_worker::configured_action_heap_bytes().map_err(Error::Invalid)?;
+    Ok(Some(crate::host::action_process::Supervisor::new(
+        host, heap,
+    )))
 }

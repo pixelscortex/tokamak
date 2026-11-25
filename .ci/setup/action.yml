@@ -77,8 +77,8 @@ runs:
         proto install moon
         proto install bun
         proto install rust
-        # Workers clear their environment and run outside the checkout, where
-        # proto's shim cannot find .prototools. Give them the pinned executable.
+        # Some developer test drivers run outside the checkout, where proto's
+        # shim cannot find .prototools. Give them the pinned executable.
         mkdir -p "$HOME/.bun/bin"
         ln -sf "$(proto bin bun --reporter text)" "$HOME/.bun/bin/bun"
         echo "$HOME/.bun/bin" >> "$GITHUB_PATH"

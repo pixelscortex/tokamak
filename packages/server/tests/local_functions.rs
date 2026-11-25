@@ -1,23 +1,39 @@
+#![cfg(any(target_os = "macos", target_os = "linux"))]
+
 use std::{
-    path::Path,
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
+#[path = "support/local_runtime.rs"]
+mod local_runtime;
+
 #[test]
-fn local_process_lines_reach_live_server_queries_and_the_program_can_be_stopped() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut command = Command::new("bun");
+fn local_functions_reach_the_live_server() {
+    run(false);
+}
+
+#[test]
+fn local_functions_and_actions_run_with_an_empty_path() {
+    run(true);
+}
+
+fn run(without_bun: bool) {
+    let mut command = local_runtime::driver(
+        Command::new("bun"),
+        "packages/server/tests/local-functions-driver.mjs",
+    );
+    if without_bun {
+        command.arg("--without-bun");
+    }
+
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
     let mut child = command
-        .arg("packages/server/tests/local-functions-driver.mjs")
-        .arg(env!("CARGO_BIN_EXE_tokamak-server"))
-        .current_dir(root)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()

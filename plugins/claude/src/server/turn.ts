@@ -63,7 +63,9 @@ class Turn {
   readonly #run: Run;
   #wire?: ReturnType<typeof open>;
   #permissions?: Permissions;
+  #reports?: ReplyEvents;
   #pending = new Set<string>();
+  #steerInterrupt = false;
   #steers: string[] = [];
   #ready = false;
   #done = false;
@@ -75,8 +77,22 @@ class Turn {
     this.#run = run;
     run.onSteer((text) => {
       if (this.#done || this.stopping) return;
-      if (this.#ready) this.#user(text, this.#sessionId ?? "", true);
-      else this.#steers.push(text);
+      if (!this.#ready) {
+        this.#steers.push(text);
+        return;
+      }
+      // A second steer queues while the interrupt settles. Interrupt again
+      // only once Claude is streaming another reply, so it gets to start.
+      if (
+        !this.#steerInterrupt &&
+        this.#reports?.canInterrupt &&
+        !this.#permissions?.waiting &&
+        !this.#permissions?.cancelSent
+      ) {
+        this.#steerInterrupt = true;
+        this.#wire?.control("interrupt");
+      }
+      this.#user(text, this.#sessionId ?? "", true);
     });
     run.onStop(() => {
       if (this.#done || this.stopping) return;
@@ -102,12 +118,14 @@ class Turn {
     this.#ready = false;
     this.#sessionId = resume;
     this.#pending.clear();
+    this.#steerInterrupt = false;
     const run = this.#run;
     const wire = open(this.#ctx, launchArgs(run, resume), run.folder);
     this.#wire = wire;
     const permissions = new Permissions(run, wire.send);
     this.#permissions = permissions;
-    const reports = new ReplyEvents(run);
+    const reports = new ReplyEvents(run, permissions.stoppedTools);
+    this.#reports = reports;
     const init = wire.control("initialize");
     // A CLI that cannot initialize should fail promptly.
     const cancelKill = killAfter(wire.proc, 15_000);
@@ -124,7 +142,7 @@ class Turn {
           cancelKill();
           this.#start(resume);
         } else if (frame.type === "result") {
-          const done = this.#result(frame, reports, this.stopping || permissions.cancelSent, resume);
+          const done = this.#result(frame, reports, permissions.cancelSent, resume);
           if (done) return done;
         } else this.#report(frame, reports, permissions);
       }
@@ -140,13 +158,14 @@ class Turn {
   #report(frame: Frame, reports: ReplyEvents, permissions: Permissions) {
     // A steer can join the current turn (echo before its result) or queue a
     // follow-up (echo after the result). Don't close while an echo is pending.
-    if (frame.type === "user" && frame.isReplay && frame.uuid) this.#pending.delete(frame.uuid);
     if (this.stopping) return;
+    if (frame.type === "user" && frame.isReplay && frame.uuid && this.#pending.delete(frame.uuid))
+      reports.steered();
     if (frame.type === "control_request" && frame.request?.tool_name === "ExitPlanMode") {
       reports.plan(frame.request.input?.plan);
     }
     permissions.frame(frame);
-    reports.frame(frame);
+    reports.frame(frame, this.#steerInterrupt);
   }
 
   #start(resume?: string) {
@@ -160,7 +179,7 @@ class Turn {
   #result(
     frame: Frame,
     reports: ReplyEvents,
-    interruptRequested: boolean,
+    cancelRequested: boolean,
     resume?: string,
   ): TurnResult | undefined {
     if (
@@ -172,11 +191,16 @@ class Turn {
       throw new MissingSession();
     }
     // A Cancel answer requests an interruption; Claude can still continue to reply.
-    const stopped = interruptRequested && isInterrupted(frame);
-    const final = stopped || frame.is_error || this.#pending.size === 0;
-    reports.result(frame, this.stopping || stopped, !!final);
-    if (frame.is_error && !stopped) throw new Error(resultError(frame));
+    const interrupted = isInterrupted(frame);
+    const stopped = this.stopping || (cancelRequested && interrupted);
+    // The old reply may have finished before the interrupt arrived. In that
+    // case its success still counts, and the pending echo holds the turn open.
+    const steered = this.#steerInterrupt && interrupted && !stopped;
+    this.#steerInterrupt = false;
+    const final = stopped || (!steered && (!!frame.is_error || this.#pending.size === 0));
+    reports.result(frame, stopped ? "stop" : steered ? "steer" : undefined, final);
     if (!final) return;
+    if (frame.is_error && !stopped) throw new Error(resultError(frame));
     if (!this.#sessionId) throw new Error("Claude finished without a session ID.");
     return { sessionId: this.#sessionId, ...(stopped && { stopped: true }) };
   }
@@ -185,5 +209,6 @@ class Turn {
     this.#done = true;
     this.#wire = undefined;
     this.#permissions = undefined;
+    this.#reports = undefined;
   }
 }

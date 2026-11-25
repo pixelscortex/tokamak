@@ -1,6 +1,7 @@
 import {
   authCaller,
   functionName,
+  LocalReloadTimeout,
   type ActionSignal,
   type ClientTransport,
   type JsonValue,
@@ -27,13 +28,19 @@ type Manifest = {
   entries: { local?: { entry: string; code: string } };
   hashes: Readonly<Record<string, string>>;
   publicFunctions?: readonly string[];
-  contracts?: readonly { name: string; place: "local" | "server"; declarationHash: string }[];
+  contracts?: readonly {
+    name: string;
+    place: "local" | "server";
+    declarationHash: string;
+    dataMethods?: unknown;
+  }[];
   contractProviders?: readonly {
     name: string;
     place: "local" | "server";
     owner: string;
     registration: string;
     declarationHash: string;
+    unavailable?: string;
   }[];
 };
 
@@ -41,10 +48,12 @@ export type LaunchLocalWorker = (
   artifact: LocalArtifact,
   receive: (message: JsonValue) => void,
   closed: (reason: string) => void,
+  workspace?: string,
 ) => Promise<{
   send(message: JsonValue): Promise<void>;
   close(): Promise<void>;
-  load?(artifact: LocalArtifact): Promise<string>;
+  route(id: number, artifact: LocalArtifact): Promise<void>;
+  retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
 type ServerConnection = ClientTransport & {
@@ -52,16 +61,21 @@ type ServerConnection = ClientTransport & {
   onPluginsChanged(callback: () => void): () => void;
 };
 type Worker = Awaited<ReturnType<LaunchLocalWorker>>;
+type Catalog = {
+  plugins: Manifest[];
+};
 
 export class LocalFunctions implements LocalTransport {
   private readonly workers = new Map<string, LocalWorker>();
+  private readonly draining = new Set<LocalWorker>();
   private readonly unlisten: () => void;
   private generation = 0;
-  private catalog: Manifest[] = [];
+  private catalog: Catalog = { plugins: [] };
   /** The generation `catalog` was read for; -1 before the first read. */
   private loaded = -1;
   /** The catalog read in flight, shared by every call that needs it. */
-  private loading?: { generation: number; promise: Promise<boolean> };
+  private loading?: { generation: number; promise: Promise<void> };
+  private authRead?: Promise<JsonValue>;
   private closed = false;
   /**
    * Plugins looked up and not found, with the generation the catalog was
@@ -74,12 +88,13 @@ export class LocalFunctions implements LocalTransport {
   constructor(
     private readonly server: ServerConnection,
     private readonly launch: LaunchLocalWorker,
+    private readonly workspace?: string,
   ) {
     this.unlisten = server.onPluginsChanged(() => {
       const generation = ++this.generation;
       // Catalog notifications may be paged and omit plugin IDs. Reconcile
       // against the complete catalog; a later reload supersedes this read.
-      void this.refresh(generation).catch(() => {});
+      void this.loadCatalog(generation).catch(() => {});
     });
   }
 
@@ -94,18 +109,10 @@ export class LocalFunctions implements LocalTransport {
     while (!this.closed && this.loaded !== this.generation) {
       // A reload overtook the catalog read. Retry without discarding workers
       // that still match their installed artifacts.
-      const generation = this.generation;
-      if (this.loading?.generation !== generation) {
-        const promise = this.refresh(generation);
-        this.loading = { generation, promise };
-        promise.catch(() => {
-          if (this.loading?.promise === promise) this.loading = undefined;
-        });
-      }
-      await this.loading!.promise;
+      await this.loadCatalog(this.generation);
     }
     if (this.closed) throw new Error("Local functions closed");
-    const manifest = this.catalog.find((entry) => entry.plugin.id === id);
+    const manifest = this.catalog.plugins.find((entry) => entry.plugin.id === id);
     const artifact = manifest && this.artifact(manifest);
     if (!artifact) {
       // The caller may know about this plugin before this catalog does: an
@@ -120,15 +127,22 @@ export class LocalFunctions implements LocalTransport {
       throw new Error(`Plugin ${id} has no local functions`);
     }
     let worker = this.workers.get(id);
+    if (worker && !sameArtifact(worker.artifact, artifact)) {
+      void worker.close("Local plugin generation retired");
+      worker = undefined;
+    }
     if (!worker) {
-      if (this.workers.size >= WORKER_CAPACITY) throw new Error("Local plugin worker limit reached");
+      if (this.workers.size >= WORKER_CAPACITY) throw new Error("Plugin process limit reached");
       const current = new LocalWorker(
         this.launch,
         artifact,
-        (caller, operation, payload) => this.serverCall(caller ?? id, operation, payload),
-        (caller, key, load) => this.contractProviders(caller ?? id, id, key, load),
+        this.workspace,
+        () => this.catalog,
+        (catalog, caller, operation, payload) => this.serverCall(catalog, caller ?? id, operation, payload),
+        (catalog, caller, key, allow) => this.contractProviders(catalog, caller ?? id, id, key, allow),
         () => {
           if (this.workers.get(id) === current) this.workers.delete(id);
+          this.draining.delete(current);
         },
       );
       this.workers.set(id, current);
@@ -145,55 +159,119 @@ export class LocalFunctions implements LocalTransport {
     if (entryHash && codeHash) return { id: manifest.plugin.id, entryHash, codeHash };
   }
 
-  private async refresh(generation: number) {
-    const { plugins } = (await this.server.plugins()) as unknown as { plugins: Manifest[] };
-    if (this.closed || generation !== this.generation) return false;
-    this.catalog = plugins;
-    this.loaded = generation;
-    const artifacts = new Map(plugins.map((manifest) => [manifest.plugin.id, this.artifact(manifest)]));
-    for (const worker of this.workers.values()) {
-      if (!worker.matchesCatalog(artifacts)) void worker.close("Local plugin generation retired");
-    }
-    return true;
+  private loadCatalog(generation: number) {
+    if (this.loading?.generation === generation) return this.loading.promise;
+    const promise = this.refresh(generation);
+    this.loading = { generation, promise };
+    void promise.catch(() => {
+      if (this.loading?.promise === promise) this.loading = undefined;
+    });
+    return promise;
   }
 
-  private async contractProviders(
+  private async refresh(generation: number) {
+    const { plugins } = (await this.server.plugins()) as unknown as { plugins: Manifest[] };
+    const workers = [...this.workers.values()];
+    // Retire only after the process connection is ready to receive the frame.
+    await Promise.allSettled(workers.map((worker) => worker.ready));
+    if (this.closed || generation !== this.generation) return;
+    const previous = this.catalog;
+    this.catalog = { plugins };
+    const artifacts = new Map(plugins.map((manifest) => [manifest.plugin.id, this.artifact(manifest)]));
+    for (const worker of workers) {
+      const id = worker.artifact.id;
+      if (this.workers.get(id) !== worker) continue;
+      const change = worker.catalogChange(artifacts);
+      if (change) {
+        this.workers.delete(id);
+        this.draining.add(worker);
+        worker.drain();
+      }
+    }
+    // Routed providers may have been used without opening their own socket.
+    // Retire releases those leases; the Runner still holds any admitted call.
+    for (const manifest of previous.plugins) {
+      const old = this.artifact(manifest);
+      if (!old) continue;
+      if (!sameArtifact(old, artifacts.get(old.id)))
+        for (const worker of workers) void worker.retireArtifact(old).catch(() => {});
+    }
+    this.loaded = generation;
+  }
+
+  private contractProviders(
+    catalog: Catalog,
     caller: string,
     worker: string,
     payload: JsonValue,
-    load: (artifact: LocalArtifact) => Promise<string>,
-  ): Promise<JsonValue> {
+    allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
+  ): JsonValue {
     const { name, owner } = payload as { name: string; owner?: string };
     if (owner !== undefined && owner !== caller)
       throw new Error("Only the defining plugin can list contract providers");
-    // Provider code can import into this worker only when the live catalog
-    // identifies the calling plugin as the owner of the contract.
-    const definingPlugin = this.catalog.find(({ plugin }) => plugin.id === caller);
+    const definingPlugin = catalog.plugins.find(({ plugin }) => plugin.id === caller);
     const declaration = definingPlugin?.contracts?.find((key) => key.name === name && key.place === "local");
     if (!declaration) throw new Error(`Unknown local contract: ${caller}/${name}`);
+    if (declaration.dataMethods !== true)
+      throw new Error(
+        `Local contract ${caller}/${name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
+      );
     const providers = [];
-    for (const manifest of this.catalog) {
+    for (const manifest of catalog.plugins) {
       const plugin = manifest.plugin.id;
-      // A reference alone is not authority to join another plugin's worker.
+      // A registration alone does not grant access to the contract owner.
       if (!declaresAccessTo(manifest.plugin, caller)) continue;
       const registrations = manifest.contractProviders?.filter(
         (p) => p.owner === caller && p.name === name && p.place === "local",
       );
       if (!registrations?.length) continue;
-      if (registrations.some((p) => p.declarationHash !== declaration.declarationHash))
-        throw new Error(`Contract declaration mismatch for ${caller}/${name} in ${plugin}`);
+      if (registrations.some((p) => p.declarationHash !== declaration.declarationHash)) {
+        // An incompatible build is discoverable but cannot be loaded or routed.
+        providers.push({ plugin, incompatible: true });
+        continue;
+      }
       const artifact = this.artifact(manifest);
       if (!artifact) continue;
       const own = plugin === worker;
-      const path = own ? "" : await load(artifact);
-      for (const { registration } of registrations)
-        providers.push({ plugin, registration, path, own, owner: caller });
+      for (const { registration, unavailable } of registrations) {
+        // A compatible provider can be replaced independently of its caller.
+        const current = this.catalog.plugins.find(({ plugin: candidate }) => candidate.id === plugin);
+        const compatible = current?.contractProviders?.some(
+          (entry) =>
+            entry.place === "local" &&
+            entry.owner === caller &&
+            entry.name === name &&
+            entry.registration === registration &&
+            entry.declarationHash === declaration.declarationHash,
+        );
+        const currentArtifact =
+          compatible && current && declaresAccessTo(current.plugin, caller)
+            ? this.artifact(current)
+            : undefined;
+        const target = own ? artifact : (currentArtifact ?? artifact);
+        allow(caller, name, registration, target);
+
+        providers.push({
+          plugin,
+          registration,
+          own,
+          owner: caller,
+          ...(unavailable === undefined ? {} : { unavailable }),
+          build: `${target.entryHash}:${target.codeHash}`,
+        });
+      }
     }
     return providers;
   }
 
-  private serverCall(callerId: string, operation: string, payload: JsonValue) {
-    if (operation === "auth.current") return this.server.query(authCaller[functionName], {});
+  private serverCall(catalog: Catalog, callerId: string, operation: string, payload: JsonValue) {
+    if (operation === "auth.current") {
+      // A burst of routed calls need the same caller. Share only the read in
+      // flight so the workspace queue is not filled with duplicate replies.
+      return (this.authRead ??= this.server.query(authCaller[functionName], {}).finally(() => {
+        this.authRead = undefined;
+      }));
+    }
     const { name, args } = payload as { name: string; args: JsonValue };
     const slash = typeof name === "string" ? name.indexOf("/") : -1;
     if (slash < 1) throw new Error("Expected a plugin-qualified server function");
@@ -201,8 +279,8 @@ export class LocalFunctions implements LocalTransport {
     if (id !== callerId) {
       // The session can call more functions than a plugin declares. Preserve
       // the plugin's dependency and public export boundary on this bridge.
-      const caller = this.catalog.find((entry) => entry.plugin.id === callerId)?.plugin;
-      const target = this.catalog.find((entry) => entry.plugin.id === id);
+      const caller = catalog.plugins.find((entry) => entry.plugin.id === callerId)?.plugin;
+      const target = this.catalog.plugins.find((entry) => entry.plugin.id === id);
       if (
         !caller ||
         !declaresAccessTo(caller, id) ||
@@ -222,10 +300,19 @@ export class LocalFunctions implements LocalTransport {
     this.closed = true;
     this.unlisten();
     this.generation++;
-    const workers = [...this.workers.values()];
+    const workers = [...this.workers.values(), ...this.draining];
     this.workers.clear();
+    this.draining.clear();
     await Promise.allSettled(workers.map((worker) => worker.close("Local plugin generation retired")));
   }
+}
+
+function sameArtifact(a: LocalArtifact, b: LocalArtifact | undefined) {
+  return a.entryHash === b?.entryHash && a.codeHash === b.codeHash;
+}
+
+function routeKey(plugin: string, owner: string, name: string, registration: string) {
+  return JSON.stringify([plugin, owner, name, registration]);
 }
 
 class LocalWorker {
@@ -233,28 +320,36 @@ class LocalWorker {
   private readonly calls = new Map<
     number,
     {
-      finish(error: string | undefined, value?: JsonValue): void;
+      finish(error: Error | string | undefined, value?: JsonValue): void;
       cancelled: boolean;
       providers: Set<string>;
+      routes: Map<string, LocalArtifact>;
+      catalog: Catalog;
     }
   >();
   private next = 0;
   private closing?: Promise<void>;
-  private readonly loaded = new Map<string, { artifact: LocalArtifact; path: Promise<string> }>();
+  private draining = false;
+  private reloadTimer?: ReturnType<typeof setTimeout>;
+  private invoking = 0;
 
   constructor(
     launch: LaunchLocalWorker,
     readonly artifact: LocalArtifact,
+    workspace: string | undefined,
+    private readonly catalog: () => Catalog,
     private readonly serverCall: (
+      catalog: Catalog,
       caller: string | undefined,
       op: string,
       payload: JsonValue,
     ) => Promise<JsonValue>,
     private readonly contractProviders: (
+      catalog: Catalog,
       caller: string | undefined,
       key: JsonValue,
-      load: (artifact: LocalArtifact) => Promise<string>,
-    ) => Promise<JsonValue>,
+      allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
+    ) => JsonValue,
     private readonly retire: () => void,
   ) {
     this.endpoint = launch(
@@ -265,10 +360,26 @@ class LocalWorker {
       (reason) => {
         void this.close(reason);
       },
+      workspace,
     );
   }
 
+  get ready() {
+    return this.endpoint;
+  }
+
   async invoke(name: string, args: JsonValue, signal?: ActionSignal) {
+    const catalog = this.catalog();
+    this.invoking++;
+    try {
+      return await this.call(name, args, catalog, signal);
+    } finally {
+      this.invoking--;
+      this.finishDraining();
+    }
+  }
+
+  private async call(name: string, args: JsonValue, catalog: Catalog, signal?: ActionSignal) {
     let endpoint: Worker;
     try {
       endpoint = await this.endpoint;
@@ -276,9 +387,10 @@ class LocalWorker {
       void this.close(String(error));
       throw error;
     }
-    if (this.closing) throw new Error("Local worker retired");
+    if (this.closing) throw new Error("Plugin process retired");
+    if (this.draining) throw new Error("Local plugin build retired");
     if (signal?.aborted) throw new Error("Local function cancelled");
-    if (this.calls.size >= WORKER_CAPACITY) throw new Error("Local worker invocation limit reached");
+    if (this.calls.size >= WORKER_CAPACITY) throw new Error("Plugin process invocation limit reached");
     const id = ++this.next;
     const invocation = { type: "invoke", id, fn: name, args };
     if (new TextEncoder().encode(JSON.stringify(invocation)).length >= WORKER_FRAME_BYTES)
@@ -287,7 +399,7 @@ class LocalWorker {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const cancel = () => {
         call.cancelled = true;
-        // A handler can ignore abort or block Bun; retire the worker if it
+        // A handler can ignore abort; close the connection if it
         // cannot finish cooperative cleanup before the deadline.
         timer = setTimeout(() => {
           void this.close("Local function cancellation timed out");
@@ -297,11 +409,14 @@ class LocalWorker {
       const call = {
         cancelled: false,
         providers: new Set<string>(),
-        finish: (error: string | undefined, value?: JsonValue) => {
+        routes: new Map<string, LocalArtifact>(),
+        catalog,
+        finish: (error: Error | string | undefined, value?: JsonValue) => {
           clearTimeout(timer);
           this.calls.delete(id);
           signal?.removeEventListener("abort", cancel);
-          if (error !== undefined || call.cancelled) reject(new Error(error ?? "Local function cancelled"));
+          if (error !== undefined || call.cancelled)
+            reject(error instanceof Error ? error : new Error(error ?? "Local function cancelled"));
           else resolve(value!);
         },
       };
@@ -332,62 +447,89 @@ class LocalWorker {
       try {
         if (frame.plugin !== undefined && !call.providers.has(frame.plugin))
           throw new Error("Local provider is not active in this invocation");
+        const worker = await this.endpoint;
+        if (frame.name === "local.contract.call" || frame.name === "local.contract.describe") {
+          const { plugin, owner, name, registration, method } = frame.payload as {
+            plugin: string;
+            owner: string;
+            name: string;
+            registration: string;
+            method?: string;
+          };
+          const route = call.routes.get(routeKey(plugin, owner, name, registration));
+          if (
+            (frame.plugin ?? this.artifact.id) !== owner ||
+            !route ||
+            (frame.name === "local.contract.call" && !method)
+          )
+            throw new Error(`Invalid local contract route for ${owner}/${name}.${method ?? "describe"}`);
+          if (this.calls.get(frame.call) === call && !call.cancelled) {
+            call.providers.add(plugin);
+            await worker.route(frame.id, route);
+          }
+          return;
+        }
         const value =
           frame.name === "local.contracts"
-            ? await this.contractProviders(frame.plugin, frame.payload, async (artifact) => {
-                const path = await this.loadProvider(artifact);
-                call.providers.add(artifact.id);
-                return path;
-              })
-            : await this.serverCall(frame.plugin, frame.name, frame.payload);
+            ? this.contractProviders(
+                call.catalog,
+                frame.plugin,
+                frame.payload,
+                (owner, name, registration, artifact) => {
+                  call.routes.set(routeKey(artifact.id, owner, name, registration), artifact);
+                },
+              )
+            : await this.serverCall(call.catalog, frame.plugin, frame.name, frame.payload);
         response = {
           type: "opResult",
           id: frame.id,
           value,
         };
         if (new TextEncoder().encode(JSON.stringify(response)).length >= WORKER_FRAME_BYTES)
-          throw new Error("Server result exceeds 1 MiB worker limit");
+          throw new Error("Server result exceeds the plugin process's 1 MiB limit");
       } catch (error) {
         response = { type: "opResult", id: frame.id, error: String(error).slice(0, 8192) };
       }
       if (this.calls.get(frame.call) === call && !call.cancelled) await (await this.endpoint).send(response);
     } else if (frame.type !== "log") {
-      throw new Error("Invalid local worker message");
+      throw new Error("Invalid plugin process message");
     }
   }
 
-  matchesCatalog(artifacts: ReadonlyMap<string, LocalArtifact | undefined>): boolean {
-    function matches(artifact: LocalArtifact) {
-      const current = artifacts.get(artifact.id);
-      return current?.entryHash === artifact.entryHash && current.codeHash === artifact.codeHash;
-    }
-    // Bun caches imported modules. Closing this worker releases an imported
-    // provider as well as any tasks it left running.
-    return matches(this.artifact) && [...this.loaded.values()].every(({ artifact }) => matches(artifact));
+  catalogChange(artifacts: ReadonlyMap<string, LocalArtifact | undefined>) {
+    return !sameArtifact(this.artifact, artifacts.get(this.artifact.id));
   }
 
-  private loadProvider(artifact: LocalArtifact): Promise<string> {
-    const current = this.loaded.get(artifact.id);
-    if (current) {
-      if (
-        current.artifact.codeHash !== artifact.codeHash ||
-        current.artifact.entryHash !== artifact.entryHash
-      )
-        return Promise.reject(new Error("Local provider generation changed"));
-      return current.path;
+  drain() {
+    this.draining = true;
+    if (this.invoking > 0) {
+      // Give this build's admitted calls a bounded chance to settle on reload.
+      const retired = "Local plugin build retired";
+      this.reloadTimer = setTimeout(() => void this.close(new LocalReloadTimeout()), 5_000);
+      void this.endpoint.then((worker) => worker.retire(this.artifact)).catch(() => this.close(retired));
     }
-    const path = this.endpoint.then((worker) => {
-      if (!worker.load) throw new Error("Local contract loading is unavailable");
-      return worker.load(artifact);
-    });
-    this.loaded.set(artifact.id, { artifact, path });
-    void path.catch(() => this.loaded.delete(artifact.id));
-    return path;
+    this.finishDraining();
   }
 
-  close(reason: string) {
+  private finishDraining() {
+    if (!this.draining || this.invoking !== 0) return;
+    void this.close("Local plugin build retired", true);
+  }
+
+  async retireArtifact(artifact: LocalArtifact) {
+    if (this.draining && artifact.id === this.artifact.id && sameArtifact(artifact, this.artifact)) return;
+    await (await this.endpoint).retire(artifact);
+  }
+
+  close(reason: Error | string, retire = false) {
     if (!this.closing) {
-      this.closing = this.endpoint.then((worker) => worker.close()).catch(() => {});
+      clearTimeout(this.reloadTimer);
+      this.closing = this.endpoint
+        .then(async (worker) => {
+          if (retire) await worker.retire(this.artifact).catch(() => {});
+          await worker.close();
+        })
+        .catch(() => {});
       this.retire();
       for (const call of this.calls.values()) call.finish(reason);
     }

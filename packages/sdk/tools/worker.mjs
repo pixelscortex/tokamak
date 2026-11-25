@@ -1,20 +1,11 @@
 import { Visibility } from "../src/visibility.ts";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { functionPlacement, lanes, placementTransform, registrySource } from "./placement.mjs";
 import { bunPluginBoundary } from "./plugin-boundary.mjs";
 import { contractTarget } from "./contracts.mjs";
-import { serverBuiltins } from "./server-builtins.mjs";
+import { serverBuiltins, workerBuiltins } from "./server-builtins.mjs";
 
-export async function workerSources({
-  root,
-  files,
-  modules,
-  hasSchema,
-  sdkRoot,
-  header,
-  pluginRoot,
-  placement,
-}) {
+export function transactionSources({ root, files, modules, hasSchema, header, pluginRoot, placement }) {
   const paths = files.map((file) => join(root, file));
   placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root });
   const inLane = (keep) =>
@@ -26,8 +17,8 @@ export async function workerSources({
       return names.length ? [[path, modules[index], names]] : [];
     });
   const actions = inLane((kind) => kind === "action");
-  // QuickJS holds dispatch metadata. The Bun worker validates the original
-  // definitions, so their handlers and argument validators stay with them.
+  // The action process validates arguments. Transactions only need the
+  // action metadata to advertise and route those calls.
   const metadata = actions.flatMap(([path, module, names]) =>
     names.map((name) => ({
       name: `${module}:${name}`,
@@ -46,21 +37,6 @@ export async function workerSources({
           args: { kind: "any" },
           visibility: Visibility.Internal,
         });
-  await buildWorkerBundles({
-    root,
-    sdkRoot,
-    pluginRoot,
-    source: registrySource({
-      root,
-      modules: actions,
-      providers: providers.filter((p) => p.methods.some((m) => m.kind === "action")),
-      lane: lanes.worker,
-      worker: true,
-      header,
-    }),
-    name: "worker",
-    plugins: placement ? [placementTransform(placement, lanes.worker)] : [],
-  });
   return {
     source: registrySource({
       root,
@@ -72,58 +48,47 @@ export async function workerSources({
       header,
     }),
     plugins: [
-      serverBuiltins("worker-server-builtins"),
+      serverBuiltins("transaction-builtins", pluginRoot, "queries and mutations"),
       ...(placement ? [placementTransform(placement, lanes.descriptor)] : []),
     ],
   };
 }
 
-export async function buildWorkerBundles({ root, sdkRoot, pluginRoot, name, source, plugins = [] }) {
-  for (const [asset, contents, sourcemap] of [
-    [name + ".js", source, "external"],
-    [
-      name + "-entry.js",
-      (await Bun.file(join(sdkRoot, "worker/entry.ts")).text())
-        .replace('"./process"', JSON.stringify(join(sdkRoot, "worker/process.ts")))
-        .replace('"./contracts"', JSON.stringify(join(sdkRoot, "worker/contracts.ts")))
-        .replaceAll("../src/", sdkRoot.split(sep).join("/") + "/src/"),
-      "none",
+export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plugins }) {
+  const result = await Bun.build({
+    entrypoints: ["tokamak-worker:entry"],
+    target: "node",
+    format: "esm",
+    packages: "bundle",
+    sourcemap: "external",
+    outdir: join(root, "dist"),
+    naming: "local.js",
+    env: "disable",
+    plugins: [
+      workerBuiltins(pluginRoot),
+      bunPluginBoundary(pluginRoot, { publicOnly: true }),
+      ...plugins,
+      {
+        name: "worker-sdk",
+        setup(build) {
+          build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({ path: join(sdkRoot, "src/index.ts") }));
+        },
+      },
+      {
+        name: "worker-source",
+        setup(build) {
+          build.onResolve({ filter: /^tokamak-worker:entry$/ }, () => ({
+            path: "entry",
+            namespace: "worker",
+          }));
+          build.onLoad({ filter: /.*/, namespace: "worker" }, () => ({
+            contents: source,
+            loader: "ts",
+            resolveDir: join(sdkRoot, "worker"),
+          }));
+        },
+      },
     ],
-  ]) {
-    const result = await Bun.build({
-      entrypoints: ["tokamak-worker:entry"],
-      target: "node",
-      format: "esm",
-      packages: "bundle",
-      sourcemap,
-      outdir: join(root, "dist"),
-      naming: asset,
-      env: "disable",
-      plugins: [
-        bunPluginBoundary(pluginRoot, { publicOnly: name === "local" }),
-        ...plugins,
-        {
-          name: "worker-sdk",
-          setup(build) {
-            build.onResolve({ filter: /^@tokamak\/sdk$/ }, () => ({ path: join(sdkRoot, "src/index.ts") }));
-          },
-        },
-        {
-          name: "worker-source",
-          setup(build) {
-            build.onResolve({ filter: /^tokamak-worker:entry$/ }, () => ({
-              path: "entry",
-              namespace: "worker",
-            }));
-            build.onLoad({ filter: /.*/, namespace: "worker" }, () => ({
-              contents,
-              loader: "ts",
-              resolveDir: join(sdkRoot, "worker"),
-            }));
-          },
-        },
-      ],
-    });
-    if (!result.success) throw new AggregateError(result.logs, "Worker bundle failed");
-  }
+  });
+  if (!result.success) throw new AggregateError(result.logs, "Local bundle failed");
 }

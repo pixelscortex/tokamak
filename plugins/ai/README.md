@@ -76,7 +76,7 @@ const start = local({
 export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 ```
 
-- The contract lives in the local part (`{ place: "local" }`): `info` and
+- The contract lives in the local part (`{ place: "local", dataMethods: true }`): `info` and
   `start` run in the sender's own local part, with `ctx.proc`.
 - `run.prompt` is the message exactly as stored; `run.text(delta)` adds to the
   reply. The agent never writes rows; `ai` does.
@@ -113,8 +113,8 @@ export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 - Register `run.onSteer((text) => …)` to pass a follow-up into the running
   agent session, and `run.onStop(() => …)` to send a graceful interrupt.
   Let `start` settle when the program ends. Force stop kills the process
-  groups started through `ctx.proc` inside the `ctx.withPrograms` scope around `start`.
-- `ctx.proc(argv, { env })` REPLACES the environment, and the local worker
+  groups started through the scoped `ctx.proc` supplied to `start`.
+- `ctx.proc(argv, { env })` REPLACES the environment, and the plugin process
   starts with a short list (HOME, USER, LANG, PATH, …). Leave `env` out to pass
   that list on, or add what the program needs to find its login and settings.
 
@@ -134,7 +134,7 @@ never sent to windows. A queued row has no reply until it starts.
   `SignedOut`, `Busy` (one writer per thread) or `Answered` (the message already
   has a turn).
 - Local `run:steer`, `run:stop` and `run:forceStop` control a turn in its sender's
-  local worker. Steer returns `NoSteerHandler` without storing the draft if the
+  plugin process. Steer returns `NoSteerHandler` without storing the draft if the
   provider never registers a handler.
 - `turns:begin`, `turns:write`, `turns:steer`, `turns:requestStop` and
   `turns:finish` record the turn. The local part calls the server on the window's
@@ -182,15 +182,27 @@ never sent to windows. A queued row has no reply until it starts.
 ### The `turnHooks` contract
 
 Plugins use `provide(ai.turnHooks, { before, after })` with either or both
-members. Wrap a member in `local({ handler })` to use `ctx.proc` or other local
-capabilities. Both receive the same `ai.TurnInfo` (`threadId`, `turnId`, `folder`,
-and a cancellation `signal`).
+members. On the QuickJS Runner, each receives plain data in the provider's
+process: `threadId`, `turnId`, and `folder`. Use
+`local({ handler: (ctx, turn: ai.TurnInfo) => … })`. The
+SDK supplies `turn.signal` in the provider on QuickJS; Bun passes the live
+signal. Use `turnId` to find anything saved for the turn.
 
 - A `before` failure or timeout ends the turn with a reason and skips the agent
   and all `after` hooks.
 - After the agent ends, `after` hooks run together before the thread is freed.
   Errors or timeouts appear as a local notice and leave the outcome in place.
-- Each hook has 60 seconds. Listen to `turn.signal` to stop work on timeout.
+- Each before hook has 60 seconds; all after hooks share one 60-second
+  deadline. On QuickJS, Stop cancels a pending before hook without a notice.
+  On Bun, Stop lets the before hook finish under its original deadline. Stop
+  never cancels an after hook. Stop and quit can skip remaining after work
+  without changing the finished outcome. Force stop only kills the agent's
+  programs.
+- Reloading AI on QuickJS interrupts its running turns, closes pending
+  questions, and stops their programs. The thread is available again as soon
+  as the interruption is saved. Reloading Code or an agent doesn't interrupt
+  a turn in AI. "Always allow this session" answers are held by AI's process,
+  so reloading AI forgets them and later turns ask again.
 
 ## Tests
 

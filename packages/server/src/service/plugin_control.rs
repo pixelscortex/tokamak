@@ -196,17 +196,8 @@ impl Coordinator {
         }
 
         let mut candidate =
-            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref())
+            crate::plugins::Loaded::load_reusing(catalog, &self.pool, self.plugins.as_deref(), id)
                 .await?;
-        // Each generation gets a fresh action lane; build it before the swap so
-        // a pool failure leaves the current generation fully intact.
-        let action_pool = Arc::new(
-            Pool::new_actions(PoolConfig {
-                limits: self.pool.limits().clone(),
-                ..PoolConfig::default()
-            })
-            .map_err(|e| Error::Invalid(e.to_string()))?,
-        );
         Box::pin(candidate.record_grants(&self.database, self.plugins.as_deref())).await?;
         Box::pin(window_state::remove_plugins(
             &self.database,
@@ -219,35 +210,10 @@ impl Coordinator {
             .persist_install_order(self.database.directory())?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
-        // Cancel old-generation actions so a reload cannot leave revoked network
-        // grants running in old worlds; the old pool tears down detached.
-        self.action_pool.cancel_actions();
-        if let Some(previous) = &self.plugins {
-            for worker in previous.workers.values() {
-                worker.stop().await;
-            }
-        }
-        self.action_pool = action_pool;
+        self.retire_actions_for_reload(&candidate);
         self.kinds = candidate.client_kinds();
 
-        let mut changed = std::collections::BTreeSet::new();
-
-        if let Some(previous) = &self.plugins {
-            for (id, artifact) in &previous.catalog.plugins {
-                if candidate.catalog.plugins.get(id).is_none_or(|next| {
-                    serde_json::to_value(&artifact.manifest).ok()
-                        != serde_json::to_value(&next.manifest).ok()
-                }) {
-                    changed.insert(id.clone());
-                }
-            }
-
-            for id in candidate.catalog.plugins.keys() {
-                if !previous.catalog.plugins.contains_key(id) {
-                    changed.insert(id.clone());
-                }
-            }
-        }
+        let changed = self.changed_plugins(&candidate);
         self.plugins = Some(Arc::new(candidate));
 
         let catalog = self.metadata()?;
@@ -265,6 +231,36 @@ impl Coordinator {
         self.invalidate(None);
         self.refresh().await;
         self.metadata()
+    }
+
+    fn changed_plugins(
+        &self,
+        candidate: &crate::plugins::Loaded,
+    ) -> std::collections::BTreeSet<String> {
+        let Some(previous) = &self.plugins else {
+            return Default::default();
+        };
+        previous
+            .catalog
+            .plugins
+            .keys()
+            .chain(candidate.catalog.plugins.keys())
+            .filter(|id| !candidate.same_plugin(previous, id))
+            .cloned()
+            .collect()
+    }
+
+    fn retire_actions_for_reload(&self, candidate: &crate::plugins::Loaded) {
+        let Some(previous) = &self.plugins else {
+            return;
+        };
+        if let Some(process) = &self.action_process {
+            for (id, source) in &previous.action_sources {
+                if !candidate.same_action_source(previous, id) {
+                    process.retire(source);
+                }
+            }
+        }
     }
 
     pub(super) fn asset_page(

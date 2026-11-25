@@ -4,7 +4,7 @@
 mod scaffold;
 
 use engine::{Bundle, PoolConfig};
-use server::{Backend, BackendConfig, data::Storage, websocket};
+use server::{Backend, BackendConfig, data::Storage, local_endpoint, websocket};
 use sha2::{Digest, Sha256};
 use std::{
     fs::File,
@@ -55,23 +55,9 @@ fn local_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 fn capability(directory: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    let path = directory.join("server.token");
-    let metadata = std::fs::symlink_metadata(&path)?;
-    if !metadata.is_file() {
-        return Err("local capability must be a regular file".into());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o077 != 0 {
-            return Err("local capability must be private (chmod 600)".into());
-        }
-    }
-    let token = std::fs::read_to_string(path)?;
-    if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("invalid local capability".into());
-    }
-    Ok(token)
+    Ok(local_endpoint::private_token(
+        &directory.join(local_endpoint::LEGACY_TOKEN),
+    )?)
 }
 
 async fn plugin_command(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
@@ -102,32 +88,20 @@ async fn local_request(
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let directory = local_directory()?;
-    let identity: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(directory.join("server.json"))?)?;
-    let mut url = reqwest::Url::parse(identity["url"].as_str().ok_or("Invalid local discovery")?)?;
-    if url.scheme() != "ws"
-        || url.path() != "/ws"
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || !url
-            .host_str()
-            .ok_or("Missing server host")?
-            .trim_matches(['[', ']'])
-            .parse::<std::net::IpAddr>()?
-            .is_loopback()
-    {
-        return Err("Only discovered loopback ws:// endpoints are supported".into());
-    }
-    url.set_scheme("http")
-        .map_err(|_| "Invalid local URL scheme")?;
+    let (discovery, credential) =
+        match std::fs::read(directory.join(local_endpoint::RUNNER_DISCOVERY)) {
+            Ok(bytes) => (bytes, local_endpoint::RUNNER_CONTROL),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
+                std::fs::read(directory.join(local_endpoint::LEGACY_DISCOVERY))?,
+                local_endpoint::LEGACY_TOKEN,
+            ),
+            Err(error) => return Err(error.into()),
+        };
+    let identity: serde_json::Value = serde_json::from_slice(&discovery)?;
+    let mut url =
+        local_endpoint::http_url(identity["url"].as_str().ok_or("Invalid local discovery")?)?;
     url.set_path(path);
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(30))
-        .build()?;
+    let client = local_endpoint::client(Duration::from_secs(30))?;
     let request = if let Some(body) = body {
         client
             .post(url)
@@ -136,7 +110,10 @@ async fn local_request(
     } else {
         client.get(url)
     };
-    let response = request.bearer_auth(capability(&directory)?).send().await?;
+    let response = request
+        .bearer_auth(local_endpoint::private_token(&directory.join(credential))?)
+        .send()
+        .await?;
     let status = response.status();
     let body = response.text().await?;
     if !status.is_success() {
@@ -230,11 +207,28 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
     }))
 }
 
+fn read_standalone_bundle(path: &Path) -> Result<Bundle, Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(path)?;
+    let mut map_path = path.as_os_str().to_owned();
+    map_path.push(".map");
+    let map = std::fs::read_to_string(map_path).ok();
+    let bundle = Bundle::new(source, map.as_deref())?;
+    let transactions = path.with_file_name("transactions.js");
+    let source = std::fs::read_to_string(&transactions).map_err(|error| {
+        format!(
+            "QuickJS actions require {}: {error}; rebuild the feature",
+            transactions.display()
+        )
+    })?;
+    let map = std::fs::read_to_string(path.with_file_name("transactions.js.map"))?;
+    Ok(bundle.with_transactions(Bundle::new(source, Some(&map))?))
+}
+
 async fn start_backend(
     data: PathBuf,
     javascript: PoolConfig,
     plugins: Option<PathBuf>,
-    source: Option<String>,
+    source: Option<Bundle>,
     hosted: bool,
 ) -> Result<(Backend, String), Box<dyn std::error::Error>> {
     let result = if let Some(root) = plugins {
@@ -250,10 +244,10 @@ async fn start_backend(
         (backend, hash)
     } else {
         let source = source.expect("validated legacy source");
-        let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+        let hash = format!("{:x}", Sha256::digest(source.source().as_bytes()));
         let backend = Backend::start(BackendConfig {
             storage: Storage::Disk(data),
-            bundle: Arc::new(Bundle::new(source, None)?),
+            bundle: Arc::new(source),
             javascript,
         })
         .await?;
@@ -331,7 +325,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if bundle.is_some() == plugins.is_some() {
         return Err("Specify exactly one of --plugins or --bundle".into());
     }
-    let source = bundle.map(std::fs::read_to_string).transpose()?;
+    let source = bundle.as_deref().map(read_standalone_bundle).transpose()?;
     let token = if let Some(directory) = &local {
         data = directory.join("store");
         Some(capability(directory)?)

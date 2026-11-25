@@ -2,51 +2,51 @@ import { fail, local, provide, type Id, type LocalContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
-import { pruneSnapshots, trackSnapshots } from "../local/snapshots";
+import { findBeforeSnapshot, pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
-import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot, type Repository } from "../local/git";
+import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 
-// Git added during an agent run takes effect on the next turn: only a turn
-// with a saved before snapshot can save an after snapshot.
-const active = new WeakMap<ai.TurnInfo, { repo: Repository; before: string }>();
-
-export const snapshotHooks = provide(ai.turnHooks, {
-  before: local({
-    handler: async (ctx, turn: ai.TurnInfo) => {
-      try {
-        const repo = await repository(ctx, turn.folder, turn.signal);
-        if (!repo) return;
-        const target = { ...repo, ...turn };
-        await trackSnapshots(ctx, target);
-        const before = await snapshot(ctx, target, "before");
-        if (await cleanedIfDeleted(ctx, target)) {
-          return fail("ThreadDeleted", { reason: "The thread was deleted before the agent could start." });
+export const snapshotHooks = provide(
+  ai.turnHooks,
+  {
+    afterTimeoutNotice: AFTER_SNAPSHOT_WARNING,
+    before: local({
+      handler: async (ctx, turn: ai.TurnInfo) => {
+        try {
+          const repo = await repository(ctx, turn.folder, turn.signal);
+          if (!repo) return;
+          const target = { ...repo, ...turn };
+          await trackSnapshots(ctx, { ...repo, threadId: turn.threadId, turnId: turn.turnId });
+          await snapshot(ctx, target, "before");
+          if (await cleanedIfDeleted(ctx, target))
+            return fail("ThreadDeleted", { reason: "The thread was deleted before the agent could start." });
+        } catch (cause) {
+          // A turn reason is stored by ai. Keep repository paths and Git output local.
+          const step = cause instanceof Error && /^Git could not ([a-z-]+):/.exec(cause.message)?.[1];
+          return fail("NotSaved", {
+            reason: step ? `${BEFORE_NOT_SAVED} (git ${step} failed).` : `${BEFORE_NOT_SAVED}.`,
+          });
         }
-        active.set(turn, { repo, before });
-      } catch (cause) {
-        // A turn reason is stored by ai. Keep repository paths and Git output local.
-        const step = cause instanceof Error && /^Git could not ([a-z-]+):/.exec(cause.message)?.[1];
-        return fail("NotSaved", {
-          reason: step ? `${BEFORE_NOT_SAVED} (git ${step} failed).` : `${BEFORE_NOT_SAVED}.`,
-        });
-      }
-    },
-  }),
-  after: local({
-    handler: async (ctx, turn: ai.TurnInfo) => {
-      const saved = active.get(turn);
-      if (!saved) return;
-      active.delete(turn);
-      try {
-        const target = { ...saved.repo, ...turn };
-        await snapshot(ctx, target, "after", saved.before);
-        await cleanedIfDeleted(ctx, target);
-      } catch (cause) {
-        throw new Error(AFTER_SNAPSHOT_WARNING, { cause });
-      }
-    },
-  }),
-});
+      },
+    }),
+    after: local({
+      handler: async (ctx, turn: ai.TurnInfo) => {
+        try {
+          // Git added during an agent run takes effect on the next turn.
+          const saved = await findBeforeSnapshot(ctx, turn);
+          if (!saved) return;
+          const { target, before } = saved;
+          await snapshot(ctx, target, "after", before);
+          await cleanedIfDeleted(ctx, target);
+        } catch (cause) {
+          throw new Error(AFTER_SNAPSHOT_WARNING, { cause });
+        }
+      },
+    }),
+  },
+  // This notice is also in the manifest, for when the Code process cannot answer.
+  { unavailable: "Couldn't save this turn's code" },
+);
 
 export const cleanup = provide(threadDeletedLocal, {
   after: local({
@@ -70,9 +70,9 @@ export const prune = local({
 // Check the committed deletion after publishing so the last writer cleans up.
 async function cleanedIfDeleted(
   ctx: LocalContext,
-  target: { root: string; threadId: Id<"threads"> },
+  target: { root: string; threadId: Id<"threads">; signal: LocalContext["signal"] },
 ): Promise<boolean> {
   if (await ctx.runQuery(chat.getThread, { threadId: target.threadId })) return false;
-  await deleteSnapshots(ctx, target);
+  await deleteSnapshots(ctx, target, target.signal);
   return true;
 }

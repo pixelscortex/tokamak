@@ -1,12 +1,17 @@
 // Drives the installed Claude provider through a real Tokamak server. CI plays
 // sanitized recordings; --live opts into the official CLI on this computer.
 import assert from "node:assert/strict";
-import { chmod, cp, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { permissionCases } from "./permissions.mjs";
+import { claudeSnapshots } from "./snapshots.mjs";
+import { overlappingHello, resistantTurns } from "./overlap.mjs";
+import { turnWire } from "./turn-wire.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
-import { agentHarness, build, bunPath, connect, localLauncher } from "../../../e2e/fake-agent/harness.mjs";
+import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
+import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
 const [binary, mode] = process.argv.slice(2);
@@ -18,6 +23,8 @@ if (!live) await scanReplays("claude");
 const source = fileURLToPath(new URL("../", import.meta.url));
 const h = await agentHarness({ binary, name: "claude-turns" });
 const { ai } = h.api;
+
+const wire = turnWire();
 const executable = () => join(h.scratch, "bin", "claude");
 const cleanup = [];
 const hello = "Remember the code word TIDAL. Reply only: Hello Tokamak.";
@@ -29,11 +36,15 @@ const longCommand =
 const todo =
   "Use TodoWrite to create a task called Write fixture, state in_progress. Use Write to create todo-smoke.txt with TOKAMAK_TEST as content. Use an Explore helper to check whether this file exists, without reading other files. Mark the task completed with TodoWrite, then say DONE.";
 try {
+  await h.assertLocalRuntime();
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();
-  const address = await h.serve("local");
-  const client = live ? await realClient(address) : await h.connect(address, { local: true });
+  const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
+  const address = runner ? undefined : await h.serve("local");
+  const client = live
+    ? await realClient(address)
+    : await h.connect(address, { local: true, observe: wire.observe });
   const info = () => aboutClaude(client);
   assert.equal((await info())?.signedIn, true, "Claude is listed as signed in");
   const turns = agentTurns({
@@ -50,23 +61,50 @@ try {
     assert.deepEqual(readyState(await aboutClaude(signedOut)), [true, false]);
   } else {
     await discovery(client);
+    const keychain = join(h.home, "claude-replay-signed-out");
+    await writeFile(keychain, "");
+    try {
+      const failed = await run("signed-out", hello, { state: "failed" });
+      assert.equal(
+        failed.row.error,
+        "Claude is signed out. Sign in, then come back. Run `claude auth login`.",
+      );
+      assert.deepEqual(readyState(await info()), [true, false]);
+    } finally {
+      await unlink(keychain);
+    }
+    assert.deepEqual(readyState(await info()), [true, true]);
+    for (const probe of ["healthy", "invalid", "timeout"]) {
+      const started = performance.now();
+      try {
+        const failed = await run(`rate-limit-${probe}`, hello, { state: "failed" });
+        assert.equal(failed.row.error, "Rate limit reached", `${probe} setup probe`);
+        assert.equal(await Bun.file(join(h.home, "claude-replay-unexpected-models")).exists(), false);
+        if (probe === "timeout")
+          assert.ok(performance.now() - started < 4_500, "A timed-out setup probe must not hold the turn");
+      } finally {
+        await unlink(join(h.home, "claude-replay-start-failed")).catch(() => {});
+      }
+      assert.deepEqual(readyState(await info()), [true, true]);
+    }
   }
   passed("signed-in and signed-out discovery");
   await resume(turns, run);
   passed("reply and resumed session");
   await recover(turns);
   passed("lost session recovery with history");
-  await stopStreaming(run);
+  const overlap = live ? (_name, exercise) => exercise() : overlappingHello(h, run, hello);
+  await overlap("stop-streaming", () => stopStreaming(run));
   passed("stop while streaming");
   await stopRunningTool(run);
   passed("stop while a command runs");
   await steerTurns(run);
-  await permissions(run);
-  await permissionScope(run);
-  await stopAsking(run);
-  passed("stop while waiting for permission");
-  if (!live) await stopAfterWithdrawal(run);
+  await permissionCases({ h, run, turns, overlap, live, caseFolder, passed });
+  if (!live) await resistantTurns({ h, client, hello, overlap, wire });
   await reports(run);
+  if (!live) {
+    await claudeSnapshots(h, hello);
+  }
   console.log(
     `Claude ${live ? "live" : "replay"}: discovery, streaming, storage, resume, steer, stop, permission answers and all report kinds`,
   );
@@ -83,7 +121,7 @@ function caseFolder(name) {
   return h.folder(`claude-${name}`);
 }
 
-function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
+async function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
   // These are the client's relevant environment entries. Claude gets any
   // gateway settings from its own profile, not ANTHROPIC_* exports here.
   const env = { HOME: homedir(), ...(profile && { CLAUDE_CONFIG_DIR: profile }) };
@@ -98,7 +136,22 @@ function realClient(address, profile = process.env.CLAUDE_CONFIG_DIR) {
   ]) {
     if (process.env[key]) env[key] = process.env[key];
   }
-  return connect(address, { cleanup, launch: localLauncher((id) => join(h.plugins, id), env) });
+  if (!address) {
+    const dir = await h.folder("live-runners");
+    const instance = await startRunner({
+      binary,
+      plugins: h.plugins,
+      directory: join(dir, crypto.randomUUID()),
+      env,
+    });
+    cleanup.push(instance.stop);
+    return connect(instance.endpoint.ws, {
+      cleanup,
+      launch: instance.launch,
+      token: instance.endpoint.token,
+    });
+  }
+  return h.connect(address, { local: true, env });
 }
 
 async function installReplay() {
@@ -124,7 +177,9 @@ async function discovery(client) {
     ],
   );
   assert.deepEqual(ready.speeds, []);
-  const marker = join(h.home, "claude-status");
+  const profile = join(h.home, ".claude");
+  await mkdir(profile);
+  const marker = join(profile, ".credentials.json");
   await writeFile(marker, "signed-out");
   assert.deepEqual(readyState(await info()), [true, false]);
   for (const fixture of ["expired-iso", "expired-ms", "expired-seconds"]) {
@@ -166,7 +221,19 @@ async function resume(turns, run) {
             const part = await turn.firstText();
             assert.equal(part.status, "streaming");
             assert.equal(part.parts[0].text, "Hello Tokamak");
-            await h.gate(await caseFolder("hello"), "go");
+            const lastWrite = wire.hold(".");
+            try {
+              await h.gate(await caseFolder("hello"), "go");
+              await lastWrite.pending();
+              const saved = await turn.messageUntil(
+                "the final text saved while its acknowledgement is held",
+                (message) => message.parts[0]?.text === "Hello Tokamak.",
+              );
+              assert.equal(saved.status, "streaming");
+              assert.equal(lastWrite.finishSent(), false);
+            } finally {
+              lastWrite.release();
+            }
           },
         },
   );
@@ -247,16 +314,63 @@ async function steerTurns(run) {
       await turn.steer(steer);
     },
   });
-  assert.match(steered.text.trim(), live ? /STEERED$/ : /300STEERED$/);
+  assert.match(steered.text.trim(), /\S\n\nSTEERED$/);
+  assert.equal(steered.row.state, "done");
+  assert.equal(steered.row.error, undefined);
   assert.deepEqual(steered.reply.steers, [steer]);
-  if (!live)
+  if (live) {
+    assert.ok(steered.text.length < 200, "The steer cuts off the count well before 300");
+  } else {
+    assert.equal(steered.text, "1\n2\n3\n4\n5\n6\n7\n8\n\nSTEERED");
     assert.deepEqual(steered.reply.usage, {
-      inputTokens: 55481,
-      cachedInputTokens: 55475,
-      outputTokens: 607,
-      costUsd: 0.0116295,
+      inputTokens: 55554,
+      cachedInputTokens: 24302,
+      outputTokens: 6,
+      costUsd: 0.16711320000000002,
     });
+    const raced = await run("steer-race", counting.replace("1000", "300"), {
+      async during(turn) {
+        await turn.firstText();
+        await turn.steer(steer);
+      },
+    });
+    assert.equal(raced.text, Array.from({ length: 300 }, (_, i) => i + 1).join("\n") + "\n\nSTEERED");
+    assert.deepEqual(raced.reply.steers, [steer]);
+    assert.deepEqual(raced.reply.usage, {
+      inputTokens: 110447,
+      cachedInputTokens: 24302,
+      outputTokens: 607,
+      costUsd: 0.16711320000000002,
+    });
+
+    const second = "One more correction: only say LAST.";
+    const twice = await run("steer-twice", counting.replace("1000", "300"), {
+      async during(turn) {
+        await turn.firstText();
+        await turn.steer(steer);
+        await turn.steer(second);
+      },
+    });
+    assert.equal(twice.text, steered.text + "\n\nLAST");
+    assert.deepEqual(twice.reply.steers, [steer, second]);
+    assert.deepEqual(
+      (await twice.steps()).map(({ title, state }) => ({ title, state })),
+      [{ title: "sleep 20", state: "done" }],
+    );
+  }
   passed("steer while streaming");
+  const stopped = await run("steer-stop", counting.replace("1000", "300"), {
+    state: "stopped",
+    async during(turn) {
+      await turn.firstText();
+      await turn.steer(steer);
+      await turn.stop();
+    },
+  });
+  assert.deepEqual(stopped.reply.steers, [steer]);
+  if (live) assert.ok(stopped.text.trim() && !/\b(?:300|STEERED)\b/.test(stopped.text));
+  else assert.equal(stopped.text, "1\n2\n3\n4\n5\n6\n7\n8");
+  passed("stop right after steer");
   const correction = "Correction: only say STEERED. Do not use tools.";
   const merged = await run(
     "steer-tools",
@@ -278,151 +392,8 @@ async function steerTurns(run) {
   passed("steer while a command runs");
 }
 
-function checkCommand(question, title, file) {
-  assert.equal(question.action, "run");
-  if (live) assert.ok(question.subject.includes(file), `Command targets ${file}`);
-  else assert.equal(question.subject, title);
-}
-
 function passed(name) {
   if (live) console.log(`Claude PASS: ${name}`);
-}
-
-async function stopAsking(run) {
-  const waiting = await run(
-    "stop-asking",
-    "Use Bash once to run touch stop-asking-fixture.txt. Then say DONE.",
-    {
-      state: "stopped",
-      access: "ask",
-      async during(turn) {
-        const question = await turn.question();
-        checkCommand(question, "touch stop-asking-fixture.txt", "stop-asking-fixture.txt");
-        if (live)
-          assert.ok(
-            !(await Bun.file(join(await caseFolder("stop-asking"), "stop-asking-fixture.txt")).exists()),
-          );
-        await turn.stop();
-      },
-    },
-  );
-  if (live) assert.doesNotMatch(waiting.text, /\bDONE\b/);
-  else assert.equal(waiting.text, "");
-  assert.ok(waiting.reply.usage);
-  if (live) assert.ok(!(await Bun.file(join(waiting.folder, "stop-asking-fixture.txt")).exists()));
-}
-
-async function stopAfterWithdrawal(run) {
-  const prompt = "Ask before creating a fixture file.";
-  const withdrawn = await run("withdraw-question", prompt, {
-    access: "ask",
-    state: "stopped",
-    async during(turn) {
-      assert.equal((await turn.question()).subject, "touch fixture.txt");
-      await h.gate(await caseFolder("withdraw-question"), "withdraw-question");
-      // This text comes after control_cancel_request. The next wire message
-      // must be Stop's interrupt, with no answer to the withdrawn request.
-      await turn.firstText();
-      await turn.stop();
-    },
-  });
-  assert.equal(withdrawn.text, "The tool request was withdrawn.");
-
-  assert.equal(withdrawn.row.sessionId, "00000000-0000-4000-8000-000000000000", "the CLI accepted Stop");
-}
-
-async function permissions(run) {
-  const cases = [
-    [
-      "permit",
-      "approve",
-      "Use Bash exactly once to run the command touch permit-probe.txt. Then give its output.",
-      "done",
-    ],
-    [
-      "refuse",
-      "decline",
-      "Use Bash exactly once to run the command touch refuse-probe.txt. If it is denied, reply only DENIED. Do not try other tools.",
-      "failed",
-    ],
-    [
-      "remember",
-      "approveSession",
-      "Use Bash to run the exact command touch remember-probe.txt twice as two separate consecutive tool calls, never in parallel and never chained. Both calls must be issued before answering. Then reply DONE.",
-      "done",
-    ],
-    [
-      "cancel",
-      "cancel",
-      "Use Bash to run touch cancel-probe.txt. Then print 1000 numbers; do not finish early.",
-      "failed",
-    ],
-  ];
-  if (!live) cases.push(["cancel-continues", "cancel", "Ask before creating a fixture file.", "failed"]);
-  for (const [name, answer, prompt, outcome] of cases) {
-    const file = name === "cancel-continues" ? "fixture.txt" : `${name}-probe.txt`;
-    const title = `touch ${file}`;
-    const fixture = Bun.file(join(await caseFolder(name), file));
-    const result = await run(name, prompt, {
-      access: "ask",
-      answers: 1,
-      state: name === "cancel" ? "stopped" : "done",
-      async during(turn) {
-        const question = await turn.question();
-        checkCommand(question, title, file);
-        if (live) assert.ok(!(await fixture.exists()), "the command has not run before permission");
-        await turn.answer(question, answer);
-      },
-    });
-    const steps = (await result.steps()).filter(
-      (step) => step.kind === "command" && (live ? step.title.includes(file) : step.title === title),
-    );
-    assert.deepEqual(
-      steps.map((step) => step.state),
-      answer === "approveSession" ? ["done", "done"] : [outcome],
-    );
-    if (name === "cancel") {
-      if (live) assert.doesNotMatch(result.text, /^1000$/m);
-      else assert.equal(result.text, "");
-      assert.ok(result.row.sessionId);
-      assert.ok(result.reply.usage, "the CLI's interrupted result was stored");
-    }
-    if (name === "cancel-continues") assert.equal(result.text, "I continued without using the tool.");
-    if (live) {
-      const allowed = answer === "approve" || answer === "approveSession";
-      assert.equal(await fixture.exists(), allowed, `${answer} file effect`);
-      if (allowed) assert.equal(await fixture.text(), "");
-    }
-    passed(`permission: ${answer}`);
-  }
-}
-
-async function permissionScope(run) {
-  const result = await run(
-    "scope",
-    "Use Write three times: write FIRST to scope.txt, then SECOND to scope.txt, then THIRD to separate.txt. Do not use other tools. Reply DONE.",
-    {
-      access: "ask",
-      answers: 2,
-      async during(turn) {
-        for (const file of ["scope.txt", "separate.txt"]) {
-          const question = await turn.question();
-          assert.equal(question.action, "edit");
-          assert.equal(question.subject.split(/[\\/]/).at(-1), file);
-          await turn.answer(question, "approveSession");
-        }
-      },
-    },
-  );
-  assert.equal(
-    (await result.steps()).filter((step) => step.kind === "edit" && step.state === "done").length,
-    3,
-  );
-  if (live) {
-    assert.equal((await readFile(join(result.folder, "scope.txt"), "utf8")).trim().toUpperCase(), "SECOND");
-    assert.equal((await readFile(join(result.folder, "separate.txt"), "utf8")).trim().toUpperCase(), "THIRD");
-  }
-  passed("permission stays scoped to the approved path");
 }
 
 async function reports(run) {
@@ -452,6 +423,11 @@ async function reports(run) {
       costUsd: 0.0738192,
     });
     assert.match(progress.text, /^DONE/);
+  }
+  if (!live) {
+    const writes = wire.writes(progress.row._id);
+    console.log(`Claude to-do writes: ${writes}`);
+    assert.ok(writes === 2 || writes === 3);
   }
   passed("thinking, file edit, tasks, helper and usage reports");
   const plan = await run(

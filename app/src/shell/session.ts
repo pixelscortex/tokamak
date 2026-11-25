@@ -78,7 +78,9 @@ export function createSession(options: SessionOptions): Session {
       });
       if (current !== attempt) return;
       const transport = new WebSocketTransport(socket);
-      const local = isTauri() ? new LocalFunctions(transport, launchLocalWorker) : undefined;
+      const local = isTauri()
+        ? new LocalFunctions(transport, launchLocalWorker, url.origin + url.pathname)
+        : undefined;
       const client = new TokamakClient(transport, local);
       const plugins = createPluginShell(client, supplied, transport, options.routing, workspaceKey);
       close = () => {

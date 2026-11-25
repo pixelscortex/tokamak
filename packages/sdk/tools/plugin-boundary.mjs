@@ -161,8 +161,8 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
       'import { contractReference } from "@tokamak/sdk/internal/contracts";\n' +
       contractDeclarations(target.entry)
         .map(
-          ({ exported, name, place }) =>
-            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(place)}, ${JSON.stringify(target.id)});`,
+          ({ exported, name, place, dataMethods }) =>
+            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(place)}, ${JSON.stringify(target.id)}${dataMethods === undefined ? "" : ", " + JSON.stringify(dataMethods)});`,
         )
         .join("\n")
     );
@@ -345,7 +345,7 @@ export function bunPluginBoundary(root, { publicOnly = false } = {}) {
     setup(build) {
       bunPluginReferences(root, { publicOnly }).setup(build);
       build.onResolve({ filter: /.*/, namespace: "file" }, ({ path, importer }) => {
-        if (!importer || !isAbsolute(importer) || isBuiltin(path)) return;
+        if (!importer || !isAbsolute(importer) || path.startsWith("node:") || isBuiltin(path)) return;
         assertWindowSide(importer, path);
         const target = Bun.resolveSync(path, dirname(importer));
         if (publicOnly && isInternalReferenceModule(canonical(target)))

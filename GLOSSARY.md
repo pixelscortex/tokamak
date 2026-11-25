@@ -11,16 +11,20 @@ One data store, plugin list, and member list, separate from all other workspaces
 _Avoid_: Space, project, team.
 
 **Client**:
-The window and local part together, connected to a server as a member.
-_Avoid_: Frontend, desktop (when both parts are meant).
+The app a person uses to connect to a server as a member. The desktop client starts a Runner on the person’s computer.
+_Avoid_: Frontend.
 
 **Window**:
 The visible part of the client in which a person works. It calls functions and never changes data or files directly.
 _Avoid_: Client (for the interface alone), frontend, webview.
 
 **Local part**:
-The part of the client that can work with files and programs on the person's computer.
-_Avoid_: Runner, worker, local server.
+The part of a plugin that can work with files and programs on the machine where the Runner runs.
+_Avoid_: Worker, local server.
+
+**Runner**:
+The program that runs a workspace server and its local runtime together. The desktop client starts one; a person can also start one independently.
+_Avoid_: Worker, client.
 
 **Server**:
 The program that runs one workspace and holds its shared data.
@@ -42,7 +46,7 @@ _Avoid_: Remote, cloud server, hub.
 
 **Device**:
 One signed-in client identity for a member on a server.
-_Avoid_: Computer (when referring to the sign-in), session, runner.
+_Avoid_: Computer (when referring to the sign-in), session.
 
 **Device key**:
 A revocable credential that signs in one device as a member.
@@ -107,7 +111,7 @@ A saved picture of the thread folder before or after a turn, used to see what ch
 _Avoid_: Checkpoint, backup, diff.
 
 **Turn hooks**:
-The points before and after agent work at which other plugins can act on a turn.
+The points before and after agent work at which other plugins can act on a turn. They run in the provider’s plugin process; cancellation is delivered to the hook’s own signal.
 _Avoid_: Interceptors, middleware, callbacks (when referring to the extension points).
 
 ### Plugins
@@ -115,6 +119,17 @@ _Avoid_: Interceptors, middleware, callbacks (when referring to the extension po
 **Contract**:
 A named agreement a plugin defines about what another plugin can provide.
 _Avoid_: Provider lookup, service name, interface (when referring to the agreement itself).
+
+**Plugin process**:
+A process the Runner starts on demand to run one installed build of a plugin's local part.
+_Avoid_: Worker, action process (when referring to local functions).
+
+**Action process**:
+A process the server starts to run server actions. Each call starts with fresh module state.
+
+**Plain-data method**:
+A local contract method declared to take and return only JSON data. All local contract methods are plain data. Calls to another plugin's methods run in that provider's plugin process.
+_Avoid_: Remote method (which can also mean a call to a shared server).
 
 **Page**:
 A screen at a route in the window, declared with `view`. Its components expose the elements other plugins can extend.

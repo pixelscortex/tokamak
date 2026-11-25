@@ -12,6 +12,7 @@ pub mod data;
 mod environment;
 mod host;
 pub mod identity;
+pub mod local_endpoint;
 pub mod plugins;
 pub mod protocol;
 mod schema;
@@ -21,3 +22,14 @@ pub mod websocket;
 
 pub use backend::{Backend, BackendConfig};
 pub use service::{Error, Event, Server, Session, SessionSender};
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn plugin_json_number_round_trips_exactly() {
+        let text = "0.018920700000000002";
+        let value: serde_json::Value = serde_json::from_str(text).unwrap();
+
+        assert_eq!(serde_json::to_string(&value).unwrap(), text);
+    }
+}

@@ -13,8 +13,10 @@ import assert from "node:assert/strict";
 import { isFailure } from "../../sdk/src/index.ts";
 import { BEAT_MS, SILENCE_MS } from "../../../plugins/ai/src/shared/turn-timing.ts";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { agentHarness } from "../../../e2e/fake-agent/harness.mjs";
+import { delimiter, join } from "node:path";
+import { agentHarness, connect, watchQuery } from "../../../e2e/fake-agent/harness.mjs";
+import { startRunner } from "../../../e2e/fake-agent/start-runner.ts";
+import { inspectHosts } from "../../runner/tests/support/routing.mjs";
 
 const h = await agentHarness({ binary: process.argv[2], name: "ai-liveness" });
 const { ai, chat } = h.api;
@@ -24,13 +26,78 @@ const replyOf = (turn) => (messages) => messages.find((message) => message._id =
 const NOTICED_MS = SILENCE_MS + 30_000;
 
 try {
-  // The lost server waits out its own 45 seconds alongside.
-  await Promise.all([lostServer(), crashedApp()]);
+  // The lost server and a crashed ai host wait out their deadlines alongside.
+  const scenarios = [lostServer(), crashedApp()];
+  const binary = process.env.TOKAMAK_TEST_RUNNER_BIN;
+  if (binary) scenarios.push(crashedManager(binary));
+  await Promise.all(scenarios);
   console.log(
     "ai liveness: killed app interrupted after 45 s with its reply kept, waiting question ended, stranded queue settled, slow turn kept running, thread free again, agent stopped when the server stays out of reach",
   );
 } finally {
   await h.close();
+}
+
+/** Kill only the manager host. Leave the window attached and let maintenance free its thread. */
+async function crashedManager(binary) {
+  const runner = await startRunner({
+    binary,
+    plugins: h.plugins,
+    directory: join(h.scratch, "manager-crash"),
+    env: {
+      HOME: h.home,
+      PATH: [h.bin, "/usr/bin", "/bin"].join(delimiter),
+    },
+  });
+  const cleanup = [];
+  try {
+    const hosts = await inspectHosts(runner);
+    const manager = () => hosts().find(({ id }) => id === "ai")?.pid;
+    const window = await connect(runner.endpoint.ws, {
+      token: runner.endpoint.token,
+      launch: runner.launch,
+      cleanup,
+    });
+    const folder = await h.folder("manager-turn");
+    const { threadId, messageId } = await window.mutation(chat.threads.start, {
+      text: "Ask first",
+      folder: { kind: "chosen", path: folder },
+    });
+    const invoke = (messageId, model, access) =>
+      window.local(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model, access });
+    const stopped = assert.rejects(invoke(messageId, "ask-once", "ask"), /Plugin ai process:/);
+    void stopped.catch(() => {});
+    const turns = watchQuery(window, ai.turns.list, { threadId }, cleanup);
+    const [waiting] = await turns.until(
+      "the manager's open question",
+      (rows) => rows[0]?.state === "waiting",
+    );
+    const pid = manager();
+    assert.ok(pid);
+    const killedAt = Date.now();
+    process.kill(pid, "SIGKILL");
+    await stopped;
+    assert.deepEqual(await window.local(ai.working.list, {}), []);
+    assert.ok(manager() && manager() !== pid, "ai restarted while the window remained connected");
+    const [ended] = await turns.until(
+      "maintenance interrupts the turn whose manager crashed",
+      (rows) => rows[0]?._id === waiting._id && rows[0].state === "interrupted",
+      NOTICED_MS,
+    );
+    const waited = Date.now() - killedAt;
+    assert.ok(waited >= SILENCE_MS - BEAT_MS);
+    assert.equal(ended.question, undefined);
+    assert.equal(ended.error, "Tokamak was closed");
+    const next = await window.mutation(chat.messages.post, { threadId, text: "Carry on" });
+    await h.gate(folder, "go");
+    assert.equal((await invoke(next, "slow", "full")).state, "done");
+    console.log(
+      `Server maintenance freed the connected window's thread ${(waited / 1000).toFixed(1)} s after ai's host died.`,
+    );
+  } finally {
+    for (const close of cleanup.reverse()) await close();
+    assert.equal(await runner.stop(), 0);
+  }
 }
 
 async function crashedApp() {
@@ -215,7 +282,7 @@ async function within(read, ms = 10_000) {
 
 /** Whether a process still runs (a zombie waiting for its parent counts as gone). */
 function alive(pid) {
-  const stat = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+  const stat = Bun.spawnSync(["ps", "-ww", "-o", "stat=", "-p", String(pid)])
     .stdout.toString()
     .trim();
   return stat !== "" && !stat.startsWith("Z");

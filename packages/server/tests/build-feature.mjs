@@ -25,7 +25,7 @@ export async function buildFeature({
         extends: fileURLToPath(new URL("../../../tsconfig.json", import.meta.url)),
       }),
     );
-    await bundleFeature(feature);
+    await bundleFeature(feature, undefined, true);
     return feature;
   } catch (error) {
     await rm(feature, { recursive: true, force: true });
@@ -45,6 +45,8 @@ if (import.meta.main) {
         JSON.stringify({
           code: await readFile(join(feature, "dist/bundle.js"), "utf8"),
           map: await readFile(join(feature, "dist/bundle.js.map"), "utf8"),
+          transactions: await readFile(join(feature, "dist/transactions.js"), "utf8"),
+          transactionMap: await readFile(join(feature, "dist/transactions.js.map"), "utf8"),
         }),
       );
     } finally {

@@ -1,6 +1,6 @@
 // The fake-agent harness for end-to-end turns: the real tokamak-server
 // program, real clients over WebSockets, the real plugin build of chat, ai and
-// every fake agent plugin in ./agents, a real local part (Bun worker) started
+// every fake agent plugin in ./agents, a real local part started
 // the way the desktop client starts it, and each agent's replay program on PATH.
 //
 //   const h = await agentHarness({ binary, name: "ai-turns" });
@@ -14,16 +14,17 @@
 // (within, build, copySource, startServer, connect, watchQuery) serve other
 // end-to-end drivers too.
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
 import { LocalFunctions } from "../../packages/runtime/js/local.ts";
-import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher } from "./local.mjs";
+import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner } from "./local.mjs";
 
-export { bunPath, fakeAgents, installFakeAgent, localLauncher };
+export { bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner };
 
 export const workspace = fileURLToPath(new URL("../../", import.meta.url));
 const TIMEOUT_MS = 20_000;
@@ -58,7 +59,13 @@ export function build(folder) {
 export async function copySource(from, into, modules) {
   await cp(from, into, {
     recursive: true,
-    filter: (path) => !["dist", "node_modules", ".tokamak", "target"].includes(path.split("/").at(-1)),
+    filter(path) {
+      const name = basename(path);
+      return (
+        !["dist", "node_modules", ".tokamak", "target"].includes(name) &&
+        !(basename(dirname(path)) === "_generated" && name.startsWith("build-"))
+      );
+    },
   });
   await symlink(modules, join(into, "node_modules"), "dir");
   await mkdir(join(into, "src/server"), { recursive: true });
@@ -66,6 +73,17 @@ export async function copySource(from, into, modules) {
     join(into, "src/server/tsconfig.json"),
     JSON.stringify({ extends: join(workspace, "tsconfig.json"), compilerOptions: { skipLibCheck: true } }),
   );
+}
+
+async function copyAgentSources(scratch) {
+  const sources = join(scratch, "sources");
+  for (const id of ["chat", "ai"])
+    await copySource(
+      join(workspace, "plugins", id),
+      join(sources, id),
+      join(workspace, "plugins", id, "node_modules"),
+    );
+  return sources;
 }
 
 /**
@@ -76,13 +94,7 @@ export async function copySource(from, into, modules) {
 export async function buildAgentPlugins(scratch, install = (id) => join(scratch, "plugins", id)) {
   build(join(workspace, "plugins/chat"));
   build(join(workspace, "plugins/ai"));
-  const sources = join(scratch, "sources");
-  for (const id of ["chat", "ai"])
-    await copySource(
-      join(workspace, "plugins", id),
-      join(sources, id),
-      join(workspace, "plugins", id, "node_modules"),
-    );
+  const sources = await copyAgentSources(scratch);
   const builds = [
     ["chat", join(workspace, "plugins/chat/dist")],
     ["ai", join(workspace, "plugins/ai/dist")],
@@ -160,12 +172,38 @@ export async function connect(
   const transport = new WebSocketTransport(socket);
   cleanup.push(() => transport.close());
   if (!launch) return new TokamakClient(transport);
-  const part = new LocalFunctions(transport, launch);
+  const url = new URL(address);
+  const part = new LocalFunctions(transport, launch, url.origin + url.pathname);
   cleanup.push(() => part.close());
   socket.addEventListener("close", ({ code }) => {
     if (code === 4001) void part.close();
   });
   return new TokamakClient(transport, part);
+}
+
+/** Observe or hold the same worker frames regardless of the wire transport. */
+function observeWorker(launch, observe) {
+  if (!observe) return launch;
+  return async (artifact, receive, close, workspace) => {
+    const worker = await launch(
+      artifact,
+      (frame) => {
+        observe(artifact.id, frame, "fromWorker");
+        receive(frame);
+      },
+      close,
+      workspace,
+    );
+    return {
+      route: (id, provider) => worker.route(id, provider),
+      retire: (provider) => worker.retire(provider),
+      close: () => worker.close(),
+      async send(frame) {
+        await observe(artifact.id, frame, "toWorker");
+        return worker.send(frame);
+      },
+    };
+  };
 }
 
 /** Subscribes to one query; `until(label, predicate, ms?)` waits for rows that match. */
@@ -214,9 +252,19 @@ async function post(address, path, key, body, status = 200) {
 
 /** Installs the built sign-in provider beside the other plugins. */
 export async function installBasicAuth(plugins) {
-  const source = join(workspace, "plugins/basic-auth");
-  build(source);
-  await cp(join(source, "dist"), join(plugins, "basic-auth", "dist"), { recursive: true });
+  const original = join(workspace, "plugins/basic-auth");
+  const target = join(workspace, "packages/server/target");
+  await mkdir(target, { recursive: true });
+  const scratch = await mkdtemp(join(target, "sign-in-source-"));
+  const source = join(scratch, "basic-auth");
+  try {
+    // Concurrent drivers must not read each other's generated build entry.
+    await copySource(original, source, join(original, "node_modules"));
+    build(source);
+    await cp(join(source, "dist"), join(plugins, "basic-auth", "dist"), { recursive: true });
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 }
 
 /** Adds a member and issues a device key only after their first password change. */
@@ -253,12 +301,19 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
   const windows = new Map();
   /** Each started server by its address, so a test can halt one. */
   const running = new Map();
+  const runners = new Map();
+  const useRunner = basename(binary).startsWith("tokamak-runner");
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
   const plugins = join(scratch, "plugins");
   await mkdir(home);
   await installFakeAgent(bin, await fakeAgents());
-  await buildAgentPlugins(scratch);
+  const fixtures = process.env.TOKAMAK_AGENT_FIXTURES;
+  if (fixtures) {
+    await cp(fixtures, plugins, { recursive: true });
+    // Some tests build an additional plugin against these public source declarations.
+    await copyAgentSources(scratch);
+  } else await buildAgentPlugins(scratch);
   // The desktop's short list (HOME, USER, LANG, … and PATH); nothing else reaches agents.
   const localEnv = {
     TOKAMAK_APP_DATA_DIR: join(scratch, "app-data"),
@@ -269,6 +324,47 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
   };
 
   return {
+    async assertLocalRuntime() {
+      const folder = join(scratch, "runtime-probe");
+      await mkdir(folder);
+      const entry = await readFile(join(plugins, "ai", "local-entry.js"));
+      const code =
+        'export const functions = { probe: { kind: "local", args: { kind: "any" }, invoke: () => typeof Bun } };';
+      await writeFile(join(folder, "local-entry.js"), entry);
+      await writeFile(join(folder, "local.js"), code);
+
+      const hash = (content) => createHash("sha256").update(content).digest("hex");
+      const launch = localLauncher(binary, () => folder, localEnv);
+      let worker;
+      const result = new Promise((resolve, reject) => {
+        const receive = (frame) => {
+          if (frame.type === "op" && frame.name === "auth.current") {
+            void worker.send({ type: "opResult", id: frame.id, value: null }).catch(reject);
+          } else if (frame.type === "result") {
+            resolve(frame);
+          }
+        };
+        void launch(
+          { id: "runtime-probe", entryHash: hash(entry), codeHash: hash(code) },
+          receive,
+          (reason) => reject(new Error(reason)),
+        )
+          .then((endpoint) => {
+            worker = endpoint;
+            return worker.send({ type: "invoke", id: 1, fn: "probe", args: null });
+          })
+          .catch(reject);
+      });
+
+      try {
+        const frame = await within(result, "QuickJS local runtime probe");
+        assert.equal(frame.value, "undefined", `Local call returned ${JSON.stringify(frame)}`);
+      } finally {
+        await worker?.close();
+      }
+    },
+
+    runner: (address) => runners.get(address),
     scratch,
     home,
     /** Where each fake agent's command sits on the local part's PATH: unlink one to "uninstall" it. */
@@ -286,6 +382,18 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
      */
     async serve(label, { shared = false, pluginsDir = plugins } = {}) {
       if (shared) await installBasicAuth(pluginsDir);
+      if (useRunner) {
+        assert.ok(!shared, "A Runner serves a private workspace");
+        const runner = await startRunner({
+          binary,
+          plugins: pluginsDir,
+          directory: join(scratch, label),
+          env: { ...localEnv, TOKAMAK_OWNER_NAME: "Sam" },
+        });
+        cleanup.push(runner.stop);
+        runners.set(runner.endpoint.ws, runner);
+        return runner.endpoint.ws;
+      }
       let child;
       const address = await startServer({
         binary,
@@ -321,20 +429,34 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
      * A window on `address`; with `local`, also this computer's local part.
      * `env` changes the local part's environment (`undefined` leaves a variable out).
      */
-    async connect(address, { token, local = false, pluginsDir = plugins, onClose, env } = {}) {
+    async connect(address, { token, local = false, pluginsDir = plugins, onClose, env, observe } = {}) {
       const own = [];
       try {
+        const runner = runners.get(address);
+        let launch;
+        if (local) {
+          if (runner) {
+            if (env) throw new Error("Runner environment must be set when it starts");
+            launch = runner.launch;
+          } else {
+            // A window on a standalone Server gets its own desktop Runner.
+            // Keep that Runner separate so stopping the Server tests a lost
+            // connection while the local agent is still alive.
+            const desktop = await startRunner({
+              binary: process.env.TOKAMAK_TEST_RUNNER_BIN ?? join(dirname(binary), "tokamak-runner"),
+              plugins: pluginsDir,
+              directory: join(scratch, "window-" + crypto.randomUUID()),
+              env: { ...localEnv, ...env },
+            });
+            own.push(desktop.stop);
+            launch = desktop.launch;
+          }
+          launch = observeWorker(launch, observe);
+        }
         const client = await connect(address, {
-          token,
+          token: token ?? runner?.endpoint.token,
           onClose,
-          launch: local
-            ? localLauncher(
-                (id) => join(pluginsDir, id),
-                Object.fromEntries(
-                  Object.entries({ ...localEnv, ...env }).filter(([, value]) => value !== undefined),
-                ),
-              )
-            : undefined,
+          launch,
           cleanup: own,
         });
         windows.set(client, own);

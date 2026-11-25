@@ -6,6 +6,13 @@ export function turnReports(run: Run, resumed: boolean) {
   const summaries = new Set<string>();
   const plans = new Map<string, string>();
   let thinkingBlock: { itemId: string; part: number } | undefined;
+  let messageItem: string | undefined;
+  /** A steer or a tool call ends one message and starts another. Keep them apart in the reply. */
+  function message(itemId: string, text: string) {
+    if (messageItem !== undefined && messageItem !== itemId) run.text("\n\n");
+    messageItem = itemId;
+    run.text(text);
+  }
   let baseline: Usage | undefined;
   let previous: Usage | undefined;
   return {
@@ -20,7 +27,7 @@ export function turnReports(run: Run, resumed: boolean) {
         case "item/agentMessage/delta":
           if (typeof itemId === "string" && typeof delta === "string") {
             streamed.add(itemId);
-            run.text(delta);
+            if (delta) message(itemId, delta);
           }
           break;
         case "item/reasoning/summaryTextDelta":
@@ -69,7 +76,7 @@ export function turnReports(run: Run, resumed: boolean) {
           if (!isRecord(item) || typeof item.id !== "string") break;
           if (item.type === "agentMessage") {
             if (completed && !streamed.has(item.id) && typeof item.text === "string" && item.text)
-              run.text(item.text);
+              message(item.id, item.text);
           } else if (item.type === "reasoning") {
             if (completed && !summaries.has(item.id) && Array.isArray(item.summary)) {
               for (const [index, part] of item.summary.entries()) {

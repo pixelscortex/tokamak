@@ -487,9 +487,7 @@ Owned-probe formatted source SHA-256:
 Owned-probe measured release executable SHA-256:
 `e0f4f4a8f97a0e277d3872d04a49cdcefc592dbaa11534b0e9829880bd75f943`.
 
-## Plugin workers
+## Plugin code
 
-See [Plugin workers](../../README.md#plugin-workers) for the generic Bun action
-runtime and newline-JSON bridge. The server has no agent-protocol client;
-agent discovery, sessions, permission promises, and adapter processes belong to
-the Claude and Codex plugins in the client’s local part.
+See [Plugin host](../host/README.md) for the action process and the Runner's
+plugin process. Local functions and server actions are unavailable on Windows.

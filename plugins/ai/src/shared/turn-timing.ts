@@ -9,3 +9,5 @@ export const BEAT_MS = 10_000;
 export const SILENCE_MS = 45_000;
 /** The reason an interrupted turn shows: "Interrupted · Tokamak was closed". */
 export const CLOSED = "Tokamak was closed";
+
+export const RELOADED = "AI was reloaded while the turn was running.";

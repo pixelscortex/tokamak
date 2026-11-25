@@ -1,5 +1,8 @@
 use super::*;
 
+pub(super) const TRANSACTIONS: &str = "transactions.js";
+pub(super) const TRANSACTIONS_MAP: &str = "transactions.js.map";
+
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
         Self::read_reusing(directory, None)
@@ -16,10 +19,28 @@ impl Artifact {
         let manifest = Manifest::read(&root)?;
 
         let names = manifest.validate()?;
+        let transactions = [TRANSACTIONS, TRANSACTIONS_MAP];
+        if manifest.hashes.contains_key(TRANSACTIONS)
+            != manifest.hashes.contains_key(TRANSACTIONS_MAP)
+        {
+            let missing = if manifest.hashes.contains_key(TRANSACTIONS) {
+                TRANSACTIONS_MAP
+            } else {
+                TRANSACTIONS
+            };
+            return Err(invalid(format!(
+                "Incomplete transaction bundle: no hash for {missing}; rebuild this plugin"
+            )));
+        }
 
         let mut assets = BTreeMap::new();
 
         for name in names {
+            #[cfg(not(feature = "local-runtime"))]
+            if omit_runner_asset(&manifest, name)? {
+                continue;
+            }
+
             let whole_backend = manifest
                 .entries
                 .server
@@ -29,6 +50,15 @@ impl Artifact {
                 name.clone(),
                 asset(&root, name, &manifest.hashes, previous, whole_backend)?,
             );
+        }
+
+        if manifest.hashes.contains_key(TRANSACTIONS) {
+            for name in transactions {
+                assets.insert(
+                    name.to_owned(),
+                    asset(&root, name, &manifest.hashes, previous, true)?,
+                );
+            }
         }
 
         let bundle = manifest
@@ -65,6 +95,63 @@ impl Artifact {
         })
     }
 
+    pub(super) async fn transactions(&self) -> Result<Option<Arc<Bundle>>, Error> {
+        if let (Some(code), Some(map)) = (
+            self.assets.get(TRANSACTIONS),
+            self.assets.get(TRANSACTIONS_MAP),
+        ) {
+            return Bundle::new(
+                code.backend_text(TRANSACTIONS)?,
+                Some(&map.backend_text(TRANSACTIONS_MAP)?),
+            )
+            .map(|bundle| Some(Arc::new(bundle)))
+            .map_err(|error| invalid(error.to_string()));
+        }
+        if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_ok()
+            && let Some(entry) = self.manifest.entries.server.as_ref()
+            && self.manifest.entries.worker.is_none()
+            && crate::host::action_process::inspect_legacy(self.assets[&entry.code].path())
+                .await
+                .map_err(invalid)?
+        {
+            return Err(invalid(
+                "QuickJS actions require a transaction bundle; rebuild this plugin",
+            ));
+        }
+        Ok(self.bundle.clone())
+    }
+
+    pub(super) fn action_source(
+        &self,
+        id: &str,
+    ) -> Result<Arc<crate::host::action_process::Source>, Error> {
+        let (code, bundle, worker_entry) = if let Some(entry) = &self.manifest.entries.worker {
+            let source = self.assets[&entry.code].backend_text(&entry.code)?;
+            let map = self.assets[&entry.map].backend_text(&entry.map)?;
+            let bundle =
+                Bundle::new(source, Some(&map)).map_err(|error| invalid(error.to_string()))?;
+            (self.assets[&entry.code].clone(), Arc::new(bundle), true)
+        } else {
+            let entry = self
+                .manifest
+                .entries
+                .server
+                .as_ref()
+                .ok_or_else(|| invalid("Missing server action bundle"))?;
+            let bundle = self
+                .bundle
+                .clone()
+                .ok_or_else(|| invalid("Missing server action bundle"))?;
+            (self.assets[&entry.code].clone(), bundle, false)
+        };
+        Ok(crate::host::action_process::Source::plugin(
+            id,
+            code,
+            bundle,
+            worker_entry,
+        ))
+    }
+
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,
     /// server source, credentials or on-disk files can be fetched by this method.
     pub fn ui_asset(&self, name: &str) -> Option<Arc<Asset>> {
@@ -77,4 +164,36 @@ impl Artifact {
             .then(|| self.assets.get(name).cloned())
             .flatten()
     }
+}
+
+#[cfg(not(feature = "local-runtime"))]
+fn omit_runner_asset(manifest: &Manifest, name: &str) -> Result<bool, Error> {
+    let entries = &manifest.entries;
+    let runner_only = entries.local.as_ref().is_some_and(|local| {
+        [
+            local.entry.as_str(),
+            local.code.as_str(),
+            local.map.as_str(),
+        ]
+        .contains(&name)
+    }) || entries
+        .worker
+        .as_ref()
+        .is_some_and(|worker| worker.entry == name);
+    if runner_only {
+        // The Runner still needs the original build ID and hashes to match its
+        // own installation. The Server needs only this metadata.
+        super::assets::relative_asset_path(name)?;
+        if !manifest.hashes.get(name).is_some_and(|hash| {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        }) {
+            return Err(invalid(format!(
+                "Missing or invalid hash for {name}; rebuild it"
+            )));
+        }
+    }
+    Ok(runner_only)
 }

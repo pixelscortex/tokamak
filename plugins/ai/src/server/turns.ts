@@ -9,6 +9,7 @@ import {
   type QueryContext,
 } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
+import { agentTurnHistory } from "@tokamak/sdk/agent-turn";
 import { isSendersDevice } from "../shared/turn-shared";
 import { FORCE_STOP_MS } from "../shared/turn-timing";
 import { ACTIVE, mutation, query, view, type Model, type Turn, activeTurnOf } from "./_functions";
@@ -27,6 +28,7 @@ import { access, question, stepReport, task, usage, who } from "./schema";
 const ANSWER_BYTES = 512 * 1024;
 /** As many turns as chat shows messages (it reads the latest 200). */
 const REPLIES_MAX = 200;
+const LONG_MESSAGE = "This message is too long to send to the agent. Shorten the message and try again.";
 
 /** The thread's turns, oldest first, as windows see them. */
 export const list = query({
@@ -226,11 +228,12 @@ export const begin = mutation({
   args: {
     threadId: v.string(),
     messageId: v.string(),
+    folder: v.optional(v.string()),
     ...agentSettings,
     /** Chat's reply capability, chosen by the local part (mutations have no secret randomness). */
     replyToken: v.string(),
   },
-  handler: async (ctx, { threadId, messageId, replyToken, ...settings }) => {
+  handler: async (ctx, { threadId, messageId, folder, replyToken, ...settings }) => {
     const { user, device } = ctx.auth;
     const message = await ctx.use(chat).readPrompt({ messageId: messageId as Id<"messages"> });
     if (!message || message.threadId !== threadId) throw new Error("That message is not in this thread");
@@ -249,8 +252,13 @@ export const begin = mutation({
     if (queued && queued._id !== existing?._id) return busy(queued);
     const earlier = await lastTurn(ctx.db, threadId);
     if (existing) {
+      const input = await handOver(ctx, existing, message, earlier, folder, settings);
+      if (!input) {
+        await settleQueuedFailure(ctx, existing, LONG_MESSAGE);
+        return { turnId: existing._id, state: "failed" as const };
+      }
       await promoteQueued(ctx, existing, replyToken);
-      return handOver(ctx, existing, message, earlier);
+      return input;
     }
     const turnId = await ctx.db.insert("turns", {
       threadId,
@@ -260,7 +268,9 @@ export const begin = mutation({
       ...(await openReply(ctx, threadId, settings.agent, replyToken)),
     });
     const turn = (await ctx.db.get(turnId))!;
-    return handOver(ctx, turn, message, earlier);
+    const input = await handOver(ctx, turn, message, earlier, folder, settings);
+    if (!input) throw new Error(LONG_MESSAGE);
+    return input;
   },
 });
 
@@ -275,8 +285,42 @@ async function handOver(
   turn: Turn,
   message: { text: string; createdAt: number },
   earlier: Turn | undefined,
+  folder: string | undefined,
+  startSettings: Pick<Turn, "model" | "effort" | "speed" | "mode" | "access">,
 ) {
   const { agent, model, effort, speed, mode, access, sender } = turn;
+  const history = await ctx
+    .use(chat)
+    .historyBefore({ threadId: turn.threadId as Id<"threads">, before: message.createdAt });
+  const sessionId =
+    earlier?.agent.id === agent.id && earlier.sender.device === sender.device ? earlier.sessionId : undefined;
+  const input = {
+    turnId: turn._id,
+    prompt: message.text,
+    history,
+    ...(sessionId === undefined ? {} : { sessionId }),
+  };
+  const {
+    model: pickedModel,
+    effort: pickedEffort,
+    speed: pickedSpeed,
+    mode: pickedMode,
+    access: pickedAccess,
+  } = startSettings;
+  const fitting =
+    folder === undefined
+      ? history
+      : agentTurnHistory({
+          ...input,
+          threadId: turn.threadId,
+          folder,
+          model: pickedModel,
+          effort: pickedEffort,
+          speed: pickedSpeed,
+          mode: pickedMode,
+          access: pickedAccess,
+        });
+  if (!fitting) return undefined;
   await save(ctx, turn.threadId, {
     agent,
     model,
@@ -285,17 +329,7 @@ async function handOver(
     ...(mode === undefined ? {} : { mode }),
     access,
   });
-  const history = await ctx
-    .use(chat)
-    .historyBefore({ threadId: turn.threadId as Id<"threads">, before: message.createdAt });
-  const sessionId =
-    earlier?.agent.id === agent.id && earlier.sender.device === sender.device ? earlier.sessionId : undefined;
-  return {
-    turnId: turn._id,
-    prompt: message.text,
-    history,
-    ...(sessionId === undefined ? {} : { sessionId }),
-  };
+  return { ...input, history: fitting };
 }
 
 /** The thread's last turn that began, before this one: queued ones have not. */
@@ -386,12 +420,16 @@ export const failQueued = mutation({
       (await firstQueued(ctx.db, turn.threadId))?._id !== turnId
     )
       return null;
-    await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages">, error });
-    const now = Date.now();
-    await ctx.db.patch(turnId, { state: "failed", error, startedAt: now, finishedAt: now });
+    await settleQueuedFailure(ctx, turn, error);
     return null;
   },
 });
+
+async function settleQueuedFailure(ctx: MutationContext<Model>, turn: Turn, error: string) {
+  await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages">, error });
+  const now = Date.now();
+  await ctx.db.patch(turn._id, { state: "failed", error, startedAt: now, finishedAt: now });
+}
 
 async function requireCreator(ctx: MutationContext<Model>, threadId: string): Promise<void> {
   if (!(await startedBy(ctx, threadId, ctx.auth.user.id)))
@@ -415,20 +453,65 @@ export const replySteers = query({
       .query("turns")
       .withIndex("by_replyId", (q) => q.eq("replyId", replyId))
       .first();
-    return turn?.steers ?? [];
+    if (!turn) return [];
+    const steers = turn.steers ?? [];
+    return turn.pendingSteer === undefined ? steers : [...steers, turn.pendingSteer];
   },
 });
 
 /** Records a follow-up inside the turn before handing it to the registered agent handler. */
 export const steer = mutation({
-  args: { turnId: v.id("turns"), text: v.string() },
-  handler: async (ctx, { turnId, text }) => {
+  args: {
+    turnId: v.id("turns"),
+    text: v.string(),
+    delivery: v.optional(v.union(v.literal("pending"), v.literal("delivered"), v.literal("failed"))),
+  },
+  handler: async (ctx, { turnId, text, delivery }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
+    if (delivery === "delivered" || delivery === "failed") {
+      if (turn.pendingSteer === text)
+        await update(ctx.db, turn, {
+          pendingSteer: undefined,
+          pendingSteerOffset: undefined,
+          ...(delivery === "delivered" && withSteer(turn, text, turn.pendingSteerOffset)),
+        });
+      return null;
+    }
     if (turn.stoppingAt !== undefined) throw new Error("This turn is stopping");
-    await ctx.db.patch(turnId, { steers: [...(turn.steers ?? []), text] });
+    if (turn.pendingSteer !== undefined) throw new Error("The turn is already receiving a steer");
+    await ctx.db.patch(
+      turnId,
+      delivery === "pending"
+        ? { pendingSteer: text, pendingSteerOffset: replyLength(turn) }
+        : withSteer(turn, text, undefined),
+    );
     return null;
   },
 });
+
+/**
+ * How much of the reply's text is stored now. A steer is recorded as pending
+ * before the agent receives it, so the text stored at that moment is all
+ * written before the steer; the reply draws the steer at this point.
+ */
+function replyLength(turn: Turn): number {
+  return turn.text?.length ?? 0;
+}
+
+/**
+ * The turn's steers with `text` added, and where it landed in the reply's
+ * text: the offset taken when it was pending, else the text stored now.
+ * `steerOffsets` runs parallel to `steers`; a turn whose steers predate it
+ * has none, and its reply draws them after the text.
+ */
+function withSteer(turn: Turn, text: string, offset: number | undefined) {
+  const steers = [...(turn.steers ?? []), text];
+  const known = (turn.steerOffsets?.length ?? 0) === (turn.steers?.length ?? 0);
+  return {
+    steers,
+    ...(known && { steerOffsets: [...(turn.steerOffsets ?? []), offset ?? replyLength(turn)] }),
+  };
+}
 
 /**
  * The questions waiting for the caller: turns they sent from this device that
@@ -553,14 +636,15 @@ export const forceStopDelay = query({
 export const finish = mutation({
   args: {
     turnId: v.id("turns"),
-    state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped")),
+    state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped"), v.literal("interrupted")),
     error: v.optional(v.string()),
     sessionId: v.optional(v.string()),
+    acknowledgedSteer: v.optional(v.string()),
     finishedAt: v.number(),
   },
-  handler: async (ctx, { turnId, state, error, sessionId, finishedAt }) => {
+  handler: async (ctx, { turnId, state, error, sessionId, acknowledgedSteer, finishedAt }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
-    if (turn.stoppingAt !== undefined) state = "stopped";
+    if (turn.stoppingAt !== undefined && state !== "interrupted") state = "stopped";
     const reason = error === undefined ? undefined : line(error, LINE_CHARS * 4);
     await ctx.use(chat).writeReply({
       messageId: turn.replyId,
@@ -568,6 +652,9 @@ export const finish = mutation({
       text: turn.text ?? "",
       done: true,
       ...(state === "stopped" ? { outcome: "cancelled" as const } : {}),
+      ...(state === "interrupted"
+        ? { outcome: "interrupted" as const, error: reason ?? "The turn was interrupted." }
+        : {}),
       ...(state === "failed"
         ? { outcome: "error" as const, ...(reason === undefined ? {} : { error: reason }) }
         : {}),
@@ -579,19 +666,32 @@ export const finish = mutation({
     // A step the agent never closed ends with its turn; a stopped one did not fail.
     for (const step of steps)
       if (step.state === "running")
-        await ctx.db.patch(step._id, { state: state === "failed" ? "failed" : "done", finishedAt });
+        await ctx.db.patch(step._id, {
+          state: state === "failed" || state === "interrupted" ? "failed" : "done",
+          finishedAt,
+        });
     await update(ctx.db, turn, {
       question: undefined,
       questionToken: undefined,
+      pendingSteer: undefined,
+      pendingSteerOffset: undefined,
+      ...deliveredSteers(turn, acknowledgedSteer),
       state,
       current: undefined,
       finishedAt: Date.now(),
-      ...(state === "failed" && reason !== undefined ? { error: reason } : {}),
+      ...((state === "failed" || state === "interrupted") && reason !== undefined ? { error: reason } : {}),
       ...(sessionId === undefined ? {} : { sessionId: line(sessionId) }),
     });
     return state;
   },
 });
+
+/** The steers with the pending one added when the agent acknowledged it; nothing changes otherwise. */
+function deliveredSteers(turn: Turn, acknowledgedSteer: string | undefined) {
+  return acknowledgedSteer !== undefined && turn.pendingSteer === acknowledgedSteer
+    ? withSteer(turn, acknowledgedSteer, turn.pendingSteerOffset)
+    : {};
+}
 
 /** Writes `changes` over the turn; a field set to undefined is removed (patch cannot remove one). */
 async function update(db: DatabaseWriter<Model>, turn: Turn, changes: Partial<Turn>) {

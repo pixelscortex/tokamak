@@ -59,7 +59,8 @@ export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
       stderr: "inherit",
     });
     if ((await child.exited) !== 0) throw new Error(`Public plugin build failed: ${id}`);
-    for (const name of ["manifest.json", "bundle.js", "bundle.js.map", "api.ts"])
+    const manifest = await Bun.file(join(path, "dist", "manifest.json")).json();
+    for (const name of ["manifest.json", ...Object.keys(manifest.hashes)])
       files[`${id}/${name}`] = await readFile(join(path, "dist", name), "utf8");
   }
   const driver = join(root, "driver.ts");

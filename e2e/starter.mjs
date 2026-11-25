@@ -7,7 +7,8 @@ import { homedir } from "node:os";
 import { buildStarterPlugins, installStarterPlugins } from "../app/scripts/starter-plugins.ts";
 import { createApi } from "../packages/sdk/src/index.ts";
 import { agentTurns } from "./fake-agent/agent-turn.mjs";
-import { connect, localLauncher, startServer, workspace } from "./fake-agent/harness.mjs";
+import { startRunner } from "./fake-agent/start-runner.ts";
+import { connect, startServer, workspace } from "./fake-agent/harness.mjs";
 
 const [flag, ...requested] = process.argv.slice(2);
 const names = { claude: "Claude", codex: "Codex" };
@@ -21,6 +22,7 @@ assert.ok(
 );
 
 const target = join(workspace, "target");
+const binary = resolve(target, "debug", `tokamak-server${process.platform === "win32" ? ".exe" : ""}`);
 const root = await mkdtemp(join(target, "starter-"));
 const pluginsDir = join(root, "plugins");
 const localDir = join(root, "local");
@@ -35,7 +37,7 @@ try {
   await mkdir(project);
   await writeFile(join(localDir, "server.token"), token, { mode: 0o600 });
   const address = await startServer({
-    binary: resolve(target, "debug", `tokamak-server${process.platform === "win32" ? ".exe" : ""}`),
+    binary,
     dir: join(root, "server"),
     localDir,
     pluginsDir,
@@ -71,7 +73,7 @@ try {
       HOME: homedir(),
       // The desktop gives its local part a data folder (own-folder threads, snapshot records).
       TOKAMAK_APP_DATA_DIR: join(root, "app-data"),
-      // The client's worker needs Bun and inherits the documented CLI profile paths.
+      // The local part inherits the documented CLI profile paths.
       PATH: [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter),
     };
     for (const key of [
@@ -88,11 +90,14 @@ try {
     ]) {
       if (process.env[key]) env[key] = process.env[key];
     }
-    const client = await connect(address, {
-      token,
-      cleanup,
-      launch: localLauncher((id) => join(pluginsDir, id, "dist"), env),
+    const runner = await startRunner({
+      binary: binary.replace(/tokamak-server(?=\.exe$|$)/, "tokamak-runner"),
+      plugins: pluginsDir,
+      directory: join(root, "runner"),
+      env,
     });
+    cleanup.push(runner.stop);
+    const client = await connect(address, { token, cleanup, launch: runner.launch });
     const available = await client.local(api.ai.agents.list, {});
     for (const id of new Set(requested)) {
       const info = available.find((agent) => agent.id === id)?.info;

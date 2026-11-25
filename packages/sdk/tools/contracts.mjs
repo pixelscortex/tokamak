@@ -19,6 +19,34 @@ export function importedContractEntry(root, id) {
   return existsSync(source) ? source : resolve(root, "contracts", id + ".ts");
 }
 
+function nonDataMethods(entry, exported, data, file) {
+  const declared = new Set(
+    data && ts.isArrayLiteralExpression(data)
+      ? data.elements.filter(ts.isStringLiteralLike).map((name) => name.text)
+      : [],
+  );
+  // The normal path needs only the syntax tree. Resolve the contract's type to
+  // report method names only when rejecting an old or incomplete declaration.
+  const program = ts.createProgram([entry], { noEmit: true, skipLibCheck: true });
+  const source = program.getSourceFile(entry);
+  const checker = program.getTypeChecker();
+  const call = source?.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((declaration) => declaration.name.getText(source) === exported)?.initializer;
+  const node = call && ts.isCallExpression(call) && call.typeArguments?.[0];
+  const names = node
+    ? checker
+        .getTypeFromTypeNode(node)
+        .getProperties()
+        .flatMap((property) => {
+          const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, node));
+          return type.getCallSignatures().length && !declared.has(property.name) ? [property.name] : [];
+        })
+    : [];
+  return names.length ? names.join(", ") : (data?.getText(file) ?? "all methods");
+}
+
 /** A public contract module describes types and keys, and is never loaded by its providers. */
 export function contractDeclarations(entry) {
   if (!existsSync(entry)) return [];
@@ -60,11 +88,26 @@ export function contractDeclarations(entry) {
         throw new Error(`${entry}: contract names and places must be literals`);
       if (contracts.some((item) => item.name === key.text))
         throw new Error(`${entry}: duplicate contract ${key.text}`);
+      const data =
+        options && ts.isObjectLiteralExpression(options)
+          ? options.properties.find(
+              (p) =>
+                ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "dataMethods",
+            )?.initializer
+          : undefined;
+      if (place?.text === "local" && data?.kind !== ts.SyntaxKind.TrueKeyword) {
+        const missing = nonDataMethods(entry, name.text, data, file);
+        throw new Error(
+          `${entry}: local contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
+        );
+      }
+      if (data && place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
       contracts.push({
         exported: name.text,
         name: key.text,
         place: place?.text ?? "server",
         declarationHash,
+        dataMethods: data ? true : undefined,
         memberHook: call.typeArguments?.[0]?.getText(file) === "MemberHook",
       });
     }
@@ -90,10 +133,10 @@ export function discoverProviders(root, files, program, checker) {
       const declaration = target.valueDeclaration;
       if (!declaration || declaration.getSourceFile() !== source) continue;
       const call = ts.isExportAssignment(declaration) ? declaration.expression : declaration.initializer;
-      if (!call || !ts.isCallExpression(call) || call.arguments.length !== 2)
+      if (!call || !ts.isCallExpression(call) || ![2, 3].includes(call.arguments.length))
         throw new Error(`${path}: export the result of provide(contract, implementation) directly`);
       seen.add(target);
-      const [key, implementation] = call.arguments;
+      const [key, implementation, options] = call.arguments;
       const keySymbol = unalias(
         checker,
         checker.getSymbolAtLocation(ts.isPropertyAccessExpression(key) ? key.name : key),
@@ -110,6 +153,22 @@ export function discoverProviders(root, files, program, checker) {
         throw new Error(
           `${path}: provide requires a named contract from src/contracts.ts or plugin:<id>/contracts`,
         );
+      let unavailable;
+      if (options) {
+        const field = ts.isObjectLiteralExpression(options) && options.properties[0];
+        if (
+          contract.place !== "local" ||
+          !field ||
+          options.properties.length !== 1 ||
+          !ts.isPropertyAssignment(field) ||
+          field.name.getText(source) !== "unavailable" ||
+          !ts.isStringLiteralLike(field.initializer) ||
+          !field.initializer.text ||
+          Buffer.byteLength(field.initializer.text) > 1024
+        )
+          throw new Error(`${path}: provider options must be { unavailable: "message" } (up to 1024 bytes)`);
+        unavailable = field.initializer.text;
+      }
       const local = relative(root, path).split(sep).join("/");
       const methods = [];
       if (memberHook) {
@@ -131,7 +190,7 @@ export function discoverProviders(root, files, program, checker) {
           const info = definitionTypeInfo(checker, actual, value);
           if (info?.kind === "local")
             throw new Error(
-              `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local" }`,
+              `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
             );
           if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, field });
         }
@@ -144,6 +203,7 @@ export function discoverProviders(root, files, program, checker) {
         registration: `${local.replace(/\.tsx?$/, "")}:${exported.name}`,
         call,
         methods,
+        unavailable,
       });
     }
   }
@@ -155,11 +215,14 @@ export function discoverProviders(root, files, program, checker) {
 export const contractTarget = (provider, method) => `$contract:${provider.registration}:${method.member}`;
 
 export function contractManifest(root, namespace, providers = []) {
-  const contracts = contractDeclarations(contractEntry(root)).map(({ name, place, declarationHash }) => ({
-    name,
-    place,
-    declarationHash,
-  }));
+  const contracts = contractDeclarations(contractEntry(root)).map(
+    ({ name, place, declarationHash, dataMethods }) => ({
+      name,
+      place,
+      declarationHash,
+      dataMethods,
+    }),
+  );
   return {
     contracts,
     contractProviders: providers.map((p) => ({
@@ -167,7 +230,9 @@ export function contractManifest(root, namespace, providers = []) {
       name: p.name,
       declarationHash: p.declarationHash,
       place: p.place,
+      dataMethods: p.dataMethods,
       registration: p.registration,
+      unavailable: p.unavailable,
       methods: Object.fromEntries(p.methods.map((method) => [method.member, contractTarget(p, method)])),
     })),
   };

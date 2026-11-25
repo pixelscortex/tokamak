@@ -1,16 +1,17 @@
+import type {} from "@tokamak/sdk/web";
 import { action, query, v } from "@tokamak/sdk";
-import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { api } from "./_generated/api";
+
+// Probe an intentionally unsupported global without bringing in Node types.
+declare const process: { pid: number; cwd(): string; env: Record<string, string | undefined> } | undefined;
+
 let count = 0;
-let releaseLarge: (() => void) | undefined;
-let retained: (() => Promise<unknown>) | undefined;
 export const state = action({
   handler: () => ({
     count: ++count,
-    pid: process.pid,
-    cwd: process.cwd(),
-    secret: process.env.WORKER_UNGRANTED ?? null,
+    pid: typeof process === "undefined" ? null : process.pid,
+    cwd: typeof process === "undefined" ? null : process.cwd(),
+    secret: typeof process === "undefined" ? null : (process.env.WORKER_UNGRANTED ?? null),
   }),
 });
 export const echo = action({
@@ -27,66 +28,45 @@ export const roundtrip = action({
     return ctx.runQuery(api.database.get, { id });
   },
 });
-export const remember = action({
-  handler: (ctx) => {
-    retained = () => ctx.runQuery(api.database.get, { id: "items/missing" as never });
-  },
+export const stuck = action({
+  handler: () => new Promise(() => {}),
 });
-export const stale = action({
-  handler: async () => {
-    try {
-      await retained!();
-      return "allowed";
-    } catch (error) {
-      return String(error);
-    }
-  },
-});
-export const crash = action({ handler: () => process.exit(7) });
-export const stuck = action({ handler: () => new Promise(() => {}) });
 export const cpu = action({
   handler: () => {
-    writeFileSync("cpu-started", "");
+    console.info("action process entered CPU loop");
     for (;;) {}
   },
 });
 export const flood = action({
-  args: { stderr: v.boolean() },
-  handler: async (_, { stderr }) => {
+  handler: async () => {
     for (let i = 0; i < 4096; i++) {
-      if (stderr) process.stderr.write("x".repeat(8192) + "\n");
-      else console.log("x".repeat(8192));
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      console.log("x".repeat(8192));
+      await Promise.resolve();
     }
     return "flooded";
   },
 });
-export const waitForLarge = action({
-  handler: () =>
-    new Promise<string>((resolve) => {
-      releaseLarge = () => resolve("waiting");
-    }),
-});
 export const large = action({
-  handler: async (ctx) => {
-    try {
-      return await ctx.runQuery(api.database.large, {});
-    } finally {
-      releaseLarge?.();
-    }
-  },
+  handler: (ctx) => ctx.runQuery(api.database.large, {}),
 });
 export const cooperative = action({
   handler: (ctx) =>
     new Promise<void>((resolve) => ctx.signal?.addEventListener("abort", () => resolve(), { once: true })),
 });
-export const child = action({
+export const envDenied = action({ handler: (ctx) => ctx.env("WORKER_UNGRANTED") });
+export const networkDenied = action({
+  handler: async () => (await fetch("http://127.0.0.1:1")).text(),
+});
+export const dbDenied = action({ handler: (ctx) => (ctx as unknown as { db: unknown }).db ?? null });
+// A mixed module keeps transactions available when the action process exits.
+export const pure = query({ handler: () => "QuickJS" });
+
+export const thrown = action({
   handler: () => {
-    const child = spawn("/bin/sleep", ["60"], { stdio: "ignore" });
-    return { worker: process.pid, child: child.pid };
+    throw new Error("action error sentinel");
   },
 });
-export const envDenied = action({ handler: (ctx) => ctx.env("WORKER_UNGRANTED") });
-export const dbDenied = action({ handler: (ctx) => (ctx as unknown as { db: unknown }).db ?? null });
-// A mixed module must not pull this file's Node actions into QuickJS.
-export const pure = query({ handler: () => "QuickJS" });
+
+export const logMarker = action({
+  handler: () => console.info("action process log marker"),
+});

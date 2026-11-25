@@ -1,17 +1,53 @@
 import { isBuiltin } from "node:module";
+import { isAbsolute, relative } from "node:path";
 
-export function isFileOrProcessModule(path) {
-  return /^(?:node:)?(?:fs(?:\/promises)?|child_process)$/.test(path);
+const action = ["node:path", "node:os", "node:crypto", "node:url"];
+
+// The QuickJS host must supply exactly this list.
+export const suppliedNodeModules = { action, local: [...action, "node:fs/promises"] };
+
+function nodeModule(path) {
+  if (path.startsWith("node:") || path === "bun" || path.startsWith("bun:")) return path;
+  if (isBuiltin(path)) return `node:${path}`;
 }
 
-export function serverBuiltins(name) {
+function unavailable(pluginRoot, importer, module, lane) {
+  const file = isAbsolute(importer) ? relative(pluginRoot, importer) : importer;
+  const advice = module === "node:fs/promises" ? " Move it into a local function." : "";
+
+  return new Error(
+    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function.`,
+  );
+}
+
+export function workerBuiltins(pluginRoot) {
+  const supplied = suppliedNodeModules.local;
+
+  return {
+    name: "worker-node-builtins",
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, ({ path, importer }) => {
+        // Bun injects its own node:module import for the require shim.
+        if (!importer || importer === "runtime") return;
+
+        const module = nodeModule(path);
+        if (!module || supplied.includes(module)) return;
+
+        throw unavailable(pluginRoot, importer, module, "local functions");
+      });
+    },
+  };
+}
+
+export function serverBuiltins(name, pluginRoot, lane) {
   return {
     name,
     setup(build) {
       build.onResolve({ filter: /.*/ }, ({ path, importer }) => {
-        if (!importer || !(isBuiltin(path) || path === "bun" || path.startsWith("bun:"))) return;
-        const advice = isFileOrProcessModule(path) ? " Move it into a local function." : "";
-        throw new Error(`${importer}: ${path} is unavailable in server functions.${advice}`);
+        if (!importer) return;
+
+        const module = nodeModule(path);
+        if (module) throw unavailable(pluginRoot, importer, module, lane);
       });
     },
   };

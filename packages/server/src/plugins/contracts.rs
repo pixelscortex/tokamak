@@ -77,6 +77,15 @@ pub struct ContractDeclaration {
     pub name: String,
     pub place: ContractPlace,
     pub declaration_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_methods: Option<LocalDataMethods>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum LocalDataMethods {
+    All(bool),
+    Named(Vec<String>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -87,6 +96,10 @@ pub struct ContractRegistration {
     pub place: ContractPlace,
     pub declaration_hash: String,
     pub registration: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_methods: Option<LocalDataMethods>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
     pub methods: BTreeMap<String, String>,
 }
 
@@ -164,16 +177,22 @@ impl Loaded {
         if owner != AUTH_CONTRACT_OWNER && !self.catalog.plugins.contains_key(owner) {
             return Ok(()); // An optional owner can be installed after its providers.
         }
-        if declarations.get(&(owner, name))
-            != Some(&(registration.place, registration.declaration_hash.as_str()))
+        let declaration = declarations.get(&(owner, name));
+        if declaration.is_some_and(|(place, _)| *place == ContractPlace::Local)
+            && registration.place == ContractPlace::Local
         {
+            // The client lists local providers and quarantines stale builds there.
+            // One mismatched local provider must not prevent catalog publication.
+            return Ok(());
+        }
+        if declaration != Some(&(registration.place, registration.declaration_hash.as_str())) {
             return Err(invalid(format!(
                 "Contract declaration mismatch for {owner}/{name} in {plugin}; rebuild against the owner's public declaration"
             )));
         }
-        let Some(providers) = contracts.get_mut(&(owner.to_owned(), name.to_owned())) else {
-            return Ok(()); // Local contracts are executed by the client.
-        };
+        let providers = contracts
+            .get_mut(&(owner.to_owned(), name.to_owned()))
+            .expect("checked server contract declaration");
         let provider = self.read_provider(plugin, registration)?;
         if providers.iter().any(|current| current.id == provider.id) {
             return Err(invalid(format!(
@@ -434,13 +453,19 @@ impl Manifest {
             let declared = self.plugin.declares_access_to(&provider.owner);
             let has_entry = match provider.place {
                 ContractPlace::Local => self.entries.local.is_some() && provider.methods.is_empty(),
-                ContractPlace::Server => self.entries.server.is_some(),
+                ContractPlace::Server => {
+                    self.entries.server.is_some() && provider.unavailable.is_none()
+                }
             };
             if !declared
                 || !has_entry
                 || !valid_name(&provider.name)
                 || !valid_hash(&provider.declaration_hash)
                 || provider.registration.is_empty()
+                || provider
+                    .unavailable
+                    .as_ref()
+                    .is_some_and(|notice| notice.is_empty() || notice.len() > 1024)
                 || !registrations.insert(&provider.registration)
                 || provider.methods.keys().any(|member| !valid_name(member))
             {

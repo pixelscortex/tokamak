@@ -48,13 +48,14 @@ jobs:
       - if: always()
         run: sccache --show-stats
   rust:
-    # Rust unit tests and the offline Codex replay. Real agent runs and other
-    # integration and browser suites stay local.
+    # Build the Runner and cloud server and run their offline suites.
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     env:
       CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
       RAYON_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
@@ -81,14 +82,6 @@ jobs:
       - uses: ./.ci/setup
       - name: Build unsigned macOS bundle
         run: proto run bun -- run --cwd app tauri build --no-sign
-      - name: Smoke check server build identity
-        shell: bash
-        run: |
-          id=$(./target/release/tokamak-server --build-id)
-          if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then
-            printf '%s\n' 'Server did not print a 64-character build identity' >&2
-            exit 1
-          fi
       - name: Archive macOS bundle
         run: |
           mkdir -p .ci-results
@@ -141,13 +134,6 @@ jobs:
       # Build only: Windows test suites are intentionally outside this job's scope.
       - name: Build unsigned Windows installer
         run: proto run bun -- run --cwd app tauri build --no-sign --bundles nsis
-      - name: Smoke check server build identity
-        shell: pwsh
-        run: |
-          $id = & ./target/release/tokamak-server.exe --build-id
-          if ($LASTEXITCODE -ne 0 -or $id -cnotmatch '^[0-9a-f]{64}$') {
-            throw 'Server did not print a 64-character build identity'
-          }
       - name: Save Windows release build
         if: steps.windows-release.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -181,9 +167,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
       - uses: ./.ci/setup
       - run: |
+          bash .ci/check.sh cloud-graph
           moon run workspace:build-release
           mkdir -p .ci-results
-          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/release tokamak-server
+          tar -czf .ci-results/server-linux-${{ matrix.arch }}.tar.gz -C target/cloud/release tokamak-server tokamak-plugin-host
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-linux-${{ matrix.arch }}

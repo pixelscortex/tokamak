@@ -60,7 +60,9 @@ async function submit(client: TokamakClient, { threadId, text, intent }: DraftSu
 
 export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
   try {
-    if (isFailure(await client.local(api.run.stop, { turnId })))
+    const result = await client.local(api.run.stop, { turnId });
+    // A turn that is only saving its after work has already finished; Stop has nothing to say.
+    if (isFailure(result) && !("finishing" in result.data))
       notice.set("This turn is running in another window or has ended.");
   } catch (cause) {
     notice.set(`The turn could not stop: ${errorText(cause)}`);

@@ -21,7 +21,7 @@ test("only a changed or removed local artifact retires its running worker", asyn
   };
   const launches = [];
   const sent = Promise.withResolvers();
-  const functions = new LocalFunctions(server, async ({ id }, receive) => {
+  const functions = new LocalFunctions(server, async ({ id }, receive, closed) => {
     let request;
     const worker = {
       id,
@@ -29,6 +29,9 @@ test("only a changed or removed local artifact retires its running worker", asyn
       async send(message) {
         request = message;
         if (launches.filter((item) => item.ready()).length === 2) sent.resolve();
+      },
+      async retire(artifact) {
+        if (artifact.id === id) closed("Local plugin build retired");
       },
       ready: () => !!request,
       finish: () => receive({ type: "result", id: request.id, value: id }),
@@ -87,6 +90,7 @@ test("many local calls at once read the plugin catalog once, and again only afte
     async send(message) {
       receive({ type: "result", id: message.id, value: "done" });
     },
+    async retire() {},
     async close() {},
   }));
   const client = new TokamakClient(server, functions);
@@ -124,6 +128,7 @@ test("a plugin installed before its notice arrives is found, and a missing one c
     async send(message) {
       receive({ type: "result", id: message.id, value: id });
     },
+    async retire() {},
     async close() {},
   }));
   const client = new TokamakClient(server, functions);

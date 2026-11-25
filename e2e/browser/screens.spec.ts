@@ -264,6 +264,18 @@ test("thread screens", async ({ browser }) => {
     await shot(page, "permission-card");
     await question.getByRole("button", { name: "Approve" }).click();
     await expect(question).toHaveCount(0);
+
+    // Steers: two follow-ups sent while the reply ran, each drawn where it arrived.
+    await page.getByRole("button", { name: /^New thread/ }).click();
+    await pick(page, "steer");
+    await send(page, "Rename the export button to Download CSV.");
+    await expect(conversation(page).getByText("Ready for steering.")).toBeVisible();
+    await send(page, "Also keep the old label as a tooltip");
+    await expect(conversation(page).getByText("Steered: Also keep the old label as a tooltip")).toBeVisible();
+    await send(page, "Then run the tests");
+    await expect(conversation(page).getByText("Then: Then run the tests")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+    await shot(page, "reply-steered");
   } finally {
     await context.close();
   }

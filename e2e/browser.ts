@@ -38,9 +38,20 @@ try {
       filter: (source) => !source.split("/").includes("dist"),
     });
   }
-  run("cargo", ["build", "--locked", "-p", "server", "--bin", "tokamak-server", "--jobs", "2"]);
+  run("cargo", [
+    "build",
+    "--locked",
+    "-p",
+    "server",
+    "-p",
+    "tokamak-runner",
+    "-p",
+    "tokamak-plugin-host",
+    "--jobs",
+    "2",
+  ]);
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts", "--with-basic-auth"]);
-  // Chat, ai and fake agents. A desktop page (browser/desktop.ts) runs their local parts with this Bun.
+  // A desktop page (browser/desktop.ts) runs Chat, AI and the fake agents through the Runner.
   await buildAgentPlugins(directory, (id) => `${env.TOKAMAK_PLUGIN_DIR}/${id}/dist`);
   buildPlugin(resolve("plugins/code"));
   await cp("plugins/code/dist", `${env.TOKAMAK_PLUGIN_DIR}/code/dist`, { recursive: true });

@@ -1,7 +1,8 @@
 import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { onSent, type Sent } from "plugin:chat/client";
+import { runLocalTurn } from "./local-turn";
 import { errorText } from "../../shared/turn-shared";
-import { api, connectedClient, notice, reasonLine, unavailable } from "./agents";
+import { connectedClient, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
 import { guardQuit } from "./quit";
 import { watchQueue } from "./queue";
@@ -21,13 +22,14 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
     if (!resolved || unavailable(resolved.agent)) return;
     // Only what the agent offers: a local call takes JSON, where undefined is not a value.
     const { agent: _agent, ...settings } = toStored(resolved);
-    const result = await client.local(api.run.turn, {
+    const result = await runLocalTurn(client, {
       threadId: sent.threadId,
       messageId: sent.messageId,
       folder: sent.folder,
       agentId: resolved.agent.id,
       ...settings,
     });
+    if (result === undefined) return;
     // The row was a moment out of date, or the thread is busy: say what the local part found.
     if (isFailure(result))
       notice.set(
@@ -38,7 +40,7 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
         ),
       );
     else if ("ended" in result && result.ended) notice.set(result.ended);
-    else if (result.hookNotice) notice.set(result.hookNotice);
+    else if ("hookNotice" in result && result.hookNotice) notice.set(result.hookNotice);
   } catch (cause) {
     notice.set(`The turn could not run: ${errorText(cause)}`);
   }

@@ -1,4 +1,5 @@
-import type { Answer, Run } from "plugin:ai/contracts";
+import { askForTurn, type TurnAnswer } from "@tokamak/sdk/agent-turn";
+import type { Run } from "plugin:ai/contracts";
 import { describeTool } from "./events";
 import type { Frame, Json, ToolRequest } from "./wire";
 
@@ -64,6 +65,7 @@ export class Permissions {
   readonly #pending = new Set<string>();
   readonly #run: Run;
   readonly #send: (message: Json) => void;
+  readonly stoppedTools = new Set<string>();
   #closed = false;
   #cancelSent = false;
 
@@ -74,6 +76,10 @@ export class Permissions {
 
   get cancelSent() {
     return this.#cancelSent;
+  }
+
+  get waiting() {
+    return this.#pending.size > 0;
   }
 
   close() {
@@ -98,7 +104,10 @@ export class Permissions {
     const response = await this.#choice(request).catch(() => "decline" as const);
     if (!this.#pending.delete(id) || this.#closed) return;
     const allow = response === "approve" || response === "approveSession";
-    const cancel = response === "cancel";
+    const cancel = response === "cancel" || response === "stopping";
+    // Claude can report the rejected tool before the separate Stop callback.
+    // Leave that tool running so ai closes it with the stopped turn.
+    if (response === "stopping" && request.tool_use_id) this.stoppedTools.add(request.tool_use_id);
     const grant = response === "approveSession" ? sessionRule(request) : undefined;
     this.#send({
       type: "control_response",
@@ -113,7 +122,7 @@ export class Permissions {
     if (cancel) this.#cancelSent = true;
   }
 
-  async #choice(request: ToolRequest): Promise<Answer> {
+  async #choice(request: ToolRequest): Promise<TurnAnswer> {
     // AskUserQuestion needs real text input. The contract only offers
     // permission answers, so decline it rather than invent a user's answer.
     if (request.tool_name === "AskUserQuestion") return "decline";
@@ -124,7 +133,7 @@ export class Permissions {
     // shown and don't save raw tool arguments as a permission key.
     const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(grantKey(request, tool)));
     if (this.#closed) return "decline";
-    return this.#run.ask({
+    return askForTurn(this.#run, {
       kind: `${request.tool_name}:${Buffer.from(hash).toString("hex")}`,
       action: tool.action,
       subject: request.tool_name === "ExitPlanMode" ? "the proposed plan" : tool.title,

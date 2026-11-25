@@ -331,6 +331,83 @@ fn reload_cancels_running_action_and_keeps_the_lane_usable() {
         });
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
+    let installation = Installation::new();
+    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
+    let server = Server::load_plugins(
+        Database::open(Storage::Memory).await.unwrap(),
+        pool,
+        &installation.0,
+    )
+    .await
+    .unwrap();
+    let mut session = server.connect().await.unwrap();
+    let action = |id, name: &str, args| server::protocol::Request::Action {
+        id,
+        name: name.into(),
+        args,
+    };
+    session
+        .sender()
+        .request(action(1, "a/ops:sleep", json!({"ms":1})))
+        .unwrap();
+    assert!(matches!(
+        session.recv().await.unwrap(),
+        Some(Event::Response {
+            id: 1,
+            result: Ok(_)
+        })
+    ));
+    session
+        .sender()
+        .request(action(2, "a/ops:sleep", json!({"ms":30000})))
+        .unwrap();
+    session
+        .sender()
+        .request(action(3, "b/ops:waitThroughReload", json!({})))
+        .unwrap();
+
+    // The combined action module must never initialize on the server.
+    let path = installation.0.join("a/bundle.js");
+    let source = std::fs::read_to_string(&path).unwrap();
+    assert!(source.contains("slept"));
+    let source = format!(
+        "if (!globalThis.console) throw Error('action initialized in the server');\n{}",
+        source.replace("slept", "reloaded")
+    );
+    use sha2::{Digest, Sha256};
+    let manifest = installation.0.join("a/manifest.json");
+    let mut manifest_json: Value =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    manifest_json["hashes"]["bundle.js"] =
+        json!(format!("{:x}", Sha256::digest(source.as_bytes())));
+    std::fs::write(path, source).unwrap();
+    std::fs::write(manifest, manifest_json.to_string()).unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    server.reload_plugin("a".into()).await.unwrap();
+    session
+        .sender()
+        .request(action(4, "a/ops:sleep", json!({"ms":1})))
+        .unwrap();
+
+    let results = tokio::time::timeout(Duration::from_secs(6), async {
+        let mut results = BTreeMap::new();
+        while results.len() < 3 {
+            if let Some(Event::Response { id, result }) = session.recv().await.unwrap() {
+                results.insert(id, result);
+            }
+        }
+        results
+    })
+    .await
+    .unwrap();
+    assert!(results[&2].as_ref().unwrap_err().contains("cancelled"));
+    assert_eq!(results[&3], Ok(json!("public")));
+    assert_eq!(results[&4], Ok(json!("reloaded")));
+    server.close().await.unwrap();
+}
+
 // A fixed replay seed must not seed an action's Math.random. Repeated fresh
 // worlds with identical explicit inputs catch seeding without probabilistic
 // assumptions about the server's own per-call seed selection.
@@ -506,7 +583,8 @@ fn web_fix_network_checks_resolved_addresses_and_canonical_hosts() {
         "DNS shim compile: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let output = Command::new(std::env::current_exe().unwrap())
+    let mut child = Command::new(std::env::current_exe().unwrap());
+    child
         .args([
             "--exact",
             "web_fix_network_checks_resolved_addresses_and_canonical_hosts",
@@ -514,22 +592,53 @@ fn web_fix_network_checks_resolved_addresses_and_canonical_hosts() {
         ])
         .env("TKM45_TEST_DNS", "1")
         .env("TKM45_TEST_CONNECT_LOG", installation.0.join("connect.log"))
-        .env(
-            if cfg!(target_os = "macos") {
-                "DYLD_INSERT_LIBRARIES"
-            } else {
-                "LD_PRELOAD"
-            },
-            library,
-        )
-        .output()
-        .unwrap();
+        .env(resolver_environment(), &library);
+    configure_action_process_resolver(&mut child, &installation.0, &library);
+    let output = child.output().unwrap();
     assert!(
         output.status.success(),
         "DNS/HTTP acceptance:\n{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[cfg(unix)]
+fn resolver_environment() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "DYLD_INSERT_LIBRARIES"
+    } else {
+        "LD_PRELOAD"
+    }
+}
+
+#[cfg(unix)]
+fn configure_action_process_resolver(
+    command: &mut Command,
+    directory: &std::path::Path,
+    library: &std::path::Path,
+) {
+    use std::os::unix::fs::PermissionsExt;
+
+    // The launcher deliberately clears its environment. Use an executable
+    // owned by this test to interpose DNS in the process making the requests.
+    fn quote(path: &std::path::Path) -> String {
+        format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
+    }
+
+    let host = tokamak_worker::Process::action_host_path().unwrap();
+    let wrapper = directory.join("action-process-with-resolver");
+    std::fs::write(&wrapper, format!(
+        "#!/bin/sh\nexport {}={} TKM45_DNS_LOG={} TKM45_DNS_RELEASE={} TKM45_TEST_CONNECT_LOG={}\nexec {} \"$@\"\n",
+        resolver_environment(),
+        quote(library),
+        quote(&directory.join("dns.log")),
+        quote(&directory.join("release")),
+        quote(&directory.join("connect.log")),
+        quote(&host),
+    )).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+    command.env("TOKAMAK_PLUGIN_HOST", wrapper);
 }
 
 // Keep the cancelled pool allocated but idle: dropping the pool/runtime must

@@ -94,6 +94,7 @@ export { TokamakClient } from "./client";
 export { authCaller, memberFields, onMember } from "./auth";
 export type { MemberHook } from "./auth";
 export type { ClientTransport, LocalTransport, SubscriptionEvent } from "./client";
+export { isLocalReloadTimeout, LocalReloadTimeout } from "./client";
 export { InProcessTransport, WebSocketTransport, RemoteFunctionError } from "./transport";
 export { threadRecordBytes, threadPrompt } from "./thread-context";
 export type { MessageConnection, ClientWebSocket } from "./transport";

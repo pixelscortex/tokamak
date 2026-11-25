@@ -1,6 +1,8 @@
 export interface LocalProcessOptions {
   cwd?: string;
   env?: Readonly<Record<string, string>>;
+  /** Let a bounded write finish on ordinary cancellation, so it can release its locks. */
+  finishOnCancel?: boolean;
 }
 
 /** Output is decoded as UTF-8 and split on LF or CRLF. Each stream is read once. */
@@ -8,7 +10,7 @@ export interface RunningProcess {
   readonly stdout: AsyncIterable<string>;
   readonly stderr: AsyncIterable<string>;
   readonly exited: Promise<number>;
-  write(input: string): void;
+  write(input: string | Uint8Array): void;
   closeInput(): void;
   stop(signal?: "SIGTERM" | "SIGKILL"): void;
 }
@@ -19,4 +21,6 @@ export type LocalProcess = (
   options?: LocalProcessOptions,
 ) => RunningProcess;
 
-export type WithPrograms = <T>(run: (forceStop: () => Promise<void>) => Promise<T>) => Promise<T>;
+export type WithPrograms = <T>(
+  run: (forceStop: () => Promise<void>, context: import("./functions").LocalContext) => Promise<T>,
+) => Promise<T>;

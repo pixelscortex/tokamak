@@ -86,6 +86,10 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
     return wait(messages, what, (rows) => rows.find((row) => row._id === replyId && predicate(row)));
   }
 
+  function sendAnswer({ turnId, id: questionId }, answer) {
+    return client.local(ai.run.answer, { turnId, questionId, answer });
+  }
+
   return {
     replyUntil,
     messageUntil,
@@ -105,10 +109,10 @@ function turnControls({ client, ai, chat, args, label, isTurn }, running, cleanu
       assert.equal(waiting._id, question.turnId);
       return question;
     },
+    sendAnswer,
     async answer(question, answer) {
-      const { turnId, id: questionId } = question;
-      assert.equal(await client.local(ai.run.answer, { turnId, questionId, answer }), null);
-      answered.add(questionId);
+      assert.equal(await sendAnswer(question, answer), null);
+      answered.add(question.id);
     },
     async stop() {
       const { _id: turnId } = await replyUntil("the running turn", () => true);
@@ -137,6 +141,13 @@ async function storedReply({ client, ai, chat, args, label, isTurn }, result, st
     state === "stopped" ? "cancelled" : state === "failed" ? "error" : "complete",
   );
   const turnArgs = { turnId: row._id };
+  function checkTimes(report) {
+    assert.ok(Number.isFinite(report.startedAt), `${label}: step has a start time`);
+    if (report.state !== "running") {
+      assert.ok(report.finishedAt >= report.startedAt, `${label}: finished step has valid timestamps`);
+    }
+  }
+  for (const helper of reply.helpers) checkTimes(helper);
   return {
     row,
     reply,
@@ -148,6 +159,7 @@ async function storedReply({ client, ai, chat, args, label, isTurn }, result, st
     async steps() {
       const { steps, omitted } = await client.query(ai.turns.steps, turnArgs);
       assert.equal(omitted, 0);
+      for (const step of steps) checkTimes(step);
       return steps;
     },
     helper: (step) => client.query(ai.turns.helper, { stepId: step._id }),

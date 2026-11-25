@@ -1,4 +1,6 @@
-import type { LocalContext, RunningProcess } from "@tokamak/sdk";
+import { TIMED_OUT, within, type LocalContext, type RunningProcess } from "@tokamak/sdk";
+
+const CLOSE_GRACE_MS = 2_000;
 
 /** Codex app-server uses newline-delimited JSON-RPC without the jsonrpc field. */
 export type RpcId = number | string;
@@ -39,11 +41,15 @@ export class AppServer {
     this.closed = this.#read();
   }
 
-  async initialize() {
-    await this.call("initialize", {
-      clientInfo: { name: "tokamak", title: "Tokamak", version: "0.1.0" },
-      capabilities: { experimentalApi: true },
-    });
+  async initialize(timeout?: number) {
+    await this.call(
+      "initialize",
+      {
+        clientInfo: { name: "tokamak", title: "Tokamak", version: "0.1.0" },
+        capabilities: { experimentalApi: true },
+      },
+      timeout,
+    );
     this.#write({ method: "initialized" });
   }
 
@@ -76,9 +82,18 @@ export class AppServer {
     this.#write({ id, error: { code: -32601, message } });
   }
 
-  close() {
-    this.#process.closeInput();
+  stop() {
     this.#process.stop();
+  }
+
+  async close() {
+    this.#process.closeInput();
+    const exited = this.#process.exited.catch(() => undefined);
+    // Let app-server flush the session on EOF before a queued turn resumes it.
+    if ((await within(exited, CLOSE_GRACE_MS)) === TIMED_OUT) {
+      this.#process.stop("SIGKILL");
+      await exited;
+    }
   }
 
   #write(frame: Params) {

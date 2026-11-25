@@ -27,9 +27,8 @@ Launch the desktop app:
 proto run bun -- run app
 ```
 
-The host builds Chat and the server, starts or reuses the local server and
-connects automatically. New thread creates a Chat thread. No external agent
-is started. See [app/README.md](app/README.md) for browser development and checks.
+The app builds the starter set, starts the Runner, and connects automatically.
+New thread creates a Chat thread. No external agent is started. See [app/README.md](app/README.md) for browser development and checks.
 
 ## Packages
 
@@ -64,42 +63,42 @@ Server/engine tests and SDK/build/app tests cover the runtime. Run
 `proto run bun -- run e2e:browser` for production browser tests against a real
 disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
-Every PR runs Linux TypeScript/native/browser checks and an unsigned macOS Tauri
-build. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
+Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
+check runs the local suites on the Runner and the server suites against the
+actions-only cloud build. Both use QuickJS.
+Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release
 workflow is manual and uploads artifacts only. See [.ci/README.md](.ci/README.md)
 for reserved signing inputs; signing, notarization and publishing are absent.
 
-## Plugin workers
+## Build for a machine or the cloud
 
-A plugin opts its actions into Bun with `runtime: "worker"` in `definePlugin`.
-Queries and mutations continue to run in QuickJS. Each opted-in plugin has one
-lazy, long-lived worker, preserving module state between actions. Bun must be
-installed on the machine; a missing executable produces
-`Plugin <id> needs Bun: install from https://bun.sh`.
+Build the **Runner** for the desktop app, real machines and sandboxes. On macOS
+and Linux, ship the full `tokamak-plugin-host` beside it. Do not run the Runner
+in Docker for deployment. On Windows, build only `tokamak-runner`.
+Local functions and server actions are unavailable on Windows.
 
-The build emits a separate Bun action bundle and a generic SDK worker entry.
-The server and worker exchange newline-delimited JSON with a 1 MiB message cap:
-server → worker: `invoke {id, fn, args}`, `opResult {id, value|error}`,
-`cancel {id}`, and `shutdown`; worker → server: `result {id, value|error}`,
-`op {id, call, name, payload}`, and `log {level, text}`. Messages have a `type`
-field. Invocation and operation IDs correlate concurrent calls. Host operations
-reuse the existing action bridge and permission checks; workers get no database
-handle. Each invocation receives an AbortSignal through `ctx.signal`.
+```sh
+cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
+```
 
-Workers run in per-plugin data folders under the server data directory, with a
-cleared environment containing PATH, HOME, USER, LANG and manifest `env:<name>`
-grants. Worker code has ordinary local process access; this is not an OS sandbox.
-Reload, disable, and server shutdown kill the worker's whole process group.
-Crashes fail pending actions and restart on the next call with a short backoff.
-Actions have a one-hour wall deadline; cancellation allows 500 ms to settle
-before the worker and its children are killed. Plugins without the field keep
-running actions in QuickJS.
+Build the **Server** for cloud hosts such as Railway or Hetzner. Plugins have
+no filesystem or program access on the Server. The Server itself starts only
+one kind of plugin child: the action process. It keeps the process launcher
+and guardian needed to run, inspect, and supervise server actions. Build it in
+`target/cloud` so it cannot replace the Runner's binaries. The
+[Dockerfile](Dockerfile) ships this pair and keeps the existing entrypoint,
+environment, ports and data directory.
 
-The desktop client uses a separate Bun worker for `local` functions.
-`client.local(api.module.function, args, { signal })` runs the matching
-installed plugin build. Local handlers can use files and start programs
-with `ctx.proc`; stopping a program or aborting its invocation stops its
-process tree. Local handlers call public server functions through the
-window's authenticated session. Only a change to that plugin's local
-artifact, or its removal, retires the worker on plugin reload.
+```sh
+cargo build --locked --release --no-default-features -p server -p tokamak-plugin-host --target-dir target/cloud
+```
+
+On macOS and Linux, ship the host beside its matching executable, or set
+`TOKAMAK_PLUGIN_HOST` to that host's path. Check with
+`tokamak-plugin-host --capabilities`: the Runner host prints `actions local`
+and the Server host prints `actions`. The Runner checks this at startup.
+Bun is a developer tool for building plugins and running tests. Installed
+artifacts run without it. Rebuild old artifacts that lack QuickJS companions.
+See the [plugin process and action process guide](packages/sdk/README.md#plugin-process-and-action-process)
+for supported modules, permissions and limits.

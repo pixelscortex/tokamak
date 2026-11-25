@@ -64,6 +64,9 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - `Message` spacing (`gap-2`, `pb-12`) or the header height (`h-5`): `ai`
   reply header (also `h-5`), `ai` cards (`pt-2`, relies on the 8 px gap),
   `code` change card and notices in `footer`.
+- The body's text style or the author line (avatar, name): `ai` replaces the
+  body of a steered reply and draws each steer as the person's message with
+  the same classes (`plugins/ai/src/client/ui/turn-steers.tsx`).
 - `ThreadRow` box (`min-h-8`, `px-row`, `py-1`) or the lead lane (`w-4`):
   `ai` status icon, detail line and helper rows (half rows start at the title edge).
 - The header layout (`gap-2`, chip after the title, `flex-1` before the menu):

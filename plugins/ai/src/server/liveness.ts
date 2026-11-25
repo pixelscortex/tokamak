@@ -1,7 +1,7 @@
 import { v, type DatabaseReader, type Id, type MutationContext } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import { isSendersDevice, sameSender } from "../shared/turn-shared";
-import { BEAT_MS, CLOSED, SILENCE_MS } from "../shared/turn-timing";
+import { BEAT_MS, CLOSED, RELOADED, SILENCE_MS } from "../shared/turn-timing";
 import {
   ACTIVE,
   activeTurnOf,
@@ -84,6 +84,21 @@ export const release = mutation({
   },
 });
 
+/** A window closed an admitted call on reload. Its token identifies that exact invocation. */
+export const releaseReloaded = mutation({
+  args: { messageId: v.string(), replyToken: v.string() },
+  handler: async (ctx, { messageId, replyToken }) => {
+    const turn = await ctx.db
+      .query("turns")
+      .withIndex("by_messageId", (q) => q.eq("messageId", messageId))
+      .first();
+    if (!turn || turn.replyToken !== replyToken || !isSendersDevice(turn, ctx.auth)) return false;
+    if (!isActive(turn)) return "ended" as const;
+    await interrupt(ctx, turn, Date.now(), RELOADED);
+    return true;
+  },
+});
+
 /** The plugin's maintenance entry: the server runs it every few seconds. */
 export const sweep = internalMutation({
   handler: async (ctx) => {
@@ -136,14 +151,14 @@ async function lastHeard(db: DatabaseReader<Model>, turn: Turn) {
  * Ends a silent turn: the reply keeps its text and says why it ended, a step
  * the agent never closed ends with it, and the question, if any, is gone.
  */
-async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number) {
+async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number, reason = CLOSED) {
   if (turn.replyId && turn.replyToken)
     await ctx.use(chat).writeReply({
       messageId: turn.replyId as Id<"messages">,
       token: turn.replyToken,
       done: true,
       outcome: "interrupted",
-      error: CLOSED,
+      error: reason,
     });
   const steps = await ctx.db
     .query("steps")
@@ -151,8 +166,17 @@ async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number) {
     .collect();
   for (const step of steps)
     if (step.state === "running") await ctx.db.patch(step._id, { state: "failed", finishedAt: now });
-  const { _id, _creationTime, question: _question, questionToken: _token, current: _current, ...rest } = turn;
-  await ctx.db.replace(_id, { ...rest, state: "interrupted", error: CLOSED, finishedAt: now });
+  const {
+    _id,
+    _creationTime,
+    question: _question,
+    questionToken: _token,
+    current: _current,
+    pendingSteer: _steer,
+    pendingSteerOffset: _steerOffset,
+    ...rest
+  } = turn;
+  await ctx.db.replace(_id, { ...rest, state: "interrupted", error: reason, finishedAt: now });
   const sign = await signOf(ctx.db, _id);
   if (sign) await ctx.db.delete(sign._id);
 }
