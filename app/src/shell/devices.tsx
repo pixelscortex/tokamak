@@ -18,7 +18,30 @@ type DeviceEntry = {
   online: boolean;
 };
 
+/** A machine a plugin created (a sandbox or a VPS); the plugin manages it, so the row is read-only. */
+type PluginMachineEntry = {
+  id: string;
+  name: string;
+  owner: { kind: "plugin"; plugin: string; name: string };
+  online: boolean;
+  lastSeen: number | null;
+  member?: { id: string; name: string };
+};
+
 const lastSeenFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** "Last seen …" or "Never connected", shared by person devices and plugin machines. */
+function LastSeen(props: { at: number | null }): JSX.Element {
+  return (
+    <Show when={props.at !== null ? new Date(props.at!) : undefined} fallback={<span>Never connected</span>}>
+      {(date) => (
+        <span>
+          Last seen <time datetime={date().toISOString()}>{lastSeenFormat.format(date())}</time>
+        </span>
+      )}
+    </Show>
+  );
+}
 
 export function Devices(): JSX.Element {
   const shell = useShell();
@@ -121,7 +144,6 @@ export function DevicesList(props: { endpoint: Endpoint }): JSX.Element {
           <For each={[...byId().keys()]}>
             {(id) => {
               const device = () => byId().get(id)!;
-              const seen = () => device().lastSeen;
               const nameId = createUniqueId();
               const actionId = createUniqueId();
               return (
@@ -139,17 +161,7 @@ export function DevicesList(props: { endpoint: Endpoint }): JSX.Element {
                       <Show when={device().online}>
                         <span>Online</span>
                       </Show>
-                      <Show
-                        when={seen() !== null ? new Date(seen()!) : undefined}
-                        fallback={<span>Never connected</span>}
-                      >
-                        {(date) => (
-                          <span>
-                            Last seen{" "}
-                            <time datetime={date().toISOString()}>{lastSeenFormat.format(date())}</time>
-                          </span>
-                        )}
-                      </Show>
+                      <LastSeen at={device().lastSeen} />
                     </p>
                   </div>
                   <Button
@@ -165,6 +177,79 @@ export function DevicesList(props: { endpoint: Endpoint }): JSX.Element {
           </For>
         </ul>
       </Show>
+      <PluginMachines endpoint={endpoint} />
     </section>
+  );
+}
+
+/**
+ * Machines that plugins created, below people's devices. Only the owner and admins may
+ * read `/devices/machines/live`: for anyone else (403), and when there are none, the group
+ * is not drawn at all, so the screen stays as it was. Unreachable servers are covered by
+ * the page's `Unreachable` band, so a failed stream only retries quietly.
+ */
+function PluginMachines(props: { endpoint: Endpoint }): JSX.Element {
+  const [machines, setMachines] = createSignal<PluginMachineEntry[]>([]);
+  const byId = createMemo(() => new Map(machines().map((machine) => [machine.id, machine])));
+  const endpoint = props.endpoint;
+  const closed = new AbortController();
+  const headingId = createUniqueId();
+  let retry: ReturnType<typeof setTimeout> | undefined;
+
+  async function follow() {
+    try {
+      const allowed = await readSnapshots<PluginMachineEntry[]>(
+        endpoint,
+        "/devices/machines/live",
+        closed.signal,
+        setMachines,
+      );
+      if (!allowed) {
+        // Not allowed to manage devices: the group stays hidden and is not asked again.
+        setMachines([]);
+        return;
+      }
+    } catch {
+      // Keep the last list and retry while the window is still connected to this server.
+    }
+    if (!closed.signal.aborted) retry = setTimeout(follow, 1_000);
+  }
+  void follow();
+  onCleanup(() => {
+    clearTimeout(retry);
+    closed.abort();
+  });
+
+  return (
+    <Show when={machines().length > 0}>
+      <section aria-labelledby={headingId} class="mt-8">
+        <h3 id={headingId} class="flex h-6 items-center text-label text-ink-3">
+          Plugin machines
+        </h3>
+        <ul class="mt-1">
+          <For each={[...byId().keys()]}>
+            {(id) => {
+              const machine = () => byId().get(id)!;
+              return (
+                <li class="flex flex-wrap items-center gap-3 border-b border-edge py-3">
+                  <Icon path={shellIcons.plug} class="shrink-0 text-ink-3" />
+                  <div class="min-w-0 flex-1">
+                    <p class="wrap-break-word text-row font-medium text-ink">{machine().name}</p>
+                    <p class="flex flex-wrap gap-x-2 text-label text-ink-3">
+                      <span>{machine().owner.name} plugin</span>
+                      <Show when={machine().member}>{(member) => <span>For {member().name}</span>}</Show>
+                      <Show when={machine().online}>
+                        <span>Online</span>
+                      </Show>
+                      <LastSeen at={machine().lastSeen} />
+                    </p>
+                  </div>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </section>
+    </Show>
   );
 }
