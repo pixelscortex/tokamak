@@ -11,6 +11,7 @@ import { profilesUsing, subscriptionRemoved, type ProfileUse } from "./profile-u
  */
 
 type Kind = "subscriptions" | "accounts";
+type Failed = { failed: true; kind: string; data: { message: string } };
 const isIdOf = (table: Kind, value: string) =>
   new RegExp(`^(?:agent-proxy/)?${table}:[A-Za-z0-9_-]+$`).test(value);
 const gone = (what: "subscription" | "account") => fail("NotFound", { message: `That ${what} is gone.` });
@@ -62,8 +63,9 @@ export const remove = mutation({
     if (!isIdOf("subscriptions", id)) return gone("subscription");
     const removed = await ctx.use(proxy).removeSubscription({ id });
     if (isFailure(removed)) return removed;
-    const done: unknown = await subscriptionRemoved(ctx, id);
-    if (isFailure(done)) return done;
+    // Typed as the failure it should never be, so one returned anyway is passed on with its message.
+    const done = (await subscriptionRemoved(ctx, id)) as Failed | void;
+    if (done && isFailure(done)) return done;
     return null;
   },
 });
