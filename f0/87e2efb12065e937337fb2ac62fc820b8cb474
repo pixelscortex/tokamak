@@ -1,0 +1,68 @@
+packages/server/src/data/query.rs
+  s_ba25387409099f::t_3d6eb4d6907312 128-130,159-167
+packages/sdk/tools/bundle.mjs
+  s_ba25387409099f::t_67fc4b8aac8354 164,168,314
+  s_ba25387409099f::t_9ac5446f422513 306
+packages/sdk/src/validators.ts
+  s_ba25387409099f::t_9ac5446f422513 31-38,90-91,93-94,96,100,103,110,114,118,122-137
+  s_ba25387409099f::t_a2460f3bc85e74 138
+packages/sdk/tools/plugin-descriptor.ts
+  s_ba25387409099f::t_67fc4b8aac8354 1-75
+packages/sdk/src/index.ts
+  s_ba25387409099f::t_67fc4b8aac8354 94
+packages/server/src/data/transaction/records.rs
+  s_ba25387409099f::t_3d6eb4d6907312 121-123,191-192,217-218,220-221,227,230,232,236,242,244,246-247,254,257-258
+packages/server/src/data/transaction/indexes.rs
+  s_ba25387409099f::t_3d6eb4d6907312 3,19-24,28-35,46,56-57,217-219,224-235
+  s_ba25387409099f::t_0f7f926184209b 17-18,25-27,36,44-45,55
+packages/build/src/descriptor.ts
+  s_ba25387409099f::t_67fc4b8aac8354 3-4
+packages/sdk/src/api.ts
+  s_ba25387409099f::t_9ac5446f422513 29-31,33-38
+  s_ba25387409099f::t_67fc4b8aac8354 4,32,39-45
+  s_ba25387409099f::t_d7e2ff90d998ae 46
+packages/build/src/vite.ts
+  s_ba25387409099f::t_67fc4b8aac8354 48
+packages/sdk/src/schema.ts
+  s_ba25387409099f::t_9ac5446f422513 4-5,69-71,75-81
+packages/sdk/tools/plugin-boundary.mjs
+  s_ba25387409099f::t_67fc4b8aac8354 1,194,222-225,232,240,244,247-249,260-261,343-349
+  s_ba25387409099f::t_9ac5446f422513 262-263
+packages/server/src/data/mod.rs
+  s_ba25387409099f::t_3d6eb4d6907312 215-216
+packages/server/src/data/transaction/references.rs
+  s_ba25387409099f::t_3d6eb4d6907312 4,10,53-66,69-74,76-80,86-103,105-109,115,118-123,125-127,130
+  s_ba25387409099f::t_53e0daa2b75ff9 129,131-136,138-140,143-146
+packages/build/tests/ref-fixtures.mjs
+  s_ba25387409099f::t_abda7181c14752 5-8,30,38-39,42-54,58-59,61,63-64,66,89-92,103-153
+packages/build/tests/refs.test.mjs
+  s_ba25387409099f::t_5f9aaa528397d1 39-61
+packages/sdk/README.md
+  s_ba25387409099f::t_17faae4d1dd15b 610-615
+packages/server/src/data/README.md
+  s_ba25387409099f::t_6b6ef28b19b522 64-73
+packages/server/src/plugins/grants.rs
+  s_ba25387409099f::t_7a3899b6db1ea4 92,156-177
+packages/server/src/schema.rs
+  s_ba25387409099f::t_09be341848635a 4,8,137-139,151,154,158,187,190-191,193-200,202-203,209,216,226,239-244,257-264,271-274
+packages/server/tests/internal/references.rs
+  s_ba25387409099f::t_6deccdf3ffab56 1-100
+packages/server/tests/refs-driver.mjs
+  s_ba25387409099f::t_75588722812370 12,17,36,45-52,61,71-72,77-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f087e2efb12065e937337fb2ac62fc820b8cb474",
+  "prompts": {},
+  "sessions": {
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
