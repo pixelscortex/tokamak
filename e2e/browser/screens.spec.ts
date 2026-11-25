@@ -344,10 +344,11 @@ test("profiles screens", async ({ browser }) => {
     // The person signs in on Claude's page in their browser and ends on the callback link.
     const signedIn = await fetch((await open.getAttribute("href"))!, { redirect: "manual" });
     const callback = signedIn.headers.get("location")!;
+    // The address goes in the field the step shows; the other-device note is opened too.
+    await dialog.getByRole("textbox", { name: /Address the sign-in ended on/ }).fill(callback);
     await dialog.getByRole("button", { name: /Signed in on another device/ }).click();
-    await dialog.getByRole("textbox", { name: /Link or code/ }).fill(callback);
     await rest();
-    await shot(page, "profiles-add-sign-in-other-device");
+    await shot(page, "profiles-add-sign-in-pasted");
     await dialog.getByRole("button", { name: "Continue" }).click();
     await expect(dialog.getByRole("heading", { name: "Connected" })).toBeVisible();
     await dialog.getByRole("textbox", { name: "Label" }).fill("Personal");
