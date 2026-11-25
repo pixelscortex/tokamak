@@ -347,20 +347,24 @@ pub(in crate::local) async fn action(
         entry_hash: action.entry_hash,
         code_hash: action.code_hash,
     };
-    let lease = leases.get(&artifact).map_err(|error| {
+    let startup_error = |error| {
         if action.name.starts_with("@hook/") {
             server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE.to_owned()
         } else {
             error
         }
-    })?;
+    };
+    let lease = leases.get(&artifact).map_err(startup_error)?;
     let bridge = Bridge {
         leases,
         retiring: lease.retiring.clone(),
         source_retiring: Some(action.retiring),
         upstream: Upstream::Embedded(action.upstream),
     };
-    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let host = pool
+        .host(&lease.build, &lease.slot, false)
+        .await
+        .map_err(startup_error)?;
     let frame = json!({
         "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
     });
@@ -518,7 +522,10 @@ async fn window_hook(
             _ => return Err("Runner hook scope unavailable".into()),
         }
     }
-    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let host = pool
+        .host(&lease.build, &lease.slot, false)
+        .await
+        .map_err(unavailable)?;
     let ancestors = [owner.to_owned(), artifact.id];
     let frame = json!({
         "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
