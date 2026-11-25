@@ -6,27 +6,54 @@ import { built, workspace } from "../../build/tests/plugin-fixtures.mjs";
 import { triggerFixtures } from "../../build/tests/trigger-fixtures.mjs";
 import { createApi } from "../../sdk/src/index.ts";
 
-async function benchmark(client, triggers) {
-  const cases = [triggers.savePlain, triggers.saveNoop, triggers.saveWrite];
+async function benchmark(baseline, client, triggers) {
+  const cases = [
+    ["baseline", baseline, triggers.savePlain],
+    ["unwatched", client, triggers.savePlain],
+    ["ownNoop", client, triggers.saveNoop],
+    ["ownWrite", client, triggers.saveWrite],
+    ["crossWrite", client, triggers.saveCross],
+  ];
   const times = cases.map(() => []);
   const warmup = 30;
   const samples = 201;
   for (let lap = 0; lap < warmup + samples; lap++) {
     for (let step = 0; step < cases.length; step++) {
       const index = (lap + step) % cases.length;
+      const [, connection, mutation] = cases[index];
       const start = performance.now();
-      await client.mutation(cases[index], {});
+      await connection.mutation(mutation, {});
       if (lap >= warmup) times[index].push(performance.now() - start);
     }
   }
-  const ms = times.map((set) => set.sort((a, b) => a - b)[Math.floor(samples / 2)]);
-  console.log({ samples, warmup, medianMilliseconds: { plain: ms[0], noop: ms[1], write: ms[2] } });
+  const median = (set) => set.sort((a, b) => a - b)[Math.floor(set.length / 2)];
+  const bulkTimes = [[], []];
+  for (let lap = 0; lap < 13; lap++) {
+    for (const [index, connection] of [baseline, client].entries()) {
+      const start = performance.now();
+      await connection.mutation(triggers.bulk, {});
+      if (lap >= 2) bulkTimes[index].push(performance.now() - start);
+    }
+  }
+  const [bulkBaseline, bulkWatched] = bulkTimes.map(median);
+  console.log({
+    samples,
+    warmup,
+    medianMilliseconds: Object.fromEntries(cases.map(([name], i) => [name, median(times[i])])),
+    bulk300: {
+      samples: 11,
+      warmup: 2,
+      baseline: bulkBaseline,
+      watched: bulkWatched,
+      addedPerRow: (bulkWatched - bulkBaseline) / 300,
+    },
+  });
 }
 
 const target = join(workspace, "packages/server/target");
 await mkdir(target, { recursive: true });
 const scratch = await mkdtemp(join(target, "trigger-runtime-"));
-const fixtures = await triggerFixtures(join(scratch, "sources"));
+const fixtures = await triggerFixtures(join(scratch, "sources"), { chain: true });
 const pluginsDir = join(scratch, "installed");
 for (const [id, source] of Object.entries(fixtures)) {
   built(source);
@@ -64,7 +91,19 @@ try {
   const triggers = owner.triggers;
 
   if (process.argv.includes("--benchmark")) {
-    await benchmark(client, triggers);
+    const { owner: plain } = await triggerFixtures(join(scratch, "baseline-sources"), { ownerStages: false });
+    built(plain);
+    const baselinePlugins = join(scratch, "baseline-plugins");
+    await cp(join(plain, "dist"), join(baselinePlugins, "owner"), { recursive: true });
+    const baselineAddress = await startServer({
+      binary: process.argv[2],
+      dir: join(scratch, "baseline-server"),
+      pluginsDir: baselinePlugins,
+      servers,
+      cleanup,
+    });
+    const baseline = await connect(baselineAddress, { cleanup });
+    await benchmark(baseline, client, triggers);
   } else {
     const save = (label, path = "direct") => client.mutation(triggers.save, { label, path });
     const events = () => client.query(dependent.events, {});
@@ -78,11 +117,19 @@ try {
     const id = await save("window");
     const viaPlugin = await client.mutation(dependent.addViaPlugin, { label: "plugin" });
     const internal = await save("internal", "internal");
+    const action = await client.action(triggers.saveFromAction, {});
+    const leaf = createApi("leaf");
+
     await client.mutation(triggers.update, { id, label: "patched", replace: false });
     await client.mutation(triggers.update, { id, label: "replaced", replace: true });
     await client.mutation(triggers.update, { id, label: "replaced", replace: true });
     const link = await client.mutation(dependent.link, { id });
+    const grandchild = await client.mutation(leaf.rows.add, { link });
     await client.mutation(rows.remove, { id, undo: false });
+    assert.deepEqual(
+      (await client.query(leaf.audit.events, {})).map((event) => event.row),
+      [grandchild],
+    );
 
     const history = await events();
     const stamp = history.find((event) => event.row === id && event.op === "insert").after._creationTime;
@@ -115,13 +162,14 @@ try {
       assert.equal(event.depth, 2);
       assert.equal(event.user, user);
     }
-    assert.equal(history.length, 7);
+    assert.equal(history.find((event) => event.row === action).after.label, "action");
+    assert.equal(history.length, 8);
     const cascade = history.find((event) => event.row === link);
     assert.deepEqual([cascade.op, cascade.before.item, cascade.after], ["delete", id, null]);
     assert.deepEqual(await client.query(dependent.links, {}), []);
 
     await assert.rejects(save("rollback", "rollback"), /owner failed after write/);
-    for (const path of ["direct", "catch"]) {
+    for (const path of ["direct", "catch", "nestedCatch"]) {
       await assert.rejects(save("throw", path), (error) => {
         assert.equal(error.plugin, "dependent");
         assert.equal(error.stage, "trigger");
@@ -134,8 +182,11 @@ try {
         return true;
       });
     }
-    await assert.rejects(save("foreign"), /does not own that record/);
-    assert.deepEqual((await allRows()).map((row) => row.label).sort(), ["internal", "plugin"]);
+    for (const label of ["foreign", "foreign-patch"]) {
+      await assert.rejects(save(label), /does not own that record/);
+    }
+    await assert.rejects(save("foreign-insert"), { plugin: "dependent", kind: "triggerException" });
+    assert.deepEqual((await allRows()).map((row) => row.label).sort(), ["action", "internal", "plugin"]);
     assert.deepEqual(await events(), history);
 
     await assert.rejects(client.mutation(triggers.startLoop, {}), (error) => {
@@ -147,6 +198,29 @@ try {
     });
     assert.equal(await client.query(triggers.loops, {}), 0);
 
+    await assert.rejects(client.mutation(triggers.startSelf, {}), {
+      plugin: "owner",
+      table: "owner.selfLoop",
+      kind: "triggerDepthLimit",
+    });
+    await assert.rejects(save("fanout"), {
+      plugin: "dependent",
+      table: "owner.items",
+      kind: "triggerBudgetLimit",
+    });
+    await client.mutation(triggers.bulk, {});
+    assert.equal((await events()).filter((event) => event.after?.label === "bulk").length, 300);
+
+    const parent = await save("cascade");
+    await client.mutation(dependent.linkBulk, { id: parent });
+    await client.mutation(rows.remove, { id: parent, undo: false });
+    assert.equal(
+      (await events()).filter((event) => event.op === "delete" && event.before?.item === parent).length,
+      300,
+    );
+    assert.deepEqual(await client.query(dependent.links, {}), []);
+
+    await rename(join(pluginsDir, "leaf"), join(scratch, "uninstalled-leaf"));
     await rename(join(pluginsDir, "dependent"), join(scratch, "uninstalled"));
     const reloaded = await fetch(new URL("/plugins/dependent/reload", http), { method: "POST", headers });
     assert.ok(reloaded.ok, await reloaded.text());

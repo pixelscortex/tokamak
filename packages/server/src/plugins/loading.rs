@@ -438,7 +438,7 @@ impl Loaded {
             host::triggers::{TableTriggers, Trigger, TriggerRegistry},
         };
 
-        let mut registry = TriggerRegistry::new();
+        let mut registry = std::collections::HashMap::new();
         for (owner, inspected) in &self.inspected {
             let Some(triggers) = inspected.descriptor.get("triggers") else {
                 continue;
@@ -497,7 +497,10 @@ impl Loaded {
             }
         }
 
-        self.triggers = registry;
+        self.triggers = registry
+            .into_iter()
+            .map(|(table, triggers)| (table, Arc::new(triggers)))
+            .collect::<TriggerRegistry>();
         Ok(())
     }
 

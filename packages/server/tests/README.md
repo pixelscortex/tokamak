@@ -294,5 +294,7 @@ TOKAMAK_PLUGIN_HOST="$PWD/target/debug/tokamak-plugin-host" \
 ```
 
 The driver measures 201 SDK mutation round trips per case after 30 warmups.
-It rotates between three inserts on the same server and disk store: no trigger,
-one no-op trigger, and one trigger that inserts a row.
+It rotates among a server with no triggers installed and four saves on a
+server with triggers installed: unwatched, one own no-op trigger, one own
+trigger that writes, and one cross-plugin trigger that writes. It also
+measures 11 saves of 300 rows per server after two warmups.

@@ -206,14 +206,21 @@ impl QueryHooks {
         note: CallNote,
         input: Json,
     ) -> Result<Json, engine::CallError> {
-        let label = CallError::hook(
-            &hook.owner,
-            &hook.name,
-            stage.name(),
-            "hookTimeout",
-            Json::Null,
-            &self.target.name,
+        let (owner, name, target) = (
+            hook.owner.clone(),
+            hook.name.clone(),
+            self.target.name.clone(),
         );
+        let label = Arc::new(move || {
+            CallError::hook(
+                &owner,
+                &name,
+                stage.name(),
+                "hookTimeout",
+                Json::Null,
+                &target,
+            )
+        });
         execute_stage(
             executor,
             &self.tx,
@@ -244,7 +251,7 @@ pub(super) struct StageCall<'a> {
     pub kind: StageKind,
     pub note: CallNote,
     pub input: Json,
-    pub label: engine::CallError,
+    pub label: TimeoutLabel,
 }
 
 pub(super) async fn execute_stage(
@@ -253,9 +260,9 @@ pub(super) async fn execute_stage(
     plugins: &Arc<Loaded>,
     stage: StageCall<'_>,
 ) -> Result<Json, engine::CallError> {
-    let (export, writable, charge) = match stage.kind {
-        StageKind::QueryHook => ("invoke_hook", false, false),
-        StageKind::Trigger => ("invoke_trigger", true, true),
+    let (export, writable) = match stage.kind {
+        StageKind::QueryHook => ("invoke_hook", false),
+        StageKind::Trigger => ("invoke_trigger", true),
     };
     let scope = CallScope::default();
     let tx = parent.stage_scope();
@@ -272,7 +279,7 @@ pub(super) async fn execute_stage(
         },
     );
 
-    let label = Arc::new(stage.label);
+    let label = stage.label;
     let active = &parent.active_stages;
     active
         .lock()
@@ -280,7 +287,7 @@ pub(super) async fn execute_stage(
         .push(label.clone());
 
     let call = ModuleCall::new(stage.bundle.clone(), export, stage.input, ops, |_| {});
-    let value = executor.run(call, charge).await;
+    let value = executor.run(call, writable).await;
 
     active
         .lock()

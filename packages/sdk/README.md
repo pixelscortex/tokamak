@@ -871,16 +871,19 @@ to read or change the owner's data.
 
 Deletes run one trigger chain per deleted row, including rows removed by
 `v.ref` cascades. The database applies the cascade before dispatching those
-triggers and dispatches the parent before the rows that reference it. Patch
-or replace that leaves the stored document unchanged, deleting an absent row,
+triggers and dispatches in breadth-first order, starting with the deleted row.
+Patch or replace that leaves the stored document unchanged, deleting an absent row,
 schema resets, and startup index backfills do not run triggers.
 
 If a trigger throws, the whole transaction rolls back, even if the writing
 mutation catches the exception. The caller's error identifies `plugin`,
 `hook` (the trigger export name), `stage: "trigger"`, and `table`. Its message
 also lists the registered triggers for that table. Loops are stopped by the
-call note depth limit, and trigger stages and calls they make share the same
-delegation budget as hook stages.
+call note depth limit, and the mutation's call deadline also applies. Each
+trigger entered outside another trigger gets a budget of 256 delegated calls.
+Its nested triggers and hooks share that budget; running a trigger or hook
+stage itself does not use it. A later trigger on another row starts fresh.
+Trigger and hook stages share their bundle's module state only within one invocation.
 
 The server's plugin catalog lists active triggers under `triggers`, keyed by
 qualified table name. A trigger whose table is missing is skipped with a

@@ -10,7 +10,7 @@ use crate::{
 use engine::StageExecutor;
 use std::collections::HashMap;
 
-pub(crate) type TriggerRegistry = HashMap<Table, TableTriggers>;
+pub(crate) type TriggerRegistry = HashMap<Table, Arc<TableTriggers>>;
 
 pub(crate) struct TableTriggers {
     pub name: String,
@@ -35,13 +35,13 @@ impl TableTriggers {
 }
 
 pub(super) struct Change<'a> {
-    table: &'a TableTriggers,
+    table: &'a Arc<TableTriggers>,
     input: Json,
 }
 
 impl<'a> Change<'a> {
     pub(super) fn record(
-        table: &'a TableTriggers,
+        table: &'a Arc<TableTriggers>,
         old: Option<Document>,
         new: Option<Document>,
     ) -> data::Result<Self> {
@@ -72,12 +72,19 @@ impl<'a> Change<'a> {
             return Err(error);
         }
 
-        for trigger in &self.table.handlers {
-            let error = |kind, reason: &str| self.error(trigger, kind, reason);
-            let label = error("triggerTimeout", "trigger did not finish");
+        for (index, trigger) in self.table.handlers.iter().enumerate() {
+            let error = |kind, reason: &str| self.table.error(trigger, kind, reason);
+            let table = self.table.clone();
+            let label: TimeoutLabel = Arc::new(move || {
+                table.error(
+                    &table.handlers[index],
+                    "triggerTimeout",
+                    "trigger did not finish",
+                )
+            });
             let mut pending = PendingTrigger {
                 tx,
-                failure: Some(label.clone()),
+                timeout: Some(label.clone()),
             };
 
             let result = match note.enter(&self.table.name, None, &Json::Null) {
@@ -124,21 +131,30 @@ impl<'a> Change<'a> {
                     )
                 }
             });
-            pending.failure = result.as_ref().err().cloned();
+            pending.timeout = None;
+            if let Err(error) = &result {
+                pending.poison(|| error.clone());
+            }
             result?;
         }
         Ok(())
     }
+}
 
+impl TableTriggers {
     fn error(&self, trigger: &Trigger, kind: &str, reason: &str) -> engine::CallError {
-        let chain = self
-            .table
+        let mut chain = self
             .handlers
             .iter()
+            .take(10)
             .map(|entry| format!("{}/{}", entry.owner, entry.name))
             .collect::<Vec<_>>()
             .join(", ");
-        let table = &self.table.name;
+        if self.handlers.len() > 10 {
+            use std::fmt::Write;
+            let _ = write!(chain, ", {} more", self.handlers.len() - 10);
+        }
+        let table = &self.name;
         let message = format!(
             "Trigger {}/{} on {table}: {reason} (registered triggers: {chain})",
             trigger.owner, trigger.name
@@ -161,18 +177,23 @@ impl<'a> Change<'a> {
 // A suspended trigger can be dropped if its owner leaves a write unawaited.
 struct PendingTrigger<'a> {
     tx: &'a TransactionContext,
-    failure: Option<engine::CallError>,
+    timeout: Option<TimeoutLabel>,
+}
+
+impl PendingTrigger<'_> {
+    fn poison(&self, failure: impl FnOnce() -> engine::CallError) {
+        self.tx
+            .trigger_failure
+            .lock()
+            .expect("trigger failure lock")
+            .get_or_insert_with(failure);
+    }
 }
 
 impl Drop for PendingTrigger<'_> {
     fn drop(&mut self) {
-        if let Some(error) = self.failure.take() {
-            let mut fatal = self
-                .tx
-                .trigger_failure
-                .lock()
-                .expect("trigger failure lock");
-            fatal.get_or_insert(error);
+        if let Some(timeout) = self.timeout.take() {
+            self.poison(|| timeout());
         }
     }
 }

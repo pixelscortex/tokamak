@@ -13,6 +13,7 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 pub(crate) use crate::data::ReadSet;
 
 type SharedTransaction = Arc<Mutex<Option<Transaction>>>;
+type TimeoutLabel = Arc<dyn Fn() -> engine::CallError + Send + Sync>;
 type Failure = Arc<std::sync::Mutex<Option<engine::CallError>>>;
 
 #[derive(Clone)]
@@ -21,7 +22,7 @@ struct TransactionContext {
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
     trigger_failure: Failure,
-    active_stages: Arc<std::sync::Mutex<Vec<Arc<engine::CallError>>>>,
+    active_stages: Arc<std::sync::Mutex<Vec<TimeoutLabel>>>,
     reads: Arc<Mutex<ReadSet>>,
 }
 
@@ -64,7 +65,7 @@ impl TransactionContext {
                 .expect("active stages lock")
                 .last()
         {
-            return (**stage).clone().into();
+            return stage().into();
         }
         engine::CallError::from(error).into()
     }

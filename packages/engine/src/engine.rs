@@ -150,7 +150,7 @@ impl Engine for QuickJsEngine {
             world.context.async_with(async |ctx| {
                 let function = exported_function(&ctx, namespace, export)
                     .map_err(|e| js_error(&ctx, e, bundle, false))?;
-                if ops.3.is_some() {
+                if ops.3.is_some() || ops.has_stages() {
                     return bridge::invoke_export(&ctx, &invocation, ops, function, args, bundle)
                         .await;
                 }

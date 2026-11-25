@@ -5,6 +5,7 @@ use crate::data::{
 };
 use std::{
     borrow::Cow,
+    collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH},
 };
 use surrealdb_datastore::key::schema::{RecordKey, RecordPrefix};
@@ -240,8 +241,8 @@ impl Transaction {
             tx.ready(true)?;
 
             let mut deleted = Vec::new();
-            let mut pending = vec![id.clone()];
-            while let Some(id) = pending.pop() {
+            let mut pending = VecDeque::from([id.clone()]);
+            while let Some(id) = pending.pop_front() {
                 if let Some(old) = Box::pin(tx.delete_record(&id)).await? {
                     pending.extend(Box::pin(tx.referring_rows(&id)).await?);
                     deleted.push(old);
