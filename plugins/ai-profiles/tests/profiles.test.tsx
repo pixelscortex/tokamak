@@ -1,20 +1,27 @@
 import { screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { render } from "@solidjs/web";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
-import { Profiles } from "../src/client/pages/profiles";
+import { Profiles, RENEW_EVERY_MS } from "../src/client/pages/profiles";
 
 // The Profiles screen with a stand-in server: `list` answers with what
 // `listed` holds, and every call the window makes is recorded in `calls`. The
 // server side of the same flow runs for real in agent-proxy's sign-in tests.
 
 const LINK = "https://claude.example/oauth/authorize?code=true&state=abc";
-const waiting: SignIn = { id: "s1", company: "anthropic", method: "subscription", link: LINK, startedAt: 1 };
+const waiting: SignIn = {
+  id: "agent-proxy/signIns:s1",
+  company: "anthropic",
+  method: "subscription",
+  link: LINK,
+  startedAt: 1,
+  expired: false,
+};
 const pro: Subscription = {
-  id: "sub1",
+  id: "agent-proxy/subscriptions:sub1",
   company: "anthropic",
   method: "subscription",
   label: "Personal",
@@ -25,17 +32,21 @@ const pro: Subscription = {
   models: [{ id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" }],
   createdAt: 1,
 };
+const failure = (kind: string, message: string) => ({ failed: true, kind, data: { message } });
 
 let listed: { subscriptions: Subscription[]; signIns: SignIn[] } = { subscriptions: [], signIns: [] };
-let answers: Record<string, JsonValue> = {};
+/** Each call's answer: a value, or a function of the arguments (which may hold a promise open). */
+let answers: Record<string, JsonValue | ((args: JsonValue) => Promise<JsonValue>)> = {};
 const calls: [string, JsonValue][] = [];
 const listeners = new Set<() => void>();
 const copied: string[] = [];
 
-function client(): TokamakClient {
+/** `local` gives the window a local part, as the desktop app does; a plain browser has none. */
+function client(local: boolean): TokamakClient {
   const call = async (name: string, args: JsonValue) => {
     calls.push([name, args]);
-    return answers[name] ?? null;
+    const answer = answers[name];
+    return typeof answer === "function" ? answer(args) : (answer ?? null);
   };
   const transport: ClientTransport = {
     query: call,
@@ -49,7 +60,15 @@ function client(): TokamakClient {
       return () => listeners.delete(send);
     },
   };
-  return new TokamakClient(transport);
+  const agents = [
+    {
+      id: "claude",
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 1h22v22H1z"/></svg>',
+    },
+  ];
+  return local
+    ? new TokamakClient(transport, { invoke: async () => agents as unknown as JsonValue } as never)
+    : new TokamakClient(transport);
 }
 
 function update(next: typeof listed) {
@@ -58,31 +77,44 @@ function update(next: typeof listed) {
 }
 
 const cleanups: (() => void)[] = [];
-function mount() {
+function mount({ local = false } = {}) {
   const root = document.createElement("div");
   document.body.append(root);
   const dispose = render(
     () => (
-      <ClientContext value={client()}>
+      <ClientContext value={client(local)}>
         <Profiles />
       </ClientContext>
     ),
     root,
   );
-  cleanups.push(() => {
+  const unmount = () => {
     dispose();
     root.remove();
-  });
+  };
+  cleanups.push(unmount);
+  return unmount;
 }
-afterEach(() => {
+afterEach(async () => {
+  // A dialog left open would carry into the next test's page: close it and let it go first.
+  for (const close of document.querySelectorAll<HTMLElement>('[role="dialog"] [aria-label="Close"]'))
+    close.click();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   for (const cleanup of cleanups.splice(0)) cleanup();
+  document.body.replaceChildren();
+  vi.useRealTimers();
   listed = { subscriptions: [], signIns: [] };
   answers = {};
   calls.length = 0;
   copied.length = 0;
 });
 
+// Order matters in one way: in jsdom, a dialog opened after an earlier test left
+// its own dialog on a failed sign-in showed that earlier step again, so the test
+// that ends on "Start again" runs last. Not seen in the browser run.
 const named = (name: string) => calls.filter(([called]) => called === `ai-profiles/subscriptions:${name}`);
+const pasteField = (dialog: HTMLElement) =>
+  within(dialog).getByRole("textbox", { name: /Address the sign-in/ });
 
 test("the dialog runs company, method, sign-in and connected, and the card shows what was found", async () => {
   const user = userEvent.setup({ document });
@@ -111,7 +143,8 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
     ["ai-profiles/subscriptions:startSignIn", { company: "anthropic", method: "subscription" }],
   ]);
 
-  // Sign-in: the page opens in a new tab, "Copy link" copies the same link, and it says it waits.
+  // Sign-in: the page opens in a new tab, "Copy link" copies the same link, it says it waits,
+  // and the field for the address the browser ends on is there without opening anything.
   const signIn = await screen.findByRole("dialog", { name: "Sign in to Claude" });
   const open = within(signIn).getByRole("link", { name: "Open sign-in page" });
   expect(open.getAttribute("href")).toBe(LINK);
@@ -119,11 +152,14 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
   await user.click(within(signIn).getByRole("button", { name: "Copy link" }));
   expect(copied).toEqual([LINK]);
   expect(within(signIn).getByText(/Waiting for you to sign in · you can close this/)).toBeTruthy();
-  await user.click(within(signIn).getByRole("button", { name: /Signed in on another device/ }));
-  await user.type(within(signIn).getByRole("textbox", { name: /Link or code/ }), "the-code#abc");
+  expect(within(signIn).getByText(/ends on a page that may not load/)).toBeTruthy();
+  await user.type(pasteField(signIn), "http://localhost:54545/callback?code=the-code&state=abc");
   await user.click(within(signIn).getByRole("button", { name: "Continue" }));
   expect(named("finishSignIn")).toEqual([
-    ["ai-profiles/subscriptions:finishSignIn", { id: "s1", pasted: "the-code#abc" }],
+    [
+      "ai-profiles/subscriptions:finishSignIn",
+      { id: waiting.id, pasted: "http://localhost:54545/callback?code=the-code&state=abc" },
+    ],
   ]);
 
   // Connected: plan, email and models found, then a label.
@@ -138,14 +174,18 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
   await user.clear(label);
   await user.type(label, "Home");
   await user.click(within(connected).getByRole("button", { name: "Done" }));
-  expect(named("setLabel")).toEqual([["ai-profiles/subscriptions:setLabel", { id: "sub1", label: "Home" }]]);
+  expect(named("setLabel")).toEqual([["ai-profiles/subscriptions:setLabel", { id: pro.id, label: "Home" }]]);
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
   update({ subscriptions: [{ ...pro, label: "Home" }], signIns: [] });
   const card = await screen.findByRole("article", { name: "Claude Pro, Home" });
   for (const text of ["you@example.test", "fake org · pro", "OK", "1 model · not used yet"])
     expect(within(card).getByText(text)).toBeTruthy();
-  expect(within(card).getByRole("switch", { name: "Claude Pro enabled" })).toBeTruthy();
+  // The Enabled switch tells the server.
+  await user.click(within(card).getByRole("switch", { name: "Claude Pro enabled" }));
+  expect(named("setEnabled")).toEqual([
+    ["ai-profiles/subscriptions:setEnabled", { id: pro.id, enabled: false }],
+  ]);
 });
 
 test("a closed dialog leaves an Awaiting sign-in card that reopens it or cancels the sign-in", async () => {
@@ -162,48 +202,119 @@ test("a closed dialog leaves an Awaiting sign-in card that reopens it or cancels
   expect(named("cancelSignIn")).toEqual([]);
 
   await user.click(within(card).getByRole("button", { name: "Cancel" }));
-  expect(named("cancelSignIn")).toEqual([["ai-profiles/subscriptions:cancelSignIn", { id: "s1" }]]);
+  expect(named("cancelSignIn")).toEqual([["ai-profiles/subscriptions:cancelSignIn", { id: waiting.id }]]);
 });
 
-test("a refused code says why and offers to start again; a signed-out card signs in again in place", async () => {
+test("an open dialog follows its sign-in ending in another window", async () => {
   const user = userEvent.setup({ document });
-  answers["ai-profiles/subscriptions:finishSignIn"] = {
-    failed: true,
-    kind: "Refused",
-    data: { message: "Claude did not accept that code. It may have been used or expired. Start again." },
-  };
-  answers["ai-profiles/subscriptions:startSignIn"] = {
-    ...waiting,
-    id: "s2",
-    repair: "sub1",
-  } as unknown as JsonValue;
+  listed = { subscriptions: [], signIns: [{ ...waiting, startedAt: 10 }] };
+  mount();
+  await user.click(await screen.findByRole("button", { name: "Continue" }));
+  await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  // Finished elsewhere: a subscription made after it started appears, and the dialog moves on.
+  update({ subscriptions: [{ ...pro, createdAt: 20 }], signIns: [] });
+  expect(await screen.findByRole("dialog", { name: "Connected" })).toBeTruthy();
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+
+  // Cancelled elsewhere: the dialog closes and the screen says why.
+  const other = { ...waiting, id: "agent-proxy/signIns:s2", startedAt: 30 };
+  update({ subscriptions: [{ ...pro, createdAt: 20 }], signIns: [other] });
+  await user.click(await screen.findByRole("button", { name: "Continue" }));
+  await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  update({ subscriptions: [{ ...pro, createdAt: 20 }], signIns: [] });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByRole("alert").textContent).toMatch(/cancelled in another window/);
+});
+
+test("a signed-out card signs in again in place, and a failure to start is said, not thrown", async () => {
+  const user = userEvent.setup({ document });
+  answers["ai-profiles/subscriptions:startSignIn"] = failure("NotFound", "That subscription is gone.");
   listed = {
     subscriptions: [
       { ...pro, status: "signed-out", reason: "Claude would not renew the login. Sign in again." },
     ],
-    signIns: [waiting],
+    signIns: [],
   };
   mount();
   const card = await screen.findByRole("article", { name: "Claude Pro, Personal" });
   expect(within(card).getByText("Signed out")).toBeTruthy();
-
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  const dialog = await screen.findByRole("dialog", { name: "Sign in to Claude" });
-  await user.click(within(dialog).getByRole("button", { name: /Signed in on another device/ }));
-  await user.type(within(dialog).getByRole("textbox", { name: /Link or code/ }), "used-code");
-  await user.click(within(dialog).getByRole("button", { name: "Continue" }));
-  expect((await within(dialog).findByRole("alert")).textContent).toMatch(/did not accept that code/);
-  expect(within(dialog).getByRole("button", { name: "Start again" })).toBeTruthy();
-  await user.click(within(dialog).getByRole("button", { name: "Close" }));
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
-  // "Sign in" on the card starts a sign-in that repairs this subscription.
   await user.click(within(card).getByRole("button", { name: "Sign in" }));
-  expect(named("startSignIn")).toEqual([
-    [
-      "ai-profiles/subscriptions:startSignIn",
-      { company: "anthropic", method: "subscription", repair: "sub1" },
-    ],
+  expect((await screen.findByRole("alert")).textContent).toBe("That subscription is gone.");
+  expect(screen.queryByRole("dialog")).toBeNull();
+
+  answers["ai-profiles/subscriptions:startSignIn"] = { ...waiting, repair: pro.id };
+  await user.click(within(card).getByRole("button", { name: "Sign in" }));
+  expect(named("startSignIn").at(-1)).toEqual([
+    "ai-profiles/subscriptions:startSignIn",
+    { company: "anthropic", method: "subscription", repair: pro.id },
   ]);
   expect(await screen.findByRole("dialog", { name: "Sign in to Claude" })).toBeTruthy();
+});
+
+test("with nothing added the screen says so, and renewal is asked on open, every minute, and not after leaving", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const unmount = mount();
+  expect(await screen.findByText(/No subscriptions yet/)).toBeTruthy();
+  expect(named("renew")).toHaveLength(1);
+  vi.advanceTimersByTime(RENEW_EVERY_MS);
+  expect(named("renew")).toHaveLength(2);
+  unmount();
+  vi.advanceTimersByTime(RENEW_EVERY_MS * 3);
+  expect(named("renew")).toHaveLength(2);
+});
+
+test("company logos come from the agents' marks in the desktop app, and a plain browser shows the neutral mark", async () => {
+  listed = { subscriptions: [pro], signIns: [] };
+  mount({ local: false });
+  const plain = await screen.findByRole("article", { name: "Claude Pro, Personal" });
+  expect(plain.querySelector("[data-mark]")?.getAttribute("data-mark")).toBe("neutral");
+  for (const cleanup of cleanups.splice(0)) cleanup();
+
+  mount({ local: true });
+  const desktop = await screen.findByRole("article", { name: "Claude Pro, Personal" });
+  await waitFor(() => expect(desktop.querySelector("[data-mark]")?.getAttribute("data-mark")).toBe("agent"));
+});
+
+test("an expired sign-in says so on the card and in the dialog, and starts again", async () => {
+  const user = userEvent.setup({ document });
+  listed = { subscriptions: [], signIns: [{ ...waiting, expired: true }] };
+  answers["ai-profiles/subscriptions:startSignIn"] = { ...waiting, id: "agent-proxy/signIns:s3" };
+  mount();
+  const card = await screen.findByRole("article", { name: "Claude, sign-in expired" });
+  expect(within(card).getByText(/expired after 15 minutes/)).toBeTruthy();
+  await user.click(within(card).getByRole("button", { name: "Start again" }));
+  expect(named("startSignIn")).toEqual([
+    ["ai-profiles/subscriptions:startSignIn", { company: "anthropic", method: "subscription" }],
+  ]);
+  const dialog = await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  expect(pasteField(dialog)).toBeTruthy();
+});
+
+test("a wrong paste keeps the sign-in waiting; a double press finishes once; an ended one offers Start again", async () => {
+  const user = userEvent.setup({ document });
+  listed = { subscriptions: [], signIns: [waiting] };
+  answers["ai-profiles/subscriptions:finishSignIn"] = failure(
+    "Refused",
+    "Claude did not accept that code. Paste the whole address again, or open the sign-in page again for a new code.",
+  );
+  mount();
+  await user.click(await screen.findByRole("button", { name: "Continue" }));
+  const dialog = await screen.findByRole("dialog", { name: "Sign in to Claude" });
+  await user.type(pasteField(dialog), "half-a-cod");
+  await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+  expect((await within(dialog).findByRole("alert")).textContent).toMatch(/did not accept that code/);
+  // Still waiting: the same field, the page link, no "Start again".
+  expect(pasteField(dialog)).toBeTruthy();
+  expect(within(dialog).queryByRole("button", { name: "Start again" })).toBeNull();
+
+  // A slow finish: pressing again while it runs sends nothing more.
+  let release: (value: JsonValue) => void = () => {};
+  answers["ai-profiles/subscriptions:finishSignIn"] = () => new Promise((done) => (release = done));
+  await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+  expect(within(dialog).getByRole("button", { name: "Continue" }).getAttribute("aria-busy")).toBe("true");
+  await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+  expect(named("finishSignIn")).toHaveLength(2);
+  release(failure("AlreadyAdded", 'you@example.test is already added as "Personal".'));
+  expect((await within(dialog).findByRole("alert")).textContent).toMatch(/already added/);
+  expect(within(dialog).getByRole("button", { name: "Start again" })).toBeTruthy();
 });
