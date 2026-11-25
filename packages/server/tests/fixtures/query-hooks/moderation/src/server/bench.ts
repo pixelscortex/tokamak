@@ -20,7 +20,8 @@ export const readOwnTable = hook(readTable, {
 export const saveOwnTable = hook(saveTable, {
   before,
   async after(ctx, result, args) {
-    await ctx.db.insert("bans", { name: args.name });
+    // Use a table with no trigger so this measures the hook alone.
+    await ctx.db.insert("benchWrites", { name: args.name });
     return result;
   },
 });
