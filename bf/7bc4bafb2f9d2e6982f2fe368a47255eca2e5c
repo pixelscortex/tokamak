@@ -1,0 +1,137 @@
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 101,111,119,131,171,173-176,201,249,277
+e2e/fake-agent/no-bun.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 96
+plugins/ai/src/client/lib/quit.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 1,24,29
+  s_6f4a87ec8baba4::t_79297a1b2c1256 26,35
+plugins/ai/src/server/questions.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 7,56
+plugins/claude/src/server/turn.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,46,62,75
+plugins/ai/src/client/lib/release.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 1,16-18
+plugins/ai/src/client/lib/local-turn.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 14
+packages/runner/tests/agent-routing.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 57,116-118,120,251-252
+  s_6f4a87ec8baba4::t_fdad59eb587d24 119
+e2e/fake-agent/agents/factory.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 47-48,69-70
+  s_6f4a87ec8baba4::t_124b71ed7ab928 9,167,179
+plugins/ai/src/server/working.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 2,40-41,55-56
+packages/server/tests/code-snapshots-driver.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 211,411
+  s_6f4a87ec8baba4::t_c5f6cff9695fb7 47,54-56,58,70-71
+plugins/codex/src/server/turn.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,19
+plugins/codex/tests/e2e.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 67
+plugins/ai/src/client/lib/questions.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 29,55
+  s_6f4a87ec8baba4::t_79297a1b2c1256 65
+  s_6f4a87ec8baba4::t_01bfcd949c8566 56-57
+plugins/claude/src/server/wire.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,103,132,144
+plugins/claude/tests/turns.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 117,198
+plugins/codex/src/server/agent.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 6,21-22,26-27
+packages/runner/tests/measure-first-text.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 71
+packages/server/tests/runner-routing.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 128
+e2e/fake-agent/agent-turn.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 37,90,119,123
+plugins/ai/src/client/lib/turn-controls.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 6,24,37-38,67-72,83-85
+  s_6f4a87ec8baba4::t_79297a1b2c1256 35,65,80
+  s_6f4a87ec8baba4::t_9af784c304cdb0 86-87
+plugins/codex/src/server/info.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,19,91
+plugins/ai/src/client/lib/agents.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 1,23-24,53-57,67,69-74,79-82
+  s_6f4a87ec8baba4::t_79297a1b2c1256 51
+  s_6f4a87ec8baba4::t_b72542efca59c0 68
+packages/server/tests/ai-threads-driver.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 34,52,68,177,345
+plugins/ai/src/server/keep-alive.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,18
+plugins/claude/tests/snapshots.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 88
+plugins/codex/src/server/rpc.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,29
+plugins/ai/src/client/lib/queue.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 6,16,54,68-70
+plugins/claude/tests/overlap.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 64,81-82,89
+plugins/ai/src/client/lib/turn.ts
+  s_6f4a87ec8baba4::t_3151db58375c0c 12-14,23
+  s_6f4a87ec8baba4::t_549ef2bbe36bb2 34-38,46
+packages/server/tests/code-changes-driver.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 71
+packages/runner/tests/support/agent-channel.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 283,292,335,436,454,465
+plugins/ai/src/server/run.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 3-10,12,51-52,230-231,248-249,263-264,282-283,299-300,396
+  s_6f4a87ec8baba4::t_e230fae14a52a0 11
+e2e/starter.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 101
+plugins/claude/src/server/agent.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 6,17,50-51,79,128-129
+plugins/ai/src/contracts.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,84-87,91,99,112
+plugins/ai/src/client/ui/agent-row.tsx
+  s_6f4a87ec8baba4::t_3151db58375c0c 9,55,153-157,159-170,192
+packages/server/tests/ai-turns-driver.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 47,65,164,268,303,356,410,430,470,497,515-516,523-524,538,553,569-570,577,603,613,618,634,642,652,658,688,713,751,826,853,864,866,890,895
+plugins/ai/src/server/turn-hooks.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 1,10
+packages/server/tests/ai-liveness-driver.mjs
+  s_6f4a87ec8baba4::t_79297a1b2c1256 67,80,117,190,235
+plugins/ai/src/server/agents.ts
+  s_6f4a87ec8baba4::t_79297a1b2c1256 2,23-24
+design/ai.md
+  s_6f4a87ec8baba4::t_3b6f14f1689fc7 14-15
+design/claude-plugin.md
+  s_6f4a87ec8baba4::t_61c3c921783a35 5-6
+design/codex-plugin.md
+  s_6f4a87ec8baba4::t_a32558f6ab692e 5-6
+plugins/ai/README.md
+  s_6f4a87ec8baba4::t_b00c1ed4ba8c5f 63,66-67,70-71,81-82,189
+plugins/ai/src/server/_generated/api.ts
+  s_5da48a806990de::t_b5da01c7a78bbe 4-6,17-24,60,67-72
+plugins/ai/tests/agent-row.test.tsx
+  s_6f4a87ec8baba4::t_43f3e07ef26c20 4,12,29,37-40,44-45,100,144-152
+plugins/ai/tests/keep-alive.test.ts
+  s_6f4a87ec8baba4::t_d2d8a83d40ea6f 2,13-17,34-38
+plugins/ai/tests/local-turn.test.ts
+  s_6f4a87ec8baba4::t_0caf6ef35edde6 6,8,20
+plugins/code/contracts/ai.ts
+  s_6f4a87ec8baba4::t_af1c503317c7c2 1,84-87,91,99,112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf7bc4bafb2f9d2e6982f2fe368a47255eca2e5c",
+  "prompts": {},
+  "sessions": {
+    "s_5da48a806990de": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c7-140e-7971-9fb7-fe39e1192eff",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_6f4a87ec8baba4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c6-b0f2-7902-b7f5-2cbd839f1c4e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
