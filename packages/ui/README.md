@@ -3,8 +3,8 @@
 Tokamak's Solid 2 primitives, tokens (`@tokamak/ui/theme.css`) and lint
 config (`@tokamak/ui/lint`). The rules are in the wiki's design page
 (`wiki/content/docs/design/index.mdx`); the app's `/kit` page shows every
-token and primitive in both themes. Each primitive's file starts with its
-usage and the Paper values it follows.
+token and primitive in both themes. Each primitive's file starts with a
+comment that shows how to use it.
 
 Primitives are built on `@ui-sdk/solid`. Single elements:
 
