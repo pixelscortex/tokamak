@@ -103,13 +103,9 @@ impl Transaction {
             return Err(Error::Invalid("referenced row does not exist"));
         }
 
-        self.write_ref_guard(id).await
-    }
-
-    async fn write_ref_guard(&self, id: &Id) -> Result<()> {
-        // Keep this key outside the datastore's catalog and record keyspaces.
-        let key = format!("tokamak/ref-guard/v1\0{id}");
-        self.inner.set(key.as_bytes().into(), vec![0]).await?;
+        self.inner
+            .set(ref_guard(id).as_bytes().into(), vec![0])
+            .await?;
         Ok(())
     }
 
@@ -118,7 +114,9 @@ impl Transaction {
         if incoming.is_empty() {
             return Ok(Vec::new());
         }
-        self.write_ref_guard(id).await?;
+        // Deleting the guard is still a write, so it conflicts with a concurrent
+        // reference to this row, and no key outlives its target.
+        self.inner.del(ref_guard(id).as_bytes().into()).await?;
 
         let mut ids = Vec::new();
         for reference in incoming {
@@ -146,6 +144,11 @@ impl Reference {
         let id = self.space.id(text).ok()?;
         (id.table() == &self.target).then_some(id)
     }
+}
+
+/// Sits outside the datastore's catalog and record keyspaces.
+fn ref_guard(id: &Id) -> String {
+    format!("tokamak/ref-guard/v1\0{id}")
 }
 
 #[cfg(test)]

@@ -62,7 +62,7 @@ async fn check_reference_conflicts(storage: Storage) {
     let mut reference = database.begin().await.unwrap();
     let mut delete = database.begin().await.unwrap();
     delete.delete(&id).await.unwrap();
-    reference.insert(&links, value.clone()).await.unwrap();
+    let winner = reference.insert(&links, value.clone()).await.unwrap();
     reference.commit().await.unwrap();
     assert!(delete.commit().await.unwrap_err().is_retryable_conflict());
 
@@ -82,6 +82,7 @@ async fn check_reference_conflicts(storage: Storage) {
     let mut read = database.read_only().await.unwrap();
     assert!(read.get(&id).await.unwrap().is_none());
     assert!(read.get(&link).await.unwrap().is_none());
+    assert!(read.get(&winner).await.unwrap().is_none());
     read.commit().await.unwrap();
     database.close().await.unwrap();
 }

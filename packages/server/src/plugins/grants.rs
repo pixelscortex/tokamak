@@ -35,6 +35,7 @@ impl Loaded {
                 match Box::pin(self.record_grants_for(database, previous, &self.catalog.order))
                     .await
                 {
+                    // A reload turns a reset reason into an error, so the list is empty.
                     Ok(_) => return Ok(()),
                     Err(failure) => failure,
                 };
@@ -73,6 +74,7 @@ impl Loaded {
         self.prune_skipped()?;
 
         // Resets need the incoming references and indexes of every active plugin.
+        // No schema change asks for a reset yet, so this runs only in tests.
         for (id, reason) in resets {
             self.reset_startup_schema(database, &id, &reason).await?;
         }
