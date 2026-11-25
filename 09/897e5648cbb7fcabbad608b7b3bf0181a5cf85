@@ -8,6 +8,7 @@ packages/server/src/host/action_process/mod.rs
   s_040e9b5fc04cd5::t_be102f275ffede 141,275,287-297,333,369-381
   s_040e9b5fc04cd5::t_ab913c85462894 102-105,107-111,115-119
   s_040e9b5fc04cd5::t_a81caf2c01f70d 106,112-113
+  s_040e9b5fc04cd5::t_146c0c9620b658 347,357
 packages/server/src/host.rs
   s_040e9b5fc04cd5::t_e82d82331d7c60 20,29,31,41-44,141,170-172,175-184,288
 packages/build/src/vite.ts
@@ -77,6 +78,7 @@ packages/server/src/actions.rs
   s_040e9b5fc04cd5::t_9dace5cbf9b27a 202
   s_040e9b5fc04cd5::t_be102f275ffede 31,215,219,312-314,318-323
   s_040e9b5fc04cd5::t_c2d8865325b4f2 24-25,146,209-214
+  s_040e9b5fc04cd5::t_146c0c9620b658 216-218,220-226
 packages/server/src/plugins/mod.rs
   s_040e9b5fc04cd5::t_e82d82331d7c60 37
   s_040e9b5fc04cd5::t_d8785fb3b7ce3a 43,62
