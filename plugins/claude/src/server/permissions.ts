@@ -78,6 +78,10 @@ export class Permissions {
     return this.#cancelSent;
   }
 
+  get waiting() {
+    return this.#pending.size > 0;
+  }
+
   close() {
     this.#closed = true;
     this.#pending.clear();
