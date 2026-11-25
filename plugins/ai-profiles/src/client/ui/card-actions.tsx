@@ -40,11 +40,16 @@ export function CardActions(props: { subscription: Subscription }): JSX.Element 
       ? props.subscription.models.map((model) => modelName(model.name)).join(" · ")
       : "No models found";
   const actions = [
-    { label: `${name()} models`, icon: manageGlyphs.models, tip: models, run: open },
-    { label: `Check ${name()} again`, icon: manageGlyphs.refresh, tip: () => "Check again", run: check },
-    { label: `${name()} details`, icon: manageGlyphs.details, tip: () => "Details", run: open },
+    { label: () => `${name()} models`, icon: manageGlyphs.models, tip: models, run: open },
     {
-      label: `Remove ${name()}`,
+      label: () => `Check ${name()} again`,
+      icon: manageGlyphs.refresh,
+      tip: () => "Check again",
+      run: check,
+    },
+    { label: () => `${name()} details`, icon: manageGlyphs.details, tip: () => "Details", run: open },
+    {
+      label: () => `Remove ${name()}`,
       icon: manageGlyphs.remove,
       tip: () => "Remove",
       run: () => removing.set(props.subscription.id),
@@ -62,7 +67,7 @@ export function CardActions(props: { subscription: Subscription }): JSX.Element 
                   size="sm"
                   variant="ghost"
                   icon={busy() ? icons.running : action.icon}
-                  label={action.label}
+                  label={action.label()}
                   aria-busy={busy() ? "true" : undefined}
                   onClick={() => void action.run()}
                 />
