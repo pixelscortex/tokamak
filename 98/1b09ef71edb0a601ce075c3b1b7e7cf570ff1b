@@ -1,0 +1,96 @@
+packages/sdk/tools/bundle.mjs
+  s_dcb5093083cc27::t_c756d84e66d2cc 180-181,186-192,195-198
+  s_dcb5093083cc27::t_d77ccb953cb03f 10,88,176,184,279-284
+packages/sdk/tools/http-actions.mjs
+  s_dcb5093083cc27::t_d77ccb953cb03f 1-11,14-20,26
+  s_dcb5093083cc27::t_c756d84e66d2cc 12-13,21-25
+packages/server/src/lib.rs
+  s_dcb5093083cc27::t_4a7db7daf25bdf 14
+packages/server/tests/build-http-actions.mjs
+  s_dcb5093083cc27::t_b253f71f114cf0 15-16,23,27,31-32,54-55,63-64
+  s_dcb5093083cc27::t_49c3109d33c9db 12-14,17-22
+  s_dcb5093083cc27::t_487363100745c4 2-9,24-26,28-30,33-53,56-62,65-71,73
+  s_dcb5093083cc27::t_aee1e869699999 1,10-11
+  s_dcb5093083cc27::t_2cd439fadef272 72
+packages/server/src/service/mod.rs
+  s_dcb5093083cc27::t_c756d84e66d2cc 196-200
+  s_dcb5093083cc27::t_cb2066fc76224e 293
+packages/sdk/tools/contracts.mjs
+  s_dcb5093083cc27::t_b253f71f114cf0 191-192
+packages/server/src/http_actions.rs
+  s_dcb5093083cc27::t_25c7b9b61a262f 1-44,75-87,91-112,117-136,153,172-173,183-189,193-194,206-243,248,264-286,295-299,311,315-322,324-347,352,357,361-368,381-385,394-416
+  s_dcb5093083cc27::t_c756d84e66d2cc 88-90,113-116,137-152,154-171,174-182,190-192,195-205,244-247,249-263,287-294,303-305,348-351,353-356,358-360,369-380,386-393
+  s_dcb5093083cc27::t_487363100745c4 309
+  s_dcb5093083cc27::t_f8e989fcba4e4f 45-74,300-302,306-308,310,312-314,323
+packages/sdk/README.md
+  s_dcb5093083cc27::t_49c3109d33c9db 144-187
+packages/host/src/main.rs
+  s_dcb5093083cc27::t_487363100745c4 56-61
+  s_dcb5093083cc27::t_c756d84e66d2cc 10-11
+packages/build/src/vite.ts
+  s_dcb5093083cc27::t_4a7db7daf25bdf 12,184-194
+  s_dcb5093083cc27::t_b7f9eeff56af9f 195
+packages/server/Cargo.toml
+  s_dcb5093083cc27::t_b253f71f114cf0 77
+packages/server/tests/http_actions.rs
+  s_dcb5093083cc27::t_487363100745c4 1-2,4-10,12-13,15,30,33-38,45-55,57,68,71,74-75,83-84,90,98-99,107,121,131-137,140,149-150,159,178-179,185-188,193,196,214-215,234-235,244-247,249,256-258,260-269,280
+  s_dcb5093083cc27::t_49c3109d33c9db 141-148,151-158,189-192,206-213,216-218,272,279
+  s_dcb5093083cc27::t_b253f71f114cf0 3,11,14,18-19,39-44,56,76,86-89,91-97,100-106,108-120,122-130,160-177,180-184,219-228,230-233,250-253,274-277
+  s_dcb5093083cc27::t_030a1284bebba0 16-17,20-29,31-32,58-67,69-70,72-73,77-82,85,138-139,194-195,197-205,229,236-243,248,254-255,259,270-271,273,278
+packages/server/src/plugins/artifact.rs
+  s_dcb5093083cc27::t_25c7b9b61a262f 48,170
+  s_dcb5093083cc27::t_4a7db7daf25bdf 164-169,177-179
+  s_dcb5093083cc27::t_c756d84e66d2cc 49-53,100-102,163,171-176
+packages/server/src/websocket.rs
+  s_dcb5093083cc27::t_25c7b9b61a262f 257-258,261
+  s_dcb5093083cc27::t_48bc852cd4c460 256,259-260,262-264,315,351
+packages/sdk/tools/plugin-boundary.mjs
+  s_dcb5093083cc27::t_49c3109d33c9db 135-140
+packages/server/src/plugin-skill.md
+  s_dcb5093083cc27::t_49c3109d33c9db 24-29
+packages/sdk/src/http-action.ts
+  s_dcb5093083cc27::t_c756d84e66d2cc 5
+  s_dcb5093083cc27::t_d77ccb953cb03f 1-4,6-27
+packages/server/src/plugins/mod.rs
+  s_dcb5093083cc27::t_25c7b9b61a262f 21
+packages/sdk/tools/plugin-compiler.mjs
+  s_dcb5093083cc27::t_d77ccb953cb03f 64-67
+packages/host/src/http_action.js
+  s_dcb5093083cc27::t_487363100745c4 1-32
+.ci/check.sh
+  s_dcb5093083cc27::t_487363100745c4 131
+packages/sdk/tools/placement.mjs
+  s_dcb5093083cc27::t_d77ccb953cb03f 16,25
+packages/build/src/exports.ts
+  s_dcb5093083cc27::t_c756d84e66d2cc 74
+packages/server/src/plugins/manifest.rs
+  s_dcb5093083cc27::t_c756d84e66d2cc 215-224
+  s_dcb5093083cc27::t_4a7db7daf25bdf 67,78-85,187-188
+  s_dcb5093083cc27::t_8152ddb3863efc 66,189
+packages/host/src/http_action.rs
+  s_dcb5093083cc27::t_487363100745c4 1-12,17-27,31-36,40-52,58-59,62-64,73,76-81,84-90,97-98,120,125-128,136-157,172-174
+  s_dcb5093083cc27::t_c756d84e66d2cc 13-16,28-30,37-39,53-57,60-61,66-72,74-75,82-83,91-96,100-112,114-119,121-124,129-135,158-171
+  s_dcb5093083cc27::t_ae3a378616a4f1 65,99,113
+packages/sdk/src/index.ts
+  s_dcb5093083cc27::t_9b2f6412037c4d 104
+packages/server/src/service/http_actions.rs
+  s_dcb5093083cc27::t_5e3c2d3f3ff258 1-30
+packages/server/src/service/plugin_control.rs
+  s_dcb5093083cc27::t_9fd3cb95c883eb 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "981b09ef71edb0a601ce075c3b1b7e7cf570ff1b",
+  "prompts": {},
+  "sessions": {
+    "s_dcb5093083cc27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21335-34ee-7761-be52-721efb85d0ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
