@@ -40,6 +40,24 @@ None.
 
 None.
 
+## Known limits
+
+- **Renewal only when something asks.** A plugin's server code has no timer
+  that may use the network, so a login is renewed only when a screen that
+  lists subscriptions is open (it asks every minute) or, from TKM-263, when the
+  proxy is about to use it. A login nobody asks for can run out; the next ask
+  renews it if its refresh token still works.
+- **Any plugin that depends on `agent-proxy` acts as the calling member.** Its
+  server code can call every export for the person whose call it is handling:
+  list their subscriptions and sign-ins (no logins, no verifiers), start,
+  finish and cancel their sign-ins, label and switch their subscriptions, and
+  trigger renewal. It cannot reach another member's rows, nor any login.
+- **Logins sit in ordinary tables.** Whoever can read the server's database can
+  read them (no secret store yet, TKM-292). When plugins can hook internal
+  functions (Plugin API v2, decision D33), a hook on `logins:read` or
+  `logins:fresh` could read logins; logins must move to a secret store, or
+  out of hookable functions, before that ships.
+
 ## Open questions
 
 - The plan comes from the profile endpoint's `organization.organization_type`
