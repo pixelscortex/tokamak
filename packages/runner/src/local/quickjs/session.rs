@@ -334,14 +334,7 @@ pub(crate) async fn connection(
             Some(completed) = calls.join_next() => {
                 let (id, response) = completed.map_err(|error| error.to_string())?;
                 active.remove(&id);
-                let frame = match response {
-                    Ok(mut frame) => {
-                        frame["id"] = json!(id);
-                        json!({"type":"message", "message":frame})
-                    }
-                    Err(error) => result(id, Some(&error), Value::Null),
-                };
-                send(socket, frame).await?;
+                send(socket, root_result(id, response)).await?;
             }
         }
     }
@@ -421,6 +414,16 @@ async fn root_call(
 
 fn result(id: u64, error: Option<&str>, value: Value) -> Value {
     json!({"type":"message","message":{"type":"result","id":id,"error":error,"value":value}})
+}
+
+fn root_result(id: u64, response: Result<Value, String>) -> Value {
+    match response {
+        Ok(mut frame) => {
+            frame["id"] = json!(id);
+            json!({"type":"message", "message":frame})
+        }
+        Err(error) => result(id, Some(&error), Value::Null),
+    }
 }
 
 async fn invoke_root(
