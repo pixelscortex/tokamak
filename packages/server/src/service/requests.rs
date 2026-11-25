@@ -54,48 +54,11 @@ impl Coordinator {
                 args,
                 kind: expected,
                 local_parent,
-<<<<<<< HEAD
-                on,
-            } => {
-                // A socket may already have admitted a write when its member
-                // was revoked. It must not recreate rows after cleanup.
-                if name == window_state::WRITE && auth.revoked.is_cancelled() {
-                    self.respond(session, id, Err("Session has been revoked".into()));
-                    return;
-                }
-                let auth = auth.caller.read().expect("auth lock").clone();
-                let note = match local_parent {
-                    Some((depth, thread)) => {
-                        match crate::identity::CallNote::from_local_parent(&auth, depth, thread)
-                            .and_then(|parent| {
-                                let validator = self
-                                    .plugins
-                                    .as_ref()
-                                    .and_then(|loaded| loaded.targets.get(&name))
-                                    .map(|target| target.args.as_ref());
-                                parent
-                                    .enter(&name, validator, &args)
-                                    .map_err(|error| error.to_string())
-                            }) {
-                            Ok(note) => note,
-                            Err(error) => {
-                                self.respond(session, id, Err(error));
-                                return;
-                            }
-                        }
-                    }
-                    None => Some(auth.clone()).into(),
-                };
-                self.call(session, id, name, args, expected, (auth, note, on))
-                    .await;
-            }
-=======
                 placement,
             } => match self.request_caller(auth, &name, &args, local_parent, placement) {
                 Ok(caller) => self.call(session, id, name, args, expected, caller).await,
-                Err(error) => self.respond(session, id, Err(error)),
+                Err(error) => self.respond(session, id, Err(error.into())),
             },
->>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
             }
@@ -130,7 +93,9 @@ impl Coordinator {
                 .as_ref()
                 .and_then(|loaded| loaded.targets.get(name))
                 .map(|target| target.args.as_ref());
-            CallNote::from_local_parent(&auth, depth, thread)?.enter(name, validator, args)?
+            CallNote::from_local_parent(&auth, depth, thread)?
+                .enter(name, validator, args)
+                .map_err(|error| error.to_string())?
         } else {
             Some(auth.clone()).into()
         };

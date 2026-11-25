@@ -42,12 +42,8 @@ impl Coordinator {
                 }
                 Some(completion) = self.action_jobs.join_next() => {
                     if let Ok((session, id, result)) = completion {
-<<<<<<< HEAD
-                        self.respond(session, id, result);
-=======
                         self.action_cancellations.remove(&(session, id));
-                        self.emit(session, Event::Response { id, result });
->>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
+                        self.respond(session, id, result);
                     }
                 }
                 _ = self.cleanup.notified() => {},

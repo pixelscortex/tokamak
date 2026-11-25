@@ -191,7 +191,6 @@ export function functionPlacement(root, selected, namespace) {
       contents = contents.slice(0, start) + replacement + contents.slice(end);
     return contents;
   }
-<<<<<<< HEAD
   function results(server, organized) {
     return Object.fromEntries(
       [...modules].flatMap(([path, definitions]) =>
@@ -202,8 +201,6 @@ export function functionPlacement(root, selected, namespace) {
       ),
     );
   }
-  return { modules, providers, transform, edits, results };
-=======
   const callerFiles = new Set([
     ...[...modules]
       .filter(([, exports]) => [...exports.values()].some((d) => d.on === "caller"))
@@ -262,8 +259,7 @@ export function functionPlacement(root, selected, namespace) {
     visit(file);
   }
 
-  return { modules, providers, callerFiles, transform, edits };
->>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
+  return { modules, providers, callerFiles, transform, edits, results };
 }
 
 function isDeclarationName(node) {

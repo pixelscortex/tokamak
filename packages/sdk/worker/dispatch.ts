@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 import { RemoteFunctionError, type CallError } from "../src/call-error";
-=======
 import { Visibility } from "../src/visibility";
->>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";

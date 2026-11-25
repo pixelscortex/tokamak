@@ -124,7 +124,10 @@ impl RunnerActionUpstream {
             return Err(invalid());
         }
         let (entry_hash, code_hash) = runner_hashes(manifest).ok_or_else(invalid)?;
-        let note = scope.note.enter(label, None, &payload["args"])?;
+        let note = scope
+            .note
+            .enter(label, None, &payload["args"])
+            .map_err(|error| error.to_string())?;
         let environment = Arc::new(crate::environment::Snapshot::new(
             Some(&scope.generation),
             Some(plugin),
