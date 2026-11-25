@@ -1,0 +1,25 @@
+packages/runner/src/local/quickjs/session.rs
+  s_040e9b5fc04cd5::t_0e93de55b01595 529-532
+packages/server/src/actions.rs
+  s_040e9b5fc04cd5::t_1f02ef614f95b4 175,182,197-222,233,252-260,262-269
+packages/server/src/host/action_process/mod.rs
+  s_040e9b5fc04cd5::t_8bf5925ed2daca 329-331,334
+packages/server/tests/action-placement.mjs
+  s_040e9b5fc04cd5::t_b28579ca85837c 51,65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9f0c76850dbd2a862c9ef16922c58736b736cfb",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
