@@ -76,17 +76,19 @@ export function SubscriptionCard(props: {
 /**
  * A sign-in still waiting for the person (Paper's pending card): it stays
  * when the dialog is closed. "Continue" opens the dialog at its sign-in step
- * again; "Cancel" stops waiting, and nothing is left behind.
+ * again; "Cancel" stops waiting, and nothing is left behind. After 15 minutes
+ * it says it expired and offers to start again.
  */
 export function AwaitingCard(props: {
   signIn: SignIn;
   onContinue: () => void;
   onCancel: () => Promise<unknown>;
+  onRestart: () => Promise<unknown>;
 }): JSX.Element {
   const product = () => productOf[props.signIn.company];
   return (
     <article
-      aria-label={`${product()}, awaiting sign-in`}
+      aria-label={`${product()}, ${props.signIn.expired ? "sign-in expired" : "awaiting sign-in"}`}
       class="flex items-start gap-3 rounded-md p-4 inset-ring inset-ring-edge"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-sm bg-card">
@@ -95,17 +97,32 @@ export function AwaitingCard(props: {
       <div class="flex min-w-0 flex-1 flex-col gap-2">
         <div class="flex flex-col">
           <span class="text-row font-medium text-ink">{product()}</span>
-          <span class="flex items-center gap-2 text-data text-ink-3">
-            <Icon path={icons.running} size={12} />
-            {props.signIn.repair ? "Awaiting sign-in again" : "Awaiting sign-in"}
-          </span>
+          <Show
+            when={!props.signIn.expired}
+            fallback={<span class="text-data text-ink-3">Sign-in expired after 15 minutes</span>}
+          >
+            <span class="flex items-center gap-2 text-data text-ink-3">
+              <Icon path={icons.running} size={12} />
+              {props.signIn.repair ? "Awaiting sign-in again" : "Awaiting sign-in"}
+            </span>
+          </Show>
         </div>
+        {/* Each Button stays pending until its promise settles, so a second press does nothing. */}
         <div class="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => props.onContinue()}>
-            Continue
-          </Button>
+          <Show
+            when={!props.signIn.expired}
+            fallback={
+              <Button size="sm" variant="ghost" onClick={() => props.onRestart()}>
+                Start again
+              </Button>
+            }
+          >
+            <Button size="sm" variant="ghost" onClick={() => props.onContinue()}>
+              Continue
+            </Button>
+          </Show>
           <Button size="sm" variant="ghost" onClick={() => props.onCancel()}>
-            Cancel
+            {props.signIn.expired ? "Dismiss" : "Cancel"}
           </Button>
         </div>
       </div>

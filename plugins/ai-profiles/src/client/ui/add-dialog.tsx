@@ -184,7 +184,7 @@ function MethodStep(props: { start: () => Promise<unknown>; onBack: () => void }
         Anthropic
       </Header>
       <div class="flex flex-col gap-1">
-        <div class="rounded-md bg-band p-1">
+        <div class="rounded-md p-1">
           <Row
             as="button"
             kind="double"
@@ -219,6 +219,9 @@ function MethodStep(props: { start: () => Promise<unknown>; onBack: () => void }
   );
 }
 
+/** Failures after which this sign-in cannot finish: the dialog offers to start again. */
+const ENDED = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
+
 function SignInStep(props: {
   signIn: SignIn;
   finish: (pasted: string) => Promise<unknown>;
@@ -227,10 +230,11 @@ function SignInStep(props: {
 }): JSX.Element {
   const [pasted, setPasted] = createSignal("");
   const [problem, setProblem] = createSignal<string>();
-  /** A sign-in that cannot finish any more (refused or cancelled) offers to start again. */
   const [ended, setEnded] = createSignal(false);
+  const [submitting, setSubmitting] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  const expired = () => props.signIn.expired;
 
   async function copyLink() {
     await (props.copy ?? ((text: string) => navigator.clipboard.writeText(text)))(props.signIn.link);
@@ -238,16 +242,30 @@ function SignInStep(props: {
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => setCopied(false), 2_000);
   }
+  // One finish at a time: the server would answer a second one "already finishing" anyway.
   async function submit() {
+    if (submitting() || !pasted().trim()) return;
+    setSubmitting(true);
     setProblem(undefined);
     try {
       const result = await props.finish(pasted());
       if (failed(result)) {
         setProblem(result.data.message);
-        setEnded(["Refused", "Cancelled", "AlreadyAdded", "Gone"].includes(result.kind));
+        setEnded(ENDED.includes(result.kind));
       }
     } catch {
       setProblem("The sign-in could not finish. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  async function restart() {
+    setProblem(undefined);
+    try {
+      const started = await props.restart();
+      if (failed(started)) setProblem(started.data.message);
+    } catch {
+      setProblem("The sign-in could not start. Try again.");
     }
   }
   return (
@@ -256,11 +274,12 @@ function SignInStep(props: {
         Sign in to Claude
       </Header>
       <Show
-        when={!ended()}
+        when={!ended() && !expired()}
         fallback={
           <div class="flex flex-col items-start gap-3">
-            <Problem message={problem()} />
-            <Button variant="brand" onClick={() => props.restart()}>
+            <Problem message={problem() ?? "This sign-in expired after 15 minutes. Start again."} />
+            {/* The Button stays pending until the promise settles, so it cannot start twice. */}
+            <Button variant="brand" onClick={() => restart()}>
               Start again
             </Button>
           </div>
@@ -285,34 +304,51 @@ function SignInStep(props: {
           <Icon path={icons.running} size={12} />
           Waiting for you to sign in · you can close this
         </p>
+        {/* Nothing listens on the sign-in's redirect, so the browser ends on a page that
+            fails to load; its address holds the code. Say so, and ask for it right here. */}
+        <form
+          class="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <p id="paste-help" class="m-0 text-label text-ink-2">
+            After you sign in, your browser ends on a page that may not load. Copy the whole address from its
+            address bar and paste it here.
+          </p>
+          <div class="flex items-center gap-2">
+            <Input
+              mono
+              class="flex-1"
+              aria-label="Address the sign-in ended on"
+              aria-describedby="paste-help"
+              placeholder="http://localhost:54545/callback?code=…"
+              invalid={Boolean(problem())}
+              value={pasted()}
+              onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>
+                setPasted(event.currentTarget.value)
+              }
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              type="submit"
+              disabled={!pasted().trim() || submitting()}
+              aria-busy={submitting() ? "true" : undefined}
+            >
+              Continue
+            </Button>
+          </div>
+          <Problem message={problem()} />
+        </form>
         <Collapsible.Root>
           <Collapsible.Trigger variant="quiet">Signed in on another device?</Collapsible.Trigger>
           <Collapsible.Panel>
-            <form
-              class="flex flex-col gap-2 pt-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit();
-              }}
-            >
-              <div class="flex items-center gap-2">
-                <Input
-                  mono
-                  class="flex-1"
-                  aria-label="Link or code from the sign-in page"
-                  placeholder="http://localhost:54545/callback?code=…"
-                  invalid={Boolean(problem())}
-                  value={pasted()}
-                  onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>
-                    setPasted(event.currentTarget.value)
-                  }
-                />
-                <Button size="sm" variant="ghost" type="submit" disabled={!pasted().trim()}>
-                  Continue
-                </Button>
-              </div>
-              <Problem message={problem()} />
-            </form>
+            <p class="m-0 ps-2 pt-1 text-label text-ink-3">
+              Copy the link, open it in that device's browser and sign in there. Then paste the address that
+              browser ends on in the field above.
+            </p>
           </Collapsible.Panel>
         </Collapsible.Root>
       </Show>
