@@ -98,7 +98,9 @@ the converter clips the dialog to the stage while the browser draws it in the
 top layer. The dialog screens share the shell of `Profiles · subscriptions`
 and swap only the Subscriptions section. The Switch's transparent 2 px border
 is left out (Paper measures from inside it). Matched to this branch,
-`feature/tkm-261`.
+`feature/tkm-261`. `Profiles · add · method, OpenAI`, `Profiles · Claude and ChatGPT`, the OpenAI
+row of `Profiles · add · company` and the empty-state line are matched to
+`feature/tkm-262`.
 
 ## Open questions
 
