@@ -140,13 +140,8 @@ export function signInLink(addresses: Addresses, verifier: string, state: string
 export function readPasted(pasted: string): Pasted {
   const value = pasted.trim();
   if (!value) return { error: "Paste the address your browser ended on." };
-  let candidate = value;
-  if (!value.includes("://")) {
-    if (value.startsWith("?")) candidate = `http://localhost${value}`;
-    else if (/[/?#:]/.test(value)) candidate = `http://${value}`;
-    else if (value.includes("=")) candidate = `http://localhost/?${value}`;
-    else return { error: "That is not the address the sign-in ended on. Paste the whole address." };
-  }
+  const candidate = asAddress(value);
+  if (!candidate) return { error: "That is not the address the sign-in ended on. Paste the whole address." };
   let url: URL;
   try {
     url = new URL(candidate);
@@ -171,6 +166,14 @@ export function readPasted(pasted: string): Pasted {
   if (error) return { refused: callbackError(error, description), state };
   if (!code) return { error: "That address has no code in it. Paste the whole address." };
   return { code, state };
+}
+
+/** A pasted value as a full address: with `http://` added, or only a query put on one. */
+function asAddress(value: string): string | undefined {
+  if (value.includes("://")) return value;
+  if (value.startsWith("?")) return `http://localhost${value}`;
+  if (/[/?#:]/.test(value)) return `http://${value}`;
+  return value.includes("=") ? `http://localhost/?${value}` : undefined;
 }
 
 /**

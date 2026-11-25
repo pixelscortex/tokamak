@@ -25,7 +25,7 @@ async function answering(body: unknown) {
   return { addresses, stop: () => new Promise<void>((done) => server.close(() => done())) };
 }
 const login = (idToken?: string) => ({
-  login: { access: "a", refresh: "r", expiresAt: 0, ...(idToken && { idToken }) },
+  login: { access: "a", ...(idToken && { idToken }) },
   identity: {},
 });
 

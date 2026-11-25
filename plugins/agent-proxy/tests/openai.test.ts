@@ -162,7 +162,8 @@ test("the plan is Codex's name for the claim, and a model hidden from Codex's pi
       },
     });
     const found = await details(company.addresses, {
-      login: { access: "a", refresh: "r", expiresAt: 0, idToken },
+      login: { access: "a", idToken },
+      identity: {},
     });
     expect(found).toEqual({
       plan: "Business",
