@@ -529,7 +529,7 @@ async fn window_hook(
     host.action_ops
         .get_or_init(|| WindowActionOps::new(pool, &host.build))
         .as_ref()
-        .map_err(unavailable)?;
+        .map_err(|_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
     let ancestors = [owner.to_owned(), artifact.id];
     let frame = json!({
         "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
