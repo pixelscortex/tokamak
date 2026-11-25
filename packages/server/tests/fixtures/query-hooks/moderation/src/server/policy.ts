@@ -45,7 +45,12 @@ export const delegated = query({
 });
 
 export const editProfile = hook(team.api.profile, {
-  after(_ctx, result, { mode }): typeof result {
+  after(_ctx, result, { mode }) {
+    const location: [string, number, boolean] = [
+      "new",
+      1,
+      mode === "bad-location" ? ("invalid" as unknown as boolean) : true,
+    ];
     return {
       ...result,
       title: mode === "bad-title" ? (0 as unknown as string) : "Title",
@@ -53,7 +58,7 @@ export const editProfile = hook(team.api.profile, {
       status: mode === "bad-status" ? ("invalid" as "active") : "active",
       labels: ["new"],
       extras: { fresh: ["data"] },
-      location: ["new", 1, mode === "bad-location" ? ("invalid" as unknown as boolean) : true],
+      location,
     };
   },
 });
