@@ -108,12 +108,12 @@ impl Local {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let pool = self.pool.clone();
-            let address: Arc<str> = workspace.into();
-            server.attach_runner(move |action| {
-                Box::pin(quickjs::action(pool.clone(), address.clone(), action))
-            })?;
+            let leases = Arc::new(quickjs::Leases::new(&pool, workspace.into()));
             self.pool
-                .observe(server, server.connect().await?, workspace.into());
+                .observe(server, server.connect().await?, leases.clone());
+            server.attach_runner(move |action| {
+                Box::pin(quickjs::action(pool.clone(), leases.clone(), action))
+            })?;
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = (server, workspace);

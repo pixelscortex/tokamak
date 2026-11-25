@@ -16,6 +16,8 @@ import { discoverProviders, contractTarget } from "./contracts.mjs";
 
 const serverFunction = (kind) => kind !== "local";
 export const runnerFunction = (kind) => kind === "local" || kind === "action";
+export const runnerProvider = (provider) =>
+  localProvider(provider) || provider.methods.some((m) => action(m.kind));
 const serverProvider = (provider) => provider.place === "server";
 const localProvider = (provider) => provider.place === "local";
 const action = (kind) => kind === "action";
@@ -25,7 +27,7 @@ export const lanes = {
   window: { keep: noFunctions, provider: noFunctions, method: noFunctions },
   local: {
     keep: runnerFunction,
-    provider: (provider) => localProvider(provider) || provider.methods.some((m) => action(m.kind)),
+    provider: runnerProvider,
     method: runnerFunction,
   },
   server: { keep: serverFunction, provider: serverProvider, method: serverFunction },
@@ -189,6 +191,7 @@ export function functionPlacement(root, selected, namespace) {
       contents = contents.slice(0, start) + replacement + contents.slice(end);
     return contents;
   }
+<<<<<<< HEAD
   function results(server, organized) {
     return Object.fromEntries(
       [...modules].flatMap(([path, definitions]) =>
@@ -200,6 +203,67 @@ export function functionPlacement(root, selected, namespace) {
     );
   }
   return { modules, providers, transform, edits, results };
+=======
+  const callerFiles = new Set([
+    ...[...modules]
+      .filter(([, exports]) => [...exports.values()].some((d) => d.on === "caller"))
+      .map(([path]) => path),
+    ...providers.filter((p) => p.methods.some((m) => m.on === "caller")).map((p) => p.path),
+  ]);
+  for (const path of callerFiles) {
+    const file = program.getSourceFile(path);
+    if (!file) continue;
+    function visit(node) {
+      const specifier =
+        (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) ||
+        (ts.isExportDeclaration(node) && !node.isTypeOnly)
+          ? node.moduleSpecifier
+          : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+            ? node.arguments[0]
+            : undefined;
+      if (specifier && ts.isStringLiteralLike(specifier)) {
+        const dependency = checker.getSymbolAtLocation(specifier)?.declarations?.find(ts.isSourceFile);
+        if (dependency && !dependency.isDeclarationFile && dependency.fileName.startsWith(root + sep))
+          callerFiles.add(dependency.fileName);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+  }
+
+  for (const path of files) {
+    const file = program.getSourceFile(path);
+    function visit(node) {
+      if (
+        ts.isCallExpression(node) &&
+        definitionTypeInfo(checker, checker.getTypeAtLocation(node), node)?.kind === "action"
+      ) {
+        const options = node.arguments[0];
+        const type = options && checker.getTypeAtLocation(options);
+        if (type?.getProperty("handler") && type.getProperty("on")) {
+          const properties = ts.isObjectLiteralExpression(options) ? [...options.properties].reverse() : [];
+          const field = properties.find((property) => {
+            if (ts.isSpreadAssignment(property))
+              return !!checker.getTypeAtLocation(property.expression).getProperty("on");
+            const name = property.name;
+            return name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === "on";
+          });
+          if (
+            !field ||
+            !ts.isPropertyAssignment(field) ||
+            !ts.isStringLiteral(field.initializer) ||
+            !["caller", "server"].includes(field.initializer.text)
+          )
+            throw new Error(`Action placement in ${path} must use on: "caller" or on: "server" as a literal`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+  }
+
+  return { modules, providers, callerFiles, transform, edits };
+>>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
 }
 
 function isDeclarationName(node) {

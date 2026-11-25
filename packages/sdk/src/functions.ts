@@ -9,7 +9,7 @@ import { v, validate } from "./validators";
 import type { Id, JsonObject, JsonValue } from "./values";
 import { jsonSnapshot } from "./values";
 import { functionName, type FunctionReference } from "./api";
-import { callHost } from "./host";
+import { callHost, RunnerCapabilityError, type RunnerCapability } from "./host";
 import type { LocalProcess, WithPrograms } from "./local";
 import {
   contractScope,
@@ -21,7 +21,9 @@ import { Visibility } from "./visibility";
 
 export type ServerFunctionKind = "query" | "mutation" | "action";
 export type ActionTarget = "server" | "caller";
-export type MachineFailure = Failure<"noMachine", null>;
+export type MachineFailure =
+  | Failure<"noMachine", null>
+  | Failure<"runnerCapabilityUnavailable", RunnerCapability>;
 export interface ActionOptions {
   on?: ActionTarget;
 }
@@ -346,12 +348,10 @@ function builder<
               return caller();
             },
             [contractScope]: {
-              list: (key, id, options) =>
-                (key.place === "local" && bridge.contracts ? bridge.contracts : serverContracts(bridge)).list(
-                  key,
-                  id,
-                  options,
-                ),
+              list: (key, id, options) => {
+                if (key.place === "local") return (bridge.contracts ?? machine()).list(key, id, options);
+                return serverContracts(bridge).list(key, id, options);
+              },
             },
             use: <T>(api: T) => bindCalls(api, bridge),
             signal: bridge.signal!,
@@ -425,6 +425,8 @@ function builder<
           return snapshot;
         } catch (error) {
           if (error === missingMachine) return fail("noMachine", null);
+          if (kind === "action" && error instanceof RunnerCapabilityError)
+            return fail("runnerCapabilityUnavailable", error.capability);
           throw error;
         }
       },

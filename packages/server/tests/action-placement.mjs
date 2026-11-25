@@ -17,12 +17,13 @@ await symlink(join(workspace, "app/node_modules"), join(source, "node_modules"),
 await writeFile(join(source, "tsconfig.json"), JSON.stringify({ extends: join(workspace, "tsconfig.json") }));
 build(source);
 await mkdir(plugins);
-await cp(join(source, "dist"), join(plugins, "action-placement"), { recursive: true });
+await cp(join(source, "dist"), join(plugins, "ai"), { recursive: true });
 const { api } = await import(join(source, "src/_generated/api.ts"));
 const file = join(scratch, "input");
 await writeFile(file, "text on the caller");
 const args = { file, thread: "chat/threads:placement" };
 const noMachine = { failed: true, kind: "noMachine", data: null };
+const unavailable = (data) => ({ failed: true, kind: "runnerCapabilityUnavailable", data });
 
 async function assertProgram(client, reference, depth) {
   const identity = await client.query(authCaller, {});
@@ -36,6 +37,41 @@ async function assertProgram(client, reference, depth) {
     saved: true,
     status: 0,
   });
+}
+
+async function assertChannel(client) {
+  const result = await within(
+    client.action(api.channel.stream, {}),
+    "stream, steer, and stop a channel",
+    5000,
+  );
+  assert.deepEqual(result, {
+    result: { sessionId: "fixture", stopped: true },
+    received: ["started", "steered"],
+  });
+}
+
+async function assertCancellation(client) {
+  const previous = (await client.query(api.work.rows, {})).rows.length;
+  const cancel = new AbortController();
+  const action = client.action(api.work.wait, {}, { signal: cancel.signal });
+  void action.catch(() => {});
+  // Registration is synchronous; wait until the handler reached the workspace.
+  try {
+    await within(
+      (async () => {
+        while (!cancel.signal.aborted) {
+          if ((await client.query(api.work.rows, {})).rows.length > previous) return;
+          await Bun.sleep(20);
+        }
+      })(),
+      "start cancellable action",
+      5000,
+    );
+  } finally {
+    cancel.abort();
+  }
+  await assert.rejects(within(action, "cancel running action", 5000), /cancelled/i);
 }
 
 try {
@@ -56,14 +92,16 @@ try {
   assert.deepEqual(await embedded.action(api.provider.contractCall, {}), { runner: true, depth: 1 });
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "caller" }), { runner: true, depth: 1 });
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "server" }), { runner: false, depth: 1 });
-  assert.deepEqual(
-    await within(embedded.action(api.work.run, args), "browser without a Runner", 5000),
-    noMachine,
-  );
+  await assertProgram(embedded, api.work.run, 0);
+  assert.equal(await embedded.action(api.provider.callLocalContract, {}), 1);
+  assert.deepEqual(await embedded.action(api.provider.callServerContract, {}), { runner: true, depth: 1 });
+  assert.equal(await embedded.action(api.work.callPrivate, {}), 1);
+  await assertCancellation(embedded);
+  await assertChannel(embedded);
 
   const serverPlugins = mode === "--cloud" ? join(scratch, "cloud") : plugins;
   if (mode === "--cloud") {
-    await stageServerPlugin(join(source, "dist"), join(serverPlugins, "action-placement"));
+    await stageServerPlugin(join(source, "dist"), join(serverPlugins, "ai"));
   }
   const shared = Bun.spawn(
     [server, "--plugins", serverPlugins, "--data", join(scratch, "db"), "--listen", "127.0.0.1:0"],
@@ -90,6 +128,10 @@ try {
   const browser = await connect(address, { cleanup });
 
   await assertProgram(window, api.work.run, 0);
+  assert.deepEqual(await window.action(api.delegate.caller, {}), { runner: true, depth: 1 });
+  assert.deepEqual(await window.action(api.delegate.caller, { override: true }), { runner: true, depth: 1 });
+  assert.equal(await window.action(api.work.read, { file }), "text on the caller");
+  assert.deepEqual(await window.action(api.work.read, { file }, { on: "server" }), noMachine);
   assert.equal((await browser.query(api.work.rows, {})).rows.length, 1);
   assert.deepEqual(await window.action(api.work.serverDefault, {}), { runner: false, depth: 0 });
   assert.deepEqual(await window.action(api.work.serverDefault, {}, { on: "caller" }), {
@@ -103,8 +145,19 @@ try {
   assert.deepEqual(await browser.action(api.delegate.choose, { on: "server" }), { runner: false, depth: 1 });
   assert.deepEqual(await browser.action(api.delegate.choose, { on: "caller" }), noMachine);
   assert.deepEqual(await browser.action(api.work.run, args), noMachine);
+  assert.equal(await window.action(api.provider.callLocalContract, {}), 1);
+  assert.deepEqual(await window.action(api.provider.callServerContract, {}), unavailable("serverContracts"));
+  assert.deepEqual(await window.action(api.work.callPrivate, {}), unavailable("privateFunctions"));
+  await assertCancellation(window);
+  await assertChannel(window);
   assert.deepEqual(
     await within(browser.action(api.work.run, args, { on: "server" }), "server program request", 5000),
+    noMachine,
+  );
+  await local.stop();
+  const offlineWindow = await connect(address, { launch: local.launch, cleanup });
+  assert.deepEqual(
+    await within(offlineWindow.action(api.work.run, args), "Runner unavailable", 5000),
     noMachine,
   );
 } finally {

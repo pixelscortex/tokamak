@@ -94,15 +94,13 @@ impl Catalog {
             .collect();
         recorded.extend(added);
 
-        let environment = root.parent().unwrap_or(root).join(".env.local");
-
         let mut catalog = Self {
             order,
             install_order: recorded,
             removed_plugins,
             plugins,
             revision: String::new(),
-            environment,
+            root: root.to_owned(),
             directory: directory.to_owned(),
         };
         catalog.update_metadata()?;

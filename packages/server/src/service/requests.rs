@@ -1,4 +1,15 @@
+use super::action_coordination::ActionCall;
 use super::*;
+use crate::{
+    actions::Placement,
+    identity::{AuthContext, CallNote},
+};
+
+struct RequestCaller {
+    auth: AuthContext,
+    note: CallNote,
+    placement: Placement,
+}
 
 impl Coordinator {
     pub(super) async fn action(&mut self, session: u64, auth: SessionAuth, action: Action) {
@@ -10,6 +21,12 @@ impl Coordinator {
         }
 
         match action {
+            Action::Cancel(id) => {
+                if let Some(cancel) = self.action_cancellations.get(&(session, id)) {
+                    cancel.cancel();
+                }
+            }
+
             Action::Plugins(id) => {
                 let result = self.catalog_page(None, 0);
                 self.respond(session, id, result);
@@ -37,6 +54,7 @@ impl Coordinator {
                 args,
                 kind: expected,
                 local_parent,
+<<<<<<< HEAD
                 on,
             } => {
                 // A socket may already have admitted a write when its member
@@ -71,6 +89,13 @@ impl Coordinator {
                 self.call(session, id, name, args, expected, (auth, note, on))
                     .await;
             }
+=======
+                placement,
+            } => match self.request_caller(auth, &name, &args, local_parent, placement) {
+                Ok(caller) => self.call(session, id, name, args, expected, caller).await,
+                Err(error) => self.respond(session, id, Err(error)),
+            },
+>>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
             }
@@ -85,6 +110,37 @@ impl Coordinator {
         }
     }
 
+    fn request_caller(
+        &self,
+        session: SessionAuth,
+        name: &str,
+        args: &Json,
+        local_parent: Option<(usize, Option<String>)>,
+        placement: Placement,
+    ) -> Result<RequestCaller, String> {
+        // A socket may already have admitted a write when its member
+        // was revoked. It must not recreate rows after cleanup.
+        if name == window_state::WRITE && session.revoked.is_cancelled() {
+            return Err("Session has been revoked".into());
+        }
+        let auth = session.caller.read().expect("auth lock").clone();
+        let note = if let Some((depth, thread)) = local_parent {
+            let validator = self
+                .plugins
+                .as_ref()
+                .and_then(|loaded| loaded.targets.get(name))
+                .map(|target| target.args.as_ref());
+            CallNote::from_local_parent(&auth, depth, thread)?.enter(name, validator, args)?
+        } else {
+            Some(auth.clone()).into()
+        };
+        Ok(RequestCaller {
+            auth,
+            note,
+            placement,
+        })
+    }
+
     async fn call(
         &mut self,
         session: u64,
@@ -92,11 +148,11 @@ impl Coordinator {
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
-        (auth, note, on): (
-            crate::identity::AuthContext,
-            crate::identity::CallNote,
-            Option<ActionTarget>,
-        ),
+        RequestCaller {
+            auth,
+            note,
+            placement,
+        }: RequestCaller,
     ) {
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
@@ -138,7 +194,7 @@ impl Coordinator {
                 Err("function kind does not match request".into())
             }
             Some(FunctionKind::Action) => {
-                self.start_action(session, id, name, args, (note, on));
+                self.start_action(session, id, name, args, ActionCall { note, placement });
                 return;
             }
             Some(kind) => {

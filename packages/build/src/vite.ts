@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { contractDeclarations, contractEntry } from "../../sdk/tools/contracts.mjs";
 import { serverDirectory } from "../../sdk/tools/server-files.mjs";
-import { functionPlacement, lanes } from "../../sdk/tools/placement.mjs";
+import { functionPlacement, lanes, runnerFunction, runnerProvider } from "../../sdk/tools/placement.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
 import { artifactBundle, stripSourcesContent } from "./artifact-bundle.ts";
 import solid from "@solidjs/vite-plugin";
@@ -87,18 +87,11 @@ export function tokamak(
       },
       async buildStart() {
         hasLocal =
-          (!!placement &&
-            [...placement.modules.values()].some((exports) =>
-              [...exports.values()].some(
-                (definition) => definition.kind === "local" || definition.kind === "action",
-              ),
-            )) ||
-          Boolean(
-            placement?.providers.some(
-              (p) =>
-                p.place === "local" || p.methods.some((method: { kind: string }) => method.kind === "action"),
-            ),
-          );
+          !!placement &&
+          ([...placement.modules.values()].some((exports) =>
+            [...exports.values()].some((definition) => runnerFunction(definition.kind)),
+          ) ||
+            placement.providers.some(runnerProvider));
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
           options.plugin ??
@@ -191,6 +184,7 @@ export function tokamak(
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {
               let source = await readFile(resolve(server, "dist", name), "utf8");
               if (name.endsWith(".map")) {
+                // Original mixed modules can contain handlers from the other lanes.
                 const map = JSON.parse(source);
                 stripSourcesContent(map);
                 source = JSON.stringify(map);

@@ -205,6 +205,7 @@ pub(crate) enum Command {
 
 pub(crate) enum Action {
     Plugins(u64),
+    Cancel(u64),
     PluginsPage {
         id: u64,
         revision: String,
@@ -223,7 +224,7 @@ pub(crate) enum Action {
         args: Json,
         kind: Option<FunctionKind>,
         local_parent: Option<(usize, Option<String>)>,
-        on: Option<ActionTarget>,
+        placement: crate::actions::Placement,
     },
     Subscribe {
         id: u64,
@@ -270,6 +271,7 @@ struct Coordinator {
     runner: Arc<crate::actions::RunnerSlot>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
+    action_cancellations: BTreeMap<(u64, u64), tokio_util::sync::CancellationToken>,
     commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,
     next_session: u64,

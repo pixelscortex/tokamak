@@ -20,7 +20,7 @@ mod service;
 mod web;
 pub mod websocket;
 
-pub use actions::{RunnerAction, RunnerFuture};
+pub use actions::{RunnerAction, RunnerActionUpstream, RunnerFuture};
 pub use backend::{Backend, BackendConfig};
 pub use environment::Snapshot as ActionEnvironment;
 pub use service::{Error, Event, Server, Session, SessionSender};

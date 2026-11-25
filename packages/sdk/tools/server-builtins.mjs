@@ -14,10 +14,12 @@ function nodeModule(path) {
 
 function unavailable(pluginRoot, importer, module, lane) {
   const file = isAbsolute(importer) ? relative(pluginRoot, importer) : importer;
-  const advice = module === "node:fs/promises" ? " Move it into a local function." : "";
+  const advice = suppliedNodeModules.local.includes(module)
+    ? ' Move it into a local function or an action with on: "caller".'
+    : "";
 
   return new Error(
-    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function.`,
+    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function or caller action.`,
   );
 }
 
@@ -48,41 +50,30 @@ export function serverBuiltins(name, pluginRoot, lane, { callerFiles } = {}) {
         if (!importer) return;
 
         const module = nodeModule(path);
-        if (module === "node:fs/promises" && callerFiles?.has(importer))
-          return { path: module, namespace: "unavailable-fs" };
+        if (suppliedNodeModules.local.includes(module) && callerFiles?.has(importer))
+          return { path: module, namespace: "unavailable-machine-module" };
 
         if (module) throw unavailable(pluginRoot, importer, module, lane);
       });
-      build.onLoad({ filter: /.*/, namespace: "unavailable-fs" }, () => ({
-        contents: `import { requireActionMachine } from ${JSON.stringify(fileURLToPath(new URL("../src/functions.ts", import.meta.url)))};
-          const unavailable = requireActionMachine;
-          export const constants = Object.freeze({ F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 });
-          const api = {constants, ${localFsMethods.map((method) => `${method}: unavailable`).join(",")}};
-          export const {${localFsMethods.join(",")}} = api;
-          export default api;`,
-        loader: "ts",
-      }));
+      build.onLoad({ filter: /.*/, namespace: "unavailable-machine-module" }, async ({ path }) => {
+        const names = Object.keys(await import(path)).filter(
+          (name) => /^[a-zA-Z_$][\w$]*$/.test(name) && name !== "default",
+        );
+        const bindings = names.map(
+          (name, i) => `const binding${i} = unavailable; export {binding${i} as ${name}};`,
+        );
+        return {
+          contents: `import { requireActionMachine } from ${JSON.stringify(fileURLToPath(new URL("../src/functions.ts", import.meta.url)))};
+            const unavailable = new Proxy(function () {}, {
+              apply: requireActionMachine,
+              construct: requireActionMachine,
+              get: requireActionMachine,
+            });
+            ${bindings.join("\n")}
+            export default unavailable;`,
+          loader: "ts",
+        };
+      });
     },
   };
 }
-
-// Match the filesystem functions supplied by the Runner, not all of Node.
-const localFsMethods = [
-  "access",
-  "chmod",
-  "cp",
-  "lstat",
-  "mkdir",
-  "mkdtemp",
-  "open",
-  "readdir",
-  "readFile",
-  "realpath",
-  "rename",
-  "rm",
-  "rmdir",
-  "stat",
-  "symlink",
-  "unlink",
-  "writeFile",
-];

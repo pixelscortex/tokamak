@@ -39,7 +39,7 @@ export interface ClientTransport {
   query(name: string, args: JsonValue): Promise<JsonValue>;
   mutation(name: string, args: JsonValue): Promise<JsonValue>;
   /** Optional for existing custom transports; current native/WebSocket transports implement it. */
-  action?(name: string, args: JsonValue, on?: ActionTarget): Promise<JsonValue>;
+  action?(name: string, args: JsonValue, on?: ActionTarget, signal?: ActionSignal): Promise<JsonValue>;
   /**
    * Transport owns initial delivery, update ordering and error delivery. If
    * registration itself throws, it must clean up resources before throwing.
@@ -87,7 +87,7 @@ export class TokamakClient {
     const input = jsonSnapshot(args, "args");
     const value = this.#localTransport?.action
       ? await this.#localTransport.action(name, input, options)
-      : await this.#transport.action?.(name, input, options?.on);
+      : await this.#transport.action?.(name, input, options?.on, options?.signal);
     if (value === undefined) throw new Error("Transport does not support actions");
     assertJson(value, "action result");
     return value as R;

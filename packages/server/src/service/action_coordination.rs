@@ -1,4 +1,11 @@
 use super::*;
+use crate::actions::{ActionContext, Placement, resolve};
+use crate::identity::CallNote;
+
+pub(super) struct ActionCall {
+    pub note: CallNote,
+    pub placement: Placement,
+}
 
 impl Coordinator {
     pub(super) fn start_action(
@@ -7,29 +14,30 @@ impl Coordinator {
         id: u64,
         name: String,
         args: Json,
-        (note, on): (crate::identity::CallNote, Option<ActionTarget>),
+        ActionCall { note, placement }: ActionCall,
     ) {
         if self.action_jobs.len() >= ACTIONS {
             self.respond(session, id, Err("action capacity exceeded".into()));
             return;
         }
 
-        use crate::actions::{Destination, no_machine, resolve};
-
         let target = self
             .plugins
             .as_ref()
             .and_then(|loaded| loaded.targets.get(&name));
+        let note = match target {
+            Some(target) => note.with_root_args(&target.args, &args),
+            None => note,
+        };
         let destination = resolve(
             self.plugins.as_deref(),
             target,
-            on,
+            placement,
             &self.runner,
             &note,
-            false,
         );
-        if matches!(destination, Destination::Missing) {
-            self.respond(session, id, Ok(no_machine()));
+        if let Some(reply) = destination.immediate_reply(placement, &note) {
+            self.respond(session, id, Ok(reply));
             return;
         }
 
@@ -40,16 +48,10 @@ impl Coordinator {
                 return;
             }
         };
-        let (local_name, owner, note) = if let Some(loaded) = &self.plugins {
-            let target = &loaded.targets[&name];
-            (
-                target.local_name.clone(),
-                Some(target.owner.clone()),
-                note.with_root_args(&target.args, &args),
-            )
-        } else {
-            (name.clone(), None, note)
-        };
+        let (local_name, owner) = target.map_or_else(
+            || (name, None),
+            |target| (target.local_name.clone(), Some(target.owner.clone())),
+        );
         let source = match (&self.plugins, &owner) {
             (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
             _ => self.legacy_action_source.clone(),
@@ -64,7 +66,10 @@ impl Coordinator {
             owner.clone(),
             environment.clone(),
             process.clone(),
-            (note, self.runner.clone()),
+            ActionContext {
+                note,
+                runner: self.runner.clone(),
+            },
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -72,15 +77,26 @@ impl Coordinator {
                 return;
             }
         };
+        if self.action_cancellations.contains_key(&(session, id)) {
+            self.respond(session, id, Err("Duplicate action request ID".into()));
+            return;
+        }
+        let cancel = tokio_util::sync::CancellationToken::new();
+        self.action_cancellations
+            .insert((session, id), cancel.clone());
         self.action_jobs.spawn(async move {
-            let result = destination
-                .invoke(&process, source, local_name, args, ops)
-                .await;
+            let result = tokio::select! {
+                biased;
+                () = cancel.cancelled() => Err("Action cancelled".into()),
+                result = destination.invoke(&process, source, local_name, args, ops) => result,
+            };
 
             (
                 session,
                 id,
-                result.map_err(|error| environment.redact(error)),
+                result
+                    .map(|value| placement.response(value))
+                    .map_err(|error| environment.redact(error)),
             )
         });
     }

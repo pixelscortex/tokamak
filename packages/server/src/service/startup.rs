@@ -214,6 +214,7 @@ impl Server {
             legacy_action_source,
             runner: runner.clone(),
             action_jobs: tokio::task::JoinSet::new(),
+            action_cancellations: BTreeMap::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
             next_session: 0,

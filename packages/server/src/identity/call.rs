@@ -16,6 +16,7 @@ pub(crate) struct CallNote {
     pub auth: Option<AuthContext>,
     thread_id: Option<String>,
     depth: usize,
+    window_continuation: bool,
 }
 
 impl From<Option<AuthContext>> for CallNote {
@@ -46,6 +47,7 @@ impl CallNote {
             auth: Some(auth.clone()),
             thread_id,
             depth,
+            window_continuation: true,
         })
     }
 
@@ -76,6 +78,14 @@ impl CallNote {
                 .map(str::to_owned);
         }
         self
+    }
+
+    pub fn is_window_continuation(&self) -> bool {
+        self.window_continuation
+    }
+
+    pub fn continuation(&self) -> Value {
+        json!({"depth": self.depth, "thread": self.thread_id})
     }
 
     pub fn register(&self, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {

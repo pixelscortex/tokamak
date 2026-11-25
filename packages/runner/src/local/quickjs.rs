@@ -49,6 +49,7 @@ pub(super) struct Pool {
     tasks: TaskTracker,
     processes: Arc<Semaphore>,
     linked: Arc<Semaphore>,
+    actions: Arc<Semaphore>,
 }
 
 struct Entry {
@@ -74,7 +75,7 @@ struct SlotState {
 
 // A socket remembers the builds it routes to. An invocation also holds its
 // lease, so a catalog update or a disconnected window cannot retire it mid-call.
-struct Leases {
+pub(super) struct Leases {
     pool: Pool,
     workspace: Arc<str>,
     used: Mutex<HashMap<Artifact, Arc<Lease>>>,
@@ -84,6 +85,7 @@ struct Lease {
     slots: Arc<Mutex<Slots>>,
     build: Artifact,
     slot: Arc<Slot>,
+    retiring: CancellationToken,
 }
 
 impl Drop for Lease {
@@ -104,7 +106,7 @@ impl Drop for Lease {
 }
 
 impl Leases {
-    fn new(pool: &Pool, workspace: Arc<str>) -> Self {
+    pub(super) fn new(pool: &Pool, workspace: Arc<str>) -> Self {
         Self {
             pool: pool.clone(),
             workspace,
@@ -149,6 +151,7 @@ impl Leases {
             slots: self.pool.slots.clone(),
             build: build.clone(),
             slot: entry.slot.clone(),
+            retiring: CancellationToken::new(),
         });
         used.insert(build.clone(), lease.clone());
         Ok(lease)
@@ -159,7 +162,9 @@ impl Leases {
             entry.supersede(&self.workspace, || "local plugin build retired".into());
         }
         // Drop outside the registry lock: this may release the last lease.
-        lock(&self.used).remove(build);
+        if let Some(lease) = lock(&self.used).remove(build) {
+            lease.retiring.cancel();
+        }
     }
 }
 
@@ -235,6 +240,7 @@ impl Pool {
             tasks: TaskTracker::new(),
             processes: Arc::new(Semaphore::new(WORKER_CAPACITY)),
             linked: Arc::new(Semaphore::new(TURN_CAPACITY)),
+            actions: Arc::new(Semaphore::new(WORKER_CAPACITY)),
         };
         pool.sweep_idle();
         pool
@@ -249,7 +255,7 @@ impl Pool {
         &self,
         server: &Arc<server::Server>,
         mut session: server::Session,
-        workspace: Arc<str>,
+        leases: Arc<Leases>,
     ) {
         let server = server.clone();
         let pool = self.clone();
@@ -264,7 +270,7 @@ impl Pool {
                     break;
                 };
                 if matches!(event, server::Event::PluginChanged { .. }) {
-                    pool.reconcile(&server, &mut previous, &workspace).await;
+                    pool.reconcile(&server, &mut previous, &leases).await;
                 }
             }
         });
@@ -274,11 +280,12 @@ impl Pool {
         &self,
         server: &server::Server,
         previous: &mut HashSet<Artifact>,
-        workspace: &str,
+        leases: &Leases,
     ) {
         if let Some(next) = local_catalog(server).await {
             for old in previous.difference(&next) {
-                self.retire_private(old, workspace);
+                self.retire_private(old, &leases.workspace);
+                leases.retire(old);
             }
             *previous = next;
         }
@@ -454,6 +461,7 @@ impl Inbox {
 
 struct Host {
     build: Artifact,
+    action_ops: OnceLock<Result<session::WindowActionOps, String>>,
     calls: Mutex<Calls>,
     writes: mpsc::Sender<Vec<u8>>,
     native: AsyncMutex<UnixDatagram>,
@@ -480,6 +488,7 @@ impl Host {
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
             build: build.clone(),
+            action_ops: OnceLock::new(),
             calls: Mutex::default(),
             writes,
             native: AsyncMutex::new(native),

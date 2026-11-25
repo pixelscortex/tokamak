@@ -13,3 +13,12 @@ export const program = action({
   args: { file: v.string(), thread: v.id("threads") },
   handler: (ctx, args) => ctx.runAction(api.work.run, args),
 });
+
+export const caller = action({
+  on: "caller",
+  args: { override: v.optional(v.boolean()) },
+  handler: (ctx, { override }) =>
+    override
+      ? ctx.runAction(api.work.serverDefault, {}, { on: "caller" })
+      : ctx.runAction(api.work.callerDefault, {}),
+});

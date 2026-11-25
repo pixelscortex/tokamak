@@ -1,4 +1,12 @@
-use std::path::Path;
+use serde_json::Value;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+fn installation_file(root: &Path) -> PathBuf {
+    root.parent().unwrap_or(root).join(".env.local")
+}
 
 // Called only after the action's manifest grant has been checked. Never mutate
 // process env or include dotenv parse errors (which may contain secrets).
@@ -29,13 +37,13 @@ impl Snapshot {
         let (Some(loaded), Some(owner)) = (loaded, owner) else {
             return Self::default();
         };
-        Self::for_installation(
-            &loaded.catalog.plugins[owner].manifest.plugin.permissions,
-            &loaded.catalog.environment,
+        Self::from_manifest(
+            &loaded.catalog.root,
+            &loaded.catalog.plugins[owner].manifest,
         )
     }
 
-    pub fn for_installation(permissions: &[String], environment: &Path) -> Self {
+    fn for_installation(permissions: &[String], environment: &Path) -> Self {
         Self(
             permissions
                 .iter()
@@ -45,7 +53,22 @@ impl Snapshot {
         )
     }
 
-    pub fn get(&self, name: &str) -> Result<Option<String>, String> {
+    pub fn from_manifest(root: &Path, manifest: &crate::plugins::Manifest) -> Self {
+        Self::for_installation(&manifest.plugin.permissions, &installation_file(root))
+    }
+
+    pub fn register(self: &Arc<Self>, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {
+        engine::register_password_crypto(ops)?;
+        let values = self.clone();
+        ops.register_sync("action.env", move |payload| {
+            let name = payload["name"].as_str().ok_or("env requires a name")?;
+            values
+                .get(name)
+                .map(|value| value.map(Value::String).unwrap_or(Value::Null))
+        })
+    }
+
+    fn get(&self, name: &str) -> Result<Option<String>, String> {
         self.0.get(name).cloned().unwrap_or_else(|| {
             Err(format!(
                 "environment permission denied: requires env:{name}"

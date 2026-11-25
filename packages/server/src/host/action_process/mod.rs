@@ -275,15 +275,12 @@ impl Supervisor {
         })
     }
 
-    pub(crate) async fn invoke_with(
+    fn admit(
         &self,
-        source: Arc<Source>,
-        name: String,
-        args: Value,
-        ops: Arc<OpRegistry>,
-        options: InvocationOptions,
-    ) -> Result<Value, String> {
-        let plugin_permit = if options.anonymous.is_some() {
+        source: &Source,
+        anonymous: bool,
+    ) -> Result<(OwnedSemaphorePermit, Option<OwnedSemaphorePermit>), String> {
+        let plugin = if anonymous {
             None
         } else {
             Some(source.calls.clone().try_acquire_owned().map_err(|_| {
@@ -293,11 +290,39 @@ impl Supervisor {
                 )
             })?)
         };
-        let permit = self
+        let slot = self
             .slots
             .clone()
             .try_acquire_owned()
             .map_err(|_| "Action process invocation capacity exceeded")?;
+        Ok((slot, plugin))
+    }
+
+    pub(crate) async fn invoke_runner(
+        &self,
+        source: &Source,
+        run: impl FnOnce(CancellationToken) -> crate::RunnerFuture,
+    ) -> Result<Value, String> {
+        let _permits = self.admit(source, false)?;
+        if source.retired.is_cancelled() {
+            return Err("Plugin action cancelled by reload".into());
+        }
+        tokio::select! {
+            biased;
+            () = self.closed.cancelled() => Err("Server closed".into()),
+            result = run(source.retired.clone()) => result,
+        }
+    }
+
+    pub(crate) async fn invoke_with(
+        &self,
+        source: Arc<Source>,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+        options: InvocationOptions,
+    ) -> Result<Value, String> {
+        let (permit, plugin_permit) = self.admit(&source, options.anonymous.is_some())?;
         let end = Instant::now() + options.timeout;
         let process = tokio::select! {
             biased;

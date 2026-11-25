@@ -16,6 +16,10 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 
+mod runner_upstream;
+pub use runner_upstream::RunnerActionUpstream;
+use runner_upstream::runner_hashes;
+
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
 type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
 pub(crate) type RunnerSlot = OnceLock<RunnerDispatch>;
@@ -26,69 +30,130 @@ pub struct RunnerAction {
     pub code_hash: String,
     pub name: String,
     pub args: Json,
-    pub ops: Arc<OpRegistry>,
+    pub upstream: RunnerActionUpstream,
+    pub retiring: tokio_util::sync::CancellationToken,
 }
 
 pub(crate) enum Destination {
     Server,
-    Runner {
+    AttachedRunner {
         dispatch: RunnerDispatch,
         plugin: String,
         entry_hash: String,
         code_hash: String,
     },
-    Missing,
+    CallerWindowRunner {
+        plugin: String,
+        entry_hash: String,
+        code_hash: String,
+    },
+    Failed(MachineFailure),
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Placement {
+    on: Option<ActionTarget>,
+    window: bool,
+}
+
+impl Placement {
+    pub fn new(on: Option<ActionTarget>, window: Option<bool>) -> Self {
+        Self {
+            on,
+            window: window.unwrap_or(false),
+        }
+    }
+
+    pub fn response(self, value: Json) -> Json {
+        if self.window {
+            serde_json::json!({"destination":"result","value":value})
+        } else {
+            value
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum MachineFailure {
+    NoMachine,
+}
+
+impl MachineFailure {
+    pub fn value(self) -> Json {
+        match self {
+            Self::NoMachine => serde_json::json!({"failed":true,"kind":"noMachine","data":null}),
+        }
+    }
 }
 
 pub(crate) fn resolve(
     loaded: Option<&Loaded>,
     target: Option<&crate::plugins::Target>,
-    on: Option<ActionTarget>,
+    placement: Placement,
     runner: &RunnerSlot,
     note: &CallNote,
-    from_server: bool,
 ) -> Destination {
-    let selected = on.unwrap_or_else(|| target.map(|target| target.on).unwrap_or_default());
-    let personal = note
-        .auth
-        .as_ref()
-        .is_some_and(|auth| auth.device.id != "device:server");
-    if personal
-        && selected == ActionTarget::Caller
-        && from_server
-        && let Some(dispatch) = runner.get()
-        && let (Some(loaded), Some(target)) = (loaded, target)
-    {
+    let selected = placement
+        .on
+        .unwrap_or_else(|| target.map(|target| target.on).unwrap_or_default());
+    if selected == ActionTarget::Server {
+        return Destination::Server;
+    }
+
+    let Some(auth) = note.auth.as_ref().filter(|auth| auth.is_person()) else {
+        return Destination::Failed(MachineFailure::NoMachine);
+    };
+    if let (Some(loaded), Some(target)) = (loaded, target) {
         let manifest = &loaded.catalog.plugins[&target.owner].manifest;
-        if let Some(local) = &manifest.entries.local
-            && let (Some(entry_hash), Some(code_hash)) = (
-                manifest.hashes.get(&local.entry),
-                manifest.hashes.get(&local.code),
-            )
-        {
-            return Destination::Runner {
-                dispatch: dispatch.clone(),
-                plugin: target.owner.clone(),
-                entry_hash: entry_hash.clone(),
-                code_hash: code_hash.clone(),
-            };
+        if let Some((entry_hash, code_hash)) = runner_hashes(manifest) {
+            if auth.is_on_this_machine()
+                && !note.is_window_continuation()
+                && let Some(dispatch) = runner.get()
+            {
+                return Destination::AttachedRunner {
+                    dispatch: dispatch.clone(),
+                    plugin: target.owner.clone(),
+                    entry_hash: entry_hash.to_owned(),
+                    code_hash: code_hash.to_owned(),
+                };
+            }
+            if placement.window {
+                return Destination::CallerWindowRunner {
+                    plugin: target.owner.clone(),
+                    entry_hash: entry_hash.to_owned(),
+                    code_hash: code_hash.to_owned(),
+                };
+            }
         }
     }
 
-    match selected {
-        ActionTarget::Server => Destination::Server,
-        ActionTarget::Caller => Destination::Missing,
-    }
+    Destination::Failed(MachineFailure::NoMachine)
 }
 
 impl Destination {
+    pub fn immediate_reply(&self, placement: Placement, note: &CallNote) -> Option<Json> {
+        match self {
+            Self::Failed(error) => Some(placement.response(error.value())),
+            Self::CallerWindowRunner {
+                plugin,
+                entry_hash,
+                code_hash,
+            } => Some(serde_json::json!({
+                "destination":"callerWindowRunner",
+                "note":note.continuation(),
+                "artifact":{"id":plugin,"entryHash":entry_hash,"codeHash":code_hash},
+            })),
+            _ => None,
+        }
+    }
+
     pub async fn invoke(
         self,
         process: &Supervisor,
         source: Option<Arc<crate::host::action_process::Source>>,
         name: String,
         args: Json,
-        ops: Arc<OpRegistry>,
+        upstream: RunnerActionUpstream,
     ) -> Result<Json, String> {
         match self {
             Self::Server => {
@@ -97,33 +162,42 @@ impl Destination {
                         source.ok_or("Plugin action has no action process bundle")?,
                         name,
                         args,
-                        ops,
+                        upstream.ops,
                     )
                     .await
             }
-            Self::Runner {
+            Self::AttachedRunner {
                 dispatch,
                 plugin,
                 entry_hash,
                 code_hash,
             } => {
-                dispatch(RunnerAction {
-                    plugin,
-                    entry_hash,
-                    code_hash,
-                    name,
-                    args,
-                    ops,
-                })
-                .await
+                let source = source.ok_or("Plugin action has no action process bundle")?;
+                process
+                    .invoke_runner(&source, |retiring| {
+                        dispatch(RunnerAction {
+                            plugin,
+                            entry_hash,
+                            code_hash,
+                            name,
+                            args,
+                            upstream,
+                            retiring,
+                        })
+                    })
+                    .await
             }
-            Self::Missing => Ok(no_machine()),
+            Self::Failed(error) => Ok(error.value()),
+            Self::CallerWindowRunner { .. } => {
+                Err("Window action dispatch requires a window request".into())
+            }
         }
     }
 }
 
-pub(crate) fn no_machine() -> Json {
-    serde_json::json!({"failed":true,"kind":"noMachine","data":null})
+pub(crate) struct ActionContext {
+    pub note: CallNote,
+    pub runner: Arc<RunnerSlot>,
 }
 
 pub(crate) struct NestedCall {
@@ -143,10 +217,10 @@ pub(crate) fn operations(
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
     process: Arc<Supervisor>,
-    (note, runner): (CallNote, Arc<RunnerSlot>),
-) -> Result<Arc<OpRegistry>, engine::Error> {
+    context: ActionContext,
+) -> Result<RunnerActionUpstream, engine::Error> {
     let mut ops = OpRegistry::new();
-    note.register(&mut ops)?;
+    context.note.register(&mut ops)?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -156,35 +230,36 @@ pub(crate) fn operations(
                 .clone(),
         );
     }
-    engine::register_password_crypto(&mut ops)?;
-    let values = environment.clone();
-    ops.register_sync("action.env", move |payload| {
-        let name = payload["name"].as_str().ok_or("env requires a name")?;
-        values
-            .get(name)
-            .map(|value| value.map(Json::String).unwrap_or(Json::Null))
-    })?;
+    environment.register(&mut ops)?;
     register_nested_calls(
         &mut ops,
         commands.clone(),
         generation.clone(),
         owner.clone(),
         environment.clone(),
-        note.clone(),
+        context.note.clone(),
     )?;
-    if let (Some(loaded), Some(owner)) = (generation, owner) {
+    if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         register_plugin_call(
             &mut ops,
             loaded.clone(),
             owner.clone(),
-            commands,
-            process,
-            note,
-            runner,
+            commands.clone(),
+            process.clone(),
+            context.note.clone(),
+            context.runner.clone(),
         )?;
-        crate::plugins::register_contract_list(&mut ops, loaded, owner)?;
+        crate::plugins::register_contract_list(&mut ops, loaded.clone(), owner.clone())?;
     }
-    Ok(Arc::new(ops))
+    Ok(RunnerActionUpstream::new(
+        Arc::new(ops),
+        generation,
+        owner,
+        commands,
+        process,
+        context,
+        environment,
+    ))
 }
 
 pub(crate) fn register_nested_calls(
@@ -308,9 +383,15 @@ fn register_plugin_call(
                 .map(|on| serde_json::from_value(on.clone()))
                 .transpose()
                 .map_err(|_| "Invalid action target")?;
-            let destination = resolve(Some(&loaded), Some(&target), on, &runner, &note, true);
-            if matches!(destination, Destination::Missing) {
-                return Ok(no_machine());
+            let destination = resolve(
+                Some(&loaded),
+                Some(&target),
+                Placement::new(on, None),
+                &runner,
+                &note,
+            );
+            if let Destination::Failed(error) = destination {
+                return Ok(error.value());
             }
 
             let source = loaded.action_sources.get(&target.owner).cloned();
@@ -320,7 +401,10 @@ fn register_plugin_call(
                 Some(target.owner.clone()),
                 environment.clone(),
                 process.clone(),
-                (note, runner.clone()),
+                ActionContext {
+                    note,
+                    runner: runner.clone(),
+                },
             )
             .map_err(|e| e.to_string())?;
             let result = destination

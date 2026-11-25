@@ -20,7 +20,7 @@ impl SessionSender {
             args,
             kind: None,
             local_parent: None,
-            on: None,
+            placement: Default::default(),
         })
     }
 
@@ -77,7 +77,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             args,
             kind: Some(FunctionKind::Query),
             local_parent: None,
-            on: None,
+            placement: Default::default(),
         },
         Request::Mutation { id, name, args } => Action::Call {
             id,
@@ -85,15 +85,21 @@ fn request_action(request: Request) -> Result<Action, Error> {
             args,
             kind: Some(FunctionKind::Mutation),
             local_parent: None,
-            on: None,
+            placement: Default::default(),
         },
-        Request::Action { id, name, args, on } => Action::Call {
+        Request::Action {
+            id,
+            name,
+            args,
+            on,
+            window,
+        } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
             local_parent: None,
-            on,
+            placement: crate::actions::Placement::new(on, window),
         },
         // TKM-286 will restrict LocalCall to authenticated Runner sessions.
         Request::LocalCall {
@@ -104,14 +110,16 @@ fn request_action(request: Request) -> Result<Action, Error> {
             depth,
             thread,
             on,
+            window,
         } => Action::Call {
             id,
             name,
             args,
             kind: Some(kind),
             local_parent: Some((depth, thread)),
-            on,
+            placement: crate::actions::Placement::new(on, window),
         },
+        Request::CancelAction { id } => Action::Cancel(id),
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),
         Request::Plugins { id } => Action::Plugins(id),

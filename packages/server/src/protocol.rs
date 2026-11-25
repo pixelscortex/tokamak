@@ -163,6 +163,9 @@ pub enum Request {
             ts(optional, type = "\"server\" | \"caller\"")
         )]
         on: Option<ActionTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        window: Option<bool>,
     },
     LocalCall {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -183,6 +186,13 @@ pub enum Request {
             ts(optional, type = "\"server\" | \"caller\"")
         )]
         on: Option<ActionTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        window: Option<bool>,
+    },
+    CancelAction {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
     },
     Subscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -223,6 +233,7 @@ impl Request {
             | Self::Mutation { id, .. }
             | Self::Action { id, .. }
             | Self::LocalCall { id, .. }
+            | Self::CancelAction { id }
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id }
             | Self::Plugins { id }

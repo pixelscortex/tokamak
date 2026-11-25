@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { RemoteFunctionError, type CallError } from "../src/call-error";
+=======
+import { Visibility } from "../src/visibility";
+>>>>>>> 4ff4e5cd (Resolve action placement on the server and share Runner invocation controls)
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
@@ -15,6 +19,7 @@ export type WorkerMessage =
       contract?: ContractInvocation;
       routed?: boolean;
       action?: boolean;
+      admittedAction?: boolean;
     }
   | {
       type: "opResult";
@@ -116,6 +121,7 @@ export function workerDispatch(
     target?: ContractInvocation,
     routed?: boolean,
     action?: boolean,
+    admittedAction?: boolean,
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Plugin process invocation capacity exceeded");
@@ -227,7 +233,11 @@ export function workerDispatch(
     try {
       if (
         !(target && options.contract) &&
-        functions[name]?.kind !== (action && kind === "local" ? "action" : kind)
+        (functions[name]?.kind !== (action && kind === "local" ? "action" : kind) ||
+          (action &&
+            kind === "local" &&
+            functions[name]?.visibility !== Visibility.Public &&
+            !admittedAction))
       )
         throw new Error(`Unknown local ${kind} function: ${name}`);
       const value =
@@ -275,6 +285,7 @@ export function workerDispatch(
         message.contract,
         message.routed,
         message.action,
+        message.admittedAction,
       );
       if (options.observeInvocation) return invocation;
     } else if (message.type === "opResult") {

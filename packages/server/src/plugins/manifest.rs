@@ -91,7 +91,7 @@ pub struct Manifest {
 }
 
 impl Definition {
-    pub(super) fn declares_access_to(&self, owner: &str) -> bool {
+    pub(crate) fn declares_access_to(&self, owner: &str) -> bool {
         self.id == owner || self.depends.contains_key(owner) || self.optional.contains_key(owner)
     }
 

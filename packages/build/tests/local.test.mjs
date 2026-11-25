@@ -233,7 +233,7 @@ test("a query importing bare fs gets proc advice only", async () => {
     const result = build(folder);
     assert.match(
       result.stderr + result.stdout,
-      /imports "node:fs", which is unavailable in queries, mutations and server actions\. A plugin that needs real Node can start it through proc in a local function\./,
+      /imports "node:fs", which is unavailable in queries, mutations and server actions\. A plugin that needs real Node can start it through proc in a local function or caller action\./,
     );
   });
 }, 30_000);
@@ -270,5 +270,26 @@ test("the server part's Node module check does not apply to the window", async (
       'export const Window = () => import("node:child_process");',
     );
     built(folder);
+  });
+}, 30_000);
+
+test("caller action placement must be literal in the definition", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      export function Window() {}
+      const target = "caller";
+      const settings = { on: target, handler: () => true } as const;
+      export const run = action(settings);
+    `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /Action placement.*must use on: "caller" or on: "server" as a literal/,
+    );
   });
 }, 30_000);

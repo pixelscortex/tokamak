@@ -1,3 +1,4 @@
+import type { ActionSignal } from "./host";
 import type { ActionTarget } from "./functions";
 // Correlation and subscription lifecycle are shared by both transports. Hosts
 // provide an ordered native message connection or an already-open WebSocket;
@@ -71,8 +72,37 @@ export class InProcessTransport implements ClientTransport {
     return this.call("mutation", name, args);
   }
 
-  action(name: string, args: JsonValue, on?: ActionTarget): Promise<JsonValue> {
-    return this.call("action", name, args, on);
+  action(name: string, args: JsonValue, on?: ActionTarget, signal?: ActionSignal): Promise<JsonValue> {
+    return this.sendAction(name, args, on, signal);
+  }
+
+  dispatchWindowAction(
+    name: string,
+    args: JsonValue,
+    on?: ActionTarget,
+    signal?: ActionSignal,
+  ): Promise<JsonValue> {
+    return this.sendAction(name, args, on, signal, true);
+  }
+
+  private sendAction(
+    name: string,
+    args: JsonValue,
+    on?: ActionTarget,
+    signal?: ActionSignal,
+    window?: true,
+  ): Promise<JsonValue> {
+    return this.control(
+      (id) => ({
+        type: "action",
+        id,
+        name,
+        args,
+        ...(window && { window }),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
   }
 
   /** Forward the continuation supplied by the Runner on its private socket. */
@@ -82,16 +112,22 @@ export class InProcessTransport implements ClientTransport {
     args: JsonValue,
     parent: { depth: number; thread: string | null },
     on?: ActionTarget,
+    window?: boolean,
+    signal?: ActionSignal,
   ): Promise<JsonValue> {
-    return this.control((id) => ({
-      type: "localcall",
-      id,
-      name,
-      args,
-      kind,
-      ...parent,
-      ...(on === undefined ? {} : { on }),
-    }));
+    return this.control(
+      (id) => ({
+        type: "localcall",
+        id,
+        name,
+        args,
+        kind,
+        ...parent,
+        ...(window ? { window } : {}),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
   }
 
   async plugins(): Promise<JsonValue> {
@@ -179,12 +215,37 @@ export class InProcessTransport implements ClientTransport {
     };
   }
 
-  private control(request: (id: number) => Request): Promise<JsonValue> {
+  private control(request: (id: number) => Request, signal?: ActionSignal): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) throw new Error("Action cancelled");
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
-      this.pending.set(id, { resolve, reject });
-      this.send(request(id));
+      const cancel = () => {
+        try {
+          this.send({ type: "cancelaction", id });
+        } catch {
+          // send already rejects outstanding requests when the connection closes.
+        }
+      };
+      const cleanup = () => signal?.removeEventListener("abort", cancel);
+      this.pending.set(id, {
+        resolve(value) {
+          cleanup();
+          resolve(value);
+        },
+        reject(error) {
+          cleanup();
+          reject(error);
+        },
+      });
+      signal?.addEventListener("abort", cancel, { once: true });
+      try {
+        this.send(request(id));
+      } catch (error) {
+        this.pending.delete(id);
+        cleanup();
+        throw error;
+      }
     });
   }
 
@@ -225,17 +286,12 @@ export class InProcessTransport implements ClientTransport {
     }
   }
 
-  private call(
-    type: "query" | "mutation" | "action",
-    name: string,
-    args: JsonValue,
-    on?: ActionTarget,
-  ): Promise<JsonValue> {
+  private call(type: "query" | "mutation", name: string, args: JsonValue): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
       this.pending.set(id, { resolve, reject });
-      this.send({ type, id, name, args, ...(on === undefined ? {} : { on }) });
+      this.send({ type, id, name, args });
     });
   }
 

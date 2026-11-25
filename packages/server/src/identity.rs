@@ -58,6 +58,9 @@ pub struct AuthContext {
     pub device: Device,
 }
 
+const SERVER_USER_ID: &str = "server";
+const LOCAL_DEVICE_ID: &str = "device:local";
+
 impl AuthContext {
     pub fn local() -> Self {
         Self::in_process(User::local())
@@ -68,7 +71,7 @@ impl AuthContext {
     pub fn server() -> Self {
         Self {
             user: User {
-                id: "server".into(),
+                id: SERVER_USER_ID.into(),
                 name: "Tokamak".into(),
                 role: Role::Owner,
             },
@@ -77,6 +80,14 @@ impl AuthContext {
                 name: "Server".into(),
             },
         }
+    }
+
+    pub(crate) fn is_on_this_machine(&self) -> bool {
+        self.device.id == LOCAL_DEVICE_ID
+    }
+
+    pub(crate) fn is_person(&self) -> bool {
+        self.user.id != SERVER_USER_ID
     }
 
     pub(crate) fn in_process(user: User) -> Self {
@@ -91,7 +102,7 @@ impl AuthContext {
 impl Device {
     fn local() -> Self {
         Self {
-            id: "device:local".into(),
+            id: LOCAL_DEVICE_ID.into(),
             name: local_device_name().to_owned(),
         }
     }

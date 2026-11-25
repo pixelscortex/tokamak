@@ -25,7 +25,7 @@ pub struct Catalog {
     pub revision: String,
     install_order: Vec<String>,
     pub(crate) removed_plugins: Vec<String>,
-    pub(crate) environment: PathBuf,
+    pub(crate) root: PathBuf,
     pub(crate) directory: PathBuf,
 }
 
@@ -87,6 +87,7 @@ mod artifact;
 mod assets;
 mod catalog;
 mod contracts;
+pub(crate) use contracts::LocalDataMethods;
 pub(crate) use contracts::MemberEvent;
 mod dependencies;
 mod grants;

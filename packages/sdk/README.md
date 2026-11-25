@@ -145,9 +145,11 @@ throws clearly when a custom transport has not implemented it.
 
 An action without an `on` setting runs beside the server in its action process.
 Set `on: "caller"` to run it in the caller's desktop Runner. It can use
-`ctx.proc`, `node:fs/promises`, and the same program and cancellation controls
-as a local function. The desktop Runner needs the matching plugin build
-installed. Queries and mutations still run on the workspace server.
+`ctx.proc`, Runner Node modules such as `node:fs/promises` and `node:path`,
+and the program scopes and cancellation controls used by local functions.
+The Runner needs the matching plugin build installed. Use a literal
+`on: "caller"` or `on: "server"` in a definition so the builder can place its
+imports. Queries and mutations still run on the workspace server.
 
 ```ts
 import { action, isFailure, v } from "@tokamak/sdk";
@@ -175,12 +177,20 @@ Pass `{ on: "server" }` or `{ on: "caller" }` to `client.action` or
 `client.action` to cancel an action running on the desktop Runner. The
 action receives the original identity and call note.
 
-A call from server code can use the caller's Runner when that Runner embeds
-the server. A shared server cannot yet send an action to a desktop Runner;
-the desktop window routes its own calls there and uses the same public
-workspace functions as `local()`. A Runner action resolves `ctx.env` grants
-from its installation on that machine. A call returns the typed
-failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
+The workspace server chooses the destination. A direct client authenticated
+as a person on an embedded Runner's machine uses that Runner, including for
+nested actions. For a shared workspace, the window forwards caller actions
+and their nested caller actions to its own Runner.
+
+Both Runner routes support local contracts and their channels. On a shared
+workspace the window connects with the public client API, so private function
+calls and server contract discovery return `runnerCapabilityUnavailable`
+with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
+are available on the embedded Runner path.
+
+Runner actions use the Runner's program scope and lifetime rules, including
+no fixed deadline. A Runner action resolves `ctx.env` grants from its
+installation on that machine. A call returns the typed failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
 and has none, or when it requests a file or program from the server action
 process.
 
