@@ -354,7 +354,7 @@ impl Supervisor {
                     stage: "runner".into(),
                     kind: "LocalReloadTimeout".into(),
                     table: None,
-                point: None,
+                    point: None,
                     data: Value::Null,
                 },
             })).into()),

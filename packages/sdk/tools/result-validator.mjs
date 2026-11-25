@@ -13,7 +13,13 @@ export function resultValidator(checker, definition, location) {
   return validatorFromType(checker, checker.getTypeOfSymbolAtLocation(result, location), location);
 }
 
-export function validatorFromType(checker, type, location) {
+export function includesUndefined(type) {
+  return (
+    Boolean(type.flags & ts.TypeFlags.Undefined) || (type.isUnion() && type.types.some(includesUndefined))
+  );
+}
+
+export function validatorFromType(checker, type, location, point = false) {
   const visit = (type, ancestors, optional = false) => {
     if (ancestors.length >= 16 || ancestors.includes(type)) return { kind: "any" };
     const nested = [...ancestors, type];
@@ -67,11 +73,11 @@ export function validatorFromType(checker, type, location) {
     for (const field of type.getProperties()) {
       if (field.name.startsWith("__@")) continue;
       const fieldType = checker.getTypeOfSymbolAtLocation(field, location);
-      const optional = field.flags & ts.SymbolFlags.Optional;
+      const optional = field.flags & ts.SymbolFlags.Optional || (point && includesUndefined(fieldType));
       const inner = visit(fieldType, nested, Boolean(optional));
       fields.push([field.name, optional ? { kind: "optional", inner } : inner]);
     }
-    return fields.length ? { kind: "object", fields: Object.fromEntries(fields) } : { kind: "any" };
+    return fields.length || point ? { kind: "object", fields: Object.fromEntries(fields) } : { kind: "any" };
   };
   return visit(type, []);
 }

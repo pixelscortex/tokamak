@@ -264,6 +264,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
           modules: local,
           providers,
           placement,
+          points: placement?.points(root, organized),
           lane: lanes.local,
           worker: true,
           header,

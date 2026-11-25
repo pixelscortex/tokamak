@@ -33,3 +33,15 @@ export const actPoint = action({
     return result.count * 2;
   },
 });
+
+export const catchPoint = mutation({
+  async handler(ctx) {
+    await ctx.db.insert("users", { name: "caught-point" });
+    try {
+      await ctx.point("caught", { note: undefined as string | undefined }, async () => {});
+    } catch {
+      await ctx.db.insert("users", { name: "caught-point-after" });
+    }
+    return "owner finished";
+  },
+});

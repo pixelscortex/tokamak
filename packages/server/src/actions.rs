@@ -217,17 +217,17 @@ impl Destination {
                 .map_err(Into::into);
         };
         let note = scope.note.clone();
-        let stages = ActionStageExecutor {
-            generation: &scope.generation,
-            commands: &scope.commands,
-            process: &scope.process,
-            runner: &scope.runner,
-            lifetime: scope.lifetime.clone(),
-            dispatch: match &self {
+        let stages = ActionStageExecutor::new(
+            &scope.generation,
+            &scope.commands,
+            &scope.process,
+            &scope.runner,
+            match &self {
                 Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
                 _ => None,
             },
-        };
+            scope.lifetime.clone(),
+        );
         let retirement = if stages.dispatch.is_some() {
             Some(
                 source
@@ -319,7 +319,25 @@ struct ActionStageExecutor<'a> {
     lifetime: Option<CancellationToken>,
 }
 
-impl ActionStageExecutor<'_> {
+impl<'a> ActionStageExecutor<'a> {
+    fn new(
+        generation: &'a Arc<Loaded>,
+        commands: &'a mpsc::WeakSender<Command>,
+        process: &'a Arc<Supervisor>,
+        runner: &'a Arc<RunnerSlot>,
+        dispatch: Option<RunnerDispatch>,
+        lifetime: Option<CancellationToken>,
+    ) -> Self {
+        Self {
+            generation,
+            commands,
+            process,
+            runner,
+            dispatch,
+            lifetime,
+        }
+    }
+
     async fn execute(
         &self,
         hook: Hook,
@@ -517,14 +535,14 @@ impl ActionPoints {
             .as_str()
             .and_then(|name| self.targets.get(name))
             .ok_or("Unknown hook point")?;
-        let stages = ActionStageExecutor {
-            generation: &self.generation,
-            commands: &self.commands,
-            process: &self.process,
-            runner: &self.context.runner,
-            dispatch: self.context.dispatch.clone(),
-            lifetime: self.context.lifetime.clone(),
-        };
+        let stages = ActionStageExecutor::new(
+            &self.generation,
+            &self.commands,
+            &self.process,
+            &self.context.runner,
+            self.context.dispatch.clone(),
+            self.context.lifetime.clone(),
+        );
         run_point(
             target,
             &self.context.note,

@@ -943,7 +943,7 @@ plugin still loads; the server skips that hook and logs a warning.
 A query, mutation, or action can expose a named spot in its handler with
 `ctx.point`. Use a unique, nonempty string literal without `#`. A helper
 in the same module can take `ctx` and call a point if the compiler can trace it
-to exactly one exported handler.
+to exactly one exported handler. Points are not allowed in triggers or hook stages.
 
 ```ts
 const launch = await ctx.point("launch", { env: {} as Record<string, string>, args: [] as string[] });
@@ -973,22 +973,30 @@ export const setProxy = hook(api.turn.points.launch, {
 ```
 
 Point references are for hooks. Their input and result types are inferred from
-the value or callback. Use plain JSON data: a function, class instance, symbol,
+the value or callback. These types define what hooks may return, so annotate
+empty literals with the types you want to allow. Use plain JSON data: a function, class instance, symbol,
 or promise inside point data is a build error. An async callback is fine; its
-resolved result is what crosses the boundary. The build treats `unknown` and
+resolved result is what crosses the boundary. A callback that returns
+`undefined` produces `null`, and object fields set to `undefined` are omitted
+when crossing the boundary. The build treats `unknown` and
 `any` as open data; a value that crosses a host boundary must still be JSON.
 
-Point hooks follow the enclosing function's rules. In a mutation they run
+Point hooks follow the enclosing function's rules. Action hooks receive an
+action context: use `ctx.runQuery` or `ctx.runMutation` for your plugin's data
+(there is no `ctx.db`), and `ctx.call.threadId` for the thread. In a mutation they run
 inside the same transaction, and a failed hook rolls it back. A failed stage
 rejects the point with the hook's plugin, `point` name, and `pointBefore` or
 `pointAfter` stage. Each hook uses one level of call depth and counts against
 the shared 256-stage budget, including repeated calls to a point in a loop.
-An unhooked point checks the call's local set of hooked names, then returns the
-original value or runs the callback directly. It spends no hook budget and makes
+A hooked value point returns a copy of the value. An unhooked point checks the
+declared and hooked names locally, then returns the original value or runs the
+callback directly. It spends no hook budget and makes
 no host call. Renaming or removing a hooked point warns the owner at build time.
 An installed plugin with a stale point reference still loads; the server warns
-and skips that hook. A caller action with point hooks requires a window and
-Runner that support point plans when routed through the window.
+and skips that hook. With a point hook on an `on: "caller"` action, every call
+fails with `hookRunnerUnavailable` on a desktop whose window or Runner cannot
+run point hooks. The error names the hooking plugin and point; update both the
+window and Runner.
 
 ## Run code when a table changes
 

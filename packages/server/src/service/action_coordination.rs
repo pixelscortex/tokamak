@@ -113,16 +113,14 @@ impl Coordinator {
         allow_points: bool,
     ) -> Option<CallError> {
         let loaded = self.plugins.as_ref()?;
-        let point;
         let name = if !allow_hooks && loaded.hooks.contains_key(name) {
-            name
+            std::borrow::Cow::Borrowed(name)
         } else if !allow_points {
-            point = crate::host::hooks::point_targets(loaded, name).next()?.1;
-            &point
+            std::borrow::Cow::Owned(crate::host::hooks::point_targets(loaded, name).next()?.1)
         } else {
             return None;
         };
-        let hook = loaded.hooks.get(name)?.first()?;
+        let hook = loaded.hooks.get(name.as_ref())?.first()?;
         Some(
             CallError::hook(
                 &hook.owner,
@@ -134,7 +132,7 @@ impl Coordinator {
                 },
                 "hookRunnerUnavailable",
                 Json::Null,
-                name,
+                &name,
             )
             .into(),
         )

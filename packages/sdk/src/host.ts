@@ -134,6 +134,7 @@ export interface ActionSignal {
 
 export interface HostBridge {
   readonly hookPoints?: readonly string[];
+  readonly pointOwner?: { name: string; declared?: readonly string[] };
   readonly call?: import("./functions").CallContext | null;
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;

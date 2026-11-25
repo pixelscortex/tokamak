@@ -180,11 +180,24 @@ async function point_hooks_share_the_mutation_transaction() {
   assert.equal(await client.mutation(team.points.savePoint, { rollback: false }), "owner-point:before:after");
   const saved = await client.query(list, { text: "owner-point" });
   const audit = await client.query(moderation.policy.audit, {});
+  const events = await client.query(extra.extra.events, {});
+  assert.equal(events.filter((name) => name === "point-write").length, 1);
   assert.ok(saved.some(({ name }) => name === "owner-point:before"));
   assert.equal(audit.filter((name) => name === "point-write").length, 1);
   await assert.rejects(client.mutation(team.points.savePoint, { rollback: true }), /rollback point/);
   assert.deepEqual(await client.query(list, { text: "owner-point" }), saved);
   assert.deepEqual(await client.query(moderation.policy.audit, {}), audit);
+
+  await assert.rejects(client.mutation(team.points.catchPoint, {}), {
+    plugin: "moderation",
+    point: "caught",
+    stage: "pointAfter",
+    kind: "hookException",
+    message: /fixture rejected the void point/,
+  });
+  assert.deepEqual(await client.query(list, { text: "caught-point" }), []);
+  assert.deepEqual(await client.query(moderation.policy.audit, {}), audit);
+  assert.deepEqual(await client.query(extra.extra.events, {}), events);
 }
 
 async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {

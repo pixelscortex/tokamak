@@ -60,14 +60,11 @@ impl CallError {
         let mut details = serde_json::json!({ "message":message, "plugin":plugin, "hook":hook, "stage":stage, "kind":kind, "data":data });
         if let Some((_, point)) = target.split_once('#') {
             details["point"] = serde_json::json!(point);
-            details["stage"] = serde_json::json!(format!(
-                "point{stage_capitalized}",
-                stage_capitalized = if stage == "before" {
-                    "Before"
-                } else {
-                    "After"
-                }
-            ));
+            details["stage"] = serde_json::json!(match stage {
+                "before" => "pointBefore",
+                "after" => "pointAfter",
+                _ => stage,
+            });
         }
         engine::CallError {
             message,

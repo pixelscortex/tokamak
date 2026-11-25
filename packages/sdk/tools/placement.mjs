@@ -142,6 +142,7 @@ export function functionPlacement(root, selected, namespace) {
     files.map((file) => program.getSourceFile(file)),
     checker,
     allDefinitions.map(({ symbol }) => symbol).filter(Boolean),
+    console.warn,
   );
   for (const definition of allDefinitions) definition.points = namedPoints.get(definition.symbol);
 
@@ -470,9 +471,10 @@ export function registrySource({
           `${JSON.stringify(contractTarget(p, m))}: provider${i}.implementation[${JSON.stringify(m.member)}]`,
       ),
   );
-  const registry = targets.length
-    ? `createRegistry({${entries.join(",")}}, {${targets.join(",")}})`
-    : `createRegistry({${entries.join(",")}})`;
+  const declaredPoints = Object.fromEntries(
+    Object.entries(points ?? {}).map(([name, points]) => [name, Object.keys(points)]),
+  );
+  const registry = `createRegistry({${entries.join(",")}}, {${targets.join(",")}}, ${JSON.stringify(declaredPoints)})`;
   const definitions = imports.join("\n");
   const hookKinds = JSON.stringify(
     Object.fromEntries(

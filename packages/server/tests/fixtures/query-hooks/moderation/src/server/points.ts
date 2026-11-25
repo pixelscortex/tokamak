@@ -1,5 +1,5 @@
 import { createApi, createHook, fail, type PointReference } from "@tokamak/sdk";
-import { actPoint, readPoint, savePoint } from "plugin:team/server";
+import { actPoint, catchPoint, readPoint, savePoint } from "plugin:team/server";
 import schema from "./schema";
 
 const hook = createHook(schema);
@@ -42,5 +42,17 @@ const stale = createApi<{
 export const removedPoint = hook(stale.points.readPoint.points.old, {
   before() {
     throw new Error("removed point should have been skipped");
+  },
+});
+
+export const caught = hook(catchPoint.points.caught, {
+  before(_ctx, input) {
+    if (Object.hasOwn(input, "note")) throw new Error("undefined field crossed the boundary");
+    return input;
+  },
+  async after(ctx, result) {
+    if (result !== null) throw new Error("void result must be null");
+    await ctx.db.insert("bans", { name: "caught-point-write" });
+    throw new Error("fixture rejected the void point");
   },
 });

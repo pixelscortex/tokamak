@@ -543,7 +543,89 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
     );
     const shared = build(owner);
     expect(shared.status).not.toBe(0);
-    expect(shared.stdout + shared.stderr).toContain("Cannot attribute point to exactly one exported");
+    expect(shared.stdout + shared.stderr).toContain('Cannot attribute point "shared"');
+
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `
+      import { createTrigger, defineSchema, defineTable } from "@tokamak/sdk";
+      export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
+        await ctx.point("trigger", 1);
+      });
+    `,
+    );
+    const trigger = build(owner);
+    expect(trigger.status).not.toBe(0);
+    expect(trigger.stdout + trigger.stderr).toContain('Cannot attribute point "trigger"');
+
+    const ownerWithHelper = `
+      import { createTrigger, defineSchema, defineTable, query, type QueryContext } from "@tokamak/sdk";
+      export const load = (ctx: Pick<QueryContext<{}>, "point">) => ctx.point("shared", 1);
+      export const a = query({ handler: (ctx) => load(ctx) });
+    `;
+    const invalidUsers = [
+      [`export const plain = (ctx: Pick<QueryContext<{}>, "point">) => load(ctx);`, "functions.ts"],
+      [
+        `export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
+        await load(ctx);
+      });`,
+        "functions.ts",
+      ],
+      ["", "other.ts"],
+    ];
+    for (const [otherUse, fileName] of invalidUsers) {
+      await file(owner, "src/server/functions.ts", ownerWithHelper + otherUse);
+      if (fileName === "other.ts")
+        await file(
+          owner,
+          "src/server/other.ts",
+          `
+          import { query } from "@tokamak/sdk";
+          import { load as imported } from "./functions";
+          export const b = query({ handler: (ctx) => imported(ctx) });
+        `,
+        );
+      const result = build(owner);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toMatch(
+        new RegExp(
+          `Cannot attribute point "shared".*owner at .*functions.ts:.*other use at .*${fileName}:.*helper in the same module`,
+        ),
+      );
+    }
+  });
+}, 90_000);
+
+test("publishes independent helper methods, null results, and optional point fields", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `
+      import { mutation, type MutationContext } from "@tokamak/sdk";
+      type Context = Pick<MutationContext<{}>, "point">;
+      const helpers = {
+        save(ctx: Context) {
+          const input: { search: string | undefined } = { search: undefined };
+          return ctx.point("save", input, async () => {});
+        },
+        launch(ctx: Context) {
+          return ctx.point("launch", { env: {}, args: [] });
+        },
+      };
+      export const save = mutation({ handler: (ctx) => helpers.save(ctx) });
+      export const launch = mutation({ handler: (ctx) => helpers.launch(ctx) });
+    `,
+    );
+    const result = build(owner);
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).toContain('Point "launch" infers an empty object or never[]');
+    const types = await readFile(resolve(owner, "src/server/_generated/api.ts"), "utf8");
+    expect(types).toMatch(/PointReference<"mutation", \{ search\?: .* \}, null,/);
+    expect(types).toContain("functions:save#save");
+    expect(types).toContain("functions:launch#launch");
   });
 }, 90_000);
 

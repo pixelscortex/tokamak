@@ -287,7 +287,7 @@ function actionContext(
   bridge: HostBridge,
   auth: AuthContext | null,
   call: CallContext,
-  points = bridge.hookPoints,
+  pointScope = bridge,
 ): CallerActionContext {
   const machine = requireActionMachine;
   const run =
@@ -301,7 +301,7 @@ function actionContext(
       });
   return Object.freeze({
     call,
-    point: bindPoint(bridge, points),
+    point: bindPoint(bridge, pointScope),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
       return auth;
@@ -317,7 +317,7 @@ function actionContext(
     retiring: bridge.retiring,
     proc: bridge.proc ?? machine,
     withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
-      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call, points))) ??
+      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call, pointScope))) ??
       machine(),
     crypto: Object.freeze({
       hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
@@ -417,7 +417,7 @@ function builder<
               ? actionContext(host, auth, call)
               : {
                   call,
-                  point: bindPoint(host, host.hookPoints),
+                  point: bindPoint(host),
                   get auth() {
                     return caller();
                   },
@@ -639,9 +639,16 @@ export function createFunctions<S extends SchemaDefinition>(
 
 export type FunctionRegistry = Readonly<Record<string, FunctionDefinition>>;
 
+// Worker dispatch and the plugin registry can be bundled separately.
+const registryPoints = Symbol.for("tokamak.registryPoints");
+type PointRegistry = FunctionRegistry & {
+  readonly [registryPoints]?: Record<string, readonly string[]>;
+};
+
 export function createRegistry(
   modules: Record<string, object>,
   contractMethods: Record<string, unknown> = {},
+  points?: Record<string, readonly string[]>,
 ): FunctionRegistry {
   const entries: [string, FunctionDefinition][] = [];
   for (const [module, exports] of Object.entries(modules)) {
@@ -661,7 +668,9 @@ export function createRegistry(
     // Even a provider using a public builder gets a private contract address.
     entries.push([name, Object.freeze({ ...method, visibility: Visibility.Internal })]);
   }
-  return Object.freeze(Object.fromEntries(entries));
+  const registry: FunctionRegistry = Object.fromEntries(entries);
+  if (points) Object.defineProperty(registry, registryPoints, { value: points });
+  return Object.freeze(registry);
 }
 
 /** Host inspection does not execute handlers or require a bridge. */
@@ -703,7 +712,11 @@ export async function invokeFunction(
     definition.invoke(args, {
       auth,
       hookPoints: note?.hookPoints,
-      call: threadId ? callContext(auth, note, threadId) : note,
+      pointOwner: {
+        name: request.name,
+        declared: (registry as PointRegistry)[registryPoints]?.[request.name],
+      },
+      call: callContext(auth, note, threadId),
       signal: host.signal,
       retiring: host.retiring,
       proc: host.proc,

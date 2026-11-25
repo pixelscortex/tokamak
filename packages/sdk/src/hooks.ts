@@ -13,7 +13,7 @@ import {
 } from "./functions";
 import type { HostBridge } from "./host";
 import type { DataModel, ModelFromSchema, SchemaDefinition } from "./schema";
-import type { JsonObject, JsonValue } from "./values";
+import { jsonSnapshot, type JsonObject, type JsonValue } from "./values";
 import { Visibility } from "./visibility";
 
 const hookBrand = Symbol("tokamak.hook");
@@ -72,12 +72,15 @@ function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilde
       before: !!handlers.before,
       after: !!handlers.after,
       invoke(stage: HookStage, input: JsonObject, host: HostBridge, targetKind = kind) {
-        const handler = (context: unknown) => {
+        const handler = async (context: unknown) => {
           type Ctx = Parameters<NonNullable<typeof handlers.before>>[0];
           const ctx = context as Ctx;
-          return stage === "before"
+          const value = await (stage === "before"
             ? handlers.before!(ctx, input.args as never)
-            : handlers.after!(ctx as never, input.result as never, input.args as never);
+            : handlers.after!(ctx as never, input.result as never, input.args as never));
+          return target.includes("#") && value !== undefined
+            ? jsonSnapshot(value, "point hook result", Infinity, true)
+            : value;
         };
         const definition =
           targetKind === "action"
