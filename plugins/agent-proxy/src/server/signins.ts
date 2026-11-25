@@ -211,7 +211,15 @@ export const connect = internalMutation({
     await ctx.db.delete(id);
     // Another provider account for an existing subscription: manage.ts.
     if (signIn.addTo)
-      return attachAccount(ctx, { owner, signIn, subscription: signIn.addTo, access, refresh, expiresAt, found });
+      return attachAccount(ctx, {
+        owner,
+        signIn,
+        subscription: signIn.addTo,
+        access,
+        refresh,
+        expiresAt,
+        found,
+      });
     const same = await ctx.db
       .query("accounts")
       .withIndex("by_owner_account", (q) => q.eq("owner", owner).eq("accountId", found.accountId))

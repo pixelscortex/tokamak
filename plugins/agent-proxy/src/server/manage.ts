@@ -99,28 +99,13 @@ export async function attachAccount(
   },
 ): Promise<SubscriptionView | Failed> {
   const { owner, found } = args;
-  const subscription = await ctx.db.get(args.subscription);
-  if (!subscription || subscription.owner !== owner)
-    return fail("Gone", { message: "That subscription was removed meanwhile. Nothing was added." });
-  if (subscription.company !== args.signIn.company)
-    return fail("OtherCompany", { message: "That account is of another company. Nothing was added." });
-  const who = found.email ?? "This account";
   const same = await ctx.db
     .query("accounts")
     .withIndex("by_owner_account", (q) => q.eq("owner", owner).eq("accountId", found.accountId))
     .first();
-  if (same && same.subscription !== subscription._id) {
-    const other = await ctx.db.get(same.subscription);
-    return fail("AlreadyAdded", {
-      message: `${who} is already added${other?.label ? ` as "${other.label}"` : " to another subscription"}.`,
-    });
-  }
-  if (same?.status === "ok")
-    return fail("AlreadyAdded", { message: `${who} is already in this subscription.` });
-  if (found.planKnown !== false && found.plan !== subscription.plan)
-    return fail("OtherPlan", {
-      message: `${who} is on Claude ${found.plan}, not ${subscription.plan}. Add it as a subscription of its own.`,
-    });
+  const refused = await refusal(ctx, args, same);
+  if (refused) return refused;
+  const subscription = (await ctx.db.get(args.subscription))!;
   const identity = {
     ...(found.email !== undefined && { email: found.email }),
     ...(found.organization !== undefined && { organization: found.organization }),
@@ -153,6 +138,33 @@ export async function attachAccount(
   const added = found.models.filter((model) => !known.has(model.id));
   if (added.length) await ctx.db.patch(subscription._id, { models: [...subscription.models, ...added] });
   return viewOf((await ctx.db.get(subscription._id))!, await accountsOf(ctx, subscription._id));
+}
+
+/** Why `attachAccount` will not take this account, or null when it will. */
+async function refusal(
+  ctx: MutationContext<Model>,
+  { owner, signIn, subscription: id, found }: Parameters<typeof attachAccount>[1],
+  same: Doc<Model, "accounts"> | null,
+): Promise<Failed | null> {
+  const subscription = await ctx.db.get(id);
+  if (!subscription || subscription.owner !== owner)
+    return fail("Gone", { message: "That subscription was removed meanwhile. Nothing was added." });
+  if (subscription.company !== signIn.company)
+    return fail("OtherCompany", { message: "That account is of another company. Nothing was added." });
+  const who = found.email ?? "This account";
+  if (same && same.subscription !== subscription._id) {
+    const other = await ctx.db.get(same.subscription);
+    return fail("AlreadyAdded", {
+      message: `${who} is already added${other?.label ? ` as "${other.label}"` : " to another subscription"}.`,
+    });
+  }
+  if (same?.status === "ok")
+    return fail("AlreadyAdded", { message: `${who} is already in this subscription.` });
+  if (found.planKnown !== false && found.plan !== subscription.plan)
+    return fail("OtherPlan", {
+      message: `${who} is on Claude ${found.plan}, not ${subscription.plan}. Add it as a subscription of its own.`,
+    });
+  return null;
 }
 
 const accountsOf = (ctx: { db: DatabaseReader<Model> }, subscription: Id<"subscriptions">) =>
