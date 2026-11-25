@@ -4,7 +4,9 @@
 //! installing a bridge for another call cannot lend authority to old work.
 
 use crate::{Determinism, Json};
-use rquickjs::{Ctx, Exception, Function, Module, Object, Promise, Value, promise::MaybePromise};
+use rquickjs::{
+    Class, Ctx, Exception, Function, Module, Object, Promise, Value, promise::MaybePromise,
+};
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -71,19 +73,14 @@ pub trait CallTransforms: Send + Sync {
 type OpResult = Result<Json, String>;
 
 type OpFuture = Pin<Box<dyn Future<Output = OpResult> + Send>>;
+type StructuredOpFuture = Pin<Box<dyn Future<Output = Result<Json, CallError>> + Send>>;
 type CompleteModule = Box<dyn FnOnce(Json) -> OpFuture + Send>;
 type OpenModule = Pin<Box<dyn Future<Output = Result<CompleteModule, String>> + Send>>;
 
 enum Op {
     Sync(Box<dyn Fn(Json) -> OpResult + Send + Sync>),
     Async(Box<dyn Fn(Json) -> OpFuture + Send + Sync>),
-    Call(
-        Box<
-            dyn Fn(Json) -> Pin<Box<dyn Future<Output = Result<Json, CallError>> + Send>>
-                + Send
-                + Sync,
-        >,
-    ),
+    Call(Box<dyn Fn(Json) -> StructuredOpFuture + Send + Sync>),
     Module(Box<dyn Fn(Json) -> Result<ModuleCall, String> + Send + Sync>),
 }
 
@@ -532,11 +529,27 @@ async fn invoke_module<'js>(
     result
 }
 
+#[derive(rquickjs::class::Trace, rquickjs::JsLifetime)]
+#[rquickjs::class]
+struct NativeCallError {
+    #[qjs(skip_trace)]
+    error: CallError,
+}
+
+pub(crate) fn native_call_error(object: &Object<'_>) -> Option<CallError> {
+    let carrier = object.get::<_, Object>("callDetails").ok()?;
+    let native = Class::<NativeCallError>::from_object(&carrier)?;
+    Some(native.borrow().error.clone())
+}
+
 fn throw_call(ctx: &Ctx<'_>, error: CallError) -> rquickjs::Error {
     let result = Exception::from_message(ctx.clone(), &error.message).and_then(|exception| {
-        if let Some(details) = error.details {
-            let value = encode(ctx, details)?;
-            exception.as_object().set("callDetails", value.clone())?;
+        if let Some(details) = &error.details {
+            let value = encode(ctx, details.clone())?;
+            exception.as_object().set(
+                "callDetails",
+                Class::instance(ctx.clone(), NativeCallError { error })?,
+            )?;
             if let Some(fields) = value.as_object() {
                 for key in ["plugin", "hook", "stage", "kind", "data"] {
                     exception

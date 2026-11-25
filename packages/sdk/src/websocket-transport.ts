@@ -49,7 +49,8 @@ function validateResult(result: unknown): void {
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("invalid event result");
   if (
     Object.keys(result).length !== 1 ||
-    (!("Ok" in result) && !("Err" in result && (typeof result.Err === "string" || isStructuredCallError(result.Err))))
+    (!("Ok" in result) &&
+      !("Err" in result && (typeof result.Err === "string" || isStructuredCallError(result.Err))))
   )
     throw new Error("invalid event outcome");
 }

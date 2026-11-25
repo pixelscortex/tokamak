@@ -166,7 +166,7 @@ impl Engine for Observed {
         self.probe
             .checkpoint(&name, false, result.clone().map_err(|e| e.to_string()))
             .await;
-        result.map_err(|error| error.to_string())
+        result
     }
 }
 
@@ -319,7 +319,7 @@ async fn response(session: &mut Session, id: u64) -> Result<Json, String> {
     match next(session).await {
         Event::Response { id: actual, result } => {
             assert_eq!(actual, id);
-            result
+            result.map_err(|error| error.to_string())
         }
         event => panic!("expected response {id}, got {event:?}"),
     }

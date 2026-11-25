@@ -210,11 +210,9 @@ export interface FunctionDefinition<
   invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext, call: CallContext): unknown;
 }
 
-export type FunctionBuilder<
-  K extends FunctionKind,
-  M extends DataModel,
-  V extends Visibility = typeof Visibility.Public,
-> = <F extends Fields = Record<never, never>, R = unknown, S extends Validator<unknown> | undefined = undefined>(definition: {
+type ReturnValidator = Validator<unknown> | undefined;
+
+type FunctionOptions<K extends FunctionKind, M extends DataModel, F extends Fields, R, S> = {
   args?: F;
   returns?: K extends "query" ? S : never;
   handler: (
@@ -227,15 +225,30 @@ export type FunctionBuilder<
           : ActionContext,
     args: ObjectValue<F>,
   ) => R;
-}) => FunctionDefinition<K, ObjectValue<F>, WireResult<R>, V> &
-  (S extends Validator<unknown> ? { readonly _explicitReturns: true } : unknown);
+};
+
+type BuiltFunction<K extends FunctionKind, A, R, V extends Visibility, S> = FunctionDefinition<
+  K,
+  A,
+  WireResult<R>,
+  V
+> &
+  (S extends Validator<unknown> ? { readonly returns: ValidatorDescription } : unknown);
+
+export type FunctionBuilder<
+  K extends FunctionKind,
+  M extends DataModel,
+  V extends Visibility = typeof Visibility.Public,
+> = <F extends Fields = Record<never, never>, R = unknown, S extends ReturnValidator = undefined>(
+  definition: FunctionOptions<K, M, F, R, S>,
+) => BuiltFunction<K, ObjectValue<F>, R, V, S>;
 
 function builder<
   K extends FunctionKind,
   M extends DataModel,
   V extends Visibility = typeof Visibility.Public,
 >(kind: K, visibility: V, schema?: SchemaDefinition): FunctionBuilder<K, M, V> {
-  return (definition) => {
+  return <F extends Fields, R, S extends ReturnValidator>(definition: FunctionOptions<K, M, F, R, S>) => {
     const description = v.object(definition.args ?? {}).description;
     const handler = definition.handler;
     const returns = definition.returns?.description;
@@ -244,7 +257,7 @@ function builder<
       kind,
       visibility,
       args: description,
-      ...(returns ? { returns, _explicitReturns: true as const } : {}),
+      ...(returns ? { returns } : {}),
       ...(kind === "local"
         ? {
             // Contract members are called in the same worker and can receive
@@ -343,7 +356,7 @@ function builder<
         if (returns) validate(returns, snapshot, "result");
         return snapshot;
       },
-    }) as ReturnType<FunctionBuilder<K, M, V>> as never;
+    }) as BuiltFunction<K, ObjectValue<F>, R, V, S>;
   };
 }
 
@@ -442,13 +455,13 @@ export const mutation = builder<"mutation", LooseModel>("mutation", Visibility.P
 export const action = builder<"action", LooseModel>("action", Visibility.Public);
 const localFunction = builder<"local", LooseModel>("local", Visibility.Public);
 
-export function local<F extends Fields, R = unknown, S extends Validator<unknown> | undefined = undefined>(definition: {
+export function local<F extends Fields, R = unknown>(definition: {
   args: F;
   handler: (ctx: LocalContext, args: ObjectValue<F>) => R;
 }): FunctionDefinition<"local", ObjectValue<F>, WireResult<R>, typeof Visibility.Public>;
 // A separately declared handler cannot infer its argument from a later
 // provide() call. An annotation preserves the input type when one is supplied.
-export function local<A = any, R = unknown, S extends Validator<unknown> | undefined = undefined>(definition: {
+export function local<A = any, R = unknown>(definition: {
   args?: undefined;
   handler: (ctx: LocalContext, args: A) => R;
 }): FunctionDefinition<"local", A, WireResult<R>, typeof Visibility.Public>;
@@ -534,9 +547,13 @@ export function createRegistry(
 }
 
 /** Host inspection does not execute handlers or require a bridge. */
-export function functionMetadata(
-  registry: FunctionRegistry,
-): { name: string; kind: FunctionKind; args: ValidatorDescription; returns?: ValidatorDescription; visibility: Visibility }[] {
+export function functionMetadata(registry: FunctionRegistry): {
+  name: string;
+  kind: FunctionKind;
+  args: ValidatorDescription;
+  returns?: ValidatorDescription;
+  visibility: Visibility;
+}[] {
   return Object.entries(registry).map(([name, definition]) => ({
     name,
     kind: definition.kind,

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createInterface } from "node:readline";
-import { InProcessTransport, RemoteFunctionError, TokamakClient, type Event, type Id } from "../../sdk/src/index";
+import {
+  InProcessTransport,
+  RemoteFunctionError,
+  TokamakClient,
+  type Event,
+  type Id,
+} from "../../sdk/src/index";
 import { api as team } from "./fixtures/query-hooks/team/src/server/_generated/api";
 import { api as moderation } from "./fixtures/query-hooks/moderation/src/server/_generated/api";
 
@@ -78,24 +84,33 @@ async function chains_two_plugins_and_hooks_server_calls() {
 }
 
 async function validates_profiles_and_preserves_nested_call_budget() {
+  assert.deepEqual(await client.query(team.users.explicit, {}), { status: "active" });
   assert.deepEqual(await client.query(team.users.profile, { mode: "ok" }), {
-    title: "Title", alias: "Alias", status: "active", labels: ["new"],
+    title: "Title",
+    alias: "Alias",
+    status: "active",
+    labels: ["new"],
+    extras: { fresh: ["data"] },
+    location: ["new", 1, true],
   });
-  for (const field of ["title", "alias", "status"]) {
-    await assert.rejects(client.query(team.users.profile, { mode: `bad-${field}` }), (error: RemoteFunctionError) => {
-      assert.equal(error.plugin, "moderation");
-      assert.equal(error.stage, "after");
-      assert.equal(error.kind, "invalidHookResult");
-      assert.match(String(error.data), new RegExp(`result\\.${field}`));
-      return true;
-    });
+  for (const field of ["title", "alias", "status", "location"]) {
+    await assert.rejects(
+      client.query(team.users.profile, { mode: `bad-${field}` }),
+      (error: RemoteFunctionError) => {
+        assert.equal(error.plugin, "moderation");
+        assert.equal(error.stage, "after");
+        assert.equal(error.kind, "invalidHookResult");
+        assert.match(String(error.data), new RegExp(`result\\.${field}`));
+        return true;
+      },
+    );
   }
   assert.equal(await client.query(moderation.policy.fanout, {}), 70);
   const rows = [{ name: "Alice", detail: "Ali|member-1|member||2" }];
   assert.deepEqual(await client.mutation(moderation.policy.fromMutation, {}), rows);
-  assert.deepEqual(await client.action(moderation.policy.fromAction, {}), {
-    rows, kind: "forbidden", plugin: "moderation", data: { reason: "members" },
-  });
+  const failure = { kind: "forbidden", plugin: "moderation", data: { reason: "members" } };
+  assert.deepEqual(await client.query(moderation.policy.catchFailure, {}), failure);
+  assert.deepEqual(await client.action(moderation.policy.fromAction, {}), { rows, ...failure });
 }
 
 async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {

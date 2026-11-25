@@ -5,6 +5,7 @@ use server::{
     data::{Database, Storage},
     identity::{Role, User},
 };
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{BufRead, BufReader, Write},
@@ -54,18 +55,19 @@ fn build_fixture(workspace: &Path, installation: &Path, id: &str) {
         let export = "  invoke_hook,";
         assert!(bundle.contains(export));
         let bundle = bundle.replace(export, "  test_invoke_hook as invoke_hook,");
-        fs::write(
-            path,
-            bundle
-                + r#"
+        let bundle = bundle
+            + r#"
 function test_invoke_hook(request, host) {
   if (request.stage === "before" && request.args.mode === "raw-write")
     return host.op("db.insert", { table: "bans", value: { name: "Alice" } });
   return invoke_hook(request, host);
 }
-"#,
-        )
-        .unwrap();
+"#;
+        fs::write(path, &bundle).unwrap();
+        let path = target.join("manifest.json");
+        let mut manifest: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        manifest["hashes"]["transactions.js"] = json!(format!("{:x}", Sha256::digest(bundle)));
+        fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     }
 }
 

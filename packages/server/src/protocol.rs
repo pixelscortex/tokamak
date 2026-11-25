@@ -18,7 +18,7 @@ pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
 #[serde(untagged)]
 pub enum CallError {
     Message(String),
-    Structured(StructuredCallError),
+    Structured(Box<StructuredCallError>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

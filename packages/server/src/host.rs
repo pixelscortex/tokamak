@@ -273,21 +273,8 @@ fn operations(
     if let Some((plugins, owner)) = graph {
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
             .expect("unique operation");
-        if let Some(name) = qualified
-            && let Some(chain) = plugins.query_hooks.get(&name)
-        {
-            let target = &plugins.targets[&name];
-            ops = ops.with_transforms(hooks::QueryHooks {
-                target: hooks::HookTarget {
-                    args: target.args.clone(),
-                    result: target.result.clone(),
-                    chain: chain.clone(),
-                    name,
-                },
-                plugins: plugins.clone(),
-                note: note.clone(),
-                tx: tx.clone(),
-            });
+        if let Some(hooks) = hooks::QueryHooks::for_target(&plugins, qualified, &note, &tx) {
+            ops = ops.with_transforms(hooks);
         }
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {

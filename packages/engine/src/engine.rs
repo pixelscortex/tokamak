@@ -148,11 +148,8 @@ impl Engine for QuickJsEngine {
             call_end,
             "call",
             world.context.async_with(async |ctx| {
-                let function = (|| {
-                    let namespace: Object = namespace.restore(&ctx)?;
-                    namespace.get::<_, Function>(export)
-                })()
-                .map_err(|e| js_error(&ctx, e, bundle, false))?;
+                let function = exported_function(&ctx, namespace, export)
+                    .map_err(|e| js_error(&ctx, e, bundle, false))?;
                 if ops.3.is_some() {
                     return bridge::invoke_export(&ctx, &invocation, ops, function, args, bundle)
                         .await;
@@ -174,6 +171,23 @@ impl Engine for QuickJsEngine {
         invocation.retire();
         result
     }
+}
+
+fn exported_function<'js>(
+    ctx: &Ctx<'js>,
+    namespace: Persistent<Object<'static>>,
+    export: &str,
+) -> rquickjs::Result<Function<'js>> {
+    namespace
+        .restore(ctx)?
+        .get::<_, Value>(export)?
+        .into_function()
+        .ok_or_else(|| {
+            rquickjs::Exception::throw_type(
+                ctx,
+                &format!("bundle export {export:?} is missing or not a function"),
+            )
+        })
 }
 
 /// The interrupt stops running JS; the timer independently stops a pending
@@ -206,16 +220,8 @@ pub(crate) fn js_error_named(
         return Error::Engine(error.to_string());
     }
     let thrown = ctx.catch();
-    if let Some(object) = thrown.as_object()
-        && let Ok(value) = object.get::<_, Value>("callDetails")
-        && value.is_object()
-        && let Ok(details) = bridge::decode(ctx, value)
-        && let Ok(message) = object.get::<_, String>("message")
-    {
-        return Error::Call(crate::CallError {
-            message,
-            details: Some(details),
-        });
+    if let Some(error) = thrown.as_object().and_then(bridge::native_call_error) {
+        return Error::Call(error);
     }
     let message = thrown
         .as_object()

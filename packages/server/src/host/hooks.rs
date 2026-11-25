@@ -124,13 +124,35 @@ async fn run_chain(
 }
 
 pub(super) struct QueryHooks {
-    pub target: HookTarget,
-    pub plugins: Arc<Loaded>,
-    pub note: CallNote,
-    pub tx: TransactionContext,
+    target: HookTarget,
+    plugins: Arc<Loaded>,
+    note: CallNote,
+    tx: TransactionContext,
 }
 
 impl QueryHooks {
+    pub(super) fn for_target(
+        plugins: &Arc<Loaded>,
+        name: Option<String>,
+        note: &CallNote,
+        tx: &TransactionContext,
+    ) -> Option<Self> {
+        let name = name?;
+        let chain = plugins.query_hooks.get(&name)?.clone();
+        let target = &plugins.targets[&name];
+        Some(Self {
+            target: HookTarget {
+                name,
+                args: target.args.clone(),
+                result: target.result.clone(),
+                chain,
+            },
+            plugins: plugins.clone(),
+            note: note.clone(),
+            tx: tx.clone(),
+        })
+    }
+
     async fn execute(
         &self,
         executor: &dyn StageExecutor,

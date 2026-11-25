@@ -18,9 +18,21 @@ export const add = mutation({
   handler: (ctx, { name }) => ctx.db.insert("users", { name }),
 });
 
-type Profile = { title?: string; alias: string | null; status: "active" | "pending"; labels: string[] };
+type Profile = {
+  title?: string;
+  alias: string | null;
+  status: "active" | "pending";
+  labels: string[];
+  extras: Record<string, unknown>;
+  location: [string, number?, ...boolean[]];
+};
 
 export const profile = query({
   args: { mode: v.string() },
-  handler: (): Profile => ({ alias: null, status: "pending", labels: [] }),
+  handler: (): Profile => ({ alias: null, status: "pending", labels: [], extras: {}, location: ["old"] }),
+});
+
+export const explicit = query({
+  returns: v.object({ status: v.union(v.literal("active"), v.literal("pending")) }),
+  handler: () => ({ status: "pending" }),
 });

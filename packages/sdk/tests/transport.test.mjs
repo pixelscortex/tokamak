@@ -185,3 +185,26 @@ test("a plugin client cannot address another plugin's window state", async () =>
   );
   expect(wire.sent).toEqual([]);
 });
+
+test("WebSocket SDK preserves structured errors on calls and live queries", async () => {
+  const wire = socket();
+  const transport = new WebSocketTransport(wire.ws);
+  const error = {
+    message: "Hook moderation/policy:moderate: forbidden",
+    plugin: "moderation",
+    hook: "policy:moderate",
+    stage: "before",
+    kind: "forbidden",
+    data: { reason: "members" },
+  };
+  const pending = transport.query("team/users:list", {});
+  wire.emit(JSON.stringify({ type: "response", id: 1, result: { Err: error } }));
+  await expect(pending).rejects.toMatchObject(error);
+
+  const events = [];
+  const stop = transport.subscribe("team/users:list", {}, (event) => events.push(event));
+  wire.emit(JSON.stringify({ type: "subscription", id: 2, result: { Err: error } }));
+  expect(events).toEqual([{ error: expect.objectContaining(error), terminal: false }]);
+  stop();
+  transport.close();
+});

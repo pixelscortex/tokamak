@@ -3,7 +3,8 @@ import ts from "typescript";
 // Turn a finite wire type into the same validator format used for arguments.
 // Open or recursive subtrees leave the surrounding type intact.
 export function resultValidator(checker, definition, location) {
-  if (definition.getProperty("_explicitReturns")) return;
+  const returns = definition.getProperty("returns");
+  if (returns && !(returns.flags & ts.SymbolFlags.Optional)) return;
   const types = definition.getProperty("_types");
   if (!types) return;
   const carrier = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(types, location));

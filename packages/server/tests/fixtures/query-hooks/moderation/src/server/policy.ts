@@ -12,7 +12,8 @@ export const ban = mutation({
 
 export const moderate = hook(team.api.list, {
   async before(ctx, args) {
-    if (args.mode === "blocked" && ctx.auth.user.role === "member") return fail("forbidden", { reason: "members" });
+    if (args.mode === "blocked" && ctx.auth.user.role === "member")
+      return fail("forbidden", { reason: "members" });
     if (args.mode === "wrong-args") return { ...args, text: 3 as unknown as string };
     if (args.mode === "added-arg") return { ...args, additional: true };
     if (args.mode === "stalled") await new Promise(() => {});
@@ -44,13 +45,15 @@ export const delegated = query({
 });
 
 export const editProfile = hook(team.api.profile, {
-  after(_ctx, result, { mode }) {
+  after(_ctx, result, { mode }): typeof result {
     return {
       ...result,
       title: mode === "bad-title" ? (0 as unknown as string) : "Title",
       alias: mode === "bad-alias" ? (false as unknown as string) : "Alias",
       status: mode === "bad-status" ? ("invalid" as "active") : "active",
       labels: ["new"],
+      extras: { fresh: ["data"] },
+      location: ["new", 1, mode === "bad-location" ? ("invalid" as unknown as boolean) : true],
     };
   },
 });
@@ -67,6 +70,20 @@ export const fromMutation = mutation({
   handler: (ctx) => ctx.runQuery(team.api.list, { text: " Ali " }),
 });
 
+export const catchFailure = query({
+  async handler(ctx) {
+    try {
+      await ctx.runQuery(team.api.list, { text: "", mode: "blocked" });
+    } catch (error) {
+      if (error instanceof Error && "kind" in error && "plugin" in error && "data" in error) {
+        return { kind: String(error.kind), plugin: String(error.plugin), data: error.data };
+      }
+      throw error;
+    }
+    throw new Error("expected failure");
+  },
+});
+
 export const fromAction = action({
   async handler(ctx) {
     const rows = await ctx.runQuery(team.api.list, { text: " Ali " });
@@ -80,4 +97,8 @@ export const fromAction = action({
     }
     throw new Error("expected failure");
   },
+});
+
+export const editExplicit = hook(team.api.explicit, {
+  after: () => ({ status: "active" }),
 });
