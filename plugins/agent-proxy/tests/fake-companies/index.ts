@@ -51,6 +51,10 @@ export async function startFakeCompanies({
       strict: boolean;
       /** Milliseconds the token endpoint waits before it answers for this account. */
       tokenDelayMs: number;
+      /** OpenAI: the ID token's `chatgpt_plan_type`. */
+      plan: string;
+      /** OpenAI: the workspace's name in `/wham/accounts/check`; none for a personal account. */
+      workspace?: string;
       authorization?: { challenge: string; state: string; redirect: string };
     }
   >();
@@ -204,7 +208,11 @@ export async function startFakeCompanies({
               id_token: syntheticJwt({
                 email: `${account.id}@example.test`,
                 exp: Math.floor(account.expiresAt / 1000),
-                "https://api.openai.com/auth": { chatgpt_account_id: account.id, chatgpt_plan_type: "plus" },
+                "https://api.openai.com/auth": {
+                  chatgpt_account_id: account.id,
+                  chatgpt_plan_type: account.plan,
+                  chatgpt_user_id: `user-${account.id}`,
+                },
               }),
             }
           : {
@@ -302,8 +310,9 @@ export async function startFakeCompanies({
         accounts: [
           {
             id: account.id,
-            plan_type: "plus",
-            structure: "personal",
+            name: account.workspace ?? null,
+            plan_type: account.plan,
+            structure: account.workspace ? "workspace" : "personal",
             can_access_with_session: true,
             workspace_backend_origin: "NO_CONSTRAINT",
             account_routing_override: "NO_CONSTRAINT",
@@ -411,7 +420,12 @@ export async function startFakeCompanies({
     addAccount(
       company: Company,
       id: string,
-      { signIn = "success", strict = true }: { signIn?: SignIn; strict?: boolean } = {},
+      {
+        signIn = "success",
+        strict = true,
+        plan = "plus",
+        workspace,
+      }: { signIn?: SignIn; strict?: boolean; plan?: string; workspace?: string } = {},
     ) {
       if (accounts.has(id)) throw new Error(`Duplicate fake account: ${id}`);
       const account = {
@@ -424,6 +438,8 @@ export async function startFakeCompanies({
         refreshToken: `fake-${id}-refresh`,
         generation: 0,
         tokenDelayMs: 0,
+        plan,
+        ...(workspace !== undefined && { workspace }),
         expiresAt: Infinity,
         answers: [] as Answer[],
       };

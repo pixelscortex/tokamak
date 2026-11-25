@@ -321,7 +321,11 @@ export const finishSignIn = pluginOnly(
       const addresses = await companyAddresses(ctx);
       let signedIn: SignedIn;
       try {
-        signedIn = await company.exchange(addresses, { code: read.code, state: claimed.state }, claimed.verifier);
+        signedIn = await company.exchange(
+          addresses,
+          { code: read.code, state: claimed.state },
+          claimed.verifier,
+        );
       } catch (error) {
         await settle(false);
         if (!(error instanceof SignInError)) throw error;
@@ -332,7 +336,9 @@ export const finishSignIn = pluginOnly(
       const accountId = about.identity.accountId ?? signedIn.identity.accountId;
       if (!accountId) {
         await settle(false);
-        return fail("Refused", { message: `${company.name} did not say which account signed in. Try again.` });
+        return fail("Refused", {
+          message: `${company.name} did not say which account signed in. Try again.`,
+        });
       }
       const email = about.identity.email ?? signedIn.identity.email;
       const organization = about.identity.organization ?? signedIn.identity.organization;

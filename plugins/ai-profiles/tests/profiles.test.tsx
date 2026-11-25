@@ -128,10 +128,9 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
   mount();
   await user.click(await screen.findByRole("button", { name: "Add subscription" }));
 
-  // Company: Anthropic is the one choice; OpenAI and "More later" are listed, not offered.
+  // Company: Anthropic and OpenAI are offered; "More later" is listed, not offered.
   const dialog = await screen.findByRole("dialog", { name: "Add subscription" });
-  expect(within(dialog).queryByRole("button", { name: /OpenAI/ })).toBeNull();
-  expect(within(dialog).getByText("OpenAI")).toBeTruthy();
+  expect(within(dialog).getByRole("button", { name: /OpenAI/ })).toBeTruthy();
   expect(within(dialog).getByText("More later")).toBeTruthy();
   await user.click(within(dialog).getByRole("button", { name: /Anthropic/ }));
 
