@@ -250,6 +250,11 @@ fn call_depth_limits_a_cycle_between_plugins() {
 }
 
 #[test]
+fn call_depth_limits_a_cycle_between_actions() {
+    acceptance("action-depth");
+}
+
+#[test]
 fn action_kind_and_independent_transactions_outlive_normal_budget() {
     acceptance("contract");
 }

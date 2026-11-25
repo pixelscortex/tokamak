@@ -10,7 +10,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES, next_call_depth};
+use tokamak_worker::{CHAT_THREAD_ID_PREFIX, WORKER_CAPACITY, WORKER_FRAME_BYTES, next_call_depth};
 use tokio::{
     sync::{Semaphore, mpsc, oneshot, watch},
     task::JoinSet,
@@ -392,12 +392,11 @@ async fn run(
     bridge: &Bridge,
     root: u64,
     host: &Arc<Host>,
-    frame: Value,
+    mut frame: Value,
     ancestors: &[String],
     invocation: Invocation<'_>,
 ) -> Result<Value, String> {
-    let (thread, args) = call_input(&frame);
-    let mut call = match host.begin(frame).await {
+    let mut call = match host.begin(&mut frame).await {
         Ok(call) => call,
         Err(error) => return Err(host.call_error(error).await),
     };
@@ -407,12 +406,16 @@ async fn run(
         channel: None,
     };
     let channels = Channels::default();
+    let thread = frame["threadId"]
+        .as_str()
+        .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned()));
     let route = CallRoute {
         pool,
         bridge,
         root,
         ancestors,
-        input: (thread, args),
+        thread,
+        args: &frame["args"],
     };
     let mut operations = FuturesUnordered::new();
     let mut pending = HashMap::<u64, CancellationToken>::new();
@@ -544,17 +547,6 @@ async fn peer_operation(
     }
 }
 
-fn call_input(frame: &Value) -> (OnceLock<String>, Value) {
-    let inherited = frame["threadId"].as_str().map(str::to_owned);
-    let args = if inherited.is_none() {
-        frame["args"].clone()
-    } else {
-        Value::Null
-    };
-    let thread = inherited.map_or_else(OnceLock::new, OnceLock::from);
-    (thread, args)
-}
-
 fn contains_string(value: &Value, needle: &str) -> bool {
     match value {
         Value::String(value) => value == needle,
@@ -569,7 +561,8 @@ struct CallRoute<'a> {
     bridge: &'a Bridge,
     root: u64,
     ancestors: &'a [String],
-    input: (OnceLock<String>, Value),
+    thread: OnceLock<String>,
+    args: &'a Value,
 }
 
 impl CallRoute<'_> {
@@ -599,7 +592,7 @@ impl CallRoute<'_> {
                 if wants_note && value["value"].is_object() {
                     let note = value["value"].as_object_mut().expect("object checked");
                     note.remove("threadId");
-                    if let Some(thread_id) = self.input.0.get() {
+                    if let Some(thread_id) = self.thread.get() {
                         note.insert("threadId".into(), json!(thread_id));
                     }
                     value["value"]["depth"] = json!(self.ancestors.len() - 1);
@@ -612,7 +605,7 @@ impl CallRoute<'_> {
             here,
             frame,
             opening,
-            self.input.0.get().map(String::as_str),
+            self.thread.get().map(String::as_str),
         )
         .await
     }
@@ -626,12 +619,12 @@ impl CallRoute<'_> {
         // Check it against the admitted arguments and retain the first thread in Rust.
         let candidate = fields.remove("threadId");
         if wants_note
-            && self.input.0.get().is_none()
+            && self.thread.get().is_none()
             && let Some(thread) = candidate.as_ref().and_then(Value::as_str)
-            && thread.starts_with("chat/threads:")
-            && contains_string(&self.input.1, thread)
+            && thread.starts_with(CHAT_THREAD_ID_PREFIX)
+            && contains_string(self.args, thread)
         {
-            let _ = self.input.0.set(thread.to_owned());
+            let _ = self.thread.set(thread.to_owned());
         }
 
         if matches!(
@@ -642,7 +635,7 @@ impl CallRoute<'_> {
                 "continuation".into(),
                 json!({
                     "depth": self.ancestors.len() - 1,
-                    "thread": self.input.0.get(),
+                    "thread": self.thread.get(),
                 }),
             );
         }
@@ -679,8 +672,10 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
-        let method = target["method"].as_str().unwrap_or("describe");
-        let name = format!("plugin {}/{method}", artifact.id);
+        let name = match target["method"].as_str() {
+            Some(method) => format!("plugin {}/{method}", artifact.id),
+            None => format!("plugin {} contract {}", artifact.id, target["name"]),
+        };
         next_call_depth(ancestors.len() - 1, &name)?;
         if lease.is_some() && ancestors.contains(&artifact.id) {
             return Err(format!(
@@ -763,6 +758,55 @@ mod tests {
             entry_hash: String::new(),
             code_hash: String::new(),
         }
+    }
+
+    #[tokio::test]
+    async fn continuation_uses_only_the_admitted_ancestry_and_thread() {
+        let pool = Pool::new(
+            Default::default(),
+            Default::default(),
+            CancellationToken::new(),
+        );
+        let (output, _) = mpsc::channel(1);
+        let bridge = Bridge {
+            output,
+            next: AtomicU64::new(0),
+            slots: Semaphore::new(1),
+            pending: Mutex::default(),
+            leases: Leases::new(&pool, "".into()),
+            retiring: CancellationToken::new(),
+        };
+        let route = CallRoute {
+            pool: &pool,
+            bridge: &bridge,
+            root: 1,
+            ancestors: &["first".into(), "second".into()],
+            thread: OnceLock::new(),
+            args: &json!({"selection": "chat/threads:admitted"}),
+        };
+        let mut auth = json!({
+            "name": "auth.current",
+            "payload": {"call": true},
+            "continuation": {"depth": 0, "thread": "chat/threads:forged"},
+            "threadId": "chat/threads:forged",
+        });
+        route.attach_continuation(&mut auth, true);
+        assert_eq!(
+            auth,
+            json!({"name": "auth.current", "payload": {"call": true}})
+        );
+        assert!(route.thread.get().is_none());
+
+        let mut query = json!({
+            "name": "local.runQuery",
+            "continuation": {"depth": 0, "thread": "chat/threads:forged"},
+            "threadId": "chat/threads:forged",
+        });
+        route.attach_continuation(&mut query, false);
+        assert_eq!(
+            query,
+            json!({"name": "local.runQuery", "continuation": {"depth": 1, "thread": null}})
+        );
     }
 
     #[tokio::test]

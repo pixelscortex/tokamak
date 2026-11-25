@@ -153,6 +153,8 @@ try {
     await assertChain(undefined, true);
   } else if (scenario === "call-depth") {
     await assert.rejects(client.query(b.ops.loop, {}), /depth limit at b\/ops:loop/);
+  } else if (scenario === "action-depth") {
+    await assert.rejects(client.action(b.ops.loopAction, {}), /depth limit at b\/ops:loopAction/);
   } else if (scenario === "contract") {
     // Prove the configured normal call budget is real, then outlive it in action.
     await assert.rejects(client.query(api.ops.timeoutQuery, {}), /wall-clock budget/);

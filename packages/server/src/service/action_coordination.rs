@@ -21,11 +21,15 @@ impl Coordinator {
                 return;
             }
         };
-        let (local_name, owner) = if let Some(loaded) = &self.plugins {
+        let (local_name, owner, note) = if let Some(loaded) = &self.plugins {
             let target = &loaded.targets[&name];
-            (target.local_name.clone(), Some(target.owner.clone()))
+            (
+                target.local_name.clone(),
+                Some(target.owner.clone()),
+                note.with_root_args(&target.args, &args),
+            )
         } else {
-            (name.clone(), None)
+            (name.clone(), None, note)
         };
         let source = match (&self.plugins, &owner) {
             (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
@@ -44,13 +48,6 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
-        let note = match &self.plugins {
-            Some(loaded) => {
-                let target = &loaded.targets[&name];
-                note.with_args(&target.args, &args)
-            }
-            None => note,
-        };
         let ops = match crate::actions::operations(
             self.commands.clone(),
             self.plugins.clone(),
@@ -99,10 +96,7 @@ impl Coordinator {
     }
 
     pub(super) async fn run_function(&mut self, call: crate::actions::NestedCall) {
-        let result = match self
-            .validate_nested(&call)
-            .and_then(|()| call.note.clone().nested(&call.name))
-        {
+        let result = match self.enter_nested(&call) {
             Err(error) => Err(error),
             Ok(note) => {
                 let result = self
@@ -123,8 +117,11 @@ impl Coordinator {
         let _ = call.reply.send(result);
     }
 
-    fn validate_nested(&self, call: &crate::actions::NestedCall) -> Result<(), String> {
-        let actual = match (&self.plugins, &call.generation, &call.owner) {
+    fn enter_nested(
+        &self,
+        call: &crate::actions::NestedCall,
+    ) -> Result<crate::identity::CallNote, String> {
+        let (kind, validator) = match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner))
                 if Arc::ptr_eq(current, generation)
                     || current.same_action_source(generation, owner) =>
@@ -147,11 +144,13 @@ impl Coordinator {
                 if call.note.auth.is_none() {
                     target.check_anonymous_scope(owner)?;
                 }
-                Some(target.kind)
+                (Some(target.kind), Some(target.args))
             }
-            (None, None, None) => self.kinds.get(&call.name).copied(),
+            (None, None, None) => (self.kinds.get(&call.name).copied(), None),
             _ => return Err("action belongs to a retired plugin generation".to_owned()),
         };
-        call.kind.check_nested(actual)
+        call.kind.check_nested(kind)?;
+        call.note
+            .enter(&call.name, validator.as_deref(), &call.args)
     }
 }

@@ -46,18 +46,27 @@ impl Coordinator {
                 }
                 let auth = auth.caller.read().expect("auth lock").clone();
                 let note = match local_parent {
-                    Some((depth, thread)) => match crate::identity::CallNote::from_local_parent(
-                        auth, &name, depth, thread,
-                    ) {
-                        Ok(note) => note,
-                        Err(error) => {
-                            self.respond(session, id, Err(error));
-                            return;
+                    Some((depth, thread)) => {
+                        match crate::identity::CallNote::from_local_parent(&auth, depth, thread)
+                            .and_then(|parent| {
+                                let validator = self
+                                    .plugins
+                                    .as_ref()
+                                    .and_then(|loaded| loaded.targets.get(&name))
+                                    .map(|target| target.args.as_ref());
+                                parent.enter(&name, validator, &args)
+                            }) {
+                            Ok(note) => note,
+                            Err(error) => {
+                                self.respond(session, id, Err(error));
+                                return;
+                            }
                         }
-                    },
-                    None => Some(auth).into(),
+                    }
+                    None => Some(auth.clone()).into(),
                 };
-                self.call(session, id, name, args, expected, note).await;
+                self.call(session, id, name, args, expected, (auth, note))
+                    .await;
             }
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
@@ -80,15 +89,11 @@ impl Coordinator {
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
-        note: crate::identity::CallNote,
+        (auth, note): (crate::identity::AuthContext, crate::identity::CallNote),
     ) {
-        let Some(auth) = note.auth.as_ref() else {
-            self.respond(session, id, Err("Session has no caller".into()));
-            return;
-        };
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
-                query.map(|read| read(auth)).map_err(str::to_owned)
+                query.map(|read| read(&auth)).map_err(str::to_owned)
             } else {
                 Err("auth caller identity requires a query".into())
             };

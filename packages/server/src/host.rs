@@ -70,7 +70,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         note,
     } = invocation;
     let note = match plugins.as_ref().and_then(|loaded| loaded.targets.get(name)) {
-        Some(target) => note.with_args(&target.args, &args),
+        Some(target) => note.with_root_args(&target.args, &args),
         None => note,
     };
     let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
@@ -264,7 +264,7 @@ fn operations(
                     target.check_anonymous_scope(&owner)?;
                 }
 
-                let child_note = note.clone().nested(name)?.with_args(&target.args, &args);
+                let child_note = note.enter(name, Some(&target.args), &args)?;
 
                 let child_scope = CallScope::default();
                 let child_ops = operations(

@@ -204,7 +204,7 @@ export interface FunctionDefinition<
   readonly args: ValidatorDescription;
   readonly _types?: { args: A; result: R };
   invoke(args: unknown, host: HostBridge): Promise<JsonValue>;
-  invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext, call?: CallContext): unknown;
+  invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext, call: CallContext): unknown;
 }
 
 export type FunctionBuilder<
@@ -242,7 +242,7 @@ function builder<
         ? {
             // Contract members are called in the same worker and can receive
             // live objects. Window calls still enter invoke() and validate JSON.
-            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call = callContext(auth)) =>
+            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call: CallContext) =>
               handler(
                 localContext(host, auth, call) as Parameters<typeof handler>[0],
                 input as Parameters<typeof handler>[1],
@@ -338,11 +338,15 @@ function builder<
   };
 }
 
+const CHAT_THREAD_ID_PREFIX = "chat/threads:";
+
 // Local function validators run in the worker; a qualified ID identifies its owner.
 export function threadArgument(schema: ValidatorDescription, value: unknown): Id<"threads"> | undefined {
   switch (schema.kind) {
     case "id":
-      return schema.table === "threads" && typeof value === "string" && value.startsWith("chat/threads:")
+      return schema.table === "threads" &&
+        typeof value === "string" &&
+        value.startsWith(CHAT_THREAD_ID_PREFIX)
         ? (value as Id<"threads">)
         : undefined;
     case "optional":

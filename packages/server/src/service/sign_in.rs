@@ -313,7 +313,7 @@ impl Coordinator {
             None
         };
         let mut ops = OpRegistry::new();
-        let note = CallNote::default().with_args(&target.args, &call.arguments);
+        let note = CallNote::default().with_root_args(&target.args, &call.arguments);
         note.register(&mut ops)
             .map_err(|_| SignInError::Unavailable)?;
         engine::register_password_crypto(&mut ops).map_err(|_| SignInError::Unavailable)?;

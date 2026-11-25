@@ -91,6 +91,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             kind: Some(FunctionKind::Action),
             local_parent: None,
         },
+        // TKM-286 will restrict LocalCall to authenticated Runner sessions.
         Request::LocalCall {
             id,
             name,

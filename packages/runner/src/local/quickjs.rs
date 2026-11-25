@@ -542,7 +542,7 @@ impl Host {
         Err(self.label(&format!("cannot claim plugin identity {claimed}")))
     }
 
-    async fn begin(self: &Arc<Self>, mut frame: Value) -> Result<Call, String> {
+    async fn begin(self: &Arc<Self>, frame: &mut Value) -> Result<Call, String> {
         // One op and one cancel per pending SDK slot, plus the final result.
         let (frames, receive) = mpsc::channel(2 * WORKER_CAPACITY + 1);
         let overflow = CancellationToken::new();
@@ -565,7 +565,7 @@ impl Host {
         let id = calls.next;
         frame["id"] = json!(id);
         frame["routed"] = json!(true);
-        let bytes = self.encode(&frame)?;
+        let bytes = self.encode(frame)?;
         calls.active.insert(
             id,
             Inbox {

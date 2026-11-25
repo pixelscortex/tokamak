@@ -1,4 +1,5 @@
 use super::AuthContext;
+use crate::data::Id;
 use serde_json::{Value, json};
 
 #[derive(Clone, Default)]
@@ -19,38 +20,51 @@ impl From<Option<AuthContext>> for CallNote {
 
 impl CallNote {
     pub fn from_local_parent(
-        auth: AuthContext,
-        name: &str,
+        auth: &AuthContext,
         depth: usize,
         thread_id: Option<String>,
     ) -> Result<Self, String> {
         if let Some(thread_id) = &thread_id
-            && !thread_id.strip_prefix("chat/threads:").is_some_and(|key| {
-                !key.is_empty()
-                    && key
-                        .bytes()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
-            })
+            && !(thread_id.starts_with(tokamak_worker::CHAT_THREAD_ID_PREFIX)
+                && thread_id
+                    .split_once('/')
+                    .is_some_and(|(_, id)| id.parse::<Id>().is_ok()))
         {
             return Err("Invalid local call thread ID".into());
         }
 
-        Self {
-            auth: Some(auth),
+        Ok(Self {
+            auth: Some(auth.clone()),
             thread_id,
             depth,
+        })
+    }
+
+    pub fn enter(
+        &self,
+        name: &str,
+        validator: Option<&Value>,
+        args: &Value,
+    ) -> Result<Self, String> {
+        let depth = tokamak_worker::next_call_depth(self.depth, name)?;
+        let mut note = self.clone();
+        note.depth = depth;
+        Ok(note.with_args(validator, args))
+    }
+
+    pub fn with_root_args(self, validator: &Value, args: &Value) -> Self {
+        if self.depth == 0 {
+            self.with_args(Some(validator), args)
+        } else {
+            self
         }
-        .nested(name)
     }
 
-    pub fn nested(mut self, name: &str) -> Result<Self, String> {
-        self.depth = tokamak_worker::next_call_depth(self.depth, name)?;
-        Ok(self)
-    }
-
-    pub fn with_args(mut self, validator: &Value, args: &Value) -> Self {
+    fn with_args(mut self, validator: Option<&Value>, args: &Value) -> Self {
         if self.thread_id.is_none() {
-            self.thread_id = thread_in(validator, args).ok().flatten().map(str::to_owned);
+            self.thread_id = validator
+                .and_then(|schema| thread_in(schema, args).ok().flatten())
+                .map(str::to_owned);
         }
         self
     }
@@ -113,14 +127,12 @@ fn thread_in<'a>(schema: &Value, value: &'a Value) -> Result<Option<&'a str>, ()
             .ok_or(()),
         "id" => {
             let id = value.as_str().ok_or(())?;
-            let (namespace, logical) = id
-                .split_once('/')
-                .map_or((None, id), |(ns, id)| (Some(ns), id));
-            let parsed: crate::data::Id = logical.parse().map_err(|_| ())?;
+            let logical = id.split_once('/').map_or(id, |(_, logical)| logical);
+            let parsed: Id = logical.parse().map_err(|_| ())?;
             if schema["table"] != parsed.table().as_str() {
                 return Err(());
             }
-            Ok((parsed.table().as_str() == "threads" && namespace == Some("chat")).then_some(id))
+            Ok((id.starts_with(tokamak_worker::CHAT_THREAD_ID_PREFIX)).then_some(id))
         }
         "string" if value.is_string() => Ok(None),
         "number" if value.is_number() => Ok(None),
@@ -128,6 +140,28 @@ fn thread_in<'a>(schema: &Value, value: &'a Value) -> Result<Option<&'a str>, ()
         "null" if value.is_null() => Ok(None),
         "literal" if crate::data::json_equal(value, &schema["value"]) => Ok(None),
         "any" => Ok(None),
-        _ => Err(()),
+        "string" | "number" | "boolean" | "null" | "literal" => Err(()),
+        _ => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thread_arguments_match_the_sdk_cases() {
+        let cases: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../sdk/tests/fixtures/thread-arguments.json"
+        ))
+        .unwrap();
+        for case in cases {
+            assert_eq!(
+                thread_in(&case["schema"], &case["args"]),
+                Ok(case["thread"].as_str()),
+                "{}",
+                case["name"]
+            );
+        }
     }
 }

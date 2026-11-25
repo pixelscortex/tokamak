@@ -178,7 +178,7 @@ fn register_plugin_call(
                     .await
                     .map_err(|_| "server closed before plugin call completed".to_owned())?;
             }
-            let note = note.nested(name)?.with_args(&target.args, &args);
+            let note = note.enter(name, Some(&target.args), &args)?;
             let environment = Arc::new(crate::environment::Snapshot::new(
                 Some(&loaded),
                 Some(&target.owner),

@@ -300,6 +300,9 @@ fn spawn_group(
     Ok((child, group, guardian))
 }
 
+/// Qualified record IDs for chat threads.
+pub const CHAT_THREAD_ID_PREFIX: &str = "chat/threads:";
+
 /// The root call is at depth zero.
 pub const MAX_CALL_DEPTH: usize = 15;
 

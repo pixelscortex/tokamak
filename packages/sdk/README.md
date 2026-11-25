@@ -541,14 +541,18 @@ Queries, mutations, actions and local functions receive a read-only
 Anonymous calls have `null` for `user` and `device`; `ctx.auth` behaves
 as before.
 
-A root call starts at depth zero. Each nested call adds one,
-and attempts to go past depth 15 fail with the target plugin and function
-in the error. The first call in the chain with a validated
+A root call starts at depth zero. Each nested call adds one.
+A function can call itself or loop through others up to depth 15; going past it
+fails with the target plugin and function in the error.
+The first call in the chain with a validated
 `v.id("threads")` argument whose value is a qualified `chat/threads:…` ID
 sets the thread for its descendants. The argument can be inside an object
 or array and can have any name. An ordinary string that looks like a thread
 ID does not set it. If multiple typed IDs occur in one call, object fields
 are visited in key order and arrays in element order.
+
+`threadId` says which thread the caller claims the call is about. It is not an
+access check; verify the caller's access before reading or changing that thread.
 
 The Runner preserves the note across routed local contracts and when a
 local function calls a server query, mutation, or action through the window.

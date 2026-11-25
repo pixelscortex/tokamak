@@ -7,6 +7,7 @@ import {
   v,
   provide,
   internalQuery,
+  internalAction,
   type Id,
   type ApiFromModule,
   type FunctionReference,
@@ -19,11 +20,12 @@ import {
   callerMutation,
   callerAction,
   loop,
+  loopAction,
   noteViaAction,
   noteQuery,
   noteMutation,
 } from "plugin:b/server";
-import { callLoop } from "plugin:b/contracts";
+import { actionLoop, callLoop } from "plugin:b/contracts";
 
 export const callerViaQuery = query({ handler: (ctx) => ctx.use({ callerQuery }).callerQuery({}) });
 export const callerViaMutation = mutation({
@@ -221,6 +223,10 @@ export const delayedSecret = action({
 
 export const callLoopProvider = provide(callLoop, {
   next: internalQuery({ handler: (ctx): Promise<null> => ctx.use({ loop }).loop({}) }),
+});
+
+export const actionLoopProvider = provide(actionLoop, {
+  next: internalAction({ handler: (ctx): Promise<null> => ctx.use({ loopAction }).loopAction({}) }),
 });
 
 export const callNoteAction = action({
