@@ -1,0 +1,35 @@
+packages/sdk/tools/plugin-boundary.mjs
+  s_ba25387409099f::t_61d3da0062cc62 223,245
+packages/build/src/vite.ts
+  s_ba25387409099f::t_61d3da0062cc62 48
+  s_ba25387409099f::t_12479bfa8f6abc 145
+packages/sdk/tools/bundle.mjs
+  s_ba25387409099f::t_61d3da0062cc62 164,167-169,281,307-314,318,321
+  s_ba25387409099f::t_196dd6b45d6b95 7,342,355,374
+packages/sdk/tools/table-references.mjs
+  s_ba25387409099f::t_61d3da0062cc62 22-31,76
+packages/sdk/src/schema.ts
+  s_ba25387409099f::t_61d3da0062cc62 110-118
+packages/build/tests/ref-fixtures.mjs
+  s_ba25387409099f::t_12b84c808f94c9 53,62-69,81-82
+packages/build/tests/refs.test.mjs
+  s_ba25387409099f::t_901e859747a284 2,20,32,63-77
+packages/sdk/README.md
+  s_ba25387409099f::t_310e2fcf202121 611-613,620-625
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc5318256cd4a2104782ff13434462de4de5487d",
+  "prompts": {},
+  "sessions": {
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
