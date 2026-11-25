@@ -8,6 +8,7 @@ export {
   serverDefault,
   callPrivate,
   wait,
+  waitHook,
   marker,
   hookedQuery,
   failureValue,
