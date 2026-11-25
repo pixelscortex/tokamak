@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "bun:test";
 import { build, built, workspace } from "./plugin-fixtures.mjs";
@@ -25,4 +25,30 @@ test("a trigger needs a declared dependency and an existing table", async () => 
     assert.notEqual(result.status, 0);
     assert.match(result.stdout + result.stderr, error);
   }
+}, 45_000);
+
+test("a table import preserves the owner's public query hook and qualified IDs", async () => {
+  const { owner, dependent } = await fixture();
+  await writeFile(
+    join(dependent, "src/hook.ts"),
+    `
+    import { hook, type Id } from "@tokamak/sdk";
+    import { api } from "plugin:owner/server";
+    export const inspect = hook(api.get, {
+      before(_ctx, args) {
+        const id: Id<"owner.items"> = args.id;
+        return { id };
+      },
+      after(_ctx, result) {
+        if (result) {
+          const id: Id<"owner.items"> = result._id;
+          return { ...result, _id: id };
+        }
+        return result;
+      },
+    });
+  `,
+  );
+  built(owner);
+  built(dependent);
 }, 45_000);

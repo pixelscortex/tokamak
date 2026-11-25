@@ -59,8 +59,14 @@ type QualifyIds<Owner extends string, T> =
 
 /** Cross-plugin references in a consumer that imports the owner's table handles. */
 export type QualifiedPluginApi<Owner extends string, Api> = {
-  [Key in keyof Api]: Api[Key] extends FunctionReference<infer Kind, infer Args, infer Result>
-    ? FunctionReference<Kind, QualifyIds<Owner, Args>, QualifyIds<Owner, Result>>
+  [Key in keyof Api]: Api[Key] extends FunctionReference<
+    infer Kind,
+    infer Args,
+    infer Result,
+    infer V,
+    infer O
+  >
+    ? FunctionReference<Kind, QualifyIds<Owner, Args>, QualifyIds<Owner, Result>, V, O>
     : never;
 };
 
