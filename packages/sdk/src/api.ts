@@ -3,6 +3,8 @@
 import type { FunctionDefinition, FunctionKind } from "./functions";
 import type { Visibility } from "./visibility";
 
+const callableReference: unique symbol = Symbol("tokamak.reference.callable");
+
 const referenceTypes: unique symbol = Symbol("tokamak.reference.types");
 
 export const functionKind: unique symbol = Symbol("tokamak.function.kind");
@@ -16,6 +18,7 @@ export interface FunctionReference<
   V extends Visibility = Visibility,
   Owner extends string = string,
 > {
+  readonly [callableReference]: true;
   readonly [functionName]: string;
   readonly [functionKind]?: K;
   readonly [referenceTypes]: { kind: K; args: A; result: R; visibility: V; owner: Owner };
@@ -31,6 +34,17 @@ export type ReferenceFromDefinition<D, Owner extends string = string> =
   D extends FunctionDefinition<infer K, infer A, infer R, infer V>
     ? FunctionReference<K, A, R, V, Owner>
     : never;
+
+export type HookReference<
+  K extends FunctionKind,
+  A,
+  R,
+  V extends Visibility = Visibility,
+  Owner extends string = string,
+> = Omit<FunctionReference<K, A, R, V, Owner>, typeof callableReference>;
+
+export type HookReferenceFromDefinition<D, Owner extends string> =
+  D extends FunctionDefinition<infer K, infer A, infer R, infer V> ? HookReference<K, A, R, V, Owner> : never;
 
 export type ApiFromModule<M, Owner extends string = string> = ReferencesFromModule<
   M,
@@ -48,9 +62,9 @@ export type PluginFunctionsFromModule<M, Owner extends string = string> = Refere
   Owner
 >;
 
-export type ArgsOf<R> = R extends FunctionReference<FunctionKind, infer A, unknown> ? A : never;
+export type ArgsOf<R> = R extends HookReference<FunctionKind, infer A, unknown> ? A : never;
 
-export type ResultOf<R> = R extends FunctionReference<FunctionKind, unknown, infer V> ? V : never;
+export type ResultOf<R> = R extends HookReference<FunctionKind, unknown, infer V> ? V : never;
 
 /**
  * Generated references have an explicit list of wire names. The lazy form is

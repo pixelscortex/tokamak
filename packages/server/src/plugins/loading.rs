@@ -404,6 +404,15 @@ impl Loaded {
                 let kind = hook
                     .get("kind")
                     .map_or(Some(FunctionKind::Query), FunctionKind::from_wire);
+                if !matches!(
+                    kind,
+                    Some(FunctionKind::Query | FunctionKind::Mutation | FunctionKind::Action)
+                ) {
+                    eprintln!(
+                        "Skipping hook {owner}/{name}: target {target} is not a query, mutation or action"
+                    );
+                    continue;
+                }
                 if kind != Some(function.kind) {
                     eprintln!(
                         "Skipping hook {owner}/{name}: target {target} has a different function kind"

@@ -168,6 +168,12 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
         window: Option<bool>,
+        #[serde(default, rename = "hookPlans", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookPlans", optional, type = "boolean")
+        )]
+        hook_plans: Option<bool>,
     },
     LocalCall {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -197,6 +203,12 @@ pub enum Request {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
         window: Option<bool>,
+        #[serde(default, rename = "hookPlans", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookPlans", optional, type = "boolean")
+        )]
+        hook_plans: Option<bool>,
     },
     HookStage {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]

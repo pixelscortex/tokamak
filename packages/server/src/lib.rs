@@ -21,8 +21,8 @@ mod web;
 pub mod websocket;
 
 pub use actions::{
-    RUNNER_ACTION_ARTIFACT_UNAVAILABLE, RunnerAction, RunnerActionUpstream, RunnerFuture,
-    RunnerHookPlan,
+    RunnerAction, RunnerActionUpstream, RunnerFuture, RunnerHookPlan,
+    runner_action_artifact_unavailable,
 };
 pub use backend::{Backend, BackendConfig};
 pub use environment::Snapshot as ActionEnvironment;

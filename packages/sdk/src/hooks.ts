@@ -1,4 +1,4 @@
-import { functionKind, functionName, type ArgsOf, type FunctionReference, type ResultOf } from "./api";
+import { functionKind, functionName, type ArgsOf, type HookReference, type ResultOf } from "./api";
 import {
   action,
   mutation,
@@ -18,16 +18,16 @@ import { Visibility } from "./visibility";
 
 const hookBrand = Symbol("tokamak.hook");
 
-type Reference = FunctionReference<FunctionKind, unknown, unknown>;
+type Reference = HookReference<FunctionKind, unknown, unknown>;
 type HookKind = "query" | "mutation" | "action";
 type Context<T extends Reference, M extends DataModel> =
-  T extends FunctionReference<"action", unknown, unknown>
+  T extends HookReference<"action", unknown, unknown>
     ? CallerActionContext
-    : T extends FunctionReference<"mutation", unknown, unknown>
+    : T extends HookReference<"mutation", unknown, unknown>
       ? MutationContext<M>
       : QueryContext<M>;
 type OwnerOf<T> =
-  T extends FunctionReference<FunctionKind, unknown, unknown, Visibility, infer Owner> ? Owner : never;
+  T extends HookReference<FunctionKind, unknown, unknown, Visibility, infer Owner> ? Owner : never;
 type HookStage = "before" | "after";
 type MaybePromise<T> = T | Promise<T>;
 
@@ -43,12 +43,12 @@ interface HookDefinition<T extends Reference = Reference> {
   readonly target: string;
   readonly before: boolean;
   readonly after: boolean;
-  invoke(stage: HookStage, input: JsonObject, host: HostBridge): Promise<JsonValue>;
+  invoke(stage: HookStage, input: JsonObject, host: HostBridge, targetKind?: HookKind): Promise<JsonValue>;
 }
 
 type HookBuilder<M extends DataModel> = <T extends Reference>(
   target: T &
-    (T extends FunctionReference<HookKind, unknown, unknown>
+    (T extends HookReference<HookKind, unknown, unknown>
       ? string extends OwnerOf<T>
         ? { readonly error: "hooks must target another plugin" }
         : unknown
@@ -69,7 +69,7 @@ function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilde
       target,
       before: !!handlers.before,
       after: !!handlers.after,
-      invoke(stage: HookStage, input: JsonObject, host: HostBridge) {
+      invoke(stage: HookStage, input: JsonObject, host: HostBridge, targetKind = kind) {
         const handler = (context: unknown) => {
           type Ctx = Parameters<NonNullable<typeof handlers.before>>[0];
           const ctx = context as Ctx;
@@ -78,9 +78,9 @@ function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilde
             : handlers.after!(ctx, input.result as never, input.args as never);
         };
         const definition =
-          kind === "action"
+          targetKind === "action"
             ? functions.action({ handler })
-            : kind === "mutation"
+            : targetKind === "mutation"
               ? functions.mutation({ handler })
               : functions.query({ handler });
         return invokeFunction({ hook: definition }, { name: "hook", args: {} }, host);
@@ -95,11 +95,18 @@ export function createHook<S extends SchemaDefinition>(schema: S): HookBuilder<M
   return hookBuilder(schema);
 }
 
-export function createHookRegistry(modules: Record<string, object>) {
+export function createHookRegistry(modules: Record<string, object>, kinds: Record<string, HookKind> = {}) {
   return Object.fromEntries(
     Object.entries(modules).flatMap(([module, exports]) =>
       Object.entries(exports).flatMap(([name, value]) =>
-        value?.[hookBrand] === true ? [[`${module}:${name}`, value as HookDefinition] as const] : [],
+        value?.[hookBrand] === true
+          ? [
+              [
+                `${module}:${name}`,
+                { ...value, kind: kinds[`${module}:${name}`] ?? value.kind } as HookDefinition,
+              ] as const,
+            ]
+          : [],
       ),
     ),
   );
@@ -126,5 +133,5 @@ export function invokeHook(
   if (!hook?.[request.stage] || (request.target !== undefined && request.target !== hook.target)) {
     throw new Error(`Unknown hook stage: ${request.name}`);
   }
-  return hook.invoke(request.stage, request, host);
+  return hook.invoke(request.stage, request, host, hook.kind);
 }

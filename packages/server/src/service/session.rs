@@ -94,13 +94,14 @@ fn request_action(request: Request) -> Result<Action, Error> {
             args,
             on,
             window,
+            hook_plans,
         } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
             local_parent: None,
-            placement: crate::actions::Placement::new(on, window),
+            placement: crate::actions::Placement::new(on, window, hook_plans),
         },
         // TKM-286 will restrict LocalCall to authenticated Runner sessions.
         Request::LocalCall {
@@ -113,6 +114,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             hook_scope,
             on,
             window,
+            hook_plans,
         } => Action::Call {
             id,
             name,
@@ -123,7 +125,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
                 thread,
                 hook_scope,
             }),
-            placement: crate::actions::Placement::new(on, window),
+            placement: crate::actions::Placement::new(on, window, hook_plans),
         },
         Request::HookStage { id, scope, done } => Action::HookStage {
             id,

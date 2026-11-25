@@ -114,6 +114,7 @@ export function functionPlacement(root, selected, namespace) {
         if (path.startsWith(resolve(src, "client") + sep))
           throw new Error("Hooks must be exported from the plugin's server part");
         const info = hookInfo(type, source);
+        if (!info.targetKind) throw new Error("Hook target reference could not be resolved");
         if (!hookable(info.targetKind)) throw new Error("Only queries, mutations and actions can be hooked");
         if (namespace && info.owner === namespace) throw new Error("Hooks must target another plugin");
         exports.set(value.name, info);
@@ -386,6 +387,7 @@ export function registrySource({
   hasSchema,
   metadata,
   hasActionHooks,
+  placement,
   results,
   providers = [],
   lane = lanes.server,
@@ -435,10 +437,21 @@ export function registrySource({
     ? `createRegistry({${entries.join(",")}}, {${targets.join(",")}})`
     : `createRegistry({${entries.join(",")}})`;
   const definitions = imports.join("\n");
+  const hookKinds = JSON.stringify(
+    Object.fromEntries(
+      modules.flatMap(([path, module, names]) =>
+        [...(placement?.modules.get(path) ?? [])].flatMap(([name, definition]) =>
+          definition.targetKind && (!names || names.includes(name))
+            ? [[`${module}:${name}`, definition.targetKind]]
+            : [],
+        ),
+      ),
+    ),
+  );
   if (worker)
     return (
       header +
-      `import {createRegistry,createHookRegistry} from "@tokamak/sdk";\n${definitions}\nexport const functions = ${registry};\nexport const hooks = createHookRegistry({${entries.join(",")}});\n${localProviders.length && lane === lanes.local ? `export const contractProviders = {${localProviders.join(",")}};\n` : ""}`
+      `import {createRegistry,createHookRegistry} from "@tokamak/sdk";\n${definitions}\nexport const functions = ${registry};\nexport const hooks = createHookRegistry({${entries.join(",")}}, ${hookKinds});\n${localProviders.length && lane === lanes.local ? `export const contractProviders = {${localProviders.join(",")}};\n` : ""}`
     );
   return (
     header +
@@ -454,7 +467,7 @@ export function registrySource({
         ? `[...functionMetadata(functions), ...${JSON.stringify(metadata)}]`
         : "functionMetadata(functions)"
     };\n` +
-    `export const hooks = createHookRegistry({${entries.join(",")}});\n` +
+    `export const hooks = createHookRegistry({${entries.join(",")}}, ${hookKinds});\n` +
     `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks),${hasActionHooks ? " actionHooks: true," : ""} results: ${JSON.stringify(results ?? {})}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
     "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n" +
     "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n"

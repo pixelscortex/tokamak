@@ -35,8 +35,25 @@ impl Coordinator {
             self.respond(session, id, Ok(placement.response(error.value())));
             return;
         }
+        if !placement.hook_plans
+            && matches!(
+                destination,
+                crate::actions::Destination::CallerWindowRunner { .. }
+            )
+            && let Some(error) = self.missing_hook_capability(&name)
+        {
+            self.respond_call(session, id, Err(error));
+            return;
+        }
         let owner = target.map(|target| (target.local_name.clone(), target.owner.clone()));
-        if let Some(reply) = self.window_action_reply(session, id, &name, &destination, &mut note) {
+        if let Some(reply) = self.window_action_reply(
+            session,
+            id,
+            &name,
+            &destination,
+            &mut note,
+            placement.hook_plans,
+        ) {
             self.respond(session, id, reply);
             return;
         }
@@ -96,6 +113,25 @@ impl Coordinator {
         self.spawn_action_job(session, id, output, invocation);
     }
 
+    fn missing_hook_capability(&self, name: &str) -> Option<CallError> {
+        let hook = self.plugins.as_ref()?.hooks.get(name)?.first()?;
+        Some(
+            CallError::hook(
+                &hook.owner,
+                &hook.name,
+                if hook.before {
+                    "before"
+                } else {
+                    "after"
+                },
+                "hookRunnerUnavailable",
+                Json::Null,
+                name,
+            )
+            .into(),
+        )
+    }
+
     fn window_action_reply(
         &mut self,
         session: u64,
@@ -103,8 +139,14 @@ impl Coordinator {
         name: &str,
         destination: &crate::actions::Destination,
         note: &mut CallNote,
+        hook_plans: bool,
     ) -> Option<Result<Json, String>> {
-        match self.prepare_hook_scope(session, id, destination, note) {
+        let scope = if hook_plans {
+            self.prepare_hook_scope(session, id, destination, note)
+        } else {
+            Ok(false)
+        };
+        match scope {
             Ok(owns) => destination
                 .immediate_reply(note, self.plugins.as_deref(), name, owns)
                 .map(Ok),
@@ -122,7 +164,7 @@ impl Coordinator {
         if !matches!(
             destination,
             crate::actions::Destination::CallerWindowRunner { .. }
-        ) || note.hook_scope.is_some()
+        ) || note.hook_scope().is_some()
             || self
                 .plugins
                 .as_ref()
@@ -136,6 +178,7 @@ impl Coordinator {
             return Err("Window action hook capacity exceeded");
         }
 
+        // Even an unhooked action can enter hooks through its nested server calls.
         let budget = crate::identity::HookBudget::default();
         client.hook_scopes.insert(id, budget.clone());
         note.scope_hooks(id, budget);

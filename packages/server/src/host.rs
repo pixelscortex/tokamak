@@ -17,7 +17,6 @@ type Failure = Arc<std::sync::Mutex<Option<engine::CallError>>>;
 
 #[derive(Clone)]
 struct TransactionContext {
-    mutation: bool,
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
@@ -26,9 +25,8 @@ struct TransactionContext {
 }
 
 impl TransactionContext {
-    fn new(tx: Transaction, mutation: bool) -> Self {
+    fn new(tx: Transaction) -> Self {
         Self {
-            mutation,
             shared: Arc::new(Mutex::new(Some(tx))),
             observations: Arc::default(),
             failure: Arc::default(),
@@ -138,7 +136,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         }
     };
 
-    let context = TransactionContext::new(tx, mutation);
+    let context = TransactionContext::new(tx);
 
     let ops = operations(
         context.clone(),

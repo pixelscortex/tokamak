@@ -84,3 +84,14 @@ export const catchGuarded = mutation({
     return null;
   },
 });
+
+export const catchQueryHook = mutation({
+  async handler(ctx) {
+    try {
+      await ctx.runQuery(api.users.list, { text: "", mode: "blocked" });
+    } catch {
+      await ctx.db.insert("users", { name: "query-fallback" });
+    }
+    return null;
+  },
+});

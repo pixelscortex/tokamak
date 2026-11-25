@@ -22,6 +22,7 @@ export type Request =
       hookScope?: number;
       on?: "server" | "caller";
       window?: boolean;
+      hookPlans?: boolean;
     }
   | { type: "hookstage"; id: number; scope: number; done?: boolean }
   | { type: "cancelaction"; id: number }

@@ -32,7 +32,7 @@ pub(crate) struct CallNote {
     depth: usize,
     window_continuation: bool,
     hooks: HookBudget,
-    pub hook_scope: Option<u64>,
+    hook_scope: Option<u64>,
     attempt_stages: Option<Arc<AtomicUsize>>,
 }
 
@@ -92,6 +92,10 @@ impl CallNote {
             hook_scope: value["hookScope"].as_u64(),
             ..Self::default()
         }
+    }
+
+    pub(crate) fn hook_scope(&self) -> Option<u64> {
+        self.hook_scope
     }
 
     pub(crate) fn scope_hooks(&mut self, id: u64, budget: HookBudget) {

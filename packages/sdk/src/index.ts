@@ -92,6 +92,7 @@ export type {
   InternalFromModule,
   PluginFunctionsFromModule,
   ReferenceFromDefinition,
+  HookReferenceFromDefinition,
   ArgsOf,
   ResultOf,
 } from "./api";

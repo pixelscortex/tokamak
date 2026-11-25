@@ -149,7 +149,8 @@ export const stallsAfterCaughtHook = query({
   },
 });
 
-export const logSave = hook(team.guarded, {
+const legacyTeam = createApi<{ users: { guarded: typeof team.guarded } }>("team");
+export const logSave = hook(legacyTeam.users.guarded, {
   async before(ctx, args) {
     await ctx.db.insert("bans", { name: `audit:${args.name}` });
     if (args.mode === "before-fails") return fail("limitReached", { maximum: 100 });

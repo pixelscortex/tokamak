@@ -74,6 +74,7 @@ impl Fixture {
             .request(Request::Action {
                 on: None,
                 window: None,
+                hook_plans: None,
                 id: self.next,
                 name: format!("worker-test/actions:{name}"),
                 args,

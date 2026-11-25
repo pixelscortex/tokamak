@@ -224,13 +224,13 @@ function declarePlugin(root, id, declared) {
     return;
   }
   const { refs, imports, internal } = publicReferences(target.folder, target.entry);
-  const referenceType = ([module, method, , , source]) =>
-    `import("@tokamak/sdk").ReferenceFromDefinition<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }`;
+  const referenceType = ([module, method, , , source], type = "ReferenceFromDefinition") =>
+    `import("@tokamak/sdk").${type}<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }`;
   const internalTree = {};
   for (const ref of internal) {
     let branch = internalTree;
     for (const segment of ref[0].split("/")) branch = branch[segment] ??= Object.create(null);
-    branch[ref[1]] = referenceType(ref);
+    branch[ref[1]] = referenceType(ref, "HookReferenceFromDefinition");
   }
   const declaration = (tree) =>
     `{${Object.entries(tree)

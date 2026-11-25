@@ -73,6 +73,32 @@ function test_invoke_hook(request, host) {
 
 #[tokio::test]
 async fn query_hooks_apply_to_window_live_and_server_calls() {
+    const CHILD: &str = "TOKAMAK_QUERY_HOOKS_CAPTURE";
+    if std::env::var_os(CHILD).is_none() && std::env::var_os("TOKAMAK_HOOK_BENCHMARK").is_none() {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "query_hooks_apply_to_window_live_and_server_calls",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "{}\n{stderr}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(
+            stderr.contains(
+                "Skipping hook moderation/policy:staleTarget: target team/users:renamed is missing"
+            ),
+            "{stderr}"
+        );
+        return;
+    }
+
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let installation = tempfile::tempdir().unwrap();
     for id in ["team", "moderation", "z-extra"] {

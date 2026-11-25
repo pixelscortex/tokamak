@@ -188,11 +188,13 @@ async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
 
 async function mutation_hooks_transform_and_share_the_save() {
   assert.equal(await client.mutation(team.users.guarded, { name: "  saved " }), "SAVED");
+  await client.mutation(team.users.catchQueryHook, {});
   await client.mutation(team.users.useHidden, { name: "private" });
   const names = async () => (await client.query(list, { text: "" })).map(({ name }) => name).sort();
   const audit = async () => client.query(moderation.policy.audit, {});
   const saved = await names();
   assert.ok(saved.includes("saved"));
+  assert.ok(saved.includes("query-fallback"));
   assert.ok(saved.includes("private-hooked"));
   const entries = await audit();
   assert.ok(entries.includes("audit:  saved "));

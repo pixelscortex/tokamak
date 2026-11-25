@@ -17,7 +17,8 @@ pub(super) fn quickjs_bundle(
     request: &crate::local::Artifact,
 ) -> Result<TempPath, String> {
     let (folder, manifest) =
-        artifact_folder(root, &request.id, &request.entry_hash, &request.code_hash)?;
+        artifact_folder(root, &request.id, &request.entry_hash, &request.code_hash)
+            .map_err(|error| error.to_string())?;
     for contract in ["contracts", "contractProviders"]
         .into_iter()
         .flat_map(|field| manifest[field].as_array().into_iter().flatten())
@@ -36,12 +37,30 @@ pub(super) fn quickjs_bundle(
     snapshot(&folder, "local.js", &request.code_hash)
 }
 
+#[derive(Debug)]
+pub(super) enum ArtifactError {
+    Missing(String),
+    Invalid(String),
+}
+
+impl std::fmt::Display for ArtifactError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Missing(plugin) => write!(
+                f,
+                "Install the matching build of {plugin} on this machine to run its local functions"
+            ),
+            Self::Invalid(message) => f.write_str(message),
+        }
+    }
+}
+
 pub(super) fn artifact_folder(
     root: &Path,
     plugin: &str,
     entry_hash: &str,
     code_hash: &str,
-) -> Result<(std::path::PathBuf, Value), String> {
+) -> Result<(std::path::PathBuf, Value), ArtifactError> {
     if plugin.is_empty()
         || matches!(plugin, "." | "..")
         || plugin.len() > 128
@@ -49,7 +68,9 @@ pub(super) fn artifact_folder(
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b))
     {
-        return Err("Invalid local plugin identity".into());
+        return Err(ArtifactError::Invalid(
+            "Invalid local plugin identity".into(),
+        ));
     }
     let matches = |path: &Path| {
         let manifest = File::open(path.join("manifest.json")).ok()?;
@@ -75,14 +96,14 @@ pub(super) fn artifact_folder(
                     matches(&dir).or_else(|| matches(&dir.join("dist")))
                 })
         })
-        .ok_or_else(|| {
-            format!(
-                "Install the matching build of {plugin} on this machine to run its local functions"
-            )
-        })?;
-    let folder = folder.canonicalize().map_err(|error| error.to_string())?;
+        .ok_or_else(|| ArtifactError::Missing(plugin.into()))?;
+    let folder = folder
+        .canonicalize()
+        .map_err(|error| ArtifactError::Invalid(error.to_string()))?;
     if !folder.starts_with(root) {
-        return Err("Local plugin path escapes its install directory".into());
+        return Err(ArtifactError::Invalid(
+            "Local plugin path escapes its install directory".into(),
+        ));
     }
     Ok((folder, manifest))
 }

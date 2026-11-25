@@ -155,10 +155,12 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
         value = execute(hook.clone(), stage, note, input)
             .await
             .map_err(|error| {
-                if error.details.is_some() {
-                    error
-                } else if error.message == crate::RUNNER_ACTION_ARTIFACT_UNAVAILABLE {
-                    make_error("hookRunnerUnavailable", Json::Null)
+                if let Some(details) = &error.details {
+                    if details["stage"] == "runner" && details["kind"] == "hookRunnerUnavailable" {
+                        make_error("hookRunnerUnavailable", Json::Null)
+                    } else {
+                        error
+                    }
                 } else {
                     match error.limit {
                         Some(engine::CallLimit::Depth) => {
@@ -176,6 +178,7 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
                 }
             })?;
 
+        // Runner capability failures mean the stage could not run, even in an after hook.
         if let Some(kind) = failure_kind(&value)
             && (matches!(stage, Stage::Before)
                 || matches!(kind, "runnerCapabilityUnavailable" | "noMachine"))
@@ -281,7 +284,7 @@ impl TransactionHooks {
     }
 
     fn finish(&self, result: Result<Json, engine::CallError>) -> Result<Json, engine::CallError> {
-        if self.tx.mutation
+        if self.writable
             && let Err(error) = &result
         {
             self.tx.poison(error.clone());

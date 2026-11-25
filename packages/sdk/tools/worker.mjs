@@ -55,6 +55,7 @@ export function transactionSources({
       modules: inLane(lanes.descriptor.keep),
       hasSchema,
       metadata,
+      placement,
       hasActionHooks: inLane((kind) => kind === "actionHook").length > 0,
       results: placement?.results(root, isServerRoot(root)),
       providers,

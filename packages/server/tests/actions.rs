@@ -361,6 +361,7 @@ async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
     let action = |id, name: &str, args| server::protocol::Request::Action {
         on: None,
         window: None,
+        hook_plans: None,
         id,
         name: name.into(),
         args,

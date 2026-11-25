@@ -52,6 +52,13 @@ await writeFile(
   export const policy = hook(marker, { after: () => "hooked" });
   export const audit = hook(audited, {
     async before(ctx, args) {
+      let denied = false;
+      try {
+        await ctx.env("FIXTURE_ACTION_PLACEMENT");
+      } catch (error) {
+        denied = String(error).includes("permission denied");
+      }
+      if (!denied) throw new Error("Hook could read the owner's environment");
       const response = await fetch(args.url);
       const marker = await response.text();
       await ctx.runQuery(rows, {});
@@ -267,6 +274,40 @@ const http = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Respon
 cleanup.push(() => http.stop(true));
 const auditArgs = { url: http.url.href, text: "audit" };
 
+async function rejects_older_window_without_hook_plan_support(address, token) {
+  const socket = new WebSocket(address, ["tokamak", `tokamak.bearer.${token}`]);
+  try {
+    const reply = await within(
+      new Promise((resolve, reject) => {
+        socket.addEventListener("error", reject, { once: true });
+        socket.addEventListener(
+          "open",
+          () =>
+            socket.send(
+              JSON.stringify({
+                type: "action",
+                id: 1,
+                name: "ai/work:audited",
+                window: true,
+                args: auditArgs,
+              }),
+            ),
+          { once: true },
+        );
+        socket.addEventListener("message", ({ data }) => {
+          const event = JSON.parse(data);
+          if (event.id === 1) resolve(event);
+        });
+      }),
+      "old window hook capability",
+    );
+    assert.equal(reply.error?.kind, "hookRunnerUnavailable");
+    assert.equal(reply.error?.plugin, "fixture-hooks");
+  } finally {
+    socket.close();
+  }
+}
+
 async function action_hooks_run_with_network_and_database(client, reference, expectedDepth, options) {
   const before = (await client.query(api.work.rows, {})).rows.length;
   assert.equal(await client.action(reference, auditArgs, options), `NETWORK:${expectedDepth}:AUDIT`);
@@ -356,6 +397,7 @@ try {
   assert.equal(await window.action(api.work.read, { file }), "text on the caller");
   assert.deepEqual(await window.action(api.work.read, { file }, { on: "server" }), noMachine);
   assert.equal((await browser.query(api.work.rows, {})).rows.length, 1);
+  await rejects_older_window_without_hook_plan_support(address, sharedToken);
   await action_hooks_run_with_network_and_database(window, api.work.audited, 1);
   await action_hooks_run_with_network_and_database(browser, api.work.audited, 1, { on: "server" });
   assert.deepEqual(await window.action(api.work.serverDefault, {}), { runner: false, depth: 0 });

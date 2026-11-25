@@ -347,24 +347,14 @@ pub(in crate::local) async fn action(
         entry_hash: action.entry_hash,
         code_hash: action.code_hash,
     };
-    let startup_error = |error| {
-        if action.name.starts_with("@hook/") {
-            server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE.to_owned()
-        } else {
-            error
-        }
-    };
-    let lease = leases.get(&artifact).map_err(startup_error)?;
+    let lease = leases.get(&artifact)?;
     let bridge = Bridge {
         leases,
         retiring: lease.retiring.clone(),
         source_retiring: Some(action.retiring),
         upstream: Upstream::Embedded(action.upstream),
     };
-    let host = pool
-        .host(&lease.build, &lease.slot, false)
-        .await
-        .map_err(startup_error)?;
+    let host = stage_host(&pool, &lease, action.name.starts_with("@hook/")).await?;
     let frame = json!({
         "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
     });
@@ -458,7 +448,18 @@ async fn invoke_root(
             args,
             &continuation,
             |artifact, name, input, note| {
-                window_hook(pool, bridge, root, id, artifact, name, input, note)
+                window_hook(
+                    WindowStage {
+                        pool,
+                        bridge,
+                        root,
+                        owner: id,
+                    },
+                    artifact,
+                    name,
+                    input,
+                    note,
+                )
             },
             |args| async {
                 frame["args"] = args;
@@ -482,24 +483,54 @@ async fn invoke_root(
     })
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "The stage runs on the root action's Runner connection"
-)]
-async fn window_hook(
-    pool: &Pool,
-    bridge: &Bridge,
+struct WindowStage<'a> {
+    pool: &'a Pool,
+    bridge: &'a Bridge,
     root: u64,
-    owner: &str,
+    owner: &'a str,
+}
+
+async fn stage_host(
+    pool: &Pool,
+    lease: &Lease,
+    hook: bool,
+) -> Result<Arc<Host>, engine::CallError> {
+    match pool.host(&lease.build, &lease.slot, false).await {
+        Ok(host) => Ok(host),
+        Err(error) if hook => Err(hook_artifact_error(pool, &lease.build, &error)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn hook_artifact_error(pool: &Pool, artifact: &Artifact, error: &str) -> engine::CallError {
+    use crate::artifact::{ArtifactError, artifact_folder};
+    match artifact_folder(
+        &pool.plugins,
+        &artifact.id,
+        &artifact.entry_hash,
+        &artifact.code_hash,
+    ) {
+        Err(ArtifactError::Missing(_)) => server::runner_action_artifact_unavailable(),
+        _ => error.into(),
+    }
+}
+
+async fn window_hook(
+    route: WindowStage<'_>,
     artifact: Value,
     name: String,
     input: Value,
     note: Value,
 ) -> Result<Value, engine::CallError> {
-    let unavailable = |_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE;
-    let artifact: Artifact =
-        serde_json::from_value(artifact).map_err(|_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
-    let lease = bridge.leases.get(&artifact).map_err(unavailable)?;
+    let WindowStage {
+        pool,
+        bridge,
+        root,
+        owner,
+    } = route;
+    let artifact: Artifact = serde_json::from_value(artifact)
+        .map_err(|_| server::runner_action_artifact_unavailable())?;
+    let lease = bridge.leases.get(&artifact)?;
     if let Some(scope) = note["hookScope"].as_u64()
         && let Upstream::Window(window) = &bridge.upstream
     {
@@ -522,14 +553,11 @@ async fn window_hook(
             _ => return Err("Runner hook scope unavailable".into()),
         }
     }
-    let host = pool
-        .host(&lease.build, &lease.slot, false)
-        .await
-        .map_err(unavailable)?;
+    let host = stage_host(pool, &lease, true).await?;
     host.action_ops
         .get_or_init(|| WindowActionOps::new(pool, &host.build))
         .as_ref()
-        .map_err(|_| server::RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
+        .map_err(|error| hook_artifact_error(pool, &artifact, error))?;
     let ancestors = [owner.to_owned(), artifact.id];
     let frame = json!({
         "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
@@ -627,7 +655,8 @@ impl WindowActionOps {
             &artifact.id,
             &artifact.entry_hash,
             &artifact.code_hash,
-        )?;
+        )
+        .map_err(|error| error.to_string())?;
         let manifest = serde_json::from_value(manifest)
             .map_err(|error| format!("Invalid plugin manifest: {error}"))?;
         let env = Arc::new(server::ActionEnvironment::from_manifest(root, &manifest));

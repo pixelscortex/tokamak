@@ -62,13 +62,15 @@ pub(crate) enum Destination {
 pub(crate) struct Placement {
     on: Option<ActionTarget>,
     window: bool,
+    pub(crate) hook_plans: bool,
 }
 
 impl Placement {
-    pub fn new(on: Option<ActionTarget>, window: Option<bool>) -> Self {
+    pub fn new(on: Option<ActionTarget>, window: Option<bool>, hook_plans: Option<bool>) -> Self {
         Self {
             on,
             window: window.unwrap_or(false),
+            hook_plans: hook_plans.unwrap_or(false),
         }
     }
 
@@ -317,7 +319,7 @@ impl ActionStageExecutor<'_> {
         let result = if let Some(dispatch) = &self.dispatch {
             let (entry_hash, code_hash) =
                 runner_hashes(&self.generation.catalog.plugins[&hook.owner].manifest)
-                    .ok_or(RUNNER_ACTION_ARTIFACT_UNAVAILABLE)?;
+                    .ok_or_else(runner_action_artifact_unavailable)?;
             self.process
                 .invoke_runner(&source, |retiring| {
                     dispatch(RunnerAction {
@@ -366,7 +368,19 @@ where
     run_after(target, note, result, &args, stage).await
 }
 
-pub const RUNNER_ACTION_ARTIFACT_UNAVAILABLE: &str = "Runner action artifact unavailable";
+pub fn runner_action_artifact_unavailable() -> engine::CallError {
+    CallError::Structured(Box::new(crate::protocol::StructuredCallError {
+        message: "Runner action artifact unavailable".into(),
+        details: crate::protocol::CallErrorDetails {
+            plugin: String::new(),
+            hook: String::new(),
+            stage: "runner".into(),
+            kind: "hookRunnerUnavailable".into(),
+            data: Json::Null,
+        },
+    }))
+    .into()
+}
 
 pub(crate) struct ActionContext {
     pub note: CallNote,
@@ -553,7 +567,7 @@ fn register_plugin_call(
             let destination = resolve(
                 Some(&loaded),
                 Some(&target),
-                Placement::new(on, None),
+                Placement::new(on, None, None),
                 &runner,
                 &note,
             );

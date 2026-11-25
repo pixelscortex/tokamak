@@ -335,6 +335,41 @@ test("hook stages use the target's argument and result types", async () => {
   });
 }, 30_000);
 
+test("dependency internal references can be hooked but cannot be called", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `import { internalMutation } from "@tokamak/sdk";
+      export const hidden = internalMutation({handler: () => null});`,
+    );
+    await file(owner, "src/server/api.ts", "export {};");
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    const policy = `import { hook, mutation } from "@tokamak/sdk";
+      import { internal } from "plugin:owner/server";
+      export const accepted = hook(internal.functions.hidden, { before: (_ctx, args) => args });`;
+    await file(consumer, "src/server/policy.ts", policy);
+    const allowed = build(consumer);
+    expect(allowed.status, allowed.stdout + allowed.stderr).toBe(0);
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      policy +
+        `
+      export const rejected = mutation({handler: (ctx) => ctx.runMutation(internal.functions.hidden, {})});`,
+    );
+    const rejected = build(consumer);
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stdout + rejected.stderr).toContain("callableReference");
+  });
+}, 30_000);
+
 test("build rejects local functions as hook targets", async () => {
   await scratch(async (root) => {
     const consumer = await backend(root, "consumer");

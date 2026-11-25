@@ -193,6 +193,7 @@ fn plugin_reload_and_transactions_do_not_wait_for_dns() {
                 .request(server::protocol::Request::Action {
                     on: None,
                     window: None,
+                    hook_plans: None,
                     id: 1,
                     name: "b/ops:dns".into(),
                     args: json!({"count":1,"host":"held.tkm.test"}),

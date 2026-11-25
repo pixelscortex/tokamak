@@ -821,6 +821,10 @@ subscriptions. `internal*` remains private to its own plugin.
 
 ## Hook another plugin's function
 
+A hook on an `on: "caller"` action runs on the caller's own machine and is
+advisory there: a modified client can skip it. Enforce rules with a query or
+mutation hook, which runs on the server.
+
 Export a hook from a server module and target a query, mutation, or action
 in another plugin. Installing your plugin registers the hook automatically.
 Public and plugin-only references come from `plugin:<id>/server`; the same
