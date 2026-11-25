@@ -4,10 +4,11 @@ import { dirname, resolve } from "node:path";
 export function warnMissingHookTargets(
   root: string,
   plugin: string,
-  functions: Set<string>,
+  targets: Set<string>,
   catalog: string | undefined,
   warn: (message: string) => void,
 ) {
+  // Match the complete key: plugin/module:fn, or plugin/module:fn#point for points.
   const reported = new Set<string>();
   for (const directory of new Set([
     dirname(root),
@@ -33,7 +34,7 @@ export function warnMissingHookTargets(
       const owner = manifest?.plugin?.id;
       if (!owner || !Array.isArray(manifest.hookTargets)) continue;
       for (const target of manifest.hookTargets) {
-        if (typeof target !== "string" || !target.startsWith(`${plugin}/`) || functions.has(target)) continue;
+        if (typeof target !== "string" || !target.startsWith(`${plugin}/`) || targets.has(target)) continue;
         const message = `Plugin "${owner}" hooks ${target}, which no longer exists`;
         if (reported.has(message)) continue;
 

@@ -341,19 +341,30 @@ test("dependency internal references can be hooked but cannot be called", async 
     await file(
       owner,
       "src/server/functions.ts",
-      `import { internalMutation } from "@tokamak/sdk";
-      export const hidden = internalMutation({handler: () => null});`,
+      `import { internalMutation, query, v } from "@tokamak/sdk";
+      export const hidden = internalMutation({args: { id: v.id("items") }, handler: () => null});
+      export const read = query({args: { id: v.id("items") }, handler: () => null});`,
     );
-    await file(owner, "src/server/api.ts", "export {};");
+    await file(owner, "src/server/api.ts", 'export {read} from "./functions";');
+    await file(
+      owner,
+      "src/server/schema.ts",
+      `import { defineSchema, defineTable } from "@tokamak/sdk";
+      export default defineSchema({ items: defineTable({}) });`,
+    );
     const consumer = await backend(root, "consumer");
     const descriptor = resolve(consumer, "plugin.ts");
     await writeFile(
       descriptor,
       (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
     );
-    const policy = `import { hook, mutation } from "@tokamak/sdk";
-      import { internal } from "plugin:owner/server";
-      export const accepted = hook(internal.functions.hidden, { before: (_ctx, args) => args });`;
+    const policy = `import { hook, mutation, type Id } from "@tokamak/sdk";
+      import { internal, read } from "plugin:owner/server";
+      import { tables } from "plugin:owner/tables";
+      export const table = tables.items;
+      const before = (_ctx: unknown, args: { id: Id<"owner.items"> }) => args;
+      export const accepted = hook(internal.functions.hidden, { before });
+      export const publicHook = hook(read, { before });`;
     await file(consumer, "src/server/policy.ts", policy);
     const allowed = build(consumer);
     expect(allowed.status, allowed.stdout + allowed.stderr).toBe(0);
@@ -362,7 +373,7 @@ test("dependency internal references can be hooked but cannot be called", async 
       "src/server/policy.ts",
       policy +
         `
-      export const rejected = mutation({handler: (ctx) => ctx.runMutation(internal.functions.hidden, {})});`,
+      export const rejected = mutation({handler: (ctx) => ctx.runMutation(internal.functions.hidden, { id: "id" as Id<"owner.items"> })});`,
     );
     const rejected = build(consumer);
     expect(rejected.status).not.toBe(0);

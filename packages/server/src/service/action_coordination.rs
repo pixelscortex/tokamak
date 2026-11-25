@@ -35,16 +35,6 @@ impl Coordinator {
             self.respond(session, id, Ok(placement.response(error.value())));
             return;
         }
-        if !placement.hook_plans
-            && matches!(
-                destination,
-                crate::actions::Destination::CallerWindowRunner { .. }
-            )
-            && let Some(error) = self.missing_hook_capability(&name)
-        {
-            self.respond_call(session, id, Err(error));
-            return;
-        }
         let owner = target.map(|target| (target.local_name.clone(), target.owner.clone()));
         if let Some(reply) = self.window_action_reply(
             session,
@@ -54,25 +44,14 @@ impl Coordinator {
             &mut note,
             placement.hook_plans,
         ) {
-            self.respond(session, id, reply);
+            self.respond_call(session, id, reply);
             return;
         }
 
-        let attached = matches!(
-            destination,
-            crate::actions::Destination::AttachedRunner { .. }
-        );
-        let output = match self.action_session(session, attached) {
-            Ok(output) => output,
+        let (output, process) = match self.action_resources(session, &destination) {
+            Ok(resources) => resources,
             Err(error) => {
-                self.respond(session, id, Err(error.into()));
-                return;
-            }
-        };
-        let process = match self.action_process() {
-            Ok(process) => process.clone(),
-            Err(error) => {
-                self.respond(session, id, Err(error.into()));
+                self.respond(session, id, Err(error));
                 return;
             }
         };
@@ -112,6 +91,25 @@ impl Coordinator {
         self.spawn_action_job(session, id, output, invocation);
     }
 
+    fn action_resources(
+        &mut self,
+        session: u64,
+        destination: &crate::actions::Destination,
+    ) -> Result<
+        (
+            Option<mpsc::Sender<Event>>,
+            Arc<crate::host::action_process::Supervisor>,
+        ),
+        String,
+    > {
+        let attached = matches!(
+            destination,
+            crate::actions::Destination::AttachedRunner { .. }
+        );
+        let output = self.action_session(session, attached)?;
+        Ok((output, self.action_process()?.clone()))
+    }
+
     fn missing_hook_capability(&self, name: &str) -> Option<CallError> {
         let hook = self.plugins.as_ref()?.hooks.get(name)?.first()?;
         Some(
@@ -139,7 +137,16 @@ impl Coordinator {
         destination: &crate::actions::Destination,
         note: &mut CallNote,
         hook_plans: bool,
-    ) -> Option<Result<Json, String>> {
+    ) -> Option<Result<Json, CallError>> {
+        if !hook_plans
+            && matches!(
+                destination,
+                crate::actions::Destination::CallerWindowRunner { .. }
+            )
+            && let Some(error) = self.missing_hook_capability(name)
+        {
+            return Some(Err(error));
+        }
         let scope = if hook_plans {
             self.prepare_hook_scope(session, id, destination, note)
         } else {

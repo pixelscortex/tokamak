@@ -38,6 +38,31 @@ pub(crate) enum StartupPolicy {
     Recover,
 }
 
+fn hook_matches_target(
+    hook: &Value,
+    function: FunctionKind,
+    owner: &str,
+    name: &str,
+    target: &str,
+) -> bool {
+    let kind = hook
+        .get("kind")
+        .map_or(Some(FunctionKind::Query), FunctionKind::from_wire);
+    if !matches!(
+        kind,
+        Some(FunctionKind::Query | FunctionKind::Mutation | FunctionKind::Action)
+    ) {
+        eprintln!(
+            "Skipping hook {owner}/{name}: target {target} is not a query, mutation or action"
+        );
+    } else if kind != Some(function) {
+        eprintln!("Skipping hook {owner}/{name}: target {target} has a different function kind");
+    } else {
+        return true;
+    }
+    false
+}
+
 impl Loaded {
     pub async fn load(
         catalog: Catalog,
@@ -402,22 +427,7 @@ impl Loaded {
                     continue;
                 };
 
-                let kind = hook
-                    .get("kind")
-                    .map_or(Some(FunctionKind::Query), FunctionKind::from_wire);
-                if !matches!(
-                    kind,
-                    Some(FunctionKind::Query | FunctionKind::Mutation | FunctionKind::Action)
-                ) {
-                    eprintln!(
-                        "Skipping hook {owner}/{name}: target {target} is not a query, mutation or action"
-                    );
-                    continue;
-                }
-                if kind != Some(function.kind) {
-                    eprintln!(
-                        "Skipping hook {owner}/{name}: target {target} has a different function kind"
-                    );
+                if !hook_matches_target(hook, function.kind, owner, name, target) {
                     continue;
                 }
 

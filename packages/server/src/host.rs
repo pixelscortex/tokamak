@@ -60,6 +60,31 @@ impl TransactionContext {
         }
     }
 
+    fn result(
+        &self,
+        result: Result<Json, CallError>,
+        mutation: bool,
+        observed: &Observations,
+    ) -> Result<Json, CallError> {
+        let result = self
+            .trigger_failed()
+            .map_or(result, |error| Err(error.into()));
+        let nested = self.failure.lock().expect("failure lock").clone();
+        if mutation && let Some(error) = nested.as_ref().filter(|error| error.details.is_some()) {
+            Err(error.clone().into())
+        } else {
+            result.and_then(|value| {
+                if let Some(error) = &observed.error {
+                    Err(error.clone().into())
+                } else if let Some(error) = nested {
+                    Err(error.into())
+                } else {
+                    Ok(value)
+                }
+            })
+        }
+    }
+
     fn call_error(&self, error: engine::Error) -> CallError {
         if matches!(error, engine::Error::Timeout { phase: "call" })
             && let Some(stage) = self
@@ -179,25 +204,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
     let mut observed = context.observations.lock().await;
 
-    let result = context
-        .trigger_failed()
-        .map_or(result, |error| Err(error.into()));
-    let nested = context.failure.lock().expect("failure lock").clone();
-    let result =
-        if mutation && let Some(error) = nested.as_ref().filter(|error| error.details.is_some()) {
-            Err(error.clone().into())
-        } else {
-            result.and_then(|value| {
-                if let Some(error) = &observed.error {
-                    Err(error.clone().into())
-                } else if let Some(error) = nested {
-                    Err(error.into())
-                } else {
-                    Ok(value)
-                }
-            })
-        };
-
+    let result = context.result(result, mutation, &observed);
     let result = finish_transaction(tx, result, mutation, &mut observed).await;
     Call {
         result,
