@@ -38,14 +38,12 @@ verifier and `state`, keeps both in the `signIns` table and returns only the
 link (Claude Code's client id, scopes and `http://localhost:54545/callback`
 redirect, `code=true`).
 
-Nothing listens on that redirect: the Claude Code CLI does, on its own
-computer, and the server cannot. So after signing in, the browser ends on a
-`localhost:54545` page that fails to load, and the person copies the whole
-address from the address bar and pastes it. The page that shows `code#state`
-belongs to Claude's hosted manual-code redirect, which this sign-in does not
-use; which redirect to use is open for the owner. `finishSignIn` still reads
-an address (state as a parameter, after the code, or in the fragment), a
-`code#state`, or a bare code.
+The desktop app listens for that redirect while the Profiles sign-in step
+is open. It passes the address to `finishSignIn`, just as the paste field
+does. In a plain browser, on another device, or if the listener is unavailable,
+the person copies the whole address from the address bar and pastes it.
+`finishSignIn` reads an address (state as a parameter, after the code, or in
+the fragment), a `code#state`, or a bare code.
 
 `finishSignIn` claims the sign-in row first, so a second paste while one is
 being exchanged gets `Busy` and changes nothing. It exchanges the code (JSON

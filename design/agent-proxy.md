@@ -42,6 +42,11 @@ None.
 
 ## Known limits
 
+- **The server does not listen for browser returns.** The Tokamak desktop
+  app listens on loopback while the Profiles sign-in step is open. A plain
+  browser or a server used without the desktop app still needs the person to
+  paste the return address, as does sign-in on another device.
+
 - **Renewal only when something asks.** A plugin's server code has no timer
   that may use the network, so a login is renewed only when a screen that
   lists subscriptions is open (it asks every minute) or, from TKM-263, when the
