@@ -17,6 +17,7 @@ import {
 } from "./_functions";
 import { companyAddresses } from "./addresses";
 import { SignInError, accountDetails, exchange, models, readPasted, signInLink } from "./claude";
+import { attachAccount } from "./manage";
 import { randomToken } from "./pkce";
 
 /**
@@ -50,10 +51,13 @@ export const begin = internalMutation({
     state: v.string(),
     link: v.string(),
     repair: v.optional(v.id("subscriptions")),
+    /** A subscription to add another provider account to (`addAccount` in manage.ts). */
+    addTo: v.optional(v.id("subscriptions")),
   },
-  handler: async (ctx, { owner, verifier, state, link, repair }) => {
-    if (repair) {
-      const subscription = await ctx.db.get(repair);
+  handler: async (ctx, { owner, verifier, state, link, repair, addTo }) => {
+    for (const target of [repair, addTo]) {
+      if (!target) continue;
+      const subscription = await ctx.db.get(target);
       if (!subscription || subscription.owner !== owner) return notFound("subscription");
     }
     const now = Date.now();
@@ -62,7 +66,8 @@ export const begin = internalMutation({
       .withIndex("by_owner", (q) => q.eq("owner", owner))
       .collect();
     // The same target is replaced; expired ones of any target go too.
-    for (const row of open) if (row.repair === repair || isExpired(row, now)) await ctx.db.delete(row._id);
+    for (const row of open)
+      if ((row.repair === repair && row.addTo === addTo) || isExpired(row, now)) await ctx.db.delete(row._id);
     const id = await ctx.db.insert("signIns", {
       owner,
       company: "anthropic",
@@ -72,6 +77,7 @@ export const begin = internalMutation({
       link,
       startedAt: now,
       ...(repair && { repair }),
+      ...(addTo && { addTo }),
     });
     return signInViewOf((await ctx.db.get(id))!, now);
   },
@@ -191,6 +197,8 @@ export const connect = internalMutation({
     email: v.optional(v.string()),
     organization: v.optional(v.string()),
     plan: v.string(),
+    /** False when Claude did not answer the plan read: "Free" is then a guess. */
+    planKnown: v.optional(v.boolean()),
     models: v.array(model),
     access: v.string(),
     refresh: v.string(),
@@ -201,6 +209,9 @@ export const connect = internalMutation({
     if (!signIn || signIn.owner !== owner)
       return fail("Cancelled", { message: "The sign-in was cancelled. Nothing was added." });
     await ctx.db.delete(id);
+    // Another provider account for an existing subscription: manage.ts.
+    if (signIn.addTo)
+      return attachAccount(ctx, { owner, signIn, subscription: signIn.addTo, access, refresh, expiresAt, found });
     const same = await ctx.db
       .query("accounts")
       .withIndex("by_owner_account", (q) => q.eq("owner", owner).eq("accountId", found.accountId))
@@ -326,6 +337,7 @@ export const finishSignIn = pluginOnly(
         ...(email !== undefined && { email }),
         ...(organization !== undefined && { organization }),
         plan: about.plan,
+        planKnown: about.known,
         models: found,
         access: login.access,
         refresh: login.refresh,
