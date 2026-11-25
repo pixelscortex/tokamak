@@ -1,0 +1,23 @@
+packages/server/tests/action-placement.mjs
+  s_6bd43a2c58496b::t_015d399eab48b2 237,307
+packages/server/tests/fixtures/action-placement/src/api.ts
+  s_6bd43a2c58496b::t_ab91ccf32b0b6f 12-13
+packages/server/tests/fixtures/action-placement/src/work.ts
+  s_6bd43a2c58496b::t_ce400b853fe933 1,78-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eaa1e181cf28252cd871a3a9b96fd9773be8a0de",
+  "prompts": {},
+  "sessions": {
+    "s_6bd43a2c58496b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-b624-7543-af8b-6d738e892f5a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
