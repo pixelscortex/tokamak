@@ -201,7 +201,7 @@ export function ExtensionProvider(props: {
                       return [owner, (await props.host.partOwner!(owner))?.parts] as const;
                     } catch {
                       // A retired generation will be checked again by the next catalog update.
-                      return [owner, null] as const;
+                      return [owner, undefined] as const;
                     }
                   }),
                 ),
@@ -209,7 +209,8 @@ export function ExtensionProvider(props: {
               if (plugins.get(id) !== plugin || failed) return;
               valid = parts.filter(({ action, fingerprint }) => {
                 let node: unknown = owners.get(partOwner(action.target));
-                if (node === null) return true;
+                // An unavailable owner has no authoritative list to check yet.
+                if (!node || typeof node !== "object" || Array.isArray(node)) return true;
                 for (const key of action.target.split(".").slice(1))
                   node =
                     node && typeof node === "object" && Object.hasOwn(node, key)
