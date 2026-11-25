@@ -76,8 +76,10 @@ export function ExtensionProvider(props: {
       let listeners = observers.get(target);
       if (!listeners) observers.set(target, (listeners = new Set()));
       listeners.add(observer);
-      const actions = current.get(target);
-      if (actions?.length) observer.update(actions);
+      if (current.size) {
+        const actions = current.get(target);
+        if (actions) observer.update(actions);
+      }
     },
     unobserve(target, observer) {
       const listeners = observers.get(target);

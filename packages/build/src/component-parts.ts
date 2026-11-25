@@ -421,8 +421,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (
             !site ||
             (!site.children.length &&
-              !site.holes.length &&
-              !(ts.isJsxElement(node) && node.children.some(ts.isJsxExpression)))
+              (site.holes.length || !(ts.isJsxElement(node) && node.children.some(ts.isJsxExpression))))
           )
             continue;
           let nextRef = 0;

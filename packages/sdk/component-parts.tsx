@@ -69,6 +69,9 @@ function matches(
   return false;
 }
 
+const plainHole: RenderHole = (_id, render) => render;
+const plainSpread = (props: object) => props;
+
 // Native templates own their DOM nodes. Additions get their own insertion
 // ranges, so changing one path leaves the other nodes and observers alone.
 function nativeRange(parent: Element, before: Node | null, original?: Element) {
@@ -100,7 +103,13 @@ export function renderNativePart(
   children: readonly NativeSite[],
 ) {
   const registry = useContext(PartActions);
-  if (!registry) return create([], (_id, render) => render);
+  if (!registry) return create([], plainHole);
+  if (!children.length)
+    return renderPart(target, fingerprint, props, row, (contents) => {
+      const element = create([], plainHole) as Element;
+      nativeContents(element, contents);
+      return element;
+    });
 
   return renderPart(target, fingerprint, props, row, (contents) => {
     const refs: Element[] = [];
@@ -251,7 +260,7 @@ export function renderPart(
   const registry = useContext(PartActions);
   const read = registry?.read(target);
   const plain = (override = original) => override?.();
-  plain.spread = (props: object) => props;
+  plain.spread = plainSpread;
   if (!read) return render(plain);
 
   // The insert can move between wrapper owners. Keep the original in a
@@ -286,6 +295,7 @@ export function renderPart(
     return untrack(() => {
       disposeActions?.();
       disposeActions = undefined;
+      if (!installed.length) return (decorated = renderOriginal());
       const actions = installed.filter((item) => matches(registry!, target, fingerprint, item));
       if (!actions.length) return (decorated = renderOriginal());
       const outside = actions.every(({ action }) => {
