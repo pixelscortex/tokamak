@@ -212,8 +212,15 @@ export const fresh = internalAction({
     if (answer.kind === "renewed") {
       // A renewed ID token is dropped: the workspace is already on the account.
       const { access, refresh: next, expiresAt } = answer.login;
-      await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
-      return { access, expiresAt, renewed: true, ...workspace(login) };
+      // Signed out or removed while the company answered: the login is gone, and so is this one.
+      const kept = await ctx.runMutation(internal.logins.renewed, {
+        ...args,
+        refresh,
+        access,
+        next,
+        expiresAt,
+      });
+      return kept ? { access, expiresAt, renewed: true, ...workspace(login) } : null;
     }
     if (answer.kind === "refused") {
       await ctx.runMutation(internal.logins.refused, { ...args, refresh, name: company.name });

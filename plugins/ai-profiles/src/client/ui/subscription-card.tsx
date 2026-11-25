@@ -9,14 +9,16 @@ import { CompanyMark } from "./company-mark";
 /**
  * One subscription (Paper "1 · Profiles · screen", a card): logo, plan and
  * label, the "Enabled" switch, the accounts' emails, the organisation and
- * plan, the status, the model count and the last use. The card's action row
- * and its profile codes come with the tickets that add those screens.
+ * plan, the status, the model count and the last use, then its action row
+ * (`actions`, ui/card-actions.tsx). Its profile codes come with TKM-264.
  */
 export function SubscriptionCard(props: {
   subscription: Subscription;
   now: number;
   onEnabled: (enabled: boolean) => void;
   onSignIn: () => Promise<unknown>;
+  /** The row of icon buttons under the card's lines. */
+  actions?: JSX.Element;
 }): JSX.Element {
   const subscription = () => props.subscription;
   const name = () => titleOf(subscription());
@@ -69,6 +71,7 @@ export function SubscriptionCard(props: {
       <span class="truncate text-data text-ink-3">
         {countOf(subscription().models.length, "model")} · {lastUse(subscription().lastUsedAt, props.now)}
       </span>
+      {props.actions}
     </article>
   );
 }
@@ -103,7 +106,11 @@ export function AwaitingCard(props: {
           >
             <span class="flex items-center gap-2 text-data text-ink-3">
               <Icon path={icons.running} size={12} />
-              {props.signIn.repair ? "Awaiting sign-in again" : "Awaiting sign-in"}
+              {props.signIn.addTo
+                ? "Awaiting another account"
+                : props.signIn.repair
+                  ? "Awaiting sign-in again"
+                  : "Awaiting sign-in"}
             </span>
           </Show>
         </div>

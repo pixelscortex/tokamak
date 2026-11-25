@@ -31,6 +31,10 @@ function usageWindow(seconds: number) {
   };
 }
 
+/** ChatGPT's plan for a fake account: `plus` unless set; null when the account reports none. */
+const chatgptPlan = (account: { plan?: string | null }) =>
+  account.plan === undefined ? "plus" : account.plan;
+
 export async function startFakeCompanies({
   delayMs = 10,
   tls,
@@ -51,10 +55,22 @@ export async function startFakeCompanies({
       strict: boolean;
       /** Milliseconds the token endpoint waits before it answers for this account. */
       tokenDelayMs: number;
-      /** OpenAI: the ID token's `chatgpt_plan_type`; null leaves the claim out. */
-      plan: string | null;
+      /**
+       * The plan the company reports: Claude's `organization_type` on the
+       * profile read (`claude_pro` unless set), ChatGPT's `chatgpt_plan_type`
+       * in the ID token and `plan_type` in the accounts check (`plus` unless
+       * set; null leaves both out).
+       */
+      plan?: string | null;
       /** OpenAI: the workspace's name in `/wham/accounts/check`; none for a personal account. */
       workspace?: string;
+      /** The models the models read lists, instead of the one fake model. */
+      models?: { id: string; name: string }[];
+      /**
+       * `unavailable`: the profile and models reads answer HTTP 503; `empty`: the
+       * profile read answers 200 with no plan, email or organisation in it.
+       */
+      reads?: "ok" | "unavailable" | "empty";
       authorization?: { challenge: string; state: string; redirect: string };
     }
   >();
@@ -212,7 +228,7 @@ export async function startFakeCompanies({
                 exp: Math.floor(account.expiresAt / 1000),
                 "https://api.openai.com/auth": {
                   chatgpt_account_id: account.id,
-                  ...(account.plan !== null && { chatgpt_plan_type: account.plan }),
+                  ...(chatgptPlan(account) !== null && { chatgpt_plan_type: chatgptPlan(account) }),
                   chatgpt_user_id: `user-${account.id}`,
                 },
               }),
@@ -247,6 +263,16 @@ export async function startFakeCompanies({
     const answer = isTurn ? account.answers.shift() : undefined;
     if (answer?.kind === "signed-out") return error(401, "authentication_error");
     if (route === "/v1/messages/count_tokens") return Response.json({ input_tokens: 8 });
+    if (
+      account.reads === "unavailable" &&
+      ["/models", "/codex/models", "/v1/models", "/api/oauth/profile"].includes(route)
+    )
+      return error(503, "api_error");
+    if (company === "anthropic" && route === "/v1/models" && account.models)
+      return Response.json({
+        data: account.models.map((model) => ({ id: model.id, type: "model", display_name: model.name })),
+        has_more: false,
+      });
     if (["/models", "/codex/models", "/v1/models"].includes(route))
       return Response.json(
         company === "anthropic"
@@ -286,13 +312,14 @@ export async function startFakeCompanies({
               ],
             },
       );
+    if (route === "/api/oauth/profile" && account.reads === "empty") return Response.json({});
     if (route === "/api/oauth/profile")
       return Response.json({
         account: { uuid: account.id, email: `${account.id}@example.test`, has_claude_pro: true },
         organization: {
           uuid: "fake-org",
           name: "Fake organization",
-          organization_type: "claude_pro",
+          organization_type: account.plan ?? "claude_pro",
           rate_limit_tier: "default_claude_pro",
         },
       });
@@ -313,7 +340,7 @@ export async function startFakeCompanies({
           {
             id: account.id,
             name: account.workspace ?? null,
-            plan_type: account.plan,
+            plan_type: chatgptPlan(account),
             structure: account.workspace ? "workspace" : "personal",
             can_access_with_session: true,
             workspace_backend_origin: "NO_CONSTRAINT",
@@ -425,7 +452,7 @@ export async function startFakeCompanies({
       {
         signIn = "success",
         strict = true,
-        plan = "plus",
+        plan,
         workspace,
       }: { signIn?: SignIn; strict?: boolean; plan?: string | null; workspace?: string } = {},
     ) {
@@ -440,10 +467,12 @@ export async function startFakeCompanies({
         refreshToken: `fake-${id}-refresh`,
         generation: 0,
         tokenDelayMs: 0,
-        plan,
+        plan: plan as string | null | undefined,
         ...(workspace !== undefined && { workspace }),
         expiresAt: Infinity,
         answers: [] as Answer[],
+        models: undefined as { id: string; name: string }[] | undefined,
+        reads: "ok" as "ok" | "unavailable" | "empty",
       };
       accounts.set(id, account);
       return account;

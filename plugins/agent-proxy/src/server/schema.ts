@@ -19,7 +19,10 @@ export default defineSchema({
     company,
     method: v.literal("subscription"),
     label: v.string(),
-    /** "Max", "Pro", "Plus", "Business"…; empty while the company has not named it. */
+    /**
+     * "Max", "Pro", "Plus", "Business"…; empty while no read has named the
+     * plan (never "Free" by guess; reads.ts).
+     */
     plan: v.string(),
     enabled: v.boolean(),
     models: v.array(v.object({ id: v.string(), name: v.string() })),
@@ -43,6 +46,11 @@ export default defineSchema({
      */
     workspace: v.optional(v.string()),
     status: v.union(v.literal("ok"), v.literal("signed-out")),
+    /**
+     * The models this account's login may use, as last read; absent until a read
+     * returned some. The subscription's `models` is the union of these (reads.ts).
+     */
+    models: v.optional(v.array(v.object({ id: v.string(), name: v.string() }))),
     /** Why the account is signed out, in the person's words. */
     reason: v.optional(v.string()),
   })
@@ -84,6 +92,10 @@ export default defineSchema({
     startedAt: v.number(),
     /** The subscription this sign-in repairs in place; absent for a new one. */
     repair: v.optional(v.id("subscriptions")),
+    /** The one account of `repair` this sign-in must sign in again (an account's own "Sign in"). */
+    repairAccount: v.optional(v.id("accounts")),
+    /** The subscription this sign-in adds a second provider account to (TKM-265). */
+    addTo: v.optional(v.id("subscriptions")),
     /** Set while one call finishes it, so a second paste cannot race the first. */
     finishingUntil: v.optional(v.number()),
   }).index("by_owner", ["owner"]),

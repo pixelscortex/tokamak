@@ -7,10 +7,14 @@ import { productOf, type Subscription } from "./api";
 export const titleOf = (subscription: Pick<Subscription, "company" | "plan">) =>
   [productOf[subscription.company], subscription.plan].filter(Boolean).join(" ");
 
-/** The data line under the emails: "fake organization · pro" (Paper sets it in lower case). */
+/**
+ * The data line under the emails: "fake organization · pro" (Paper sets it in
+ * lower case), or "… · plan unknown" until a read of the plan succeeds; the
+ * card's "Check again" reads it.
+ */
 export function planLine(subscription: Subscription): string {
   const organization = subscription.accounts.find((account) => account.organization)?.organization;
-  return [organization, subscription.plan].filter(Boolean).join(" · ").toLowerCase();
+  return [organization, subscription.plan || "plan unknown"].filter(Boolean).join(" · ").toLowerCase();
 }
 
 /** A model as people know it: Claude's own names lead with "Claude ", which the logo already says. */

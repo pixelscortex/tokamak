@@ -1,12 +1,17 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createSignal, onCleanup } from "solid-js";
 import { isFailure } from "@tokamak/sdk";
 import { useClient, useQuery, view } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
-import { api, type Company, type SignIn, type Subscription } from "../lib/api";
+import { api, type SignIn } from "../lib/api";
 import { profilesIcon } from "../lib/icons";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
+import { openSubscription } from "../lib/manage";
+import { ENDING, createSignInWatch } from "../lib/sign-in-watch";
+import { CardActions } from "../ui/card-actions";
+import { RemoveDialog } from "../ui/remove-dialog";
+import { SubscriptionDetails } from "./subscription";
 
 /**
  * How often the open screen asks the server to renew logins that run out
@@ -16,8 +21,7 @@ import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
  */
 export const RENEW_EVERY_MS = 60_000;
 
-/** Failures after which a sign-in no longer exists on the server. */
-const ENDING = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
+type Target = Pick<SignIn, "company" | "repair" | "addTo" | "repairAccount">;
 
 /**
  * The Profiles screen (Paper "1 · Profiles · screen"). This ticket draws its
@@ -39,17 +43,25 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   }, RENEW_EVERY_MS);
   onCleanup(() => clearInterval(timer));
 
-  const start = (company: Company, repair?: string) =>
-    client.action(api.subscriptions.startSignIn, {
-      company,
-      method: "subscription",
-      ...(repair !== undefined && { repair }),
-    });
+  /**
+   * A sign-in of the same kind as `like`, with its company: a new
+   * subscription, a repair, one account, or another account.
+   */
+  const start = (like: Target) =>
+    like.addTo !== undefined
+      ? client.action(api.manage.addAccount, { id: like.addTo })
+      : like.repairAccount !== undefined
+        ? client.action(api.manage.signInAccount, { id: like.repairAccount })
+        : client.action(api.subscriptions.startSignIn, {
+            company: like.company,
+            method: "subscription",
+            ...(like.repair !== undefined && { repair: like.repair }),
+          });
   /** "Sign in" on a signed-out card, and "Start again" on an expired one. */
-  async function startAndOpen(company: Company, repair?: string) {
+  async function startAndOpen(like: Target) {
     setProblem(undefined);
     try {
-      const started = await start(company, repair);
+      const started = await start(like);
       if (isFailure(started)) setProblem(started.data.message);
       else setStep({ kind: "sign-in", signIn: started });
     } catch {
@@ -57,50 +69,12 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
     }
   }
 
-  /**
-   * Sign-ins this window is finishing or cancelling, and ones it ended: the
-   * watch below leaves those to the call that answers for them.
-   */
-  const busy = new Set<string>();
-  const endedHere = new Set<string>();
-  async function local<T>(id: string, call: () => Promise<T>, ended: (result: T) => boolean): Promise<T> {
-    busy.add(id);
-    try {
-      const result = await call();
-      if (ended(result)) endedHere.add(id);
-      return result;
-    } finally {
-      busy.delete(id);
-    }
-  }
-
-  // An open dialog notices its sign-in ending in another window: finished
-  // there (go on to "Connected") or cancelled there (close and say so).
-  const seen = new Set<string>();
-  createEffect(
-    () => listed.data(),
-    (data) => {
-      if (!data) return;
-      for (const signIn of data.signIns) seen.add(signIn.id);
-      const open = step();
-      if (open?.kind !== "sign-in") return;
-      const id = open.signIn.id;
-      if (!seen.has(id) || busy.has(id) || endedHere.has(id)) return;
-      const still = data.signIns.find((signIn) => signIn.id === id);
-      if (still) {
-        if (still.expired !== open.signIn.expired) setStep({ kind: "sign-in", signIn: still });
-        return;
-      }
-      const added: Subscription | undefined = open.signIn.repair
-        ? data.subscriptions.find((item) => item.id === open.signIn.repair && item.status === "ok")
-        : data.subscriptions.find((item) => item.createdAt >= open.signIn.startedAt);
-      if (added) setStep({ kind: "connected", subscription: added });
-      else {
-        setStep(undefined);
-        setProblem("That sign-in was cancelled in another window.");
-      }
-    },
-  );
+  const { local } = createSignInWatch({
+    data: () => listed.data(),
+    step,
+    setStep,
+    onCancelled: setProblem,
+  });
 
   const subscriptions = () => listed.data()?.subscriptions ?? [];
   const signIns = () => listed.data()?.signIns ?? [];
@@ -116,7 +90,12 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
 
   return (
     <div class="flex flex-col px-8 pb-12">
-      <section aria-label="Subscriptions" class="mx-auto flex w-full max-w-profiles flex-col gap-3 pt-6">
+      <SubscriptionDetails data={listed.data()} />
+      <section
+        aria-label="Subscriptions"
+        hidden={openSubscription() !== undefined}
+        class="mx-auto flex w-full max-w-profiles flex-col gap-3 pt-6"
+      >
         <header class="flex h-8 items-center justify-between">
           <h2 class="m-0 flex items-center gap-2">
             <span class="text-row font-medium text-ink">Subscriptions</span>
@@ -149,7 +128,8 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                 onEnabled={(enabled) =>
                   void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
                 }
-                onSignIn={() => startAndOpen(subscription.company, subscription.id)}
+                onSignIn={() => startAndOpen({ company: subscription.company, repair: subscription.id })}
+                actions={<CardActions subscription={subscription} />}
               />
             )}
           </For>
@@ -162,7 +142,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   setStep({ kind: "sign-in", signIn });
                 }}
                 onCancel={() => cancel(signIn)}
-                onRestart={() => startAndOpen(signIn.company, signIn.repair)}
+                onRestart={() => startAndOpen(signIn)}
               />
             )}
           </For>
@@ -173,10 +153,15 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           </p>
         </Show>
       </section>
+      <RemoveDialog subscriptions={subscriptions()} />
       <AddDialog
         step={step()}
         onStep={setStep}
-        start={start}
+        start={(company) => {
+          // "Start again" restarts the same kind of sign-in; the method step starts a new one.
+          const open = step();
+          return start(open?.kind === "sign-in" ? open.signIn : { company });
+        }}
         finish={(signIn, pasted) =>
           local(
             signIn.id,

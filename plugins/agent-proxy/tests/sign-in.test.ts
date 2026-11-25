@@ -16,7 +16,7 @@ type Subscription = {
   plan: string;
   status: "ok" | "signed-out";
   reason?: string;
-  accounts: { email?: string; organization?: string; status: string }[];
+  accounts: { id: string; email?: string; organization?: string; status: string }[];
   models: { id: string; name: string }[];
 };
 type SignIn = { id: string; link: string; repair?: string; expired: boolean };
@@ -36,6 +36,7 @@ const api = createApi<{
     setEnabled: Ref<"mutation", { id: string; enabled: boolean }, null | Failed>;
     renew: Ref<"action", Record<string, never>, { renewed: number; signedOut: number; waiting: number }>;
   };
+  manage: { signOut: Ref<"mutation", { id: string }, null | Failed> };
 }>("ai-profiles", [
   "subscriptions:list",
   "subscriptions:startSignIn",
@@ -44,6 +45,7 @@ const api = createApi<{
   "subscriptions:setLabel",
   "subscriptions:setEnabled",
   "subscriptions:renew",
+  "manage:signOut",
 ]);
 
 /** A failure a person can read: one line, no stack trace, no source path. */
@@ -329,7 +331,9 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
       waiting: 0,
     });
 
-    // Signed in again later with a login that expires and that Claude then refuses to renew.
+    // Signed out here, then signed in again with a login that expires and that
+    // Claude then refuses to renew. (A repair takes only a signed-out account.)
+    await call(client, "mutation", api.manage.signOut, { id: added.accounts[0]!.id });
     account.signIn = "expired";
     const again = await start(client, added.id);
     const repairedOnce = await finish(client, again.id, await signInOnPage(again.link, "renewing"));
