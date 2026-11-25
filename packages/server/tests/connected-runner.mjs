@@ -18,7 +18,8 @@ const scratch = await mkdtemp(join(tmpdir(), "tokamak-connected-runner-"));
 const cleanup = [];
 const servers = [];
 const runners = [];
-const serverLogs = [];
+const serverStdout = [];
+let serverStderr;
 const ownerKey = "connected-runner-test-owner-bootstrap-key";
 const heartbeat = {
   TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS: "200",
@@ -62,7 +63,11 @@ try {
     servers,
     cleanup,
     env: { ...heartbeat, FIXTURE_ACTION_PLACEMENT: "on the server" },
-    log: (text) => serverLogs.push(text),
+    stdoutLine: (line) => serverStdout.push(line),
+    stderr: "pipe",
+    started(child) {
+      serverStderr = new Response(child.stderr).text();
+    },
   });
   const http = new URL(address);
   http.protocol = "http:";
@@ -361,8 +366,9 @@ try {
 
   servers[0].kill();
   await servers[0].exited;
+  const serverLogs = serverStdout.join("\n") + (await serverStderr);
   assert.ok(
-    [key, wrongKey, browserKey, other.key].every((secret) => !serverLogs.join("").includes(secret)),
+    [key, wrongKey, browserKey, other.key].every((secret) => !serverLogs.includes(secret)),
     "Machine credentials never appear in server logs",
   );
 
