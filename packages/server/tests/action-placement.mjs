@@ -48,7 +48,7 @@ await writeFile(
   `
   import { action, hook, provide } from "@tokamak/sdk";
   import { localPlace } from "plugin:ai/contracts";
-  import { audited, marker, rows, store, wait } from "plugin:ai/server";
+  import { audited, marker, rows, store, waitHook } from "plugin:ai/server";
   export const policy = hook(marker, { after: () => "hooked" });
   export const audit = hook(audited, {
     async before(ctx, args) {
@@ -62,7 +62,7 @@ await writeFile(
       return typeof result === "string" ? result.toUpperCase() : result;
     },
   });
-  export const waitPolicy = hook(wait, {
+  export const waitPolicy = hook(waitHook, {
     async before(ctx, args) {
       const process = ctx.proc(["/bin/sh", "-c", "echo $$; exec /bin/sleep 30"]);
       for await (const pid of process.stdout) await ctx.runMutation(store, { text: pid });
@@ -204,7 +204,7 @@ async function assertProgramsReaped(pids, label) {
 
 async function assertReloadTimeout(client, reload) {
   const previous = (await client.query(api.work.rows, {})).rows.length;
-  const action = client.action(api.work.wait, {});
+  const action = client.action(api.work.waitHook, {});
   void action.catch(() => {});
   const pid = await within(
     (async () => {

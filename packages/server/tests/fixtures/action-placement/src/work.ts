@@ -69,6 +69,8 @@ export const wait = action({
   },
 });
 
+export const waitHook = action({ on: "caller", handler: () => 0 });
+
 export const marker = query({ handler: (): string => "unhooked" });
 
 export const hookedQuery = action({
