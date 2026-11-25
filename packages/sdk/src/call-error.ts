@@ -14,6 +14,7 @@ export class RemoteFunctionError extends Error {
   declare readonly plugin?: string;
   declare readonly hook?: string;
   declare readonly stage?: string;
+  declare readonly table?: string;
   declare readonly kind?: string;
   declare readonly data?: JsonValue;
 

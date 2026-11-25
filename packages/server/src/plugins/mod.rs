@@ -34,6 +34,7 @@ pub struct Catalog {
 pub(crate) struct Loaded {
     pub catalog: Catalog,
     pub targets: BTreeMap<String, Target>,
+    pub triggers: crate::host::triggers::TriggerRegistry,
     pub hooks: crate::host::hooks::HookRegistry,
     pub descriptor: Value,
     pub catalog_text: String,

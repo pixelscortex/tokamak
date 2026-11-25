@@ -38,6 +38,9 @@ pub struct CallErrorDetails {
     pub kind: String,
     #[cfg_attr(feature = "protocol-codegen", ts(type = "JsonValue"))]
     pub data: Json,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+    pub table: Option<String>,
 }
 
 impl CallError {

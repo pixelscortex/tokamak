@@ -92,8 +92,8 @@ plugins that require it.
 Limits, checked at declaration and again by the server at load: 256 tables per
 plugin, 32 indexes per table, 16 fields per index, 64 characters per table or
 index name.
-Field descriptions provide types and metadata; field validation on persisted
-writes and schema migrations remain deferred.
+General field descriptions provide types and metadata. Typed refs are checked
+on persisted writes; general field validation and schema migrations remain deferred.
 
 ## Actions
 
@@ -686,6 +686,40 @@ const remove = onQuit(async () => {
 `within(promise, ms)` from `@tokamak/sdk` waits at most `ms` and resolves
 `TIMED_OUT` when the time is up (window and local code; server functions have no timers).
 
+### Typed references to another plugin's rows
+
+Declare the owner in `depends` in `plugin.ts`. Import its table handles from
+`plugin:<id>/tables` and use `v.ref` on a top-level field in your own schema:
+
+```ts
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+
+export default defineSchema({
+  threadProfiles: defineTable({
+    thread: v.ref(chat.tables.threads),
+    profile: v.string(),
+  }).unique("by_thread", ["thread"]),
+});
+```
+
+The field has type `Id<"chat.threads">`. The builder copies the owner's table
+types into `.tokamak/types/` and refreshes the copy each time you build.
+Use `TableDocument<typeof chat.tables.threads>` for the owner's document type.
+You can use the same validator for function arguments. The ref works with an
+index like any other field and may be optional with `v.optional`.
+
+A ref does not give `ctx.db` access to the owner's table. To read a referenced
+row, call the owner's public query. Saving a ref requires an existing row in
+the declared table. Deleting that row automatically deletes all rows that
+reference it as part of the same save. If the save rolls back, all rows remain.
+
+Adding a ref or changing its target does not check existing values. Rows of a
+removed plugin keep their refs, but those refs do not cascade until the plugin
+is installed again. Importing `plugin:owner/tables` anywhere in your plugin
+switches that owner's generated API types to qualified IDs for your whole
+plugin, so you can pass those IDs directly between refs and public functions.
+
 ### Typed contracts between plugins
 
 Define a contract in `src/contracts.ts`. The defining plugin can discover and
@@ -891,3 +925,64 @@ fails with `hookRunnerUnavailable` and names the plugin.
 Removing the hooking plugin removes its hooks. When a target is renamed or
 removed, the owner's build warns and names the hooking plugin. The hooking
 plugin still loads; the server skips that hook and logs a warning.
+
+## Run code when a table changes
+
+Export a trigger from your plugin's server part. The owner doesn't need to
+register the trigger or call it from its mutations.
+
+```ts
+import { createTrigger } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+import schema from "./schema";
+
+const trigger = createTrigger(schema);
+
+export const logThread = trigger(chat.tables.threads, async (ctx, change) => {
+  if (change.operation === "insert") {
+    await ctx.db.insert("threadLog", { thread: change.id, title: change.newDoc.title });
+  }
+});
+```
+
+Declare `chat` in `depends` to watch its tables. To watch one of your
+own tables, pass its name to the builder returned by `createTrigger(schema)`,
+for example `trigger("threadLog", handler)`. You can import `trigger` directly
+to watch another plugin's table when you don't need a schema for your own
+database. The table determines the types of `id`, `oldDoc`, and `newDoc`.
+Insert has a null `oldDoc`, delete has a null `newDoc`, and update has both.
+
+A trigger runs after the write is applied and before the database call returns,
+inside the same transaction. It runs for writes from any mutation, including
+writes made by mutation hooks and other triggers. It gets the original caller in `ctx.auth`
+and the same call note at one greater depth in `ctx.call`. Its writable
+`ctx.db` contains only its own plugin's tables. Call the owner's functions
+to read or change the owner's data.
+
+Deletes run one trigger chain per deleted row, including rows removed by
+`v.ref` cascades. The database applies the cascade before dispatching those
+triggers and dispatches in breadth-first order, starting with the deleted row.
+Patch or replace that leaves the stored document unchanged, deleting an absent row,
+schema resets, and startup index backfills do not run triggers.
+
+If a trigger throws, the whole transaction rolls back, even if the writing
+mutation catches the exception. The caller's error identifies `plugin`,
+`hook` (the trigger export name), `stage: "trigger"`, and `table`. Its message
+also lists the registered triggers for that table. Loops are stopped by the
+call note depth limit, and the mutation's call deadline also applies. Each
+trigger entered outside another trigger gets a budget of 256 delegated calls.
+Its nested triggers, hooks, and delegated calls share that budget. Every trigger run entered outside another
+trigger starts fresh, including a second trigger on the same row.
+
+Triggers have no count limit per save, so the call deadline is what bounds a
+bulk write to a watched table. A trigger that writes one row and calls one
+query added about 2 ms per row on an Apple M4 Pro; with the default 1 s
+deadline such a save times out near 500 rows, and sooner on a slower host.
+Split larger writes across mutations.
+
+Trigger and hook stages share their bundle's module state only within one
+invocation. Do not keep `ctx` there: it stops working when its stage ends.
+
+The server's plugin catalog lists active triggers under `triggers`, keyed by
+qualified table name. A trigger whose table is missing is skipped with a
+warning. Removing the trigger plugin removes its registrations.

@@ -354,6 +354,7 @@ impl Supervisor {
                     hook: String::new(),
                     stage: "runner".into(),
                     kind: "LocalReloadTimeout".into(),
+                    table: None,
                     data: Value::Null,
                 },
             })).into()),

@@ -1,5 +1,17 @@
-import { hook } from "@tokamak/sdk";
+import { createFunctions, createTrigger, hook } from "@tokamak/sdk";
 import * as team from "plugin:team/server";
+import { tables } from "plugin:moderation/tables";
+import schema from "./schema";
+
+export const watchBans = createTrigger(schema)(tables.bans, async (ctx, change) => {
+  if (change.operation === "insert") await ctx.db.insert("events", { name: change.newDoc.name });
+});
+
+export const events = createFunctions(schema).query({
+  async handler(ctx) {
+    return (await ctx.db.query("events").collect()).map(({ name }) => name).sort();
+  },
+});
 
 export const chained = hook(team.api.list, {
   before(_ctx, args) {

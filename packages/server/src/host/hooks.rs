@@ -232,57 +232,39 @@ impl TransactionHooks {
         note: CallNote,
         input: Json,
     ) -> Result<Json, engine::CallError> {
-        let scope = CallScope::default();
-        let tx = self.tx.hook_scope();
-        let space = DataSpace::plugin(&hook.owner).map_err(|error| error.to_string())?;
-        let ops = operations(
-            tx.clone(),
-            space,
-            self.writable,
-            Some((self.plugins.clone(), hook.owner.clone())),
-            CallContext {
-                determinism: None,
-                note,
-                scope: scope.clone(),
-                qualified: None,
-            },
+        let (owner, name, target) = (
+            hook.owner.clone(),
+            hook.name.clone(),
+            self.target.name.clone(),
         );
-        let label = Arc::new(CallError::hook(
-            &hook.owner,
-            &hook.name,
-            stage.name(),
-            "hookTimeout",
-            Json::Null,
-            &self.target.name,
-        ));
-        let bundle = self.plugins.transaction_bundles[&hook.owner].clone();
-        let call = ModuleCall::new(bundle, "invoke_hook", input, ops, |_| {});
-        let active = &self.tx.active_hooks;
-        active
-            .lock()
-            .expect("active hooks lock")
-            .push(label.clone());
-        let value = executor.run(call).await;
-        active
-            .lock()
-            .expect("active hooks lock")
-            .retain(|entry| !Arc::ptr_eq(entry, &label));
-        scope.close().await;
-        let observed = tx.observations.lock().await;
-        if observed.conflict {
-            self.tx.observations.lock().await.conflict = true;
-        }
-
-        let failure = tx.failure.lock().expect("failure lock");
-        if let Some(error) = &observed.error {
-            Err(error.clone().into())
-        } else if let Some(error) = failure.as_ref() {
-            Err(error.clone())
-        } else {
-            value
-        }
+        let label = Arc::new(move || {
+            CallError::hook(
+                &owner,
+                &name,
+                stage.name(),
+                "hookTimeout",
+                Json::Null,
+                &target,
+            )
+        });
+        execute_stage(
+            executor,
+            &self.tx,
+            &self.plugins,
+            StageCall {
+                owner: &hook.owner,
+                kind: if self.writable {
+                    StageKind::MutationHook
+                } else {
+                    StageKind::QueryHook
+                },
+                note,
+                input,
+                label,
+            },
+        )
+        .await
     }
-
     fn finish(&self, result: Result<Json, engine::CallError>) -> Result<Json, engine::CallError> {
         if self.writable
             && let Err(error) = &result
@@ -290,6 +272,82 @@ impl TransactionHooks {
             self.tx.poison(error.clone());
         }
         result
+    }
+}
+
+pub(super) enum StageKind {
+    QueryHook,
+    MutationHook,
+    Trigger,
+}
+
+pub(super) struct StageCall<'a> {
+    pub owner: &'a str,
+    pub kind: StageKind,
+    pub note: CallNote,
+    pub input: Json,
+    pub label: TimeoutLabel,
+}
+
+pub(super) async fn execute_stage(
+    executor: &dyn StageExecutor,
+    parent: &TransactionContext,
+    plugins: &Arc<Loaded>,
+    stage: StageCall<'_>,
+) -> Result<Json, engine::CallError> {
+    let (export, writable) = match stage.kind {
+        StageKind::QueryHook => ("invoke_hook", false),
+        StageKind::MutationHook => ("invoke_hook", true),
+        StageKind::Trigger => ("invoke_trigger", true),
+    };
+    let budget = stage.note.hook_budget();
+    let scope = CallScope::default();
+    let tx = parent.stage_scope();
+    let ops = operations(
+        tx.clone(),
+        DataSpace::plugin(stage.owner).map_err(|error| error.to_string())?,
+        writable,
+        Some((plugins.clone(), stage.owner.to_owned())),
+        CallContext {
+            determinism: None,
+            note: stage.note,
+            scope: scope.clone(),
+            qualified: None,
+        },
+    );
+
+    let label = stage.label;
+    let active = &parent.active_stages;
+    active
+        .lock()
+        .expect("active stages lock")
+        .push(label.clone());
+
+    let call = ModuleCall::new(
+        plugins.transaction_bundles[stage.owner].clone(),
+        export,
+        stage.input,
+        ops,
+        |_| {},
+    );
+    let value = executor.run(call, budget).await;
+
+    active
+        .lock()
+        .expect("active stages lock")
+        .retain(|entry| !Arc::ptr_eq(entry, &label));
+    scope.close().await;
+    let observed = tx.observations.lock().await;
+    if observed.conflict && writable {
+        parent.observations.lock().await.conflict = true;
+    }
+    let failure = tx.failure.lock().expect("failure lock");
+    if let Some(error) = &observed.error {
+        Err(error.clone().into())
+    } else if let Some(error) = failure.as_ref() {
+        Err(error.clone())
+    } else {
+        value
     }
 }
 

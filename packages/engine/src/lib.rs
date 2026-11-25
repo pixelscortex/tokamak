@@ -14,8 +14,8 @@ pub mod web;
 
 pub use action::ActionEngine;
 pub use bridge::{
-    CallError, CallFuture, CallLimit, CallTransforms, Invocation, ModuleCall, OpRegistry,
-    StageExecutor, install_ops,
+    CallError, CallFuture, CallLimit, CallTransforms, HookBudget, Invocation, ModuleCall,
+    OpRegistry, StageExecutor, install_ops,
 };
 pub use determinism::Determinism;
 pub use engine::{Engine, QuickJsContext, QuickJsEngine};

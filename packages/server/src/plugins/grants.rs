@@ -35,7 +35,8 @@ impl Loaded {
                 match Box::pin(self.record_grants_for(database, previous, &self.catalog.order))
                     .await
                 {
-                    Ok(()) => return Ok(()),
+                    // A reload turns a reset reason into an error, so the list is empty.
+                    Ok(_) => return Ok(()),
                     Err(failure) => failure,
                 };
             let Some(id) = failure.plugin.filter(|id| {
@@ -55,6 +56,7 @@ impl Loaded {
         database: &crate::data::Database,
     ) -> Result<(), Error> {
         // Catalog order puts required dependencies before their dependents.
+        let mut resets = Vec::new();
         for id in self.catalog.order.clone() {
             if let Some(reason) = self.skipped_dependency(&id) {
                 self.skip(id, reason);
@@ -66,10 +68,17 @@ impl Loaded {
                     error: Error::IndexBackfill(message),
                     ..
                 }) => self.skip(id, message),
-                result => result.map_err(|failure| failure.error)?,
+                result => resets.extend(result.map_err(|failure| failure.error)?),
             }
         }
-        self.prune_skipped()
+        self.prune_skipped()?;
+
+        // Resets need the incoming references and indexes of every active plugin.
+        // No schema change asks for a reset yet, so this runs only in tests.
+        for (id, reason) in resets {
+            self.reset_startup_schema(database, &id, &reason).await?;
+        }
+        Ok(())
     }
 
     async fn record_grants_for(
@@ -77,7 +86,7 @@ impl Loaded {
         database: &crate::data::Database,
         previous: Option<&Self>,
         ids: &[String],
-    ) -> Result<(), InstallFailure> {
+    ) -> Result<Vec<(String, String)>, InstallFailure> {
         let table = DataSpace::plugin("tokamak.host")
             .map_err(|e| invalid(e.to_string()))?
             .table(&Table::new("grants").map_err(|e| invalid(e.to_string()))?)
@@ -89,6 +98,7 @@ impl Loaded {
 
         let result: Result<_, InstallFailure> = async {
             // Schemas and grants commit together for the candidate generation.
+            self.clear_removed_references(&mut tx, previous)?;
             let mut resets = Vec::new();
             for id in ids {
                 if let Some(reason) = Box::pin(self.stage_schema(&mut tx, id, previous.is_none()))
@@ -98,7 +108,7 @@ impl Loaded {
                         error,
                     })?
                 {
-                    resets.push(reason);
+                    resets.push((id.clone(), reason));
                 }
             }
 
@@ -130,16 +140,13 @@ impl Loaded {
                     .await
                     .map_err(|e| invalid(e.to_string()))?;
 
-                for reason in resets {
-                    crate::schema::log_reset(&reason);
-                }
                 for Grant { id, version, count } in granted {
                     eprintln!(
                         "Auto-granted {count} declared capabilities to {id}@{version} (trusted local plugins)"
                     );
                 }
 
-                Ok(())
+                Ok(resets)
             }
 
             Err(error) => {
@@ -152,18 +159,86 @@ impl Loaded {
         }
     }
 
+    fn clear_removed_references(
+        &self,
+        tx: &mut Transaction,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
+        let Some(previous) = previous else {
+            return Ok(());
+        };
+
+        for id in previous
+            .catalog
+            .plugins
+            .keys()
+            .filter(|id| !self.catalog.plugins.contains_key(*id))
+        {
+            let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+            tx.set_references(&space, Vec::new())
+                .map_err(|e| invalid(e.to_string()))?;
+        }
+        Ok(())
+    }
+
     async fn stage_schema(
         &self,
         tx: &mut Transaction,
         id: &str,
         startup: bool,
     ) -> Result<Option<String>, Error> {
-        let schema = match self.inspected.get(id) {
-            Some(inspected) => crate::schema::Schema::parse(&inspected.descriptor["schema"])?,
-            None => crate::schema::Schema::default(),
-        };
+        let schema = self.schema(id)?;
         let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
-        Box::pin(schema.apply(tx, &space, startup)).await
+        let declares = |owner: &str, table: &str| {
+            self.inspected.get(owner).is_some_and(|bundle| {
+                bundle.descriptor["schema"]["tables"]
+                    .as_object()
+                    .is_some_and(|tables| tables.contains_key(table))
+            })
+        };
+        let targets = crate::schema::RefTargets {
+            depends: &self.catalog.plugins[id].manifest.plugin.depends,
+            declares: &declares,
+        };
+        Box::pin(schema.apply(tx, &space, targets, startup)).await
+    }
+
+    fn schema(&self, id: &str) -> Result<crate::schema::Schema, Error> {
+        match self.inspected.get(id) {
+            Some(inspected) => crate::schema::Schema::parse(&inspected.descriptor["schema"]),
+            None => Ok(crate::schema::Schema::default()),
+        }
+    }
+
+    pub(super) async fn reset_startup_schema(
+        &self,
+        database: &crate::data::Database,
+        id: &str,
+        reason: &str,
+    ) -> Result<(), Error> {
+        let schema = self.schema(id)?;
+        let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+        let mut tx = Box::pin(database.begin())
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+
+        let result = async {
+            Box::pin(schema.reset(&mut tx, &space, reason)).await?;
+            Box::pin(self.stage_schema(&mut tx, id, false)).await?;
+            Ok::<_, Error>(())
+        }
+        .await;
+        if let Err(error) = result {
+            Box::pin(tx.rollback())
+                .await
+                .map_err(|e| invalid(format!("{error}; schema rollback failed: {e}")))?;
+            return Err(error);
+        }
+        Box::pin(tx.commit())
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        crate::schema::log_reset(reason);
+        Ok(())
     }
 }
 

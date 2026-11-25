@@ -1,3 +1,4 @@
+import { api as extra } from "./fixtures/query-hooks/z-extra/src/server/_generated/api";
 import assert from "node:assert/strict";
 import { createInterface } from "node:readline";
 import {
@@ -196,6 +197,9 @@ async function mutation_hooks_transform_and_share_the_save() {
   assert.ok(saved.includes("saved"));
   assert.ok(saved.includes("query-fallback"));
   assert.ok(saved.includes("private-hooked"));
+  const events = await client.query(extra.extra.events, {});
+  assert.equal(events.filter((name) => name === "audit:  saved ").length, 1);
+  assert.equal(events.filter((name) => name === "after:saved").length, 1);
   const entries = await audit();
   assert.ok(entries.includes("audit:  saved "));
   assert.ok(entries.includes("after:saved"));
@@ -223,6 +227,7 @@ async function mutation_hooks_transform_and_share_the_save() {
   });
   assert.deepEqual(await names(), saved);
   assert.deepEqual(await audit(), entries);
+  assert.deepEqual(await client.query(extra.extra.events, {}), events);
 }
 
 try {

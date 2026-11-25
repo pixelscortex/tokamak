@@ -17,6 +17,7 @@ export function pluginCompilerOptions(root, options) {
     ...options,
     paths: {
       ...paths,
+      "plugin:*/tables": [resolve(generated(root), "*/tables.d.ts")],
       "plugin:*/contracts": [resolve(generated(root), "*/contracts.d.ts")],
       "plugin:*/server": [resolve(generated(root), "*/server.d.ts")],
       "plugin:*/client": [resolve(generated(root), "*/client.d.ts")],

@@ -376,6 +376,7 @@ pub fn runner_action_artifact_unavailable() -> engine::CallError {
             hook: String::new(),
             stage: "runner".into(),
             kind: "hookRunnerUnavailable".into(),
+            table: None,
             data: Json::Null,
         },
     }))

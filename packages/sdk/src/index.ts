@@ -1,13 +1,23 @@
 // Public portable SDK. Build-time helpers stay in tools/ and are not exported,
 // so importing the SDK in QuickJS cannot load Bun or Node tooling.
 export { hook, createHook, createHookRegistry, hookMetadata, invokeHook } from "./hooks";
+export { trigger, createTrigger, createTriggerRegistry, triggerMetadata, invokeTrigger } from "./triggers";
+export type { TriggerChange } from "./triggers";
 export { v, validate } from "./validators";
 export { contract, provide } from "./internal/contracts";
 export type { Contract, ContractPlace, Provider } from "./internal/contracts";
 
 export { definePlugin } from "./plugin";
 export type { PluginDefinition } from "./plugin";
-export type { Validator, ValidatorDescription, Fields, Infer, ObjectValue } from "./validators";
+export type {
+  Validator,
+  ValidatorDescription,
+  TableReference,
+  TableDocument,
+  Fields,
+  Infer,
+  ObjectValue,
+} from "./validators";
 
 export { defineSchema, defineTable, schemaMetadata } from "./schema";
 export type {
@@ -89,6 +99,7 @@ export { createApi, functionName } from "./api";
 export type {
   FunctionReference,
   ApiFromModule,
+  QualifiedPluginApi,
   InternalFromModule,
   PluginFunctionsFromModule,
   ReferenceFromDefinition,

@@ -20,6 +20,7 @@ pub use changes::{ReadSet, RecordChange, json_equal};
 pub use query::Query;
 pub use space::{DataSpace, json_object};
 pub use surrealdb_types::{Object, SurrealValue, Value};
+pub(crate) use transaction::Reference;
 pub use transaction::Transaction;
 pub use types::{Document, Error, Id, Order, Result, Table};
 
@@ -211,3 +212,5 @@ impl Database {
         result.map_err(|e| Error::Database(anyhow::anyhow!(e)))
     }
 }
+
+pub(crate) const REF_INDEX_PREFIX: &str = "$ref:";

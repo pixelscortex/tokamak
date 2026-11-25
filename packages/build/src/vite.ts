@@ -52,7 +52,7 @@ export function tokamak(
             ? dirname(resolve(configFile))
             : resolve(config.root ?? process.cwd());
         root = realpathSync(root);
-        checkPluginImports(root);
+        checkPluginImports(root, (options.plugin ?? readDescriptor(root))?.depends ?? {});
         placement = functionPlacement(root);
         stripClientSources = false;
         const server = serverDirectory(root);
@@ -149,6 +149,7 @@ export function tokamak(
               server,
               "--plugin",
               plugin.id,
+              ...(options.plugin ? ["--depends", JSON.stringify(plugin.depends ?? {})] : []),
             ],
             { stdio: "inherit" },
           );

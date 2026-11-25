@@ -1,10 +1,7 @@
 use super::AuthContext;
 use crate::data::Id;
+pub(crate) use engine::HookBudget;
 use serde_json::{Value, json};
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
 
 #[derive(Debug)]
 pub(crate) struct CallDepthLimit(String);
@@ -33,20 +30,7 @@ pub(crate) struct CallNote {
     window_continuation: bool,
     hooks: HookBudget,
     hook_scope: Option<u64>,
-    attempt_stages: Option<Arc<AtomicUsize>>,
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct HookBudget(Arc<AtomicUsize>);
-
-impl HookBudget {
-    pub fn take(&self) -> bool {
-        self.0
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
-                (count < 256).then_some(count + 1)
-            })
-            .is_ok()
-    }
+    in_trigger: bool,
 }
 
 impl From<Option<AuthContext>> for CallNote {
@@ -104,28 +88,32 @@ impl CallNote {
     }
 
     pub(crate) fn take_hook_stage(&self) -> bool {
-        if !self.hooks.take() {
-            return false;
+        self.hooks.take()
+    }
+
+    pub(crate) fn hook_budget(&self) -> HookBudget {
+        self.hooks.clone()
+    }
+
+    pub(crate) fn trigger_stage(mut self) -> Self {
+        if !self.in_trigger {
+            // A bulk save starts a fresh budget for each outer trigger dispatch.
+            // The scope is discarded with the dispatch, including on retry.
+            self.hooks = HookBudget::default();
+            self.in_trigger = true;
         }
-        if let Some(attempt) = &self.attempt_stages {
-            attempt.fetch_add(1, Ordering::Relaxed);
-        }
-        true
+        self
     }
 
     pub(crate) fn mutation_attempt(&self) -> Self {
         Self {
-            attempt_stages: Some(Arc::default()),
+            hooks: self.hooks.attempt(),
             ..self.clone()
         }
     }
 
     pub(crate) fn retry_hooks(&self) {
-        if let Some(attempt) = &self.attempt_stages {
-            self.hooks
-                .0
-                .fetch_sub(attempt.swap(0, Ordering::Relaxed), Ordering::Relaxed);
-        }
+        self.hooks.refund_attempt();
     }
 
     pub fn enter(

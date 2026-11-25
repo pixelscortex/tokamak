@@ -176,10 +176,14 @@ async fn run_driver(workspace: &Path, installation: &Path, server: &Server, sess
                     if message["uninstall"] == true || message["reinstall"] == true {
                         let installed = installation.join("moderation");
                         let removed = installation.join(".removed-moderation");
+                        let extra = installation.join("z-extra");
+                        let removed_extra = installation.join(".removed-z-extra");
                         if message["uninstall"] == true {
                             fs::rename(installed, removed).unwrap();
+                            fs::rename(extra, removed_extra).unwrap();
                         } else {
                             fs::rename(removed, installed).unwrap();
+                            fs::rename(removed_extra, extra).unwrap();
                         }
                         server.reload_plugin("moderation".into()).await.unwrap();
                         writeln!(input, "{}", json!({"reloaded":true})).unwrap();
