@@ -1,0 +1,68 @@
+packages/server/src/protocol.rs
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 63-67
+packages/sdk/tools/result-validator.mjs
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 17-19,76
+  s_df3bf9555a5dc5::t_fbb4e4fc82e411 16,20-22,80
+packages/sdk/tools/points.mjs
+  s_df3bf9555a5dc5::t_2871b24280ce19 19-20
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 53,157-161,165,182,193-195,204-207
+  s_df3bf9555a5dc5::t_ffa9c51151fd0e 78
+  s_df3bf9555a5dc5::t_fbb4e4fc82e411 2,18,21-52,54-76,80-84,94-106,109,117-121,124,132-138,140-142,144,146,152,154-156,162,171,177-181,192,196-203,208-210,213,218,230,235,237,253,266,286-287,291,294,298
+  s_df3bf9555a5dc5::t_1be6e89684af55 77,79,85-93,183-191
+  s_df3bf9555a5dc5::t_209937cd45ab8e 107-108,110-116,163-164,166
+packages/sdk/README.md
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 946,976-977,979-981,984-986,991-993,996-999
+packages/server/src/host/action_process/mod.rs
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 357
+packages/sdk/src/functions.ts
+  s_df3bf9555a5dc5::t_2871b24280ce19 420,647,651,715-716,718-719
+  s_df3bf9555a5dc5::t_060b286945196c 290,304,320,642-646,671-673,717
+packages/build/tests/boundary.test.mjs
+  s_df3bf9555a5dc5::t_ffa9c51151fd0e 548-561,603-606,620-621
+  s_df3bf9555a5dc5::t_a8a0a1b2c41ebc 546-547,562-602,607-619,622-628
+packages/server/tests/fixtures/query-hooks/team/src/server/api.ts
+  s_df3bf9555a5dc5::t_cd0270920b238a 15
+packages/sdk/src/points.ts
+  s_df3bf9555a5dc5::t_2871b24280ce19 9,12-14,17,22-28,33,42
+  s_df3bf9555a5dc5::t_8c83b798a9100d 15-16,18-19
+packages/sdk/src/values.ts
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 69-74,79-85
+  s_df3bf9555a5dc5::t_2871b24280ce19 38,53,59-60,75,92
+packages/sdk/tools/placement.mjs
+  s_df3bf9555a5dc5::t_2871b24280ce19 474-477
+  s_df3bf9555a5dc5::t_fbb4e4fc82e411 145
+packages/sdk/src/host.ts
+  s_df3bf9555a5dc5::t_2871b24280ce19 137
+packages/server/src/actions.rs
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 220-225,229-230,322-340,538-545
+packages/server/src/service/action_coordination.rs
+  s_df3bf9555a5dc5::t_1aa2f621ed1be9 117,119,123,135
+packages/sdk/tools/bundle.mjs
+  s_df3bf9555a5dc5::t_2871b24280ce19 267
+packages/sdk/src/hooks.ts
+  s_df3bf9555a5dc5::t_f9751475677d26 16,75,78,80-83
+packages/sdk/tests/acceptance.test.mjs
+  s_df3bf9555a5dc5::t_965c1c182e0190 653-684
+packages/server/tests/fixtures/query-hooks/moderation/src/server/points.ts
+  s_df3bf9555a5dc5::t_78ac0e114f2f14 2,47-58
+packages/server/tests/fixtures/query-hooks/team/src/server/points.ts
+  s_df3bf9555a5dc5::t_fd316ed4cf7590 36-47
+packages/server/tests/query-hooks-driver.ts
+  s_df3bf9555a5dc5::t_2d2fc3ae2bac04 183-184,190-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dfaacaa5fead25bb5c5f9ad3d1ced3752e3bc1b6",
+  "prompts": {},
+  "sessions": {
+    "s_df3bf9555a5dc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21413-fbba-72a0-8347-1e0267fbb6f3",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
