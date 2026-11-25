@@ -1,18 +1,16 @@
-import { For, Match, Show, Switch as Choose, createSignal, onCleanup } from "solid-js";
+import { For, Match, Show, Switch as Choose, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Chip, Collapsible, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { SignIn, Subscription } from "../lib/api";
 import { hasDesktopSignIn, openSignInBrowser } from "../lib/desktop";
-import { watchSignInReturn } from "../lib/sign-in-return";
 import { countOf, modelName, titleOf } from "../lib/format";
 import { glyphs, profilesIcon } from "../lib/icons";
 import { CompanyMark, markPath } from "./company-mark";
 
 /**
  * Adding a subscription (Paper "2a" to "2d"): company, then method, then
- * sign-in, then connected. Closing stops the desktop listener. The server
- * sign-in keeps waiting, so the "Awaiting sign-in" card can reopen this dialog
- * and start a new listener.
+ * sign-in, then connected. The Profiles page watches for returns while a
+ * sign-in waits, even when the dialog is closed.
  */
 export type Step =
   | { kind: "company" }
@@ -30,6 +28,8 @@ export interface AddDialogProps {
   /** Starts a sign-in; `repair` signs that subscription in again instead of adding one. */
   start: (repair?: string) => Promise<SignIn | Failed>;
   finish: (signIn: SignIn, pasted: string) => Promise<Subscription | Failed>;
+  listening: (id: string) => boolean;
+  returned: (id: string) => { address: string; problem?: string } | undefined;
   setLabel: (subscription: Subscription, label: string) => Promise<null | Failed>;
   /** Copies text to the clipboard; the window's own clipboard by default. */
   copy?: (text: string) => Promise<void>;
@@ -69,6 +69,8 @@ export function AddDialog(props: AddDialogProps): JSX.Element {
                     <SignInStep
                       signIn={signIn()}
                       copy={props.copy}
+                      listening={props.listening(signIn().id)}
+                      returned={props.returned(signIn().id)}
                       finish={async (pasted) => {
                         const current = signIn();
                         const added = await props.finish(current, pasted);
@@ -232,6 +234,8 @@ const ENDED = ["AlreadyAdded", "Gone", "Expired", "Cancelled", "NotFound"];
 
 function SignInStep(props: {
   signIn: SignIn;
+  listening: boolean;
+  returned: { address: string; problem?: string } | undefined;
   finish: (pasted: string) => Promise<unknown>;
   restart: () => Promise<unknown>;
   copy?: (text: string) => Promise<void>;
@@ -254,7 +258,7 @@ function SignInStep(props: {
   }
   // One finish at a time: the server would answer a second one "already finishing" anyway.
   async function submit(address: string) {
-    if (submitting() || !address.trim()) return false;
+    if (submitting() || !address.trim()) return;
     setSubmitting(true);
     setProblem(undefined);
     try {
@@ -262,17 +266,19 @@ function SignInStep(props: {
       if (failed(result)) {
         setProblem(result.data.message);
         setEnded(ENDED.includes(result.kind));
-        return ENDED.includes(result.kind);
       }
-      return true;
     } catch {
       setProblem("The sign-in could not finish. Try again.");
-      return false;
     } finally {
       setSubmitting(false);
     }
   }
-  watchSignInReturn(() => (ended() ? undefined : props.signIn), submit);
+  createEffect(
+    () => props.returned?.address,
+    (address) => {
+      if (address) setPasted(address);
+    },
+  );
 
   async function openBrowser() {
     try {
@@ -330,7 +336,7 @@ function SignInStep(props: {
         </div>
         <p class="m-0 flex items-center gap-2 text-label text-ink-3">
           <Icon path={icons.running} size={12} />
-          {desktop ? "Waiting for you to sign in" : "Waiting for you to sign in · you can close this"}
+          Waiting for you to sign in · you can close this
         </p>
         <form
           class="flex flex-col gap-2"
@@ -340,7 +346,7 @@ function SignInStep(props: {
           }}
         >
           <p id="paste-help" class="m-0 text-label text-ink-2">
-            {desktop
+            {props.listening
               ? "Tokamak can finish sign-in for you. If it doesn’t, copy the whole address your browser ends on and paste it here."
               : "After you sign in, your browser ends on a page that may not load. Copy the whole address from its address bar and paste it here."}
           </p>
@@ -351,7 +357,7 @@ function SignInStep(props: {
               aria-label="Address the sign-in ended on"
               aria-describedby="paste-help"
               placeholder="http://localhost:54545/callback?code=…"
-              invalid={Boolean(problem())}
+              invalid={Boolean(problem() ?? props.returned?.problem)}
               value={pasted()}
               onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) =>
                 setPasted(event.currentTarget.value)
@@ -367,7 +373,7 @@ function SignInStep(props: {
               Continue
             </Button>
           </div>
-          <Problem message={problem()} />
+          <Problem message={problem() ?? props.returned?.problem} />
         </form>
         <Collapsible.Root>
           <Collapsible.Trigger variant="quiet">Signed in on another device?</Collapsible.Trigger>

@@ -43,7 +43,7 @@ None.
 ## Known limits
 
 - **The server does not listen for browser returns.** The Tokamak desktop
-  app listens on loopback while the Profiles sign-in step is open. A plain
+  app listens on loopback while Profiles is open and a sign-in is waiting. A plain
   browser or a server used without the desktop app still needs the person to
   paste the return address, as does sign-in on another device.
 

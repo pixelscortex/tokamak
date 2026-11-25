@@ -1,9 +1,10 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { isFailure } from "@tokamak/sdk";
 import { useClient, useQuery, view } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
 import { api, type SignIn, type Subscription } from "../lib/api";
 import { profilesIcon } from "../lib/icons";
+import { watchSignInReturns } from "../lib/sign-in-return";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
@@ -39,12 +40,16 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   }, RENEW_EVERY_MS);
   onCleanup(() => clearInterval(timer));
 
-  const start = (repair?: string) =>
-    client.action(api.subscriptions.startSignIn, {
+  const [startedHere, setStartedHere] = createSignal<SignIn>();
+  const start = async (repair?: string) => {
+    const result = await client.action(api.subscriptions.startSignIn, {
       company: "anthropic",
       method: "subscription",
       ...(repair !== undefined && { repair }),
     });
+    if (!isFailure(result)) setStartedHere(result);
+    return result;
+  };
   /** "Sign in" on a signed-out card, and "Start again" on an expired one. */
   async function startAndOpen(repair?: string) {
     setProblem(undefined);
@@ -63,11 +68,19 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
    */
   const busy = new Set<string>();
   const endedHere = new Set<string>();
+  const [completion, setCompletion] = createSignal(0);
+  const [returned, setReturned] = createSignal<ReadonlyMap<string, { address: string; problem?: string }>>(
+    new Map(),
+  );
   async function local<T>(id: string, call: () => Promise<T>, ended: (result: T) => boolean): Promise<T> {
     busy.add(id);
     try {
       const result = await call();
-      if (ended(result)) endedHere.add(id);
+      if (ended(result)) {
+        endedHere.add(id);
+        setCompletion((n) => n + 1);
+        discardReturn(id);
+      }
       return result;
     } finally {
       busy.delete(id);
@@ -79,31 +92,99 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   const seen = new Set<string>();
   createEffect(
     () => listed.data(),
-    (data) => {
-      if (!data) return;
-      for (const signIn of data.signIns) seen.add(signIn.id);
-      const open = step();
-      if (open?.kind !== "sign-in") return;
-      const id = open.signIn.id;
-      if (!seen.has(id) || busy.has(id) || endedHere.has(id)) return;
-      const still = data.signIns.find((signIn) => signIn.id === id);
-      if (still) {
-        if (still.expired !== open.signIn.expired) setStep({ kind: "sign-in", signIn: still });
-        return;
-      }
-      const added: Subscription | undefined = open.signIn.repair
-        ? data.subscriptions.find((item) => item.id === open.signIn.repair && item.status === "ok")
-        : data.subscriptions.find((item) => item.createdAt >= open.signIn.startedAt);
-      if (added) setStep({ kind: "connected", subscription: added });
-      else {
-        setStep(undefined);
-        setProblem("That sign-in was cancelled in another window.");
-      }
-    },
+    (data) =>
+      untrack(() => {
+        if (!data) return;
+        for (const signIn of data.signIns) seen.add(signIn.id);
+        const fresh = startedHere();
+        if (fresh && seen.has(fresh.id)) setStartedHere(undefined);
+        const waiting = new Set(data.signIns.filter((signIn) => !signIn.expired).map((signIn) => signIn.id));
+        for (const id of returned().keys()) if (seen.has(id) && !waiting.has(id)) discardReturn(id);
+        const open = step();
+        if (open?.kind !== "sign-in") return;
+        const id = open.signIn.id;
+        if (!seen.has(id) || busy.has(id) || endedHere.has(id)) return;
+        const still = data.signIns.find((signIn) => signIn.id === id);
+        if (still) {
+          if (still.expired !== open.signIn.expired) setStep({ kind: "sign-in", signIn: still });
+          return;
+        }
+        const added: Subscription | undefined = open.signIn.repair
+          ? data.subscriptions.find((item) => item.id === open.signIn.repair && item.status === "ok")
+          : data.subscriptions.find((item) => item.createdAt >= open.signIn.startedAt);
+        if (added) setStep({ kind: "connected", subscription: added });
+        else {
+          setStep(undefined);
+          setProblem("That sign-in was cancelled in another window.");
+        }
+      }),
   );
 
   const subscriptions = () => listed.data()?.subscriptions ?? [];
   const signIns = () => listed.data()?.signIns ?? [];
+  function discardReturn(id: string) {
+    if (!returned().has(id)) return;
+    setReturned((entries) => {
+      const next = new Map(entries);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  const finish = (signIn: SignIn, pasted: string) => {
+    if (busy.has(signIn.id))
+      return Promise.resolve({
+        failed: true as const,
+        kind: "Busy",
+        data: { message: "This sign-in is already finishing." },
+      });
+    return local(
+      signIn.id,
+      () => client.action(api.subscriptions.finishSignIn, { id: signIn.id, pasted }),
+      (result) => !isFailure(result) || ENDING.includes(result.kind),
+    );
+  };
+
+  const listening = watchSignInReturns(
+    () => {
+      const fresh = startedHere();
+      completion();
+      const waiting = signIns().filter(({ id }) => !endedHere.has(id));
+      return fresh && !endedHere.has(fresh.id) && !waiting.some(({ id }) => id === fresh.id)
+        ? [...waiting, fresh]
+        : waiting;
+    },
+    async (signIn, address) => {
+      const remember = (problem?: string) => {
+        if (!endedHere.has(signIn.id))
+          setReturned((entries) => new Map(entries).set(signIn.id, { address, problem }));
+      };
+      remember();
+      if (busy.has(signIn.id)) return true;
+
+      try {
+        const added = await finish(signIn, address);
+        const open = step();
+        const sameDialog = open?.kind === "sign-in" && open.signIn.id === signIn.id;
+        if (!isFailure(added)) {
+          if (sameDialog) setStep({ kind: "connected", subscription: added });
+          return false;
+        }
+        if (ENDING.includes(added.kind)) {
+          if (sameDialog) {
+            setStep(undefined);
+            setProblem(added.data.message);
+          }
+          return false;
+        }
+        remember(added.data.message);
+      } catch {
+        remember("The sign-in could not finish. Try again.");
+      }
+      return !endedHere.has(signIn.id);
+    },
+  );
+
   async function cancel(signIn: SignIn) {
     await local(
       signIn.id,
@@ -177,13 +258,9 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
         step={step()}
         onStep={setStep}
         start={start}
-        finish={(signIn, pasted) =>
-          local(
-            signIn.id,
-            () => client.action(api.subscriptions.finishSignIn, { id: signIn.id, pasted }),
-            (result) => !isFailure(result) || ENDING.includes(result.kind),
-          )
-        }
+        finish={finish}
+        listening={listening}
+        returned={(id) => returned().get(id)}
         setLabel={(subscription, label) =>
           client.mutation(api.subscriptions.setLabel, { id: subscription.id, label })
         }
