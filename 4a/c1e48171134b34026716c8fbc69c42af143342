@@ -1,0 +1,148 @@
+packages/build/src/client-surface.ts
+  s_7485715999886d::t_c9577aef7ee277 82-86
+  s_7485715999886d::t_997587aa36a257 24,36,56,65
+packages/build/src/vite.ts
+  s_7485715999886d::t_14dc7f89b2a87c 14,31,105,221
+  s_7485715999886d::t_85dd34405814af 237,239
+packages/build/tests/fixtures/browser/src/client/view.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 1,6-7,11
+plugins/chat/src/client/ui/empty.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 4,23,26-27,29,33,35
+plugins/chat/src/client/ui/thread-list.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 26-27,33-34,37,41,44
+packages/sdk/client.tsx
+  s_7485715999886d::t_c9577aef7ee277 206
+packages/build/tests/fixtures/window-plugin/src/main.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 2,19,25,27,30
+packages/sdk/component-actions.ts
+  s_7485715999886d::t_c9577aef7ee277 6,22,36,50,61,66,74
+plugins/chat/src/client/ui/message.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 39,44,66,68
+packages/build/src/component-parts.ts
+  s_7485715999886d::t_c9577aef7ee277 1,8-13,16-25,29-32,34-36,38-39,41-43,47,50,55,57-66,72,75,80,87,102,105-118,120-121,123-129,133-143,147-148,155-160,167-173,179,188-189,211,217-218,224-225,235-239,277,286,292-299,313-314,324-326
+  s_7485715999886d::t_24f5ff5b8cbece 2,5-6,52,191
+  s_7485715999886d::t_f77754d23e90af 26-27,44-46,48-49,67-71,73-74,76-78,81-86,91,93-97,103-104,130-132,149-154,161-165,175-178,183-186,190,192-194,197-201,208-210,343
+  s_7485715999886d::t_144cc7d23bbd69 28,33,40,51,53-54,56,79,88-90,92,98-101,122,181,195-196,202-207,212-216,219-223,278,340-342,344-346,348-349
+packages/build/src/artifact-bundle.ts
+  s_7485715999886d::t_14dc7f89b2a87c 10,54
+  s_7485715999886d::t_8cf2eecea2f5e5 3
+packages/build/tests/components.test.mjs
+  s_7485715999886d::t_24f5ff5b8cbece 18-29,31,33-44,48-49,51-57,61-71,73-74,90-97,99-101,105,107-109,111,113-116
+  s_7485715999886d::t_f45ea414194216 17,75-76,80,82-85,87-89,118,120
+packages/build/src/contributions.ts
+  s_7485715999886d::t_f77754d23e90af 21-26,78-92,303-305,307
+  s_7485715999886d::t_14dc7f89b2a87c 12,44,50,52,93,251,255,262-266,269-272,274,289-290,294,297-302,306,310
+  s_7485715999886d::t_9af9baf4757d10 43,104,253-254,267-268
+packages/sdk/component-parts.tsx
+  s_7485715999886d::t_aa1a7664922bb8 13,64
+  s_7485715999886d::t_c9577aef7ee277 33-35,40,65
+  s_7485715999886d::t_cdd34f78348607 23-27,62,73-81
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 15-16,19,23,25-30,32-34,36
+packages/build/src/part-props.ts
+  s_7485715999886d::t_24f5ff5b8cbece 1-135
+plugins/chat/src/client/ui/composer.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 28,30-31,58,64
+plugins/chat/src/client/ui/thread-header.tsx
+  s_7485715999886d::t_14dc7f89b2a87c 20,44-45,61,63,78
+design/README.md
+  s_7485715999886d::t_fb602591a66072 11
+design/ai.md
+  s_7485715999886d::t_c226a9d2f9f0d5 32-35,41-53,73,76
+design/chat.md
+  s_7485715999886d::t_34a1dc2a2d785c 21-37
+design/code.md
+  s_7485715999886d::t_4baf831b7842c1 25-27,33-40,50,68
+e2e/fake-agent/agents/fake-agent/src/client/api.tsx
+  s_7485715999886d::t_9a6945f5fd5d9b 10
+packages/build/README.md
+  s_7485715999886d::t_ec61e2ed7ccb9c 119-138,141-142,144,147-158
+packages/build/src/descriptor.ts
+  s_7485715999886d::t_89cb223e0c50c0 6
+packages/build/tests/browser.test.ts
+  s_7485715999886d::t_6e09c1e07bbdc3 21-22
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_4ccc6fe573e949::t_fd56724e3922a0 1,3-14
+packages/build/tests/plugins.test.mjs
+  s_7485715999886d::t_491536c8158cd6 244,251,263-265
+packages/sdk/README.md
+  s_7485715999886d::t_4662f3a6d1b292 493-504,508-511
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_7485715999886d::t_b0ac92ef9ee86c 9
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_7485715999886d::t_160ef3b1ceb248 6-7,9-20,58,64-65
+packages/sdk/tests/web/component-actions.test.tsx
+  s_7485715999886d::t_c278e29fa498bf 6-7,13,43-44,149,200-204,224-229,241,249-250
+packages/sdk/tests/web/component-wrapper-lifecycle.test.tsx
+  s_7485715999886d::t_298bed1e30ec61 7-8,10
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_7485715999886d::t_0ce06c82791526 1-2,4-7
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_7485715999886d::t_bcf4958be78b8e 1,3-31
+packages/sdk/tools/plugin-boundary.mjs
+  s_7485715999886d::t_fb4ffa50cccdee 95-102,116
+packages/sdk/view.ts
+  s_7485715999886d::t_d024d6db5a89e8 12
+packages/sdk/vitest.config.ts
+  s_7485715999886d::t_82430676a5c11b 4,13-15,26-36,39
+plugins/ai/README.md
+  s_7485715999886d::t_d3bf5c965a2df8 55-56
+plugins/ai/src/client/api.ts
+  s_7485715999886d::t_11c984a0a5bb21 26,28,30,35,37,39-40,48,53,55,59
+plugins/chat/README.md
+  s_7485715999886d::t_d0d940e270012b 62-65,68,81-85,88-90
+plugins/chat/src/client/_generated/components.d.ts
+  s_ca9d7afa6e814c::t_35c4da3406c552 1,3-258
+plugins/chat/src/client/api.ts
+  s_7485715999886d::t_2ed8d9dd0945a3 3
+plugins/chat/tests/fixtures/chat-probe/src/client/api.tsx
+  s_7485715999886d::t_756d6f679a8a19 7-8,13,20-27,30,40,68-69,72-79
+plugins/code/src/client/api.tsx
+  s_7485715999886d::t_5294d6efd4d4f8 73,97,100,105,108,111
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_f25a3a73ba783c::t_26ec18c4d08e5e 1-11
+plugins/ai/src/client/_generated/components.d.ts
+  s_7485715999886d::t_3fd5bc84ce51e1 1-375
+plugins/code/src/client/_generated/components.d.ts
+  s_ca9d7afa6e814c::t_4d5c2eba9144a3 1-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ac1e48171134b34026716c8fbc69c42af143342",
+  "prompts": {},
+  "sessions": {
+    "s_4ccc6fe573e949": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21335-5720-72d3-815d-ed54e2e24a94",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_ca9d7afa6e814c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "76b44171-31b4-42b9-bd75-50a0264adbb2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_f25a3a73ba783c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc1e9c2e-987a-409a-bf2b-65354272e8a9",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
