@@ -68,6 +68,9 @@ card tone with the strong edge ring, and a dashed strong-edge slot, 40 tall
 and radius 8, shows the number the card would get; the ghost follows the
 pointer, tilted 2°, on the band tone with the raised shadow.
 
+As built, a row dragged onto another profile is copied there and stays in
+its own; inside its own profile it moves. Removing it is the row menu's job.
+
 Decided here for the Profiles section, not drawn (or not on the scale): the
 pointed box's ring is the edge (drawn at 20% ink, between `edge` 12% and
 `edge-strong` 40%); the head is 12 in (drawn 10) and the number column 12 wide
@@ -79,7 +82,10 @@ here"; a disabled subscription's row says "Off" where the label goes; the
 `md` fields (`mono` for the code) and the help "Up to 4 letters or digits.
 Threads show it in the picker."; each row ends in a ghost `sm` "more" button
 and each card's model line in a ghost `sm` add button (its "Add to profile"
-menu), both shown only while the row or card is pointed at or focused.
+menu), both shown only while the row or card is pointed at or focused, so a
+row ends 4 in (drawn 12) to make room for that button; the carried card keeps
+its tray fill at 40% (drawn without fill, with a 20% ring at 40%: no token has
+20%, and it would take another `SubscriptionCard` prop).
 
 Decided here, not drawn (or not on the scale): a card's gap is 12 (drawn 14)
 and its height follows the tallest card in its row (drawn 236); icon-to-text
@@ -128,11 +134,19 @@ None. It publishes no `component`.
   profile is pointed at.
 - A drop is found from the page: boxes carry `data-profile`, rows `data-entry`.
   Renaming those breaks dragging, not the tests of the menus.
-- Profiles hold `agent-proxy` subscription ids. When a subscription is removed
-  (TKM-265), its flow calls `internal.profiles.forgetSubscription`; the screen
-  already hides one `agent-proxy` no longer lists.
-- The picker column (TKM-266) reads a profile's subscriptions in use order with
+- Profiles hold `agent-proxy` subscription ids, in one spelling
+  (`subscriptionKey`). One `agent-proxy` does not list right now is hidden
+  everywhere but stays stored, in place, and shows again when listed; the
+  positions the window sends count shown rows only. Only
+  `internal.profiles.forgetSubscription` deletes entries: the flow that removes
+  a subscription (TKM-265) calls it in the same transaction, and it throws
+  rather than return a failure. Every other change to a profile's list goes
+  through `save()` in `src/server/profiles.ts`, the single write path.
+- The picker column (TKM-266) lists profiles with `profiles.list`. Starting a
+  turn reads the chosen profile's enabled subscriptions in use order with
   `internal.profiles.inUseOrder`; the order shown here is that order.
+- A person has at most 32 profiles (`MAX_PROFILES`); the code rules are
+  `checkCode`, for making a profile and for renaming one later (TKM-269).
 
 ## Primitives used
 
@@ -164,6 +178,14 @@ the app now also draws "Profiles 0" and "No profiles yet…"; they are left for
 whoever merges this branch with TKM-265's, which redrew `Profiles · subscriptions`.
 
 ## Open questions
+
+- **Profiles: a row dragged onto another profile is copied** (it stays in its
+  own). Should it move instead, or ask?
+- **Profiles: the carried card** keeps its tray fill at 40%; the drawing has
+  no fill and a 20% ring. A 20% edge token and a "carried" state on the card
+  would match it.
+- **Profiles: a row's end padding** is 4 (drawn 12) because its menu button sits
+  there.
 
 - **Profiles: fields and dialog.** No "New profile" dialog or field is drawn;
   it uses `Input` `md` (40) for both fields, since there is no 32 px dense
