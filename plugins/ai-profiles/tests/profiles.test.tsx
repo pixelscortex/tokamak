@@ -158,8 +158,13 @@ test("the dialog runs company, method, sign-in and connected, and the card shows
   expect(open.getAttribute("target")).toBe("_blank");
   await user.click(within(signIn).getByRole("button", { name: "Copy link" }));
   expect(copied).toEqual([LINK]);
-  expect(within(signIn).getByText(/Waiting for you to sign in · you can close this/)).toBeTruthy();
-  expect(within(signIn).getByText(/ends on a page that may not load/)).toBeTruthy();
+  // A plain browser has no listener: one line says what to do, and the field is right under it.
+  expect(
+    within(signIn).getByText(
+      "Sign in in your browser. It ends on a page that may not load. Copy its whole address and paste it here.",
+    ),
+  ).toBeTruthy();
+  expect(within(signIn).queryByText(/finishes by itself/)).toBeNull();
   await user.type(pasteField(signIn), "http://localhost:54545/callback?code=the-code&state=abc");
   await user.click(within(signIn).getByRole("button", { name: "Continue" }));
   expect(named("finishSignIn")).toEqual([

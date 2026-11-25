@@ -130,6 +130,15 @@ test("the return finishes from the Awaiting sign-in card after the system browse
   const { signIn, finish } = mount();
   const user = userEvent.setup({ document });
   const dialog = await continueSignIn(user);
+  // Listening: Tokamak finishes by itself, and the field stays for another device or a return that did not come.
+  expect(
+    await dialog.findByText("Sign in in your browser. Tokamak finishes by itself when you are done."),
+  ).toBeTruthy();
+  expect(
+    dialog.getByText(
+      "Signing in on another device, or it did not finish? The browser ends on a page that may not load. Copy its whole address and paste it here.",
+    ),
+  ).toBeTruthy();
   await user.click(dialog.getByRole("button", { name: "Open sign-in page" }));
   expect(desktop.openSignInBrowser).toHaveBeenCalledWith(signIn.link);
   await user.click(dialog.getByRole("button", { name: "Close" }));
@@ -151,7 +160,12 @@ test.each(["busy", "unavailable"] as const)(
     const { signIn, finish } = mount();
     const user = userEvent.setup({ document });
     const dialog = await continueSignIn(user);
-    expect(await dialog.findByText(/ends on a page that may not load/)).toBeTruthy();
+    expect(
+      await dialog.findByText(
+        "Sign in in your browser. It ends on a page that may not load. Copy its whole address and paste it here.",
+      ),
+    ).toBeTruthy();
+    expect(dialog.queryByText(/finishes by itself/)).toBeNull();
     const field = dialog.getByRole("textbox", { name: /Address the sign-in/ });
     await user.clear(field);
     await user.type(field, address);

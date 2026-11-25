@@ -353,9 +353,8 @@ test("profiles screens", async ({ browser }) => {
     // The person signs in on Claude's page in their browser and ends on the callback link.
     const signedIn = await fetch(await signInPage(), { redirect: "manual" });
     const callback = signedIn.headers.get("location")!;
-    // The address goes in the field the step shows; the other-device note is opened too.
+    // The address goes in the field the step shows, as on another device or when no return came.
     await dialog.getByRole("textbox", { name: /Address the sign-in ended on/ }).fill(callback);
-    await dialog.getByRole("button", { name: /Signed in on another device/ }).click();
     await rest();
     await shot(page, "profiles-add-sign-in-pasted");
     await dialog.getByRole("button", { name: "Continue" }).click();

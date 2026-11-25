@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch as Choose, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { Button, Chip, Collapsible, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
+import { Button, Chip, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { Company, SignIn, Subscription } from "../lib/api";
 import { COMPANIES, pasteExample, wordsOf } from "../lib/companies";
 import { hasDesktopSignIn, openSignInBrowser } from "../lib/desktop";
@@ -340,9 +340,15 @@ function SignInStep(props: {
             {copied() ? "Copied" : "Copy link"}
           </Button>
         </div>
-        <p class="m-0 flex items-center gap-2 text-label text-ink-3">
-          <Icon path={icons.running} size={12} />
-          Waiting for you to sign in · you can close this
+        {/* The desktop app listens for the browser's return and finishes by itself; a plain
+            browser, or a listener that is busy or unavailable, needs the address pasted. */}
+        <p id="sign-in-help" class="m-0 flex items-start gap-2 text-label text-ink-2">
+          <Show when={props.listening}>
+            <Icon path={icons.running} size={12} class="mt-0.5 shrink-0 text-ink-3" />
+          </Show>
+          {props.listening
+            ? "Sign in in your browser. Tokamak finishes by itself when you are done."
+            : "Sign in in your browser. It ends on a page that may not load. Copy its whole address and paste it here."}
         </p>
         <form
           class="flex flex-col gap-2"
@@ -351,17 +357,18 @@ function SignInStep(props: {
             void submit(pasted());
           }}
         >
-          <p id="paste-help" class="m-0 text-label text-ink-2">
-            {props.listening
-              ? "Tokamak can finish sign-in for you. If it doesn’t, copy the whole address your browser ends on and paste it here."
-              : "After you sign in, your browser ends on a page that may not load. Copy the whole address from its address bar and paste it here."}
-          </p>
+          <Show when={props.listening}>
+            <p id="paste-help" class="m-0 text-label text-ink-3">
+              Signing in on another device, or it did not finish? The browser ends on a page that may not
+              load. Copy its whole address and paste it here.
+            </p>
+          </Show>
           <div class="flex items-center gap-2">
             <Input
               mono
               class="flex-1"
               aria-label="Address the sign-in ended on"
-              aria-describedby="paste-help"
+              aria-describedby={props.listening ? "paste-help" : "sign-in-help"}
               placeholder={pasteExample(props.signIn.company)}
               invalid={Boolean(problem() ?? props.returned?.problem)}
               value={pasted()}
@@ -381,15 +388,6 @@ function SignInStep(props: {
           </div>
           <Problem message={problem() ?? props.returned?.problem} />
         </form>
-        <Collapsible.Root>
-          <Collapsible.Trigger variant="quiet">Signed in on another device?</Collapsible.Trigger>
-          <Collapsible.Panel>
-            <p class="m-0 ps-2 pt-1 text-label text-ink-3">
-              Copy the link, open it in that device's browser and sign in there. Then paste the address that
-              browser ends on in the field above.
-            </p>
-          </Collapsible.Panel>
-        </Collapsible.Root>
       </Show>
     </>
   );
