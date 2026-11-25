@@ -1,0 +1,47 @@
+packages/server/src/host/action_process/transport.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 227
+packages/server/tests/fixtures/query-hooks/moderation/src/server/policy.ts
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 160-165
+packages/runner/src/local/quickjs/session.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 556,599
+packages/server/tests/fixtures/query-hooks/z-extra/src/server/extra.ts
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 7-10
+packages/server/src/actions.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 362-364,369,395-398
+packages/engine/src/bridge.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 31-35,41,56,609
+packages/sdk/README.md
+  s_040e9b5fc04cd5::t_8b21613cc63df3 925-927,997-999
+  s_040e9b5fc04cd5::t_d7c91b58300c46 917-924,928,983-992
+  s_040e9b5fc04cd5::t_b06f4d9538c5e6 993-996
+packages/server/src/host/triggers.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 110,118
+packages/server/src/protocol.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 62,88
+packages/server/src/host/hooks.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 158-161,339
+packages/engine/src/lib.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 17-18
+packages/server/src/identity/call.rs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 21
+packages/server/tests/query-hooks-driver.ts
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 228-233
+packages/server/tests/action-placement.mjs
+  s_040e9b5fc04cd5::t_4882e3bbb2ce50 212,214,227,516-518,523-525
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65da2be22d680d0cae27887283e52bbfb1f8957b",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
