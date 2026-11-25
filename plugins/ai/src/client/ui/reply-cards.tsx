@@ -93,13 +93,17 @@ function PlanCard(props: { text: string }): JSX.Element {
   );
 }
 
-/** "12.4k in · 1.1k out · $0.04", once the agent has reported usage. */
+/** "12.4k in · 1.1k out · $0.04", once the agent has reported some tokens. */
 function Usage(props: { turn: Accessor<Turn> }): JSX.Element {
+  const line = () => {
+    const usage = props.turn().usage;
+    return usage && usageLine(usage);
+  };
   return (
-    <Show when={props.turn().usage}>
-      {(usage) => (
+    <Show when={line()}>
+      {(text) => (
         <p aria-label="Usage" class="text-data text-ink-3">
-          {usageLine(usage())}
+          {text()}
         </p>
       )}
     </Show>

@@ -571,6 +571,9 @@ async function steerTurn() {
   assert.equal((await otherRunning).state, "stopped");
   const otherTranscript = await desk.query(chat.messages.list, { threadId: other.threadId });
   assert.equal(replyOf(otherTurn)(otherTranscript).parts[0].text, "Partial reply.stop");
+  // The agent's answer to the first steer is stored before the second is sent, so its offset is exact.
+  const answered = `Ready for steering. Steered: ${text}`;
+  await messages.until("first steer answered", (list) => replyOf(turn)(list)?.parts[0]?.text === answered);
   await desk.local(ai.run.steer, { turnId: turn._id, text: followup });
   assert.equal((await running).state, "done");
   const [done] = await desk.query(ai.turns.list, { threadId: sent.threadId });
@@ -580,6 +583,9 @@ async function steerTurn() {
     `Ready for steering. Steered: ${text} Then: ${followup}`,
   );
   assert.deepEqual(done.steers, [text, followup]);
+  // Each steer keeps where the reply's text stood when it was sent, so the reply draws it there.
+  assert.deepEqual(done.steerOffsets, ["Ready for steering.".length, answered.length]);
+  assert.equal(done.pendingSteerOffset, undefined);
   assert.deepEqual(await desk.query(ai.turns.replySteers, { replyId: turn.replyId }), [text, followup]);
   assert.equal(transcript.length, 2, "a steer does not create a chat message");
 }

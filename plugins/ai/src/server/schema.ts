@@ -152,8 +152,16 @@ export default defineSchema({
     stoppingAt: v.optional(v.number()),
     /** Follow-up text in send order, displayed inside this turn's reply. */
     steers: v.optional(v.array(v.string())),
+    /**
+     * Where each steer landed in the reply's text (its length in UTF-16 units
+     * when the steer was recorded), parallel to `steers`. Missing on turns whose
+     * steers predate it; their reply draws the steers after the text.
+     */
+    steerOffsets: v.optional(v.array(v.number())),
     /** A linked steer being handed off. Only an acknowledged steer joins the history. */
     pendingSteer: v.optional(v.string()),
+    /** The reply's text length when `pendingSteer` was recorded; it becomes the steer's offset. */
+    pendingSteerOffset: v.optional(v.number()),
     error: v.optional(v.string()),
     /** What the turn cost, as the agent last reported it. */
     usage: v.optional(usage),

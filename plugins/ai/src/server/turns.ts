@@ -472,7 +472,8 @@ export const steer = mutation({
       if (turn.pendingSteer === text)
         await update(ctx.db, turn, {
           pendingSteer: undefined,
-          ...(delivery === "delivered" && { steers: [...(turn.steers ?? []), text] }),
+          pendingSteerOffset: undefined,
+          ...(delivery === "delivered" && withSteer(turn, text, turn.pendingSteerOffset)),
         });
       return null;
     }
@@ -480,11 +481,37 @@ export const steer = mutation({
     if (turn.pendingSteer !== undefined) throw new Error("The turn is already receiving a steer");
     await ctx.db.patch(
       turnId,
-      delivery === "pending" ? { pendingSteer: text } : { steers: [...(turn.steers ?? []), text] },
+      delivery === "pending"
+        ? { pendingSteer: text, pendingSteerOffset: replyLength(turn) }
+        : withSteer(turn, text, undefined),
     );
     return null;
   },
 });
+
+/**
+ * How much of the reply's text is stored now. A steer is recorded as pending
+ * before the agent receives it, so the text stored at that moment is all
+ * written before the steer; the reply draws the steer at this point.
+ */
+function replyLength(turn: Turn): number {
+  return turn.text?.length ?? 0;
+}
+
+/**
+ * The turn's steers with `text` added, and where it landed in the reply's
+ * text: the offset taken when it was pending, else the text stored now.
+ * `steerOffsets` runs parallel to `steers`; a turn whose steers predate it
+ * has none, and its reply draws them after the text.
+ */
+function withSteer(turn: Turn, text: string, offset: number | undefined) {
+  const steers = [...(turn.steers ?? []), text];
+  const known = (turn.steerOffsets?.length ?? 0) === (turn.steers?.length ?? 0);
+  return {
+    steers,
+    ...(known && { steerOffsets: [...(turn.steerOffsets ?? []), offset ?? replyLength(turn)] }),
+  };
+}
 
 /**
  * The questions waiting for the caller: turns they sent from this device that
@@ -647,7 +674,8 @@ export const finish = mutation({
       question: undefined,
       questionToken: undefined,
       pendingSteer: undefined,
-      steers: deliveredSteers(turn, acknowledgedSteer),
+      pendingSteerOffset: undefined,
+      ...deliveredSteers(turn, acknowledgedSteer),
       state,
       current: undefined,
       finishedAt: Date.now(),
@@ -658,10 +686,11 @@ export const finish = mutation({
   },
 });
 
+/** The steers with the pending one added when the agent acknowledged it; nothing changes otherwise. */
 function deliveredSteers(turn: Turn, acknowledgedSteer: string | undefined) {
   return acknowledgedSteer !== undefined && turn.pendingSteer === acknowledgedSteer
-    ? [...(turn.steers ?? []), acknowledgedSteer]
-    : turn.steers;
+    ? withSteer(turn, acknowledgedSteer, turn.pendingSteerOffset)
+    : {};
 }
 
 /** Writes `changes` over the turn; a field set to undefined is removed (patch cannot remove one). */

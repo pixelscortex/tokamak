@@ -173,6 +173,7 @@ async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number, r
     questionToken: _token,
     current: _current,
     pendingSteer: _steer,
+    pendingSteerOffset: _steerOffset,
     ...rest
   } = turn;
   await ctx.db.replace(_id, { ...rest, state: "interrupted", error: reason, finishedAt: now });

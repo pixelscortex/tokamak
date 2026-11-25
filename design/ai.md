@@ -20,10 +20,11 @@ only when it has a local part (the desktop app); a plain browser shows chat alon
 | Reply while the turn runs: work line with the step and clock, Stop, thread status              | `ui/reply-work.tsx`, `ui/turn-controls.tsx`, `ui/thread-status.tsx` | `AI · reply running`        |
 | Reply after the turn: reply header, "Worked · 5 actions", helper row, text, tasks, plan, usage | `ui/reply-header.tsx`, `ui/reply-work.tsx`, `ui/reply-cards.tsx`    | `AI · reply finished`       |
 | Thinking and the actions line opened                                                           | `ui/reply-work.tsx`                                                 | `AI · reply opened`         |
+| Reply with steers: each follow-up drawn where it arrived in the text, as the person's message  | `ui/turn-steers.tsx`, `lib/steers.ts`                               | `AI · reply steered`        |
 | Permission question on the composer (Ask first)                                                | `ui/permission-card.tsx`                                            | `AI · permission question`  |
 
 Not drawn yet: the thread list after several turns (its status icons show on the other artboards), the agent row's lines ("Codex isn't installed.", signed out,
-"Only Sam can run the agent here"), a picker menu open, steers, queued messages, the
+"Only Sam can run the agent here"), a picker menu open, a pending steer, queued messages, the
 expired question line, "Force stop".
 
 ## Parts it offers
@@ -44,11 +45,19 @@ All actions are in `plugins/ai/src/client/api.ts`.
 | `Empty.heading`       | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`         | `AI · new thread`                                                             |
 | `Message.header`      | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
 | `Message.body`        | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
-| `Message.body`        | after, agent replies                   | Tasks card, plan card, usage line                                                                                                        | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
-| `Message.body`        | after, agent replies                   | Steers (follow-ups sent while it ran)                                                                                                    | `ui/turn-steers.tsx`     | not drawn yet                                                                 |
+| `Message.body`        | after, agent replies                   | Tasks card, plan card, usage line (left out when the agent counted 0 in and 0 out)                                                       | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
+| `Message.body`        | replace, agent replies with steers     | The text cut where each steer arrived; between the parts "↳ Steer" (quiet label), then the person's author line and text                 | `ui/turn-steers.tsx`     | `AI · reply steered`                                                          |
 | `ThreadRow.status`    | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
 | `ThreadRow.detail`    | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   | `AI · reply running`, `AI · permission question`                              |
 | `ThreadRow.detail`    | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   | `AI · reply running`                                                          |
+
+Where a steer goes: when it is recorded, the server keeps the length of the
+reply's stored text (`turns.steerOffsets`, parallel to `steers`). The reply
+splits its text there, trims the blank line around the split, and never
+splits inside a code fence (a steer sent inside one moves after the fence's
+closing line). A steer still on its way to the agent shows at the end of the
+text so far. Turns stored before offsets draw their steers after the text,
+in the same look. Replies without steers keep chat's own body.
 
 It also turns chat's Send off with `holdSend` while the thread's agent is
 missing or signed out, and listens to `onSent` / `onDraftSubmit`.
@@ -66,6 +75,11 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   `Message.header` height; the user's header uses the same 20 px line.
 - Work lines and cards (`max-w-read` 560, `min-w-fold` 360): chat's message
   column (760) and `code`'s change card, which spans the full column.
+- The steered body (`ui/turn-steers.tsx`) repeats chat's body text style
+  (`text-read`, `whitespace-pre-wrap`, `max-w-read`) and chat's author line
+  (avatar 18, name in `text-label text-ink-3`, `h-5`); change those in chat
+  and change them here. Its pieces sit 16 apart (`gap-4`), and a steer
+  has `py-2` more on each side (24 between it and the agent's text).
 - `ReplyCards` relies on chat's `Message` gap (8) plus its own `pt-2` for the
   16 px between text and card; changing either changes the other.
 - Status icon size (16) and the detail line: chat's `ThreadRow` lead lane
@@ -75,7 +89,7 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
 
 ## Primitives used
 
-`Button`, `Collapsible` (Thinking uses its `quiet` trigger), `Icon`, `icons`, `Kbd`, `Menu`, `rowVariants`,
+`Avatar` (steers), `Button`, `Collapsible` (Thinking uses its `quiet` trigger), `Icon`, `icons`, `Kbd`, `Menu`, `rowVariants`,
 `StatusIcon`, `Tooltip`; its own `AgentMark` and `Spinning`.
 
 ## Open questions
