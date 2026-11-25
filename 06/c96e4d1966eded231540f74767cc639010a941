@@ -1,0 +1,27 @@
+packages/build/src/hook-targets.ts
+  s_040e9b5fc04cd5::t_177c031cbc5664 7,11,37
+packages/build/tests/boundary.test.mjs
+  s_040e9b5fc04cd5::t_b11ce0d42828be 344-353,361-367,376
+packages/server/src/host.rs
+  s_040e9b5fc04cd5::t_a6154ff4b49283 63-87,207
+packages/server/src/plugins/loading.rs
+  s_040e9b5fc04cd5::t_a72bcd39cb2dc2 41-65,430
+packages/server/src/service/action_coordination.rs
+  s_040e9b5fc04cd5::t_df7a661ad4065b 47,51-52,54,94-112,140-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06c96e4d1966eded231540f74767cc639010a941",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
