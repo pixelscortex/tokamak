@@ -1,0 +1,26 @@
+plugins/agent-proxy/src/server/signins.ts
+  s_503e9e7253d05e::t_86b099a0a05e1d 302,306-307
+plugins/agent-proxy/tests/manage-companies.test.ts
+  s_503e9e7253d05e::t_a927721bc1cc81 81,85,107-111,116-118
+plugins/agent-proxy/README.md
+  s_503e9e7253d05e::t_86b099a0a05e1d 80
+plugins/ai-profiles/tests/profiles-server.test.ts
+  s_503e9e7253d05e::t_a1451cb2aca24e 15-25,29,37,95-105,204-205,210-212,223-240
+  s_503e9e7253d05e::t_a082d680319e39 241-242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e95f3e37a1e502e21db7c63d62aaca0b69ecca4d",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
