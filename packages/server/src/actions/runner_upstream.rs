@@ -65,35 +65,36 @@ impl RunnerActionUpstream {
     pub fn local_contracts(&self, payload: &Value) -> Result<Value, String> {
         let scope = self.scope.as_ref().ok_or("Missing plugin scope")?;
         let declaration = scope.declaration(payload)?;
-        let providers = scope
-            .generation
-            .catalog
-            .plugins
-            .values()
-            .flat_map(|artifact| {
-                let manifest = &artifact.manifest;
-                scope
-                    .registrations(manifest, &declaration.name)
-                    .filter_map(move |registration| {
-                        let plugin = &manifest.plugin.id;
-                        if registration.declaration_hash != declaration.declaration_hash {
-                            return Some(json!({"plugin":plugin, "incompatible":true}));
-                        }
-                        let (entry, code) = runner_hashes(manifest)?;
-                        let mut provider = json!({
-                            "plugin":plugin,
-                            "owner":scope.owner,
-                            "own":plugin == &scope.owner,
-                            "registration":registration.registration,
-                            "build":format!("{entry}:{code}"),
-                        });
-                        if let Some(reason) = &registration.unavailable {
-                            provider["unavailable"] = json!(reason);
-                        }
-                        Some(provider)
-                    })
-            });
-        Ok(Value::Array(providers.collect()))
+        let catalog = &scope.generation.catalog;
+        let mut providers = Vec::new();
+        for plugin in &catalog.order {
+            let manifest = &catalog.plugins[plugin].manifest;
+            let registrations: Vec<_> = scope.registrations(manifest, &declaration.name).collect();
+            if !registrations
+                .iter()
+                .all(|entry| entry.declaration_hash == declaration.declaration_hash)
+            {
+                providers.push(json!({"plugin":plugin, "incompatible":true}));
+                continue;
+            }
+            let Some((entry, code)) = runner_hashes(manifest) else {
+                continue;
+            };
+            for registration in registrations {
+                let mut provider = json!({
+                    "plugin":plugin,
+                    "owner":scope.owner,
+                    "own":plugin == &scope.owner,
+                    "registration":registration.registration,
+                    "build":format!("{entry}:{code}"),
+                });
+                if let Some(reason) = &registration.unavailable {
+                    provider["unavailable"] = json!(reason);
+                }
+                providers.push(provider);
+            }
+        }
+        Ok(Value::Array(providers))
     }
 
     pub fn local_contract(
@@ -113,12 +114,12 @@ impl RunnerActionUpstream {
             .ok_or_else(invalid)?
             .manifest;
         let registration = payload["registration"].as_str().ok_or_else(invalid)?;
-        if !scope
-            .registrations(manifest, &declaration.name)
-            .any(|candidate| {
-                candidate.registration == registration
-                    && candidate.declaration_hash == declaration.declaration_hash
-            })
+        let mut providers = scope.registrations(manifest, &declaration.name);
+        if !providers
+            .clone()
+            .any(|candidate| candidate.registration == registration)
+            || !providers
+                .all(|candidate| candidate.declaration_hash == declaration.declaration_hash)
         {
             return Err(invalid());
         }
@@ -173,7 +174,7 @@ impl Scope {
         &'a self,
         manifest: &'a Manifest,
         name: &'a str,
-    ) -> impl Iterator<Item = &'a ContractRegistration> {
+    ) -> impl Iterator<Item = &'a ContractRegistration> + Clone {
         manifest.contract_providers.iter().filter(move |entry| {
             manifest.plugin.declares_access_to(&self.owner)
                 && entry.owner == self.owner
