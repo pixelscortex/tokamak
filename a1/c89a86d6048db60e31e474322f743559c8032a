@@ -1,0 +1,77 @@
+plugins/ai/src/client/lib/replies.ts
+  s_bead5d35bc54c0::t_06346dc104b77a 59,64-72
+  s_bead5d35bc54c0::t_da0de52177f597 50
+  s_bead5d35bc54c0::t_06dc5eb9b46e2a 25-26
+  s_bead5d35bc54c0::t_7d55e104a8bdeb 132-138
+  s_bead5d35bc54c0::t_d9817bd030cfaf 73-74
+plugins/ai/src/server/liveness.ts
+  s_bead5d35bc54c0::t_ce9708733be750 176
+plugins/ai/src/client/ui/reply-cards.tsx
+  s_bead5d35bc54c0::t_9ad41e7a63fd1f 96,98-101,103-104,106
+e2e/browser/ai.spec.ts
+  s_bead5d35bc54c0::t_5f15774d178923 240-249,253-260
+plugins/ai/src/client/api.ts
+  s_bead5d35bc54c0::t_2021e4c1519416 8-9
+  s_bead5d35bc54c0::t_5a65cf5f565902 44-49
+  s_bead5d35bc54c0::t_1cd38728770192 15
+plugins/ai/src/server/schema.ts
+  s_bead5d35bc54c0::t_79821d57cdb252 155-160,163-164
+design/ai.md
+  s_bead5d35bc54c0::t_207ba8706631b3 27
+  s_bead5d35bc54c0::t_b9d0519fdd4a1a 78-80
+  s_bead5d35bc54c0::t_4ce6980e253fdb 54-61
+  s_bead5d35bc54c0::t_60dfdcfc3d5cb3 81-82
+  s_bead5d35bc54c0::t_6a5a26a725ef63 23
+  s_bead5d35bc54c0::t_50b2a66fbdf7a2 92
+  s_bead5d35bc54c0::t_ef55a5c71112c5 48-49
+plugins/ai/src/client/lib/steers.ts
+  s_bead5d35bc54c0::t_7239cf817350cc 60-61,64-65
+  s_bead5d35bc54c0::t_64645bce46c2af 1-57,59,62-63,66,69-74
+  s_bead5d35bc54c0::t_4b2d55d16d394f 58,67-68
+packages/server/tests/ai-turns-driver.mjs
+  s_bead5d35bc54c0::t_74136c5d2543fe 574-576
+  s_bead5d35bc54c0::t_4b338e711a955b 586-588
+plugins/ai/tests/steers.test.tsx
+  s_bead5d35bc54c0::t_c7f5979befb195 1-87,94-116,122-139
+  s_bead5d35bc54c0::t_e0f098d90a3662 88-93,117-121
+e2e/browser/screens.spec.ts
+  s_bead5d35bc54c0::t_c6feb2fcc1bc5f 267-278
+design/chat.md
+  s_bead5d35bc54c0::t_a766a684d9dce1 67-69
+plugins/ai/src/client/ui/turn-steers.tsx
+  s_bead5d35bc54c0::t_33b936fb1fc028 1,4-6,8,11-16,18,20-23,25,28-49,52-63
+  s_bead5d35bc54c0::t_8e3e84dac4ebea 26-27
+  s_bead5d35bc54c0::t_397e9c670ba751 50-51
+plugins/ai/src/client/lib/icons.ts
+  s_bead5d35bc54c0::t_108911d625215a 31-33
+plugins/ai/src/server/turns.ts
+  s_bead5d35bc54c0::t_ebe56c9d1bf052 509
+  s_bead5d35bc54c0::t_39ad095b56a029 689,692-693
+  s_bead5d35bc54c0::t_0a70c8984b04ea 475-476,484-486,492-508,510-514
+  s_bead5d35bc54c0::t_0f6315487f9d18 677-678
+  s_4cc7cf1cc19627::t_332f510a947a50 515
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a1c89a86d6048db60e31e474322f743559c8032a",
+  "prompts": {},
+  "sessions": {
+    "s_4cc7cf1cc19627": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a211fd-5e21-7a32-8c4f-5b06135214ce",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_bead5d35bc54c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8b25a75-30f6-4b43-9cd6-3d8047890932",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
