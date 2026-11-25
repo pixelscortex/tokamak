@@ -187,7 +187,8 @@ function AccountRow(props: {
 /** The person's own name for the subscription; saved on Enter or when the field is left. */
 function Label(props: { subscription: Subscription }): JSX.Element {
   const client = useClient();
-  const [text, setText] = createSignal(props.subscription.label);
+  // Follows the label when it changes elsewhere; typing overrides it until then.
+  const [text, setText] = createSignal(() => props.subscription.label);
   const [problem, setProblem] = createSignal<string>();
   async function save() {
     if (text().trim() === props.subscription.label) return;
