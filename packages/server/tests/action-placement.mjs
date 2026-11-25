@@ -48,8 +48,13 @@ await writeFile(
   `
   import { action, hook, provide } from "@tokamak/sdk";
   import { localPlace } from "plugin:ai/contracts";
-  import { audited, marker, rows, store, waitHook } from "plugin:ai/server";
+  import { audited, callerPoint, marker, pointLoop, rows, store, waitHook } from "plugin:ai/server";
   export const policy = hook(marker, { after: () => "hooked" });
+  export const load = hook(callerPoint.points.load, {
+    before: (ctx, { search }) => ({ search: search + ":" + ctx.call.depth }),
+    after: (_ctx, result) => result.toUpperCase(),
+  });
+  export const loop = hook(pointLoop.points.loop, { before: (_ctx, value) => value + 1 });
   export const audit = hook(audited, {
     async before(ctx, args) {
       let denied = false;
@@ -306,7 +311,7 @@ const http = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Respon
 cleanup.push(() => http.stop(true));
 const auditArgs = { url: http.url.href, text: "audit" };
 
-async function rejects_older_window_without_hook_plan_support(address, token) {
+async function rejects_older_window_without_hook_plan_support(address, token, points = false) {
   const socket = new WebSocket(address, ["tokamak", `tokamak.bearer.${token}`]);
   try {
     const reply = await within(
@@ -319,9 +324,10 @@ async function rejects_older_window_without_hook_plan_support(address, token) {
               JSON.stringify({
                 type: "action",
                 id: 1,
-                name: "ai/work:audited",
+                name: points ? "ai/work:callerPoint" : "ai/work:audited",
                 window: true,
-                args: auditArgs,
+                ...(points && { hookPlans: true }),
+                args: points ? {} : auditArgs,
               }),
             ),
           { once: true },
@@ -335,9 +341,32 @@ async function rejects_older_window_without_hook_plan_support(address, token) {
     );
     assert.equal(reply.error?.kind, "hookRunnerUnavailable");
     assert.equal(reply.error?.plugin, "fixture-hooks");
+    if (points) assert.equal(reply.error?.point, "load");
   } finally {
     socket.close();
   }
+}
+
+async function rejects_runner_without_point_plan_support(address, token, launch) {
+  const client = await connect(address, {
+    token,
+    cleanup,
+    launch: async (...args) => {
+      const worker = await launch(...args);
+      return {
+        send: worker.send.bind(worker),
+        close: worker.close.bind(worker),
+        route: worker.route.bind(worker),
+        retire: worker.retire.bind(worker),
+      };
+    },
+  });
+  await assert.rejects(client.action(api.work.callerPoint, {}), {
+    plugin: "fixture-hooks",
+    point: "load",
+    stage: "pointBefore",
+    kind: "hookRunnerUnavailable",
+  });
 }
 
 async function action_hooks_run_with_network_and_database(client, reference, expectedDepth, options) {
@@ -349,6 +378,20 @@ async function action_hooks_run_with_network_and_database(client, reference, exp
     after.slice(before).map(({ text }) => text),
     ["network:audit"],
   );
+}
+
+async function caller_point_runs_with_local_stages(client) {
+  assert.equal(await client.action(api.work.callerPoint, {}), "LOADED:OWNER:1");
+}
+
+async function point_stages_share_the_window_budget(client) {
+  assert.equal(await client.action(api.work.pointLoop, { count: 256 }), 256);
+  await assert.rejects(client.action(api.work.pointLoop, { count: 257 }), {
+    plugin: "fixture-hooks",
+    stage: "pointBefore",
+    point: "loop",
+    kind: "hookDepthLimit",
+  });
 }
 
 try {
@@ -371,6 +414,7 @@ try {
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "caller" }), { runner: true, depth: 1 });
   assert.deepEqual(await embedded.action(api.delegate.choose, { on: "server" }), { runner: false, depth: 1 });
   await assertProgram(embedded, api.work.run, 0);
+  await caller_point_runs_with_local_stages(embedded);
   assert.equal(await embedded.action(api.provider.callLocalContract, {}), 1);
   assert.deepEqual(await embedded.action(api.provider.callServerContract, {}), { runner: true, depth: 1 });
   assert.equal(await embedded.action(api.work.callPrivate, {}), 1);
@@ -430,6 +474,10 @@ try {
   assert.deepEqual(await window.action(api.work.read, { file }, { on: "server" }), noMachine);
   assert.equal((await browser.query(api.work.rows, {})).rows.length, 1);
   await rejects_older_window_without_hook_plan_support(address, sharedToken);
+  await rejects_older_window_without_hook_plan_support(address, sharedToken, true);
+  await rejects_runner_without_point_plan_support(address, sharedToken, local.launch);
+  await caller_point_runs_with_local_stages(window);
+  await point_stages_share_the_window_budget(window);
   await action_hooks_run_with_network_and_database(window, api.work.audited, 1);
   await action_hooks_run_with_network_and_database(browser, api.work.audited, 1, { on: "server" });
   assert.deepEqual(await window.action(api.work.serverDefault, {}), { runner: false, depth: 0 });
@@ -470,6 +518,12 @@ try {
     await assert.rejects(window.action(api.work.audited, auditArgs), {
       plugin: "fixture-hooks",
       stage: "before",
+      kind: "hookRunnerUnavailable",
+    });
+    await assert.rejects(window.action(api.work.callerPoint, {}), {
+      plugin: "fixture-hooks",
+      stage: "pointBefore",
+      point: "load",
       kind: "hookRunnerUnavailable",
     });
     await cp(oldProvider, join(serverPlugins, "fixture-hooks"), { recursive: true });

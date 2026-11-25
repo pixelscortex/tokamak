@@ -209,8 +209,11 @@ export function tokamak(
           const module = moduleName(server, path, server === resolve(root, "src/server"));
           for (const [name, definition] of definitions) {
             if (definition.target) hookTargets.add(definition.target);
-            if (["query", "mutation", "action"].includes(definition.kind))
-              hookable.add(`${plugin.id}/${module}:${name}`);
+            if (["query", "mutation", "action"].includes(definition.kind)) {
+              const key = `${plugin.id}/${module}:${name}`;
+              hookable.add(key);
+              for (const point of definition.points?.keys() ?? []) hookable.add(`${key}#${point}`);
+            }
           }
         }
         warnMissingHookTargets(root, plugin.id, hookable, options.pluginCatalog, (message) =>

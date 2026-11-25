@@ -25,6 +25,7 @@ import {
 } from "./placement.mjs";
 import { contractEntry, contractManifest } from "./contracts.mjs";
 import { serverBuiltins } from "./server-builtins.mjs";
+import { pointReferenceTypes } from "./points.mjs";
 
 const sdkRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const quote = JSON.stringify;
@@ -104,7 +105,7 @@ function discoverReferences(root, pluginRoot, sources, virtual) {
   });
 }
 
-async function generateReferences(root, pluginRoot, files, modules, namespace) {
+async function generateReferences(root, pluginRoot, files, modules, namespace, placement) {
   const generated = join(root, "_generated");
   const variants = [
     { name: "api", mapping: "ApiFromModule", visibility: Visibility.Public },
@@ -112,13 +113,14 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
     { name: "plugin", mapping: "PluginFunctionsFromModule", visibility: Visibility.PluginOnly },
   ];
   const pathFor = (variant) => join(generated, variant.name + ".ts");
-  function render(name, mapping, type, names) {
+  function render(name, mapping, type, names, kinds, points, aliases = []) {
     const list = names?.length ? `[\n${names.map((name) => "  " + quote(name) + ",").join("\n")}\n]` : "[]";
     return (
       header +
       `import { createApi${mapping ? ", type " + mapping : ""} } from "@tokamak/sdk";\n` +
+      aliases.join("") +
       `type References = ${type};\n` +
-      `export const ${name}: References = createApi(${quote(namespace) ?? "undefined"}${names ? ", " + list : ""});\n`
+      `export const ${name}: References = createApi(${quote(namespace) ?? "undefined"}${names ? ", " + list : ""}${points && Object.keys(points).length ? `, ${quote(kinds)}, ${quote(points)}` : ""});\n`
     );
   }
   const importType = (index) => `typeof import(${quote("../" + files[index].replace(/\.tsx?$/, ""))})`;
@@ -145,6 +147,9 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
     );
     const included = modules.flatMap((_, i) => (groups[i].length ? [i] : []));
     const names = groups.flatMap((group, i) => group.map((entry) => `${modules[i]}:${entry.name}`));
+    const points = {};
+    const kinds = {};
+    const aliases = [];
     const type = apiType(
       included.map((i) => modules[i]),
       (index) => {
@@ -152,16 +157,36 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
         return (
           "{\n" +
           groups[i]
-            .map(
-              ({ name }) =>
-                `  readonly ${quote(name)}: ReferenceFromDefinition<${importType(i)}[${quote(name)}]>;`,
-            )
+            .map(({ name }) => {
+              const key = `${modules[i]}:${name}`;
+              const definition = placement?.modules.get(join(root, files[i]))?.get(name);
+              if (definition?.points?.size) {
+                points[key] = [...definition.points.keys()];
+                kinds[key] = definition.kind;
+              }
+              const named = pointReferenceTypes(
+                definition?.points,
+                definition?.kind,
+                namespace,
+                namespace ? `${namespace}/${key}` : key,
+                aliases,
+              );
+              return `  readonly ${quote(name)}: ReferenceFromDefinition<${importType(i)}[${quote(name)}]>${named};`;
+            })
             .join("\n") +
           "\n}"
         );
       },
     );
-    const output = render(variant.name, names.length ? "ReferenceFromDefinition" : null, type, names);
+    const output = render(
+      variant.name,
+      names.length ? "ReferenceFromDefinition" : null,
+      type,
+      names,
+      kinds,
+      points,
+      aliases,
+    );
     const destination = Bun.file(pathFor(variant));
     const existed = await destination.exists();
     if (variant.visibility === Visibility.PluginOnly && !names.length && !existed) continue;
@@ -206,7 +231,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
   if (new Set(modules).size !== modules.length)
     throw new Error("Duplicate server module name; module basenames must be unique");
   const generated = join(root, "_generated");
-  await generateReferences(root, pluginRoot, files, modules, namespace);
+  await generateReferences(root, pluginRoot, files, modules, namespace, placement);
 
   // Temporary entry/config live together and are always removed. They must
   // never be mistaken for author modules on the next build.
@@ -220,6 +245,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
       hasSchema,
       placement,
       results: placement?.results(root, organized),
+      points: placement?.points(root, organized),
       providers,
       header,
     });

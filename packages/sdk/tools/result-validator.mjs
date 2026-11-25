@@ -10,6 +10,10 @@ export function resultValidator(checker, definition, location) {
   const carrier = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(types, location));
   const result = carrier.getProperty("result");
   if (!result) return;
+  return validatorFromType(checker, checker.getTypeOfSymbolAtLocation(result, location), location);
+}
+
+export function validatorFromType(checker, type, location) {
   const visit = (type, ancestors, optional = false) => {
     if (ancestors.length >= 16 || ancestors.includes(type)) return { kind: "any" };
     const nested = [...ancestors, type];
@@ -69,5 +73,5 @@ export function resultValidator(checker, definition, location) {
     }
     return fields.length ? { kind: "object", fields: Object.fromEntries(fields) } : { kind: "any" };
   };
-  return visit(checker.getTypeOfSymbolAtLocation(result, location), []);
+  return visit(type, []);
 }

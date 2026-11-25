@@ -36,14 +36,9 @@ impl Coordinator {
             return;
         }
         let owner = target.map(|target| (target.local_name.clone(), target.owner.clone()));
-        if let Some(reply) = self.window_action_reply(
-            session,
-            id,
-            &name,
-            &destination,
-            &mut note,
-            placement.hook_plans,
-        ) {
+        if let Some(reply) =
+            self.window_action_reply(session, id, &name, &destination, &mut note, placement)
+        {
             self.respond_call(session, id, reply);
             return;
         }
@@ -55,6 +50,7 @@ impl Coordinator {
                 return;
             }
         };
+        let qualified = owner.as_ref().map(|_| name.clone());
         let (local_name, owner) =
             owner.map_or_else(|| (name, None), |(local, owner)| (local, Some(owner)));
         let source = match (&self.plugins, &owner) {
@@ -65,7 +61,7 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
-        let (context, guard) = destination.context(note, self.runner.clone());
+        let (context, guard) = destination.context(note, self.runner.clone(), qualified);
         let ops = match crate::actions::operations(
             self.commands.clone(),
             self.plugins.clone(),
@@ -110,8 +106,23 @@ impl Coordinator {
         Ok((output, self.action_process()?.clone()))
     }
 
-    fn missing_hook_capability(&self, name: &str) -> Option<CallError> {
-        let hook = self.plugins.as_ref()?.hooks.get(name)?.first()?;
+    fn missing_hook_capability(
+        &self,
+        name: &str,
+        allow_hooks: bool,
+        allow_points: bool,
+    ) -> Option<CallError> {
+        let loaded = self.plugins.as_ref()?;
+        let point;
+        let name = if !allow_hooks && loaded.hooks.contains_key(name) {
+            name
+        } else if !allow_points {
+            point = crate::host::hooks::point_targets(loaded, name).next()?.1;
+            &point
+        } else {
+            return None;
+        };
+        let hook = loaded.hooks.get(name)?.first()?;
         Some(
             CallError::hook(
                 &hook.owner,
@@ -136,18 +147,19 @@ impl Coordinator {
         name: &str,
         destination: &crate::actions::Destination,
         note: &mut CallNote,
-        hook_plans: bool,
+        placement: Placement,
     ) -> Option<Result<Json, CallError>> {
-        if !hook_plans
-            && matches!(
-                destination,
-                crate::actions::Destination::CallerWindowRunner { .. }
-            )
-            && let Some(error) = self.missing_hook_capability(name)
-        {
+        if matches!(
+            destination,
+            crate::actions::Destination::CallerWindowRunner { .. }
+        ) && let Some(error) = self.missing_hook_capability(
+            name,
+            placement.hook_plans,
+            placement.hook_plans && placement.point_plans,
+        ) {
             return Some(Err(error));
         }
-        let scope = if hook_plans {
+        let scope = if placement.hook_plans {
             self.prepare_hook_scope(session, id, destination, note)
         } else {
             Ok(false)

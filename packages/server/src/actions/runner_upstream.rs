@@ -144,6 +144,8 @@ impl RunnerActionUpstream {
                 note,
                 runner: scope.runner.clone(),
                 lifetime: scope.lifetime.clone(),
+                qualified: None,
+                dispatch: None,
             },
         )
         .map_err(|error| error.to_string())?;

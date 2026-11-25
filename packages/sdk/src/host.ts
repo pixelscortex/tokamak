@@ -43,7 +43,14 @@ export interface QueryRequest {
  */
 export interface HostOperations {
   "user.current": { args: {}; result: import("./functions").User };
-  "auth.current": { args: { call?: true }; result: import("./functions").CallContext | null };
+  "auth.current": {
+    args: { call?: true };
+    result: (import("./functions").CallContext & { hookPoints?: readonly string[] }) | null;
+  };
+  "point.stage": {
+    args: { name: string; stage: "before" | "after"; args: JsonValue; result?: JsonValue };
+    result: JsonValue;
+  };
   "crypto.hashPassword": { args: { password: string }; result: string };
   "crypto.verifyPassword": { args: { password: string; hash: string }; result: boolean };
   "crypto.verifyAndRehashPassword": {
@@ -126,6 +133,7 @@ export interface ActionSignal {
 }
 
 export interface HostBridge {
+  readonly hookPoints?: readonly string[];
   readonly call?: import("./functions").CallContext | null;
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;

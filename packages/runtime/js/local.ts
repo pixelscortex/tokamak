@@ -81,6 +81,7 @@ export type LaunchLocalWorker = (
   closed: (reason: string) => void,
   workspace?: string,
 ) => Promise<{
+  pointPlans?: boolean;
   send(message: JsonValue): Promise<void>;
   close(): Promise<void>;
   route(id: number, artifact: LocalArtifact): Promise<void>;
@@ -93,7 +94,10 @@ type WindowInvocation = {
   note: Continuation;
   artifact: LocalArtifact;
   ownsHookScope?: boolean;
-  hooks?: JsonValue & { artifacts: Record<string, LocalArtifact> };
+  hooks?: JsonValue & {
+    artifacts: Record<string, LocalArtifact>;
+    points?: Record<string, { hooks: { owner: string; name: string; before: boolean }[] }>;
+  };
 };
 type WorkerCallContext = {
   continuation?: Continuation;
@@ -569,6 +573,21 @@ class LocalWorker {
     } catch (error) {
       void this.close(String(error));
       throw error;
+    }
+    if (!endpoint.pointPlans && action?.hooks?.points) {
+      for (const [point, stages] of Object.entries(action.hooks.points)) {
+        const hook = stages.hooks[0];
+        if (!hook) continue;
+        throw new RemoteFunctionError({
+          message: `The Runner cannot run hook ${hook.owner}/${hook.name} at point ${name}#${point}`,
+          plugin: hook.owner,
+          hook: hook.name,
+          point,
+          stage: hook.before ? "pointBefore" : "pointAfter",
+          kind: "hookRunnerUnavailable",
+          data: null,
+        });
+      }
     }
     if (this.closing) throw new Error("Plugin process retired");
     if (this.draining) throw new Error("Local plugin build retired");

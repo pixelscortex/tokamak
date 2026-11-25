@@ -151,6 +151,42 @@ async function accepts_structural_rows_and_bounds_hook_fanout() {
   );
 }
 
+async function unhooked_points_keep_the_owner_values() {
+  assert.equal(await client.query(team.points.readPoint, { mode: "ok" }), "owner");
+  assert.equal(await client.mutation(team.points.savePoint, { rollback: false }), "owner-point");
+  assert.equal(await client.action(team.points.actPoint, {}), 2);
+}
+
+async function points_transform_values_and_validate_hook_results() {
+  assert.equal(await client.query(team.points.readPoint, { mode: "ok" }), "owner:hook");
+  assert.equal(await client.action(team.points.actPoint, {}), 6);
+  await assert.rejects(client.query(team.points.readPoint, { mode: "fail" }), {
+    plugin: "moderation",
+    stage: "pointBefore",
+    point: "choose",
+    kind: "pointRejected",
+  });
+  for (const mode of ["wrong", "extra", "recursive"]) {
+    await assert.rejects(client.query(team.points.readPoint, { mode }), {
+      plugin: "moderation",
+      stage: "pointBefore",
+      point: "choose",
+      kind: mode === "recursive" ? "hookDepthLimit" : "invalidHookResult",
+    });
+  }
+}
+
+async function point_hooks_share_the_mutation_transaction() {
+  assert.equal(await client.mutation(team.points.savePoint, { rollback: false }), "owner-point:before:after");
+  const saved = await client.query(list, { text: "owner-point" });
+  const audit = await client.query(moderation.policy.audit, {});
+  assert.ok(saved.some(({ name }) => name === "owner-point:before"));
+  assert.equal(audit.filter((name) => name === "point-write").length, 1);
+  await assert.rejects(client.mutation(team.points.savePoint, { rollback: true }), /rollback point/);
+  assert.deepEqual(await client.query(list, { text: "owner-point" }), saved);
+  assert.deepEqual(await client.query(moderation.policy.audit, {}), audit);
+}
+
 async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
   type Row = { name: string; detail: string };
   const updates: Row[][] = [];
@@ -179,10 +215,12 @@ async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
   // hook stops trimming them and stops filtering the ban on subsequent calls.
   assert.deepEqual(await next(), []);
   assert.deepEqual(await client.query(list, { text: "Mal" }), [{ name: "Mal", detail: "" }]);
+  await unhooked_points_keep_the_owner_values();
   await new Promise<void>((resolve) => {
     reloaded = resolve;
     send({ reinstall: true });
   });
+  assert.equal(await client.query(team.points.readPoint, { mode: "ok" }), "owner:hook");
   assert.ok((await names()).includes("Alice"));
   close();
 }
@@ -248,6 +286,8 @@ try {
     await accepts_structural_rows_and_bounds_hook_fanout();
     await live_query_tracks_owner_and_hook_tables_then_uninstalls();
     await mutation_hooks_transform_and_share_the_save();
+    await points_transform_values_and_validate_hook_results();
+    await point_hooks_share_the_mutation_transaction();
   }
   send({ done: true });
 } finally {

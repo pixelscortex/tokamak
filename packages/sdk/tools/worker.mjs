@@ -58,6 +58,7 @@ export function transactionSources({
       placement,
       hasActionHooks: inLane((kind) => kind === "actionHook").length > 0,
       results: placement?.results(root, isServerRoot(root)),
+      points: placement?.points(root, isServerRoot(root)),
       providers,
       lane: lanes.descriptor,
       header,

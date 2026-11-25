@@ -75,6 +75,7 @@ impl Fixture {
                 on: None,
                 window: None,
                 hook_plans: None,
+                point_plans: None,
                 id: self.next,
                 name: format!("worker-test/actions:{name}"),
                 args,

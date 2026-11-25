@@ -12,3 +12,4 @@ export {
   catchQueryHook,
 } from "./users";
 export { readPlain, readNoop, readTable, savePlain, saveNoop, saveTable } from "./bench";
+export { readPoint, savePoint, actPoint } from "./points";

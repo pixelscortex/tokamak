@@ -3,7 +3,7 @@
 
 use crate::host::{
     action_process::Supervisor,
-    hooks::{HookTarget, Stage, run_after, run_before},
+    hooks::{HookTarget, Stage, point_targets, run_after, run_before, run_point},
 };
 use crate::plugins::Hook;
 use crate::protocol::CallError;
@@ -64,14 +64,21 @@ pub(crate) struct Placement {
     on: Option<ActionTarget>,
     window: bool,
     pub(crate) hook_plans: bool,
+    pub(crate) point_plans: bool,
 }
 
 impl Placement {
-    pub fn new(on: Option<ActionTarget>, window: Option<bool>, hook_plans: Option<bool>) -> Self {
+    pub fn new(
+        on: Option<ActionTarget>,
+        window: Option<bool>,
+        hook_plans: Option<bool>,
+        point_plans: Option<bool>,
+    ) -> Self {
         Self {
             on,
             window: window.unwrap_or(false),
             hook_plans: hook_plans.unwrap_or(false),
+            point_plans: point_plans.unwrap_or(false),
         }
     }
 
@@ -146,6 +153,7 @@ impl Destination {
         &self,
         note: CallNote,
         runner: Arc<RunnerSlot>,
+        qualified: Option<String>,
     ) -> (ActionContext, Option<DropGuard>) {
         let lifetime = matches!(self, Self::AttachedRunner { .. }).then(CancellationToken::new);
         let guard = lifetime.clone().map(CancellationToken::drop_guard);
@@ -154,6 +162,11 @@ impl Destination {
                 note,
                 runner,
                 lifetime,
+                qualified,
+                dispatch: match self {
+                    Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
+                    _ => None,
+                },
             },
             guard,
         )
@@ -327,6 +340,8 @@ impl ActionStageExecutor<'_> {
                 note,
                 runner: self.runner.clone(),
                 lifetime: self.lifetime.clone(),
+                qualified: None,
+                dispatch: None,
             },
         )
         .map_err(|error| error.to_string())?;
@@ -403,6 +418,8 @@ pub(crate) struct ActionContext {
     pub note: CallNote,
     pub runner: Arc<RunnerSlot>,
     pub lifetime: Option<CancellationToken>,
+    pub qualified: Option<String>,
+    pub dispatch: Option<RunnerDispatch>,
 }
 
 pub(crate) struct NestedCall {
@@ -426,7 +443,9 @@ pub(crate) fn operations(
     context: ActionContext,
 ) -> Result<ActionOperations, engine::Error> {
     let mut ops = OpRegistry::new();
-    context.note.register(&mut ops)?;
+    let points =
+        register_point_operation(&mut ops, generation.as_ref(), &commands, &process, &context)?;
+    context.note.register_points(&mut ops, points)?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -482,6 +501,71 @@ pub(crate) fn operations(
         context,
         environment,
     ))
+}
+
+struct ActionPoints {
+    targets: std::collections::BTreeMap<String, HookTarget>,
+    generation: Arc<Loaded>,
+    commands: mpsc::WeakSender<Command>,
+    process: Arc<Supervisor>,
+    context: ActionContext,
+}
+
+impl ActionPoints {
+    async fn invoke(&self, payload: Json) -> Result<Json, engine::CallError> {
+        let target = payload["name"]
+            .as_str()
+            .and_then(|name| self.targets.get(name))
+            .ok_or("Unknown hook point")?;
+        let stages = ActionStageExecutor {
+            generation: &self.generation,
+            commands: &self.commands,
+            process: &self.process,
+            runner: &self.context.runner,
+            dispatch: self.context.dispatch.clone(),
+            lifetime: self.context.lifetime.clone(),
+        };
+        run_point(
+            target,
+            &self.context.note,
+            payload,
+            |hook, _, note, input| stages.execute(hook, note, input),
+        )
+        .await
+    }
+}
+
+fn register_point_operation(
+    ops: &mut OpRegistry,
+    loaded: Option<&Arc<Loaded>>,
+    commands: &mpsc::WeakSender<Command>,
+    process: &Arc<Supervisor>,
+    context: &ActionContext,
+) -> Result<Vec<String>, engine::Error> {
+    let (Some(generation), Some(name)) = (loaded, context.qualified.as_deref()) else {
+        return Ok(Vec::new());
+    };
+    let targets: std::collections::BTreeMap<_, _> = point_targets(generation, name)
+        .filter_map(|(point, target)| {
+            Some((point.to_owned(), HookTarget::load(generation, &target)?))
+        })
+        .collect();
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let names = targets.keys().cloned().collect();
+    let points = Arc::new(ActionPoints {
+        targets,
+        generation: generation.clone(),
+        commands: commands.clone(),
+        process: process.clone(),
+        context: context.clone(),
+    });
+    ops.register_call("point.stage", move |payload| {
+        let points = points.clone();
+        async move { points.invoke(payload).await }
+    })?;
+    Ok(names)
 }
 
 pub(crate) fn register_nested_calls(
@@ -561,6 +645,7 @@ fn register_plugin_call(
         note,
         runner,
         lifetime,
+        ..
     } = context.clone();
     ops.register_call("plugin.call", move |payload| {
         let loaded = catalog.clone();
@@ -621,6 +706,8 @@ fn register_plugin_call(
                     note,
                     runner,
                     lifetime,
+                    qualified: None,
+                    dispatch: None,
                 },
                 args,
                 on,
@@ -644,7 +731,7 @@ async fn run_nested_action(
     let destination = resolve(
         Some(&loaded),
         Some(&target),
-        Placement::new(on, None, None),
+        Placement::new(on, None, None, None),
         &parent.runner,
         &parent.note,
     );
@@ -657,7 +744,8 @@ async fn run_nested_action(
         Some(&target.owner),
     ));
     let source = loaded.action_sources.get(&target.owner).cloned();
-    let (context, _guard) = destination.context(parent.note, parent.runner);
+    let qualified = format!("{}/{}", target.owner, target.local_name);
+    let (context, _guard) = destination.context(parent.note, parent.runner, Some(qualified));
     let ops = operations(
         commands,
         Some(loaded),

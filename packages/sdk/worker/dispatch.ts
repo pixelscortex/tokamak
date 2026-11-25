@@ -279,6 +279,7 @@ export function workerDispatch(
                 stage: error.stage ?? "",
                 kind: error.kind,
                 data: error.data ?? null,
+                ...(error.point === undefined ? {} : { point: error.point }),
               },
             }),
           ...(stack === undefined ? {} : { stack }),

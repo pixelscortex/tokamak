@@ -938,6 +938,58 @@ Removing the hooking plugin removes its hooks. When a target is renamed or
 removed, the owner's build warns and names the hooking plugin. The hooking
 plugin still loads; the server skips that hook and logs a warning.
 
+### Hook a named point inside a function
+
+A query, mutation, or action can expose a named spot in its handler with
+`ctx.point`. Use a unique, nonempty string literal without `#`. A helper
+in the same module can take `ctx` and call a point if the compiler can trace it
+to exactly one exported handler.
+
+```ts
+const launch = await ctx.point("launch", { env: {} as Record<string, string>, args: [] as string[] });
+
+const rows = await ctx.point("load", { search }, (input) => load(input.search));
+```
+
+The first form lets `before` hooks change the value. A value point cannot have
+an `after` hook. In the second form, `before` hooks change the input, the owner
+runs its callback in its own process, and `after(ctx, result, input)` hooks can
+change the result. `input` in an after hook is the input the callback received.
+
+The generated API puts each point under the function it belongs to. For example,
+a plugin that depends on `ai` could hook a point named `launch` on its exported
+`turn` action:
+
+```ts
+import { hook } from "@tokamak/sdk";
+import { api } from "plugin:ai/server";
+
+export const setProxy = hook(api.turn.points.launch, {
+  before: (_ctx, launch) => ({
+    ...launch,
+    env: { ...launch.env, HTTPS_PROXY: "http://localhost:8080" },
+  }),
+});
+```
+
+Point references are for hooks. Their input and result types are inferred from
+the value or callback. Use plain JSON data: a function, class instance, symbol,
+or promise inside point data is a build error. An async callback is fine; its
+resolved result is what crosses the boundary. The build treats `unknown` and
+`any` as open data; a value that crosses a host boundary must still be JSON.
+
+Point hooks follow the enclosing function's rules. In a mutation they run
+inside the same transaction, and a failed hook rolls it back. A failed stage
+rejects the point with the hook's plugin, `point` name, and `pointBefore` or
+`pointAfter` stage. Each hook uses one level of call depth and counts against
+the shared 256-stage budget, including repeated calls to a point in a loop.
+An unhooked point checks the call's local set of hooked names, then returns the
+original value or runs the callback directly. It spends no hook budget and makes
+no host call. Renaming or removing a hooked point warns the owner at build time.
+An installed plugin with a stale point reference still loads; the server warns
+and skips that hook. A caller action with point hooks requires a window and
+Runner that support point plans when routed through the window.
+
 ## Run code when a table changes
 
 Export a trigger from your plugin's server part. The owner doesn't need to

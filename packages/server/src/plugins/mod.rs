@@ -52,12 +52,19 @@ pub(crate) struct Target {
     pub args: Arc<Value>,
     pub result: Option<Arc<Value>>,
     pub derived_result_warning: Option<Arc<std::sync::atomic::AtomicBool>>,
+    pub points: Arc<BTreeMap<String, Point>>,
     pub mutation: bool,
     pub visibility: Visibility,
     pub kind: crate::service::FunctionKind,
     pub on: crate::protocol::ActionTarget,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct Point {
+    pub args: Value,
+    pub result: Option<Value>,
 }
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]

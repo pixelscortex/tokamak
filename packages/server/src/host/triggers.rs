@@ -174,6 +174,7 @@ impl TableTriggers {
                 stage: "trigger".into(),
                 kind: kind.into(),
                 table: Some(table.clone()),
+                point: None,
                 data: json!(reason),
             },
         }))

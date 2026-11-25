@@ -2,6 +2,7 @@ import { readDescriptor } from "./plugin-descriptor.ts";
 import { Visibility } from "../src/visibility.ts";
 // One import policy for the SDK's Bun bundles and the public Vite builder.
 // Provider source is read by TypeScript for types/metadata, never evaluated or bundled.
+import { discoverPoints, pointReferenceTypes } from "./points.mjs";
 import ts from "typescript";
 import {
   existsSync,
@@ -131,9 +132,11 @@ function publicReferences(folder, entry) {
   const original = (symbol) =>
     symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const targets = new Map();
+  const sources = [];
   for (const source of program.getSourceFiles()) {
     const local = relative(backend, source.fileName).split(sep).join("/");
     if (!isServerModule(backend, local)) continue;
+    sources.push(source);
     const symbol = checker.getSymbolAtLocation(source);
     const runtime = symbol && runtimeExportNames(checker, symbol);
     for (const exported of symbol ? checker.getExportsOfModule(symbol) : []) {
@@ -152,6 +155,14 @@ function publicReferences(folder, entry) {
         ]);
     }
   }
+  const points = discoverPoints(
+    sources,
+    checker,
+    [...targets]
+      .filter(([, [, , , kind]]) => ["query", "mutation", "action"].includes(kind))
+      .map(([symbol]) => symbol),
+  );
+  for (const [symbol, target] of targets) target.push(points.get(symbol));
   const runtime = module ? runtimeExportNames(checker, module) : new Set();
   const refs = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
     if (!runtime.has(exported.name)) return [];
@@ -196,10 +207,15 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
       kind,
     ]),
   );
+  const points = Object.fromEntries(
+    [...refs.map(([, ref]) => ref), ...internalRefs].flatMap(([module, method, , , , named]) =>
+      named?.size ? [[`${module}:${method}`, [...named.keys()]]] : [],
+    ),
+  );
   return (
     'import { createApi } from "@tokamak/sdk";\n' +
-    `const references = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(Object.keys(kinds))}, ${JSON.stringify(kinds)});\n` +
-    `export const internal = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(internalRefs.map(([module, method]) => `${module}:${method}`))}, ${JSON.stringify(kinds)});\n` +
+    `const references = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(Object.keys(kinds))}, ${JSON.stringify(kinds)}, ${JSON.stringify(points)});\n` +
+    `export const internal = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(internalRefs.map(([module, method]) => `${module}:${method}`))}, ${JSON.stringify(kinds)}, ${JSON.stringify(points)});\n` +
     refs
       .map(
         ([name, [module, method]]) =>
@@ -238,8 +254,9 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
     return;
   }
   const { refs, imports, internal } = publicReferences(target.folder, target.entry);
-  const referenceType = ([module, method, , , source], type = "ReferenceFromDefinition") =>
-    `import("@tokamak/sdk").${type}<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }`;
+  const aliases = [];
+  const referenceType = ([module, method, , kind, source, points], type = "ReferenceFromDefinition") =>
+    `import("@tokamak/sdk").${type}<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }${pointReferenceTypes(points, kind, target.id, `${target.id}/${module}:${method}`, aliases)}`;
   const qualify = (type) =>
     tableOwners.has(target.id)
       ? `import("@tokamak/sdk").QualifiedPluginApi<${JSON.stringify(target.id)}, ${type}>`
@@ -257,6 +274,9 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
           `readonly ${JSON.stringify(key)}: ${typeof value === "string" ? value : declaration(value)};`,
       )
       .join("")}}`;
+  const publicApi =
+    target.side === "server" &&
+    qualify(declaration(Object.fromEntries(refs.map(([name, ref]) => [name, referenceType(ref)]))));
   writeFileSync(
     path,
     `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
@@ -264,7 +284,8 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
         ? `export * from ${entry};\n`
         : 'import { functionName } from "@tokamak/sdk";\n' +
           `export type * from ${entry};\n` +
-          `type PublicApi = ${qualify(declaration(Object.fromEntries(refs.map(([name, ref]) => [name, referenceType(ref)]))))};\n` +
+          aliases.join("") +
+          `type PublicApi = ${publicApi};\n` +
           `export declare const internal: ${declaration(internalTree)};\n` +
           `export declare const api: PublicApi;\n` +
           refs

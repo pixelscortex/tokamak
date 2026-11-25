@@ -305,6 +305,17 @@ impl Loaded {
                             .or_else(|| inspected.descriptor["results"].get(local_name))
                             .map(|validator| Arc::new(validator.clone())),
                         derived_result_warning: declared_result.is_none().then(Arc::default),
+                        points: Arc::new(
+                            inspected.descriptor["points"]
+                                .get(local_name)
+                                .cloned()
+                                .map(serde_json::from_value)
+                                .transpose()
+                                .map_err(|error| {
+                                    invalid(format!("Invalid points for {local_name}: {error}"))
+                                })?
+                                .unwrap_or_default(),
+                        ),
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind,
@@ -422,16 +433,19 @@ impl Loaded {
                     eprintln!("Skipping hook {owner}/{name}: must target another plugin");
                     continue;
                 }
-                let Some(function) = self.targets.get(target) else {
+                let Some((function, after)) = self.hook_target(target, owner, name, after) else {
                     eprintln!("Skipping hook {owner}/{name}: target {target} is missing");
                     continue;
                 };
 
-                if !hook_matches_target(hook, function.kind, owner, name, target) {
+                if !(before || after)
+                    || !hook_matches_target(hook, function.kind, owner, name, target)
+                {
                     continue;
                 }
 
                 if after
+                    && !target.contains('#')
                     && function.result.is_none()
                     && !registry
                         .get(target)
@@ -455,6 +469,24 @@ impl Loaded {
             .map(|(name, chain)| (name, chain.into()))
             .collect();
         Ok(())
+    }
+
+    fn hook_target(
+        &self,
+        target: &str,
+        owner: &str,
+        name: &str,
+        after: bool,
+    ) -> Option<(&Target, bool)> {
+        let Some((function, point)) = target.split_once('#') else {
+            return Some((self.targets.get(target)?, after));
+        };
+        let function = self.targets.get(function)?;
+        let point = function.points.get(point)?;
+        if after && point.result.is_none() {
+            eprintln!("Skipping after stage of hook {owner}/{name}: point {target} is before-only");
+        }
+        Some((function, after && point.result.is_some()))
     }
 
     fn register_triggers(&mut self) -> Result<(), Error> {

@@ -3,7 +3,7 @@ import { WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits";
 import { RunnerUnavailable, type LaunchLocalWorker, type LocalArtifact } from "./local";
 
 type WorkerEvent =
-  | { type: "started"; routed?: boolean }
+  | { type: "started"; routed?: boolean; pointPlans?: boolean }
   | { type: "message"; message: JsonValue }
   | { type: "closed"; reason: string };
 
@@ -51,6 +51,7 @@ class RunnerWorker {
     () => this.finish("The Runner did not start the plugin process"),
     10_000,
   );
+  pointPlans = false;
   private started = false;
   private ended = false;
   private closing?: Promise<void>;
@@ -95,6 +96,7 @@ class RunnerWorker {
           this.finish("The Runner does not support plugin process routing");
           break;
         }
+        this.pointPlans = event.pointPlans === true;
         clearTimeout(this.deadline);
         this.startup.resolve();
         break;

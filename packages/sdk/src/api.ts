@@ -44,6 +44,18 @@ export type HookReference<
   Owner extends string = string,
 > = Omit<FunctionReference<K, A, R, V, Owner>, typeof callableReference>;
 
+export type PointReference<
+  K extends FunctionKind,
+  A,
+  R,
+  Owner extends string,
+  Name extends string,
+  BeforeOnly extends boolean,
+> = HookReference<K, A, R, Visibility, Owner> & {
+  readonly [functionName]: Name;
+  readonly pointBeforeOnly: BeforeOnly;
+};
+
 export type HookReferenceFromDefinition<D, Owner extends string> =
   D extends FunctionDefinition<infer K, infer A, infer R, infer V> ? HookReference<K, A, R, V, Owner> : never;
 
@@ -81,7 +93,12 @@ export type QualifiedPluginApi<Owner extends string, Api> = {
         ? FunctionReference<Kind, QualifyIds<Owner, Args>, QualifyIds<Owner, Result>, V, O>
         : HookReference<Kind, QualifyIds<Owner, Args>, QualifyIds<Owner, Result>, V, O>) & {
         readonly [functionName]: Api[Key][typeof functionName];
-      }
+      } & (Api[Key] extends { readonly points: infer Points }
+          ? { readonly points: QualifiedPluginApi<Owner, Points> }
+          : unknown) &
+        (Api[Key] extends { readonly pointBeforeOnly: infer BeforeOnly }
+          ? { readonly pointBeforeOnly: BeforeOnly }
+          : unknown)
     : never;
 };
 
@@ -98,6 +115,7 @@ export function createApi<T>(
   namespace?: string,
   names?: readonly string[],
   kinds?: Readonly<Record<string, FunctionKind>>,
+  points?: Readonly<Record<string, readonly string[]>>,
 ): T {
   const qualify = (name: string) => (namespace ? `${namespace}/${name}` : name);
   if (names) {
@@ -117,7 +135,26 @@ export function createApi<T>(
         }
         branch = branch[segment] as Branch;
       }
-      branch[method] = Object.freeze({ [functionName]: qualify(name), [functionKind]: kinds?.[name] });
+      const named = points?.[name];
+      branch[method] = Object.freeze({
+        [functionName]: qualify(name),
+        [functionKind]: kinds?.[name],
+        ...(named?.length
+          ? {
+              points: Object.freeze(
+                Object.fromEntries(
+                  named.map((point) => [
+                    point,
+                    Object.freeze({
+                      [functionName]: qualify(`${name}#${point}`),
+                      [functionKind]: kinds?.[name],
+                    }),
+                  ]),
+                ),
+              ),
+            }
+          : {}),
+      });
     }
     branches.forEach(Object.freeze);
     return root as T;

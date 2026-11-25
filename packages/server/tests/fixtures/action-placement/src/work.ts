@@ -105,3 +105,20 @@ export const audited = action({
   args: { url: v.string(), text: v.string() },
   handler: (_ctx, { text }): string => text,
 });
+
+export const callerPoint = action({
+  on: "caller",
+  async handler(ctx) {
+    return ctx.point("load", { search: "owner" }, ({ search }) => "loaded:" + search);
+  },
+});
+
+export const pointLoop = action({
+  on: "caller",
+  args: { count: v.number() },
+  async handler(ctx, { count }) {
+    let result = 0;
+    for (let i = 0; i < count; i++) result = await ctx.point("loop", result);
+    return result;
+  },
+});

@@ -293,14 +293,14 @@ fn operations(
     let mut ops = OpRegistry::new();
     database_operations::register(&mut ops, &tx, &context, space, writable, &graph);
 
+    hooks::register_point_operations(&mut ops, &tx, &graph, &context);
+
     let CallContext {
         note,
         determinism,
         scope,
         qualified,
     } = context;
-    note.register(&mut ops).expect("unique operation");
-
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
     }

@@ -18,6 +18,16 @@ pub(crate) struct HookTarget {
 impl HookTarget {
     pub fn load(plugins: &Loaded, name: &str) -> Option<Self> {
         let chain = plugins.hooks.get(name)?.clone();
+        if let Some((function, point)) = name.split_once('#') {
+            let point = plugins.targets.get(function)?.points.get(point)?;
+            return Some(Self {
+                name: name.to_owned(),
+                args: Arc::new(point.args.clone()),
+                result: point.result.clone().map(Arc::new),
+                chain,
+                derived_result_warning: None,
+            });
+        }
         let target = &plugins.targets[name];
         Some(Self {
             name: name.to_owned(),
@@ -27,6 +37,87 @@ impl HookTarget {
             derived_result_warning: target.derived_result_warning.clone(),
         })
     }
+}
+
+pub(crate) fn point_targets<'a>(
+    plugins: &'a Loaded,
+    name: &str,
+) -> impl Iterator<Item = (&'a str, String)> {
+    let prefix = format!("{name}#");
+    plugins
+        .hooks
+        .range(prefix.clone()..)
+        .map_while(move |(target, _)| {
+            target
+                .strip_prefix(&prefix)
+                .map(|point| (point, target.clone()))
+        })
+}
+
+pub(crate) async fn run_point<F: Future<Output = Result<Json, engine::CallError>>>(
+    target: &HookTarget,
+    note: &CallNote,
+    mut payload: Json,
+    execute: impl FnMut(Hook, Stage, CallNote, Json) -> F,
+) -> Result<Json, engine::CallError> {
+    match payload["stage"].as_str() {
+        Some("before") => run_before(target, note, payload["args"].take(), execute).await,
+        Some("after") if target.result.is_some() => {
+            let result = payload["result"].take();
+            run_after(target, note, result, &payload["args"], execute).await
+        }
+        _ => Err("Invalid point stage".into()),
+    }
+}
+
+pub(super) fn register_point_operations(
+    ops: &mut OpRegistry,
+    tx: &TransactionContext,
+    graph: &Graph,
+    context: &CallContext,
+) {
+    let points: std::collections::BTreeMap<_, _> = graph
+        .as_ref()
+        .zip(context.qualified.as_deref())
+        .into_iter()
+        .flat_map(|((plugins, _), name)| {
+            point_targets(plugins, name).filter_map(|(name, target)| {
+                Some((
+                    name.to_owned(),
+                    TransactionHooks::for_target(plugins, Some(target), &context.note, tx)?,
+                ))
+            })
+        })
+        .collect();
+    context
+        .note
+        .register_points(ops, points.keys().cloned().collect())
+        .expect("unique operation");
+    if points.is_empty() {
+        return;
+    }
+    let points = Arc::new(points);
+    let scope = context.scope.clone();
+    ops.register_staged("point.stage", move |executor, payload| {
+        let points = points.clone();
+        let scope = scope.clone();
+        Box::pin(async move {
+            let _guard = scope.enter().await?;
+            let target = payload["name"]
+                .as_str()
+                .and_then(|name| points.get(name))
+                .ok_or("Unknown hook point")?;
+            let result = run_point(
+                &target.target,
+                &target.note,
+                payload,
+                |hook, stage, note, input| target.execute(executor, hook, stage, note, input),
+            )
+            .await;
+            target.finish(result)
+        })
+    })
+    .expect("unique operation");
 }
 
 #[derive(Clone, Copy)]
@@ -218,7 +309,10 @@ impl TransactionHooks {
             plugins: plugins.clone(),
             note: note.clone(),
             tx: tx.clone(),
-            writable: plugins.targets[&name].mutation,
+            writable: plugins.targets[name
+                .split_once('#')
+                .map_or(name.as_str(), |(function, _)| function)]
+            .mutation,
         })
     }
 

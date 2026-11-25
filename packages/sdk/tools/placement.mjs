@@ -13,6 +13,7 @@ import {
 
 import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
 import { resultValidator } from "./result-validator.mjs";
+import { discoverPoints, originalSymbol } from "./points.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
 const serverFunction = (kind) => kind !== "local";
@@ -129,12 +130,20 @@ export function functionPlacement(root, selected, namespace) {
       } else if (definition?.kind) {
         exports.set(value.name, {
           ...definition,
-          ...(hookable(definition.kind) ? { type, source } : {}),
+          ...(hookable(definition.kind) ? { type, source, symbol: originalSymbol(checker, value) } : {}),
         });
       }
     }
     if (exports.size) modules.set(path, exports);
   }
+
+  const allDefinitions = [...modules.values()].flatMap((definitions) => [...definitions.values()]);
+  const namedPoints = discoverPoints(
+    files.map((file) => program.getSourceFile(file)),
+    checker,
+    allDefinitions.map(({ symbol }) => symbol).filter(Boolean),
+  );
+  for (const definition of allDefinitions) definition.points = namedPoints.get(definition.symbol);
 
   function edits(path, lane) {
     const file = program.getSourceFile(path);
@@ -234,6 +243,23 @@ export function functionPlacement(root, selected, namespace) {
       contents = contents.slice(0, start) + replacement + contents.slice(end);
     return contents;
   }
+  function points(server, organized) {
+    return Object.fromEntries(
+      [...modules].flatMap(([path, definitions]) =>
+        [...definitions].flatMap(([name, definition]) =>
+          definition.points?.size
+            ? [
+                [
+                  `${moduleName(server, path, organized)}:${name}`,
+                  Object.fromEntries([...definition.points].map(([name, point]) => [name, point.validators])),
+                ],
+              ]
+            : [],
+        ),
+      ),
+    );
+  }
+
   function results(server, organized) {
     return Object.fromEntries(
       [...modules].flatMap(([path, definitions]) =>
@@ -333,7 +359,7 @@ export function functionPlacement(root, selected, namespace) {
     visit(file);
   }
 
-  return { modules, providers, callerFiles, transform, edits, results };
+  return { modules, providers, callerFiles, transform, edits, results, points };
 }
 
 function isDeclarationName(node) {
@@ -399,6 +425,7 @@ export function registrySource({
   hasActionHooks,
   placement,
   results,
+  points,
   providers = [],
   lane = lanes.server,
   worker = false,
@@ -479,7 +506,7 @@ export function registrySource({
     };\n` +
     `export const hooks = createHookRegistry({${entries.join(",")}}, ${hookKinds});\n` +
     `const triggers = createTriggerRegistry({${entries.join(",")}});\n` +
-    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), triggers: triggerMetadata(triggers),${hasActionHooks ? " actionHooks: true," : ""} results: ${JSON.stringify(results ?? {})}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
+    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), triggers: triggerMetadata(triggers),${hasActionHooks ? " actionHooks: true," : ""} results: ${JSON.stringify(results ?? {})}${points && Object.keys(points).length ? `, points: ${JSON.stringify(points)}` : ""}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
     "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n" +
     "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n" +
     "export const invoke_trigger = (request: Parameters<typeof invokeTrigger>[1], host: HostBridge) => invokeTrigger(triggers, request, host);\n"

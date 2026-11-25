@@ -12,6 +12,7 @@ export type CallErrorDetails = {
   kind: string;
   data: JsonValue;
   table?: string;
+  point?: string;
 };
 
 export type Request =
@@ -25,6 +26,7 @@ export type Request =
       on?: "server" | "caller";
       window?: boolean;
       hookPlans?: boolean;
+      pointPlans?: boolean;
     }
   | {
       type: "localcall";
@@ -38,6 +40,7 @@ export type Request =
       on?: "server" | "caller";
       window?: boolean;
       hookPlans?: boolean;
+      pointPlans?: boolean;
     }
   | { type: "hookstage"; id: number; scope: number; done?: boolean }
   | { type: "cancelaction"; id: number }

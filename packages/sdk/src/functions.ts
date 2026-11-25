@@ -19,6 +19,7 @@ import {
   type ContractContext,
 } from "./internal/contracts";
 import { Visibility } from "./visibility";
+import { bindPoint, type Point } from "./points";
 
 export type ServerFunctionKind = "query" | "mutation" | "action";
 export type ActionTarget = "server" | "caller";
@@ -146,6 +147,7 @@ type RunFunction<K extends FunctionKind> = <A, R>(
 ) => Promise<R>;
 
 export interface QueryContext<M extends DataModel> extends ContractContext {
+  readonly point: Point;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseReader<M>;
@@ -154,6 +156,7 @@ export interface QueryContext<M extends DataModel> extends ContractContext {
 }
 
 export interface MutationContext<M extends DataModel> extends ContractContext {
+  readonly point: Point;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseWriter<M>;
@@ -164,6 +167,7 @@ export interface MutationContext<M extends DataModel> extends ContractContext {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext extends ContractContext {
+  readonly point: Point;
   readonly auth: AuthContext;
   readonly call: CallContext;
   use<T>(api: T): PluginCalls<T, ServerFunctionKind>;
@@ -279,7 +283,12 @@ export type FunctionBuilder<
   definition: FunctionOptions<K, M, F, R, S>,
 ) => BuiltFunction<K, ObjectValue<F>, R, V, S>;
 
-function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallContext): CallerActionContext {
+function actionContext(
+  bridge: HostBridge,
+  auth: AuthContext | null,
+  call: CallContext,
+  points = bridge.hookPoints,
+): CallerActionContext {
   const machine = requireActionMachine;
   const run =
     (expected: ServerFunctionKind) =>
@@ -292,6 +301,7 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
       });
   return Object.freeze({
     call,
+    point: bindPoint(bridge, points),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
       return auth;
@@ -307,7 +317,8 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
     retiring: bridge.retiring,
     proc: bridge.proc ?? machine,
     withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
-      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call))) ?? machine(),
+      bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped, auth, call, points))) ??
+      machine(),
     crypto: Object.freeze({
       hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
       verifyPassword: (password: string, hash: string) =>
@@ -406,6 +417,7 @@ function builder<
               ? actionContext(host, auth, call)
               : {
                   call,
+                  point: bindPoint(host, host.hookPoints),
                   get auth() {
                     return caller();
                   },
@@ -690,6 +702,7 @@ export async function invokeFunction(
   const invoke = () =>
     definition.invoke(args, {
       auth,
+      hookPoints: note?.hookPoints,
       call: threadId ? callContext(auth, note, threadId) : note,
       signal: host.signal,
       retiring: host.retiring,

@@ -41,6 +41,9 @@ pub struct CallErrorDetails {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "protocol-codegen", ts(optional))]
     pub table: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+    pub point: Option<String>,
 }
 
 impl CallError {
@@ -54,7 +57,18 @@ impl CallError {
     ) -> engine::CallError {
         let reason = data.as_str().unwrap_or(kind);
         let message = format!("Hook {plugin}/{hook} ({target} {stage}): {reason}");
-        let details = serde_json::json!({ "message":message, "plugin":plugin, "hook":hook, "stage":stage, "kind":kind, "data":data });
+        let mut details = serde_json::json!({ "message":message, "plugin":plugin, "hook":hook, "stage":stage, "kind":kind, "data":data });
+        if let Some((_, point)) = target.split_once('#') {
+            details["point"] = serde_json::json!(point);
+            details["stage"] = serde_json::json!(format!(
+                "point{stage_capitalized}",
+                stage_capitalized = if stage == "before" {
+                    "Before"
+                } else {
+                    "After"
+                }
+            ));
+        }
         engine::CallError {
             message,
             details: Some(details),
@@ -179,6 +193,16 @@ pub enum Request {
             ts(rename = "hookPlans", optional, type = "boolean")
         )]
         hook_plans: Option<bool>,
+        #[serde(
+            default,
+            rename = "pointPlans",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "pointPlans", optional, type = "boolean")
+        )]
+        point_plans: Option<bool>,
     },
     LocalCall {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -214,6 +238,16 @@ pub enum Request {
             ts(rename = "hookPlans", optional, type = "boolean")
         )]
         hook_plans: Option<bool>,
+        #[serde(
+            default,
+            rename = "pointPlans",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "pointPlans", optional, type = "boolean")
+        )]
+        point_plans: Option<bool>,
     },
     HookStage {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]

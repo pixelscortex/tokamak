@@ -81,6 +81,10 @@ impl OpenChannel<'_> {
 
 enum Invocation<'a> {
     Root,
+    WindowAction {
+        plan: &'a server::RunnerHookPlan,
+        continuation: &'a Value,
+    },
     Ordinary {
         upstream: Option<&'a server::RunnerActionUpstream>,
     },
@@ -272,7 +276,11 @@ pub(in crate::local) async fn connection(
     let mut active = HashMap::<u64, CancellationToken>::new();
     let mut calls = JoinSet::new();
     bridge.leases.get(&build)?;
-    send(socket, json!({"type":"started","routed":true})).await?;
+    send(
+        socket,
+        json!({"type":"started","routed":true,"pointPlans":true}),
+    )
+    .await?;
     loop {
         tokio::select! {
             () = pool.stopping.cancelled() => return Ok(()),
@@ -454,7 +462,10 @@ async fn invoke_root(
                     &host,
                     frame,
                     ancestors,
-                    Invocation::Root,
+                    Invocation::WindowAction {
+                        plan: &plan,
+                        continuation: &continuation,
+                    },
                 )
                 .await?;
                 action_value(result)
@@ -635,7 +646,38 @@ async fn in_operation(
             Some(
                 "local.contract.peer" | "local.contract.close" | "local.contract.stopPrograms",
             ) => peer_operation(channels, invocation, frame).await,
-            _ => route.operation(here, frame, opening).await,
+            Some("point.stage")
+                if let Invocation::WindowAction { plan, continuation } = invocation =>
+            {
+                here.host.authorize(&frame["plugin"])?;
+                let result = plan
+                    .invoke_point(
+                        frame["payload"].clone(),
+                        continuation,
+                        |artifact, name, input, note| {
+                            Box::pin(window_hook(
+                                WindowStage {
+                                    pool: route.pool,
+                                    bridge: route.bridge,
+                                    root: route.root,
+                                    owner: &here.host.build.id,
+                                },
+                                artifact,
+                                name,
+                                input,
+                                note,
+                            ))
+                        },
+                    )
+                    .await;
+                Ok(match result {
+                    Ok(value) => json!({"value":value}),
+                    Err(error) => {
+                        json!({"error":error.details.unwrap_or_else(|| json!(error.message))})
+                    }
+                })
+            }
+            _ => route.operation(here, frame, opening, invocation).await,
         }
     };
     if let Some(cancel) = cancel {
@@ -696,7 +738,10 @@ async fn run(
     let route = CallRoute::new(pool, bridge, root, host, ancestors, &frame, &invocation)?;
     let mut operations = FuturesUnordered::new();
     let mut pending = HashMap::<u64, CancellationToken>::new();
-    let mut notify_retirement = matches!(invocation, Invocation::Root);
+    let mut notify_retirement = matches!(
+        invocation,
+        Invocation::Root | Invocation::WindowAction { .. }
+    );
     if let Invocation::Linked { channel, .. } = &invocation {
         channel.provider.send_replace(Some(here.clone()));
     }
@@ -872,6 +917,9 @@ impl<'a> CallRoute<'a> {
     ) -> Result<Self, String> {
         let upstream = match (&bridge.upstream, invocation) {
             (Upstream::Embedded(upstream), Invocation::Root) => CallUpstream::Embedded(upstream),
+            (Upstream::Embedded(_), Invocation::WindowAction { .. }) => {
+                return Err("Unexpected window action hook plan".into());
+            }
             (
                 Upstream::Embedded(_),
                 Invocation::Ordinary { upstream } | Invocation::Linked { upstream, .. },
@@ -938,6 +986,7 @@ impl<'a> CallRoute<'a> {
         here: &Peer,
         mut frame: Value,
         opening: Option<OpenChannel<'_>>,
+        invocation: &Invocation<'_>,
     ) -> Result<Value, String> {
         let host = &here.host;
         host.authorize(&frame["plugin"])?;
@@ -996,6 +1045,10 @@ impl<'a> CallRoute<'a> {
                         note.insert("threadId".into(), json!(thread_id));
                     }
                     value["value"]["depth"] = json!(self.action_depth + self.ancestors.len() - 1);
+                    if let Invocation::WindowAction { plan, .. } = invocation {
+                        value["value"]["hookPoints"] =
+                            json!(plan.point_names().collect::<Vec<_>>());
+                    }
                 }
                 return Ok(value);
             }

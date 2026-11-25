@@ -104,6 +104,7 @@ export type {
   PluginFunctionsFromModule,
   ReferenceFromDefinition,
   HookReferenceFromDefinition,
+  PointReference,
   ArgsOf,
   ResultOf,
 } from "./api";

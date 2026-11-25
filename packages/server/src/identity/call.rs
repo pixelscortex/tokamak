@@ -159,6 +159,14 @@ impl CallNote {
     }
 
     pub fn register(&self, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {
+        self.register_points(ops, Vec::new())
+    }
+
+    pub(crate) fn register_points(
+        &self,
+        ops: &mut engine::OpRegistry,
+        points: Vec<String>,
+    ) -> Result<(), engine::Error> {
         let user = json!(self.auth.as_ref().map(|auth| &auth.user));
         ops.register_sync("user.current", move |_| Ok(user.clone()))?;
         let auth = json!(self.auth);
@@ -169,6 +177,9 @@ impl CallNote {
         });
         if let Some(thread_id) = &self.thread_id {
             note["threadId"] = json!(thread_id);
+        }
+        if !points.is_empty() {
+            note["hookPoints"] = json!(points);
         }
         ops.register_sync("auth.current", move |payload| {
             Ok(if payload["call"] == true {

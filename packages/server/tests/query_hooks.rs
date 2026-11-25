@@ -96,6 +96,12 @@ async fn query_hooks_apply_to_window_live_and_server_calls() {
             ),
             "{stderr}"
         );
+        assert!(
+            stderr.contains(
+                "Skipping hook moderation/points:removedPoint: target team/points:readPoint#old is missing"
+            ),
+            "{stderr}"
+        );
         return;
     }
 

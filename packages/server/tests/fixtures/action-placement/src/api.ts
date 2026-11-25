@@ -1,5 +1,7 @@
 export {
   audited,
+  callerPoint,
+  pointLoop,
   store,
   rows,
   run,

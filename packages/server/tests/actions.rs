@@ -362,6 +362,7 @@ async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
         on: None,
         window: None,
         hook_plans: None,
+        point_plans: None,
         id,
         name: name.into(),
         args,

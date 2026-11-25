@@ -33,7 +33,9 @@ type MaybePromise<T> = T | Promise<T>;
 
 type HookHandlers<T extends Reference, M extends DataModel> = {
   before?: (ctx: Context<T, M>, args: ArgsOf<T>) => MaybePromise<ArgsOf<T> | Failure<string, JsonValue>>;
-  after?: (ctx: Context<T, M>, result: ResultOf<T>, args: ArgsOf<T>) => MaybePromise<ResultOf<T>>;
+  after?: T extends { readonly pointBeforeOnly: true }
+    ? never
+    : (ctx: Context<T, M>, result: ResultOf<T>, args: ArgsOf<T>) => MaybePromise<ResultOf<T>>;
 };
 
 interface HookDefinition<T extends Reference = Reference> {
@@ -75,7 +77,7 @@ function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilde
           const ctx = context as Ctx;
           return stage === "before"
             ? handlers.before!(ctx, input.args as never)
-            : handlers.after!(ctx, input.result as never, input.args as never);
+            : handlers.after!(ctx as never, input.result as never, input.args as never);
         };
         const definition =
           targetKind === "action"
