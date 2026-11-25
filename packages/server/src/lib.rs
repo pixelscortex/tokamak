@@ -11,6 +11,7 @@ mod backend;
 pub mod data;
 mod environment;
 mod host;
+mod http_actions;
 pub mod identity;
 pub mod local_endpoint;
 pub mod machine_wire;

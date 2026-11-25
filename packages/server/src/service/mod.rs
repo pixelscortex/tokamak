@@ -220,6 +220,11 @@ pub(crate) enum Command {
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
     CurrentPlugins(oneshot::Sender<Option<Arc<crate::plugins::Loaded>>>),
+    HttpAction(
+        String,
+        String,
+        oneshot::Sender<Option<crate::http_actions::Route>>,
+    ),
     Asset(
         Option<String>,
         String,
@@ -324,6 +329,7 @@ mod action_coordination;
 mod builtin_queries;
 mod command_loop;
 mod delivery;
+mod http_actions;
 mod invocations;
 mod plugin_control;
 mod requests;

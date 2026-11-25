@@ -324,6 +324,50 @@ process. This includes calls to stubbed modules such as `node:path`,
 `node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their
 bindings inside the handler so the server bundle can load independently.
 
+## HTTP actions
+
+Export an `httpAction` from the plugin's server part to answer requests from
+programs outside Tokamak. Its path is relative to `/plugins/<plugin-id>`.
+
+```ts
+import type {} from "@tokamak/sdk/web";
+import { httpAction } from "@tokamak/sdk";
+
+export const proxy = httpAction({
+  path: "/:profile/*",
+  handler: async (ctx, request) => {
+    if (!checkKey(request.headers.get("x-api-key"))) {
+      return new Response(null, { status: 401 });
+    }
+    const target = upstreamUrl(ctx.params.profile, ctx.params["*"]);
+    return fetch(target, { signal: request.signal });
+  },
+});
+```
+
+For example, `POST /plugins/my-proxy/ACME/v1/messages?format=sse` sets
+`ctx.path` to `/ACME/v1/messages`, with `ctx.params.profile` equal to `ACME`
+and `ctx.params["*"]` equal to `v1/messages`. Use a literal path; `:name`
+captures one segment and a final `*` captures the remainder. Literal segments
+take precedence over parameters, and parameters over the wildcard. Core plugin
+reload and asset URLs keep their existing routing. There is no member
+sign-in on an HTTP action: check the caller in the handler before doing work.
+
+`ctx.serverUrl` is the server origin. It uses the actual bound address in the
+Runner and `TOKAMAK_PUBLIC_URL` when configured for hosted mode. The
+`Request` provides the method, URL (including query), headers and body. It uses
+the same [web API subset](../engine/WEB_APIS.md) as `fetch`; uploads are
+buffered up to 8 MiB. Outbound requests require the usual `net:<hostname>`
+permission. Return the upstream `Response` directly to stream its body with
+backpressure. Hop-by-hop headers are handled by the server; plugin responses
+cannot set workspace cookies.
+
+HTTP actions run in a separate plugin host process per request on macOS and
+Linux, in both the Runner and the Server. The normal action wall deadline does
+not apply. A caller disconnect or server shutdown stops the host and closes
+its upstream requests. HTTP actions have no generated function references and
+cannot be exported to windows or provided as contract methods.
+
 ## Internal functions and expected failures
 
 Use `internalQuery`, `internalMutation` or `internalAction` for a function only

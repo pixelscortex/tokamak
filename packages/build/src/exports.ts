@@ -71,7 +71,7 @@ function serverFunctionNames(
     for (const exported of checker.getExportsOfModule(symbol)) {
       const target = original(exported);
       const definition = definitionInfo(checker, target, file);
-      if (!definition) continue;
+      if (!definition || definition.kind === "httpAction") continue;
       const list = names.get(target) ?? [];
       list.push(`${serverModule(root, local.slice(0, -3))}:${exported.getName()}`);
       names.set(target, list);

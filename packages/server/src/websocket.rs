@@ -259,7 +259,15 @@ async fn serve_inner(
         access,
         origins: allowed_origins(web.as_ref()),
     };
-    let app = routes(adapter, web, worker);
+    let http_actions = crate::http_actions::router(
+        adapter.server.clone(),
+        stopping.clone(),
+        web,
+        listener.local_addr()?,
+    );
+    // Catch-all plugin paths belong in a fallback router so Axum can keep
+    // the core asset and reload paths registered independently.
+    let app = routes(adapter, worker).fallback_service(http_actions);
     // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
@@ -310,11 +318,7 @@ fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
         .map_err(io::Error::other)
 }
 
-fn routes(
-    adapter: Adapter,
-    web: Option<HostedWeb>,
-    worker: Option<axum::routing::MethodRouter>,
-) -> Router {
+fn routes(adapter: Adapter, worker: Option<axum::routing::MethodRouter>) -> Router {
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
@@ -352,15 +356,7 @@ fn routes(
                 .layer(middleware::from_fn_with_state(adapter, authorize)),
         );
     }
-    if let Some(web) = web {
-        app.fallback_service(
-            Router::new()
-                .fallback(get(crate::web::shell))
-                .with_state(web),
-        )
-    } else {
-        app
-    }
+    app
 }
 
 #[cfg(not(feature = "local-runtime"))]

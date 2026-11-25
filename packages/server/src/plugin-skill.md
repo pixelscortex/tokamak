@@ -21,6 +21,12 @@ generated references in `src/server/_generated/` and component declarations in
   A mutation that returns `fail` rolls back its writes. A caller can handle a
   nested mutation's failure and keep its own writes, or return the failure to
   roll them back too. An action returning `fail` keeps mutations it already ran.
+- **HTTP routes**: export `httpAction({ path, handler })` from the server part.
+  A route such as `/:profile/*` answers under `/plugins/<id>/`. Check the caller
+  in the handler; these routes do not require member sign-in. Use the web
+  `Request` and return a `Response`, including a direct `fetch` response to
+  stream it. The context provides `ctx.serverUrl`, `ctx.path` and `ctx.params`.
+  Declare the usual network permission for outbound requests.
 - **Caller actions**: use `action({ on: "caller", args, handler })` for files and programs on the
   person's computer. Use `ctx.proc([program, ...args], { cwd })` for programs
   and `ctx.signal` for cancellation. Call public server functions with their

@@ -38,17 +38,18 @@ export function runnerActionFiles(modules, providers, on) {
 }
 const serverProvider = (provider) => provider.on === "server";
 const localProvider = (provider) => provider.on === "caller";
-const transaction = (kind) => !runnerFunction(kind);
+const transaction = (kind) => !runnerFunction(kind) && kind !== "httpAction";
 const noFunctions = () => false;
 
 export const lanes = {
   window: { keep: noFunctions, provider: noFunctions, method: noFunctions },
+  http: { keep: (kind) => kind === "httpAction", provider: noFunctions, method: noFunctions },
   local: {
     keep: runnerFunction,
     provider: runnerProvider,
     method: runnerFunction,
   },
-  server: { provider: serverProvider },
+  server: { keep: (kind) => kind !== "httpAction", provider: serverProvider },
   descriptor: {
     keep: transaction,
     provider: serverProvider,
