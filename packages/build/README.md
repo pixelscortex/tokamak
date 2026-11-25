@@ -171,17 +171,19 @@ If an installed plugin targets a path that is renamed or removed, the build
 warns with the contributing plugin's ID. The window also warns once per
 add-on and path when a missing or changed target is skipped.
 
-Only positional segments carry a fingerprint: a shared tag or component
-name disambiguated by position. Fingerprints chain from the nearest named
-ancestor. A static `data-part` or `id`, a named render scope, or a component
-name unique among its siblings starts a new chain. Paths with no positional
-segment in that chain carry no fingerprint and are never skipped for a
-fingerprint mismatch.
+Only positional segments add to a fingerprint: a shared tag or component
+name disambiguated by position. A path's fingerprint chains every positional
+segment from its render scope down, so a named part under a positional
+ancestor is still protected. A static `data-part` or `id`, or a name unique
+among its siblings, adds nothing. Paths with no positional segment carry no
+fingerprint and are never skipped for a fingerprint mismatch.
 
-A positional segment hashes the tag, sorted attribute names, and the static
-string values of `role`, `aria-*`, `type`, `name`, `for`, and `href`.
-It ignores `class`, `classList`, `style`, event handlers, `ref`, spread
-attributes, and the source text of expressions. If two positional siblings
+A positional segment hashes the tag, the attributes `role`, `type`, `name`,
+`for` and `href` (each by its static string value or as "an expression"),
+and any `aria-*` attribute that has a static string value. It ignores every
+other attribute, including `class`, `style`, `data-*`, computed `aria-*`,
+event handlers, `ref`, spread attributes, and the source text of
+expressions. If two positional siblings
 still have the same identity, the add-on build warns that the target is
 ambiguous and asks the owner for a `data-part` or `id`.
 

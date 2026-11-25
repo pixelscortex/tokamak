@@ -104,6 +104,12 @@ export function ExtensionProvider(props: {
     for (const target of targets.get(id) ?? [])
       update(target, (items) => items.filter((c) => c.plugin !== id));
     targets.delete(id);
+
+    // A reloaded add-on reports its stale targets again; a removed one has none.
+    let forgotten = false;
+    for (const key of stale.keys())
+      if (JSON.parse(key)[0] === id) forgotten = stale.delete(key) || forgotten;
+    if (forgotten) alerts();
   }
 
   function publish(id: string, parts: LoadedPartAction[]) {

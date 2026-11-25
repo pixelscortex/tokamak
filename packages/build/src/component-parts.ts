@@ -34,21 +34,17 @@ function child(parent: Tree, name: string, node: ts.Node, fixed = false) {
 }
 
 function tagIdentity(opening: ts.JsxOpeningLikeElement) {
+  // Only what says which element this is; anything else is an ordinary edit.
   const attributes = opening.attributes.properties
     .flatMap((attribute) => {
       if (!ts.isJsxAttribute(attribute)) return [];
       const name = attribute.name.getText();
-      if (/^(class|classList|style|ref)$|^on[A-Z:]/.test(name)) return [];
       const value = attribute.initializer;
       const expression = value && ts.isJsxExpression(value) ? value.expression : value;
-      return [
-        [
-          name,
-          /^(role|aria-.+|type|name|for|href)$/.test(name) && expression && ts.isStringLiteralLike(expression)
-            ? expression.text
-            : null,
-        ],
-      ];
+      const text = expression && ts.isStringLiteralLike(expression) ? expression.text : null;
+      if (/^(role|type|name|for|href)$/.test(name)) return [[name, text]];
+      // A static ARIA value tells siblings apart; a computed one is state.
+      return /^aria-/.test(name) && text !== null ? [[name, text]] : [];
     })
     .sort(([a], [b]) => String(a).localeCompare(String(b)));
   return [opening.tagName.getText(), attributes];
@@ -91,10 +87,9 @@ function assignParts(
     const target = `${prefix}.${key}`;
     tree.children.set(key, node);
     const positional = !named && (fixed.has(name) || counts.get(name)! > 1);
-    const component = node.opening && !/^[a-z][\w-]*$/.test(node.opening.tagName.getText());
-    const anchor = named || (!positional && component);
-    let fingerprint = anchor ? undefined : inherited;
-    let uncertain = !anchor && ambiguous;
+    // A named segment adds nothing, but still carries its positional ancestors.
+    let fingerprint = inherited;
+    let uncertain = ambiguous;
     if (positional) {
       const identity = identities.get(node)!;
       fingerprint = createHash("sha256")

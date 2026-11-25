@@ -178,6 +178,45 @@ test("same-tag insertions keep named parts and warn when a positional part chang
   });
 }, 30_000);
 
+test("a named part keeps its positional ancestors, and a new attribute is not a new element", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      export function Message() {
+        return <section><nav role="a"><p data-part="x"/></nav><nav role="b"><p data-part="x"/></nav></section>;
+      }
+    `,
+    );
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      `
+      import { append } from "@tokamak/sdk/client";
+      import { parts } from "plugin:owner/client";
+      export const Inside = append(parts.Message.section.nav$2.x, () => "x");
+    `,
+    );
+    built(addon);
+
+    const entry = resolve(owner, "src/main.tsx");
+    const original = await readFile(entry, "utf8");
+    await writeFile(entry, original.replace('<nav role="b">', '<nav role="b" title="b" aria-busy={false}>'));
+    const edited = build(owner);
+    expect(edited.status, edited.stderr).toBe(0);
+    expect(edited.stderr).not.toContain('Plugin "addon"');
+
+    await writeFile(entry, original.replace('<nav role="b">', '<nav role="c"><p data-part="x"/></nav><nav role="b">'));
+    const shifted = build(owner);
+    expect(shifted.status, shifted.stderr).toBe(0);
+    expect(shifted.stderr).toContain(
+      'Plugin "addon" targets a changed screen part: path owner.Message.section.nav$2.x now names a different element',
+    );
+  });
+}, 30_000);
+
 test("duplicate top-level render names report both files", async () => {
   await scratch(async (root) => {
     const owner = await source(
