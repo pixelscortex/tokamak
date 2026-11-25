@@ -1,0 +1,19 @@
+packages/runner/src/local/quickjs/session.rs
+  s_040e9b5fc04cd5::t_1e65a40d715bef 350,356-357,364-367,525-528
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c5ec39490ccb794a1a9c58e061f1559296eacd0d",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
