@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createInterface } from "node:readline";
-import { InProcessTransport, TokamakClient, type Event, type Id } from "../../sdk/src/index";
+import { InProcessTransport, RemoteFunctionError, TokamakClient, type Event, type Id } from "../../sdk/src/index";
 import { api as team } from "./fixtures/query-hooks/team/src/server/_generated/api";
 import { api as moderation } from "./fixtures/query-hooks/moderation/src/server/_generated/api";
 
@@ -34,8 +34,12 @@ async function transforms_arguments_and_results_with_identity() {
   assert.deepEqual(await client.query(list, { text: "  Ali ", thread }), [
     { name: "Alice", detail: `Ali|member-1|member|${thread}|1` },
   ]);
-  await assert.rejects(client.query(list, { text: "", mode: "blocked" }), (error: Error) => {
-    assert.match(error.message, /Hook moderation\/policy:moderate.*forbidden/s);
+  await assert.rejects(client.query(list, { text: "", mode: "blocked" }), (error: RemoteFunctionError) => {
+    assert.equal(error.plugin, "moderation");
+    assert.equal(error.hook, "policy:moderate");
+    assert.equal(error.stage, "before");
+    assert.equal(error.kind, "forbidden");
+    assert.deepEqual(error.data, { reason: "members" });
     assert.doesNotMatch(error.message, /TARGET HANDLER RAN/);
     return true;
   });
@@ -49,13 +53,16 @@ async function names_policy_errors_and_enforces_read_only_scope() {
     ["stalled", /timeout|deadline|exceeded/i],
     ["foreign", /does not own that record/, alice],
     ["write", /not a function/],
+    ["raw-write", /does not own that record/],
     ["wrong-result", /result: expected array/],
     ["added-field", /result\[0\]\.additional: unexpected field/],
-    ["recursive", /depth limit at (?:Hook moderation\/policy:moderate \()?team\/users:list/],
+    ["recursive", /depth limit/],
   ] as const) {
-    await assert.rejects(client.query(list, { text: text ?? "", mode }), (error: Error) => {
+    await assert.rejects(client.query(list, { text: text ?? "", mode }), (error: RemoteFunctionError) => {
       assert.match(error.message, /Hook moderation\/policy:moderate \(team\/users:list/);
+      assert.equal(error.plugin, "moderation");
       assert.match(error.message, expected);
+      if (mode === "recursive") assert.equal(error.message.match(/team\/users:list/g)?.length, 1);
       return true;
     });
   }
@@ -68,6 +75,27 @@ async function chains_two_plugins_and_hooks_server_calls() {
   assert.deepEqual(await client.query(moderation.policy.delegated, { text: "  Ali  " }), [
     { name: "Alice", detail: "Ali|member-1|member||2" },
   ]);
+}
+
+async function validates_profiles_and_preserves_nested_call_budget() {
+  assert.deepEqual(await client.query(team.users.profile, { mode: "ok" }), {
+    title: "Title", alias: "Alias", status: "active", labels: ["new"],
+  });
+  for (const field of ["title", "alias", "status"]) {
+    await assert.rejects(client.query(team.users.profile, { mode: `bad-${field}` }), (error: RemoteFunctionError) => {
+      assert.equal(error.plugin, "moderation");
+      assert.equal(error.stage, "after");
+      assert.equal(error.kind, "invalidHookResult");
+      assert.match(String(error.data), new RegExp(`result\\.${field}`));
+      return true;
+    });
+  }
+  assert.equal(await client.query(moderation.policy.fanout, {}), 70);
+  const rows = [{ name: "Alice", detail: "Ali|member-1|member||2" }];
+  assert.deepEqual(await client.mutation(moderation.policy.fromMutation, {}), rows);
+  assert.deepEqual(await client.action(moderation.policy.fromAction, {}), {
+    rows, kind: "forbidden", plugin: "moderation", data: { reason: "members" },
+  });
 }
 
 async function live_query_tracks_owner_and_hook_tables_then_uninstalls() {
@@ -105,6 +133,7 @@ try {
   await transforms_arguments_and_results_with_identity();
   await names_policy_errors_and_enforces_read_only_scope();
   await chains_two_plugins_and_hooks_server_calls();
+  await validates_profiles_and_preserves_nested_call_budget();
   await live_query_tracks_owner_and_hook_tables_then_uninstalls();
   send({ done: true });
 } finally {

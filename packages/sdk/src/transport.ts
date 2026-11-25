@@ -6,6 +6,7 @@ import { webSocketConnection, type ClientWebSocket } from "./websocket-transport
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
+import { RemoteFunctionError } from "./call-error";
 import type { JsonValue } from "./values";
 
 export interface MessageConnection {
@@ -14,7 +15,7 @@ export interface MessageConnection {
   close(): void;
 }
 
-export class RemoteFunctionError extends Error {}
+export { RemoteFunctionError } from "./call-error";
 
 type Pending = { resolve(value: JsonValue): void; reject(error: Error): void };
 type Observer = (event: SubscriptionEvent<JsonValue>) => void;
@@ -281,7 +282,7 @@ export class InProcessTransport implements ClientTransport {
         observer,
         "Ok" in result
           ? { value: result.Ok }
-          : { error: new Error(result.Err), terminal: event.type === "response" },
+          : { error: new RemoteFunctionError(result.Err), terminal: event.type === "response" },
       );
     }
   }

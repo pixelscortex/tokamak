@@ -1,163 +1,21 @@
 use super::*;
-use crate::plugins::{Hook, Loaded, Target};
-use std::sync::LazyLock;
+use crate::{
+    plugins::{Hook, Loaded},
+    protocol::CallError,
+};
+use engine::{CallFuture, CallTransforms, StageExecutor};
 
-const PIPELINE: &str = "run";
-static ADAPTER: LazyLock<Arc<Bundle>> = LazyLock::new(|| {
-    Arc::new(Bundle::new(include_str!("hook_pipeline.js"), None).expect("embedded adapter"))
-});
+pub(crate) type HookRegistry = std::collections::BTreeMap<String, Arc<[Hook]>>;
 
-impl TransactionContext {
-    async fn check(&self) -> Result<(), String> {
-        let observed = self.observations.lock().await;
-        let failure = self.failure.lock().expect("failure lock");
-        match observed.error.as_ref().or(failure.as_ref()) {
-            Some(error) => Err(error.clone()),
-            None => Ok(()),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub(super) struct Plan {
-    pub bundle: Arc<Bundle>,
+pub(crate) struct HookTarget {
     pub name: String,
-    pub export: &'static str,
-    pub ops: Arc<OpRegistry>,
-}
-
-impl Plan {
-    pub(super) async fn submit(self, pool: &Pool, args: Json) -> Result<Json, engine::Error> {
-        pool.submit(
-            self.bundle,
-            self.export,
-            json!({"name":self.name,"args":args}),
-            self.ops,
-        )?
-        .await
-    }
-
-    pub(super) fn module(
-        self,
-        args: Json,
-        on_error: impl Fn(String) + Send + Sync + 'static,
-    ) -> ModuleCall {
-        let call = ModuleCall::new(
-            self.bundle,
-            self.export,
-            json!({"name":self.name,"args":args}),
-            self.ops,
-            on_error,
-        );
-        if self.export == PIPELINE {
-            call.as_adapter()
-        } else {
-            call
-        }
-    }
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the invocation and its transaction are independent"
-)]
-pub(super) fn plan(
-    bundle: Arc<Bundle>,
-    name: String,
-    space: DataSpace,
-    writable: bool,
-    graph: Graph,
-    qualified: &str,
-    tx: TransactionContext,
-    context: CallContext,
-) -> Plan {
-    let hooked = graph.as_ref().and_then(|(plugins, _)| {
-        plugins.hooks.get(qualified).map(|hooks| {
-            (
-                plugins.clone(),
-                plugins.targets[qualified].clone(),
-                hooks.clone(),
-            )
-        })
-    });
-    let note = context.note.clone();
-    let determinism = context.determinism;
-    let scope = context.scope.clone();
-    let plain = Plan {
-        bundle,
-        name,
-        export: "invoke",
-        ops: operations(tx.clone(), space, writable, graph, context),
-    };
-
-    let Some((plugins, target, hooks)) = hooked else {
-        return plain;
-    };
-
-    let mut ops = OpRegistry::new();
-    if let Some(determinism) = determinism {
-        ops.set_determinism(determinism);
-    }
-
-    let hooks: Arc<[Hook]> = hooks.into();
-    let indexes = |stage: Stage| {
-        hooks
-            .iter()
-            .enumerate()
-            .filter_map(|(index, hook)| stage.enabled(hook).then_some(index))
-            .collect::<Vec<_>>()
-    };
-    let before = indexes(Stage::Before);
-    let after = indexes(Stage::After);
-    let args = target.args.clone();
-    let needs_shape = target.result.is_none();
-    ops.register_sync("hook.stages", move |input| {
-        validate(&args, &input, "args")?;
-        Ok(json!({"before":before,"after":after,"needsShape":needs_shape}))
-    })
-    .expect("unique operation");
-
-    wrap_target(&mut ops, plain, scope, tx.clone());
-    for stage in [Stage::Before, Stage::After] {
-        register_stage(
-            &mut ops,
-            stage,
-            plugins.clone(),
-            target.clone(),
-            hooks.clone(),
-            qualified,
-            note.clone(),
-            tx.clone(),
-        );
-    }
-
-    Plan {
-        bundle: ADAPTER.clone(),
-        name: qualified.to_owned(),
-        export: PIPELINE,
-        ops: Arc::new(ops),
-    }
-}
-
-fn wrap_target(ops: &mut OpRegistry, plain: Plan, scope: CallScope, tx: TransactionContext) {
-    ops.register_module("hook.target", move |args| {
-        let scope = scope.clone();
-        let check = tx.clone();
-        let failure = tx.clone();
-        Ok(plain
-            .clone()
-            .module(args, move |error| failure.poison(error))
-            .with_scope(async { Ok(()) }, move |(), value| async move {
-                scope.close().await;
-                check.check().await?;
-                Ok(value)
-            }))
-    })
-    .expect("unique operation");
+    pub args: Arc<Json>,
+    pub result: Option<Arc<Json>>,
+    pub chain: Arc<[Hook]>,
 }
 
 #[derive(Clone, Copy)]
-enum Stage {
+pub(crate) enum Stage {
     Before,
     After,
 }
@@ -178,103 +36,186 @@ impl Stage {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a stage binds the target, hook chain and call context"
-)]
-fn register_stage(
-    ops: &mut OpRegistry,
-    stage: Stage,
-    plugins: Arc<Loaded>,
-    target: Target,
-    hooks: Arc<[Hook]>,
-    qualified: &str,
-    note: CallNote,
-    tx: TransactionContext,
-) {
-    let qualified = qualified.to_owned();
-    ops.register_module(format!("hook.{}", stage.name()), move |input| {
-        let hook = input["index"]
-            .as_u64()
-            .and_then(|index| usize::try_from(index).ok())
-            .and_then(|index| hooks.get(index))
-            .ok_or("Invalid hook stage index")?;
-        let label = format!(
-            "Hook {}/{} ({qualified} {})",
-            hook.owner,
-            hook.name,
-            stage.name()
-        );
-        let note = note.enter(&label, Some(&target.args), &input["args"])?;
-        let scope = CallScope::default();
+pub(crate) async fn run_before(
+    target: &HookTarget,
+    note: &CallNote,
+    args: Json,
+    execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+) -> Result<Json, engine::CallError> {
+    validate(&target.args, &args, "args")?;
+    run_chain(target, note, Stage::Before, args, &Json::Null, execute).await
+}
 
+pub(crate) async fn run_after(
+    target: &HookTarget,
+    note: &CallNote,
+    result: Json,
+    args: &Json,
+    execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+) -> Result<Json, engine::CallError> {
+    run_chain(target, note, Stage::After, result, args, execute).await
+}
+
+async fn run_chain(
+    target: &HookTarget,
+    note: &CallNote,
+    stage: Stage,
+    mut value: Json,
+    args: &Json,
+    mut execute: impl AsyncFnMut(&Hook, Stage, CallNote, Json) -> Result<Json, engine::CallError>,
+) -> Result<Json, engine::CallError> {
+    for hook in target.chain.iter().filter(|hook| stage.enabled(hook)) {
+        let stage_args = if matches!(stage, Stage::Before) {
+            &value
+        } else {
+            args
+        };
+        let make_error = |kind: &str, data| {
+            CallError::hook(
+                &hook.owner,
+                &hook.name,
+                stage.name(),
+                kind,
+                data,
+                &target.name,
+            )
+        };
+        let note = note
+            .enter(&target.name, Some(&target.args), stage_args)
+            .map_err(|_| make_error("hookDepthLimit", json!("plugin call cycle or depth limit")))?;
+        let input = match stage {
+            Stage::Before => json!({"name":hook.name,"stage":"before","args":value}),
+            Stage::After => json!({"name":hook.name,"stage":"after","args":args,"result":value}),
+        };
+        value = execute(hook, stage, note, input).await.map_err(|error| {
+            if error.details.is_some() {
+                error
+            } else {
+                let kind = if error.message.contains("depth limit")
+                    || error.message.contains("depth/count budget")
+                {
+                    "hookDepthLimit"
+                } else {
+                    "hookException"
+                };
+                make_error(
+                    kind,
+                    json!(error.message.replace(&format!(" at {}", target.name), "")),
+                )
+            }
+        })?;
+
+        if matches!(stage, Stage::Before)
+            && let Some(kind) = failure_kind(&value)
+        {
+            return Err(make_error(kind, value["data"].clone()));
+        }
+
+        let validation = match stage {
+            Stage::Before => validate(&target.args, &value, "args"),
+            Stage::After => target
+                .result
+                .as_ref()
+                .map_or(Ok(()), |schema| validate(schema, &value, "result")),
+        };
+        validation.map_err(|message| make_error("invalidHookResult", json!(message)))?;
+    }
+    Ok(value)
+}
+
+pub(super) struct QueryHooks {
+    pub target: HookTarget,
+    pub plugins: Arc<Loaded>,
+    pub note: CallNote,
+    pub tx: TransactionContext,
+}
+
+impl QueryHooks {
+    async fn execute(
+        &self,
+        executor: &dyn StageExecutor,
+        hook: &Hook,
+        stage: Stage,
+        note: CallNote,
+        input: Json,
+    ) -> Result<Json, engine::CallError> {
+        let scope = CallScope::default();
+        let tx = self.tx.hook_scope();
         let ops = operations(
             tx.clone(),
             hook.space.clone(),
             false,
-            Some((plugins.clone(), hook.owner.clone())),
+            Some((self.plugins.clone(), hook.owner.clone())),
             CallContext {
                 determinism: None,
                 note,
                 scope: scope.clone(),
+                qualified: None,
             },
         );
-        let check = tx.clone();
-        let failure = tx.clone();
-        let failed_hook = label.clone();
-        let validator = match stage {
-            Stage::Before => Some(target.args.clone()),
-            Stage::After => target.result.clone(),
-        };
+        let caller = self.tx.clone();
+        let label = CallError::hook(
+            &hook.owner,
+            &hook.name,
+            stage.name(),
+            "hookTimeout",
+            Json::Null,
+            &self.target.name,
+        );
+        let call = ModuleCall::new(hook.bundle.clone(), "invoke_hook", input, ops, move |_| {
+            *caller.failed_hook.lock().expect("hook failure lock") = Some(label.clone());
+        });
+        let value = executor.run(call).await;
+        scope.close().await;
+        let observed = tx.observations.lock().await;
+        let failure = tx.failure.lock().expect("failure lock");
+        match observed.error.as_ref().or(failure.as_ref()) {
+            Some(error) => Err(error.clone().into()),
+            None => value,
+        }
+    }
+}
 
-        Ok(ModuleCall::new(
-            hook.bundle.clone(),
-            "invoke_hook",
-            json!({
-                "name":hook.name,
-                "stage":stage.name(),
-                "args":input["args"],
-                "result":input["result"],
-            }),
-            ops,
-            move |error| {
-                failure
-                    .failed_hook
-                    .lock()
-                    .expect("hook failure lock")
-                    .get_or_insert_with(|| failed_hook.clone());
-                failure.poison(error);
-            },
-        )
-        .with_error_context(label)
-        .with_scope(async { Ok(()) }, move |(), value| async move {
-            scope.close().await;
-            check.check().await?;
+impl CallTransforms for QueryHooks {
+    fn before<'a>(&'a self, executor: &'a dyn StageExecutor, mut input: Json) -> CallFuture<'a> {
+        Box::pin(async move {
+            input["args"] = run_before(
+                &self.target,
+                &self.note,
+                input["args"].take(),
+                async |hook, stage, note, input| {
+                    self.execute(executor, hook, stage, note, input).await
+                },
+            )
+            .await?;
+            Ok(input)
+        })
+    }
 
-            if let Stage::Before = stage
-                && let Some(kind) = failure_kind(&value)
-            {
-                let data = &value["data"];
-                return Err(if data.is_null() {
-                    kind.to_owned()
-                } else {
-                    format!("{kind}: {data}")
-                });
-            }
+    fn after<'a>(
+        &'a self,
+        executor: &'a dyn StageExecutor,
+        input: Json,
+        value: Json,
+    ) -> CallFuture<'a> {
+        Box::pin(run_after_owned(self, executor, input, value))
+    }
+}
 
-            let path = match stage {
-                Stage::Before => "args",
-                Stage::After => "result",
-            };
-            match validator {
-                Some(validator) => validate(&validator, &value, path)?,
-                None if same_shape(&input["original"], &value) => {}
-                None => return Err("result does not match the target's result shape".into()),
-            }
-            Ok(value)
-        }))
-    })
-    .expect("unique operation");
+async fn run_after_owned(
+    hooks: &QueryHooks,
+    executor: &dyn StageExecutor,
+    input: Json,
+    value: Json,
+) -> Result<Json, engine::CallError> {
+    run_after(
+        &hooks.target,
+        &hooks.note,
+        value,
+        &input["args"],
+        async |hook, stage, note, input| hooks.execute(executor, hook, stage, note, input).await,
+    )
+    .await
 }
 
 fn validate(schema: &Json, value: &Json, path: &str) -> Result<(), String> {
@@ -305,6 +246,7 @@ fn validate(schema: &Json, value: &Json, path: &str) -> Result<(), String> {
             }
             true
         }
+        "tuple" => return validate_tuple(schema, value, path),
         "array" => {
             let Some(array) = value.as_array() else {
                 return Err(format!("{path}: expected array"));
@@ -338,17 +280,27 @@ fn validate(schema: &Json, value: &Json, path: &str) -> Result<(), String> {
     }
 }
 
-fn same_shape(original: &Json, result: &Json) -> bool {
-    match (original, result) {
-        (Json::Object(original), Json::Object(result)) => {
-            original.len() == result.len()
-                && result
-                    .iter()
-                    .all(|(key, value)| original.get(key).is_some_and(|old| same_shape(old, value)))
+fn validate_tuple(schema: &Json, value: &Json, path: &str) -> Result<(), String> {
+    let (Some(items), Some(values)) = (schema["items"].as_array(), value.as_array()) else {
+        return Err(format!("{path}: expected tuple"));
+    };
+    let mut index = 0;
+    for (position, item) in items.iter().enumerate() {
+        if item["rest"] == true {
+            let trailing = items.len() - position - 1;
+            while index + trailing < values.len() {
+                validate(&item["value"], &values[index], &format!("{path}[{index}]"))?;
+                index += 1;
+            }
+        } else if let Some(value) = values.get(index) {
+            validate(&item["value"], value, &format!("{path}[{index}]"))?;
+            index += 1;
+        } else if item["optional"] != true {
+            return Err(format!("{path}[{index}]: required tuple item is missing"));
         }
-        (Json::Array(original), Json::Array(result)) => result
-            .iter()
-            .all(|value| original.iter().any(|old| same_shape(old, value))),
-        _ => std::mem::discriminant(original) == std::mem::discriminant(result),
     }
+    if index != values.len() {
+        return Err(format!("{path}: unexpected tuple items"));
+    }
+    Ok(())
 }

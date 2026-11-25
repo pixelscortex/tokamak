@@ -1,3 +1,4 @@
+import { isStructuredCallError } from "./call-error";
 import type { MessageConnection } from "./transport";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
 import type { Event } from "./protocol";
@@ -48,7 +49,7 @@ function validateResult(result: unknown): void {
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("invalid event result");
   if (
     Object.keys(result).length !== 1 ||
-    (!("Ok" in result) && !("Err" in result && typeof result.Err === "string"))
+    (!("Ok" in result) && !("Err" in result && (typeof result.Err === "string" || isStructuredCallError(result.Err))))
   )
     throw new Error("invalid event outcome");
 }

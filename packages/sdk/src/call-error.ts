@@ -1,0 +1,26 @@
+import type { CallError, StructuredCallError } from "./protocol";
+import type { JsonValue } from "./values";
+
+export class RemoteFunctionError extends Error {
+  declare readonly plugin?: string;
+  declare readonly hook?: string;
+  declare readonly stage?: string;
+  declare readonly kind?: string;
+  declare readonly data?: JsonValue;
+
+  constructor(error: CallError) {
+    super(typeof error === "string" ? error : error.message);
+    if (typeof error !== "string") Object.assign(this, error);
+  }
+}
+
+export function isStructuredCallError(value: unknown): value is StructuredCallError {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    ["message", "plugin", "hook", "stage", "kind"].every(
+      (key) => typeof (value as Record<string, unknown>)[key] === "string",
+    ) &&
+    Object.hasOwn(value, "data")
+  );
+}

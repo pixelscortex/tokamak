@@ -97,7 +97,7 @@ impl Coordinator {
 
     pub(super) async fn run_function(&mut self, call: crate::actions::NestedCall) {
         let result = match self.enter_nested(&call) {
-            Err(error) => Err(error),
+            Err(error) => Err(error.into()),
             Ok(note) => {
                 let result = self
                     .invoke_function_in(

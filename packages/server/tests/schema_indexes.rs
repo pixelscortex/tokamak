@@ -350,7 +350,7 @@ impl Client {
         match next(&mut self.session).await {
             Event::Response { id: actual, result } => {
                 assert_eq!(actual, id);
-                result
+                result.map_err(|error| error.to_string())
             }
             event => panic!("unexpected {event:?}"),
         }

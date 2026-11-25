@@ -13,7 +13,10 @@ mod types;
 pub mod web;
 
 pub use action::ActionEngine;
-pub use bridge::{Invocation, ModuleCall, OpRegistry, install_ops};
+pub use bridge::{
+    CallError, CallFuture, CallTransforms, Invocation, ModuleCall, OpRegistry, StageExecutor,
+    install_ops,
+};
 pub use determinism::Determinism;
 pub use engine::{Engine, QuickJsContext, QuickJsEngine};
 pub use password::register_password_crypto;

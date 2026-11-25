@@ -13,6 +13,101 @@ pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS), ts(untagged))]
+#[serde(untagged)]
+pub enum CallError {
+    Message(String),
+    Structured(StructuredCallError),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
+pub struct StructuredCallError {
+    pub message: String,
+    pub plugin: String,
+    pub hook: String,
+    pub stage: String,
+    pub kind: String,
+    #[cfg_attr(feature = "protocol-codegen", ts(type = "JsonValue"))]
+    pub data: Json,
+}
+
+impl CallError {
+    pub(crate) fn hook(
+        plugin: &str,
+        hook: &str,
+        stage: &str,
+        kind: &str,
+        data: Json,
+        target: &str,
+    ) -> engine::CallError {
+        let reason = data.as_str().unwrap_or(kind);
+        let message = format!("Hook {plugin}/{hook} ({target} {stage}): {reason}");
+        let details = serde_json::json!({ "message":message, "plugin":plugin, "hook":hook, "stage":stage, "kind":kind, "data":data });
+        engine::CallError {
+            message,
+            details: Some(details),
+        }
+    }
+
+    pub(crate) fn message_mut(&mut self) -> &mut String {
+        match self {
+            Self::Message(message) => message,
+            Self::Structured(error) => &mut error.message,
+        }
+    }
+}
+
+impl From<CallError> for engine::CallError {
+    fn from(error: CallError) -> Self {
+        match error {
+            CallError::Message(message) => message.into(),
+            CallError::Structured(error) => Self {
+                message: error.message.clone(),
+                details: Some(serde_json::json!(error)),
+            },
+        }
+    }
+}
+
+impl From<engine::CallError> for CallError {
+    fn from(error: engine::CallError) -> Self {
+        error
+            .details
+            .and_then(|details| serde_json::from_value(details).ok())
+            .map_or_else(|| Self::Message(error.message), Self::Structured)
+    }
+}
+
+impl From<String> for CallError {
+    fn from(error: String) -> Self {
+        Self::Message(error)
+    }
+}
+
+impl From<&str> for CallError {
+    fn from(error: &str) -> Self {
+        error.to_owned().into()
+    }
+}
+
+impl std::ops::Deref for CallError {
+    type Target = str;
+    fn deref(&self) -> &str {
+        match self {
+            Self::Message(message) => message,
+            Self::Structured(error) => &error.message,
+        }
+    }
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self)
+    }
+}
+
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
 /// clients must not reuse them while a call or subscription is outstanding.
 // ts-rs 12 cannot parse serde's enum deny_unknown_fields; describe the wire shape explicitly.
@@ -122,12 +217,12 @@ pub enum Event {
     Response {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
-        result: Result<Json, String>,
+        result: Result<Json, CallError>,
     },
     Subscription {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
-        result: Result<Json, String>,
+        result: Result<Json, CallError>,
     },
     Unsubscribed {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]

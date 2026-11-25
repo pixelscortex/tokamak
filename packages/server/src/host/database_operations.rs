@@ -2,9 +2,7 @@ use super::*;
 
 pub(super) fn register(
     ops: &mut OpRegistry,
-    shared: SharedTransaction,
-    observations: Arc<Mutex<Observations>>,
-    failure: Failure,
+    tx: TransactionContext,
     scope: CallScope,
     space: DataSpace,
     writable: bool,
@@ -17,35 +15,31 @@ pub(super) fn register(
         "db.replace",
         "db.delete",
     ] {
-        let shared = shared.clone();
-
-        let observations = observations.clone();
+        let tx = tx.clone();
 
         let space = space.clone();
 
-        let failure = failure.clone();
         let scope = scope.clone();
         ops.register_async(operation, move |payload| {
-            let shared = shared.clone();
-
-            let observations = observations.clone();
+            let scope_tx = tx.clone();
 
             let space = space.clone();
 
-            let failure = failure.clone();
             let scope = scope.clone();
             // This future is polled directly, never detached on another executor.
             // Runtime retirement drops it before replying; taking the Option below
             // revokes even retained callbacks before commit/rollback can start.
             Box::pin(async move {
                 let _scope = scope.enter().await?;
-                let mut guard = shared.lock().await;
+                let mut guard = scope_tx.shared.lock().await;
 
                 let tx = guard.as_mut().ok_or("invocation transaction is finished")?;
 
-                let observed = observations.lock().await;
+                let observed = scope_tx.observations.lock().await;
 
-                if observed.error.is_some() || failure.lock().expect("failure lock").is_some() {
+                if observed.error.is_some()
+                    || scope_tx.failure.lock().expect("failure lock").is_some()
+                {
                     return Err("an earlier host operation failed".into());
                 }
 
@@ -59,7 +53,7 @@ pub(super) fn register(
                 } else {
                     Box::pin(operation_call(
                         tx,
-                        &mut lease.observed.reads,
+                        &mut *scope_tx.reads.lock().await,
                         &space,
                         operation,
                         payload,

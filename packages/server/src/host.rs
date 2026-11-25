@@ -4,7 +4,7 @@
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
 use crate::identity::CallNote;
-use crate::protocol::failure_kind;
+use crate::protocol::{CallError, failure_kind};
 use engine::{Bundle, Determinism, ModuleCall, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
 use std::sync::Arc;
@@ -20,7 +20,8 @@ struct TransactionContext {
     shared: SharedTransaction,
     observations: Arc<Mutex<Observations>>,
     failure: Failure,
-    failed_hook: Arc<std::sync::Mutex<Option<String>>>,
+    failed_hook: Arc<std::sync::Mutex<Option<engine::CallError>>>,
+    reads: Arc<Mutex<ReadSet>>,
 }
 
 impl TransactionContext {
@@ -30,6 +31,7 @@ impl TransactionContext {
             observations: Arc::default(),
             failure: Arc::default(),
             failed_hook: Arc::default(),
+            reads: Arc::default(),
         }
     }
 
@@ -37,19 +39,26 @@ impl TransactionContext {
         *self.failure.lock().expect("failure lock") = Some(error);
     }
 
-    fn call_error(&self, error: engine::Error) -> String {
+    fn hook_scope(&self) -> Self {
+        Self {
+            observations: Arc::default(),
+            failure: Arc::default(),
+            ..self.clone()
+        }
+    }
+
+    fn call_error(&self, error: engine::Error) -> CallError {
         if matches!(error, engine::Error::Timeout { phase: "call" })
             && let Some(hook) = self.failed_hook.lock().expect("hook failure lock").as_ref()
         {
-            return format!("{hook}: {error}");
+            return hook.clone().into();
         }
-        error.to_string()
+        engine::CallError::from(error).into()
     }
 }
 
 #[derive(Default)]
 struct Observations {
-    reads: ReadSet,
     // Boundary errors must poison the call even when feature code catches them.
     error: Option<String>,
     conflict: bool,
@@ -74,7 +83,7 @@ impl Drop for Operation<'_> {
 }
 
 pub(crate) struct Call {
-    pub result: Result<Json, String>,
+    pub result: Result<Json, CallError>,
     pub reads: ReadSet,
     pub conflict: bool,
 }
@@ -118,7 +127,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         Err(e) => {
             return Call {
                 conflict: e.is_retryable_conflict(),
-                result: Err(e.to_string()),
+                result: Err(e.to_string().into()),
                 reads: ReadSet::new(),
             };
         }
@@ -126,25 +135,23 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
 
     let context = TransactionContext::new(tx);
 
-    let call = hooks::plan(
-        bundle,
-        name,
+    let ops = operations(
+        context.clone(),
         space,
         mutation,
         graph,
-        target_name,
-        context.clone(),
         CallContext {
             determinism: Some(determinism),
             note,
             scope: CallScope::default(),
+            qualified: Some(target_name.to_owned()),
         },
     );
-
-    let result = call
-        .submit(pool, args)
-        .await
-        .map_err(|error| context.call_error(error));
+    let result = match pool.submit(bundle, "invoke", json!({"name":name,"args":args}), ops) {
+        Ok(call) => call.await,
+        Err(error) => Err(error),
+    }
+    .map_err(|error| context.call_error(error));
 
     let tx = context
         .shared
@@ -158,8 +165,8 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
     let result = result.and_then(|value| {
         let nested = context.failure.lock().expect("failure lock");
 
-        match nested.as_ref().or(observed.error.as_ref()) {
-            Some(error) => Err(error.clone()),
+        match observed.error.as_ref().or(nested.as_ref()) {
+            Some(error) => Err(error.clone().into()),
             None => Ok(value),
         }
     });
@@ -167,7 +174,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
     let result = finish_transaction(tx, result, mutation, &mut observed).await;
     Call {
         result,
-        reads: std::mem::take(&mut observed.reads),
+        reads: std::mem::take(&mut *context.reads.lock().await),
         conflict: observed.conflict,
     }
 }
@@ -178,6 +185,7 @@ struct CallContext {
     determinism: Option<Determinism>,
     note: CallNote,
     scope: CallScope,
+    qualified: Option<String>,
 }
 
 // A child holds its parent's gate, so siblings and parent DB operations cannot
@@ -252,6 +260,7 @@ fn operations(
         note,
         determinism,
         scope,
+        qualified,
     } = context;
     let mut ops = OpRegistry::new();
     note.register(&mut ops).expect("unique operation");
@@ -259,19 +268,27 @@ fn operations(
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
     }
-    database_operations::register(
-        &mut ops,
-        tx.shared.clone(),
-        tx.observations.clone(),
-        tx.failure.clone(),
-        scope.clone(),
-        space,
-        writable,
-    );
+    database_operations::register(&mut ops, tx.clone(), scope.clone(), space, writable);
 
     if let Some((plugins, owner)) = graph {
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
             .expect("unique operation");
+        if let Some(name) = qualified
+            && let Some(chain) = plugins.query_hooks.get(&name)
+        {
+            let target = &plugins.targets[&name];
+            ops = ops.with_transforms(hooks::QueryHooks {
+                target: hooks::HookTarget {
+                    args: target.args.clone(),
+                    result: target.result.clone(),
+                    chain: chain.clone(),
+                    name,
+                },
+                plugins: plugins.clone(),
+                note: note.clone(),
+                tx: tx.clone(),
+            });
+        }
         ops.register_module("plugin.call", move |payload| {
             let resolved = (|| {
                 if tx.failure.lock().expect("failure lock").is_some() {
@@ -296,23 +313,31 @@ fn operations(
                 let child_note = note.enter(name, Some(&target.args), &args)?;
 
                 let child_scope = CallScope::default();
-                let child = hooks::plan(
-                    target.bundle,
-                    target.local_name,
+                let ops = operations(
+                    tx.clone(),
                     target.space,
                     target.mutation,
                     Some((plugins.clone(), target.owner)),
-                    name,
-                    tx.clone(),
                     CallContext {
                         determinism: None,
                         note: child_note,
                         scope: child_scope.clone(),
+                        qualified: Some(name.to_owned()),
                     },
                 );
-
                 let failed = tx.clone();
-                let call = child.module(args, move |error| failed.poison(error));
+                let call = ModuleCall::new(
+                    target.bundle,
+                    "invoke",
+                    json!({"name":target.local_name,"args":args}),
+                    ops,
+                    move |error| failed.poison(error),
+                );
+                let call = if target.mutation {
+                    call
+                } else {
+                    call.catch_structured()
+                };
                 Ok(scope
                     .clone()
                     .nest(child_scope, tx.shared.clone(), target.mutation, call))
@@ -332,16 +357,16 @@ mod database_operations;
 use database_operations::{field, text};
 
 mod database_queries;
-mod hooks;
+pub(crate) mod hooks;
 
 mod process_frames;
 
 async fn finish_transaction(
     tx: Transaction,
-    result: Result<Json, String>,
+    result: Result<Json, CallError>,
     mutation: bool,
     observed: &mut Observations,
-) -> Result<Json, String> {
+) -> Result<Json, CallError> {
     match result {
         Ok(value) if !mutation || failure_kind(&value).is_none() => {
             match Box::pin(tx.commit()).await {
@@ -349,9 +374,10 @@ async fn finish_transaction(
                 Err(error) => {
                     observed.conflict |= error.is_retryable_conflict();
 
-                    Err(format!(
-                        "transaction commit failed (outcome may be unknown): {error}"
-                    ))
+                    Err(
+                        format!("transaction commit failed (outcome may be unknown): {error}")
+                            .into(),
+                    )
                 }
             }
         }
@@ -363,8 +389,8 @@ async fn finish_transaction(
 
                 let message = format!("transaction rollback failed: {rollback}");
                 Err(match result {
-                    Ok(_) => message,
-                    Err(error) => format!("{error}; {message}"),
+                    Ok(_) => message.into(),
+                    Err(error) => format!("{error}; {message}").into(),
                 })
             }
         },

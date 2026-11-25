@@ -9,7 +9,12 @@ use tokio_util::task::AbortOnDropHandle;
 use super::*;
 use crate::host::process_frames::{operation_reply, read_frame, write_messages};
 
-type OpResult = (u64, u64, Result<Value, String>, OwnedSemaphorePermit);
+type OpResult = (
+    u64,
+    u64,
+    Result<Value, engine::CallError>,
+    OwnedSemaphorePermit,
+);
 
 pub(super) fn start(runtime: &Handle, host: &Path, timing: Timing) -> Result<Arc<Running>, String> {
     let _entered = runtime.enter();
@@ -285,7 +290,7 @@ impl Broker<'_> {
                 biased;
                 () = active.cancelled() => Err("stale invocation".into()),
                 () = retired.cancelled() => Err("stale invocation".into()),
-                result = registry.dispatch(&name, payload) => result,
+                result = registry.dispatch_call(&name, payload) => result,
             };
             (id, op, result, permit)
         });

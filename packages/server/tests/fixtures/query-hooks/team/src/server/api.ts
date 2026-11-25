@@ -1,1 +1,1 @@
-export { list, add } from "./users";
+export { list, add, profile } from "./users";

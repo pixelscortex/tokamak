@@ -3,6 +3,10 @@ use crate::identity::Role;
 
 impl Coordinator {
     pub(super) fn respond(&mut self, session: u64, id: u64, result: Result<Json, String>) {
+        self.respond_call(session, id, result.map_err(Into::into));
+    }
+
+    pub(super) fn respond_call(&mut self, session: u64, id: u64, result: Result<Json, CallError>) {
         self.emit(session, Event::Response { id, result });
     }
 
@@ -19,7 +23,7 @@ impl Coordinator {
             })
         {
             // Interpreter stack frames can contain the server's source paths.
-            error.truncate(stack_start);
+            error.message_mut().truncate(stack_start);
         }
         // Count serialized bytes without allocating an unbounded transport buffer.
         // Native routing envelopes are accounted for separately by the mailbox.

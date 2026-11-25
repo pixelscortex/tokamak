@@ -17,3 +17,10 @@ export const add = mutation({
   args: { name: v.string() },
   handler: (ctx, { name }) => ctx.db.insert("users", { name }),
 });
+
+type Profile = { title?: string; alias: string | null; status: "active" | "pending"; labels: string[] };
+
+export const profile = query({
+  args: { mode: v.string() },
+  handler: (): Profile => ({ alias: null, status: "pending", labels: [] }),
+});

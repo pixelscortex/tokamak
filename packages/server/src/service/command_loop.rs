@@ -42,7 +42,7 @@ impl Coordinator {
                 }
                 Some(completion) = self.action_jobs.join_next() => {
                     if let Ok((session, id, result)) = completion {
-                        self.emit(session, Event::Response { id, result });
+                        self.respond(session, id, result);
                     }
                 }
                 _ = self.cleanup.notified() => {},

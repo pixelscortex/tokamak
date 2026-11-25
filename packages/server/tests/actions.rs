@@ -125,7 +125,7 @@ async fn call_result(
     else {
         panic!("missing action response for {name}")
     };
-    result
+    result.map_err(|error| error.to_string())
 }
 
 async fn verify_plugin_callers(session: &mut server::Session, id: &str, name: &str) {

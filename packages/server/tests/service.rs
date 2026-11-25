@@ -166,7 +166,7 @@ impl Engine for Observed {
         self.probe
             .checkpoint(&name, false, result.clone().map_err(|e| e.to_string()))
             .await;
-        result
+        result.map_err(|error| error.to_string())
     }
 }
 

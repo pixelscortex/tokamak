@@ -126,7 +126,7 @@ impl Coordinator {
             return;
         }
         let result = match self.client_kind(&name) {
-            None => Err(format!("unknown function: {name}")),
+            None => Err(format!("unknown function: {name}").into()),
             Some(kind) if expected.is_some_and(|expected| expected != kind) => {
                 Err("function kind does not match request".into())
             }
@@ -147,6 +147,6 @@ impl Coordinator {
         };
         self.drain_changes();
         self.refresh().await; // Writer barrier precedes response on the SAME queue.
-        self.respond(session, id, result);
+        self.respond_call(session, id, result);
     }
 }

@@ -4,7 +4,7 @@
 //! A session has ONE ordered output stream; transports must preserve its order.
 
 pub use crate::protocol::Event;
-use crate::protocol::Request;
+use crate::protocol::{CallError, Request};
 use crate::{
     data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
@@ -234,7 +234,7 @@ pub(crate) enum Action {
 struct Subscription {
     query: SubscriptionQuery,
     reads: ReadSet,
-    last: Option<Result<Json, String>>,
+    last: Option<Result<Json, CallError>>,
     dirty: bool,
     // A runtime/admission failure may not have reached all reads. Until a
     // successful run, changed tables conservatively invalidate this subscription.

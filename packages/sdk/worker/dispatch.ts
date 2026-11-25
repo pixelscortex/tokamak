@@ -1,3 +1,5 @@
+import type { CallError } from "../src/protocol";
+import { RemoteFunctionError } from "../src/call-error";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
 import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
@@ -18,7 +20,7 @@ export type WorkerMessage =
       type: "opResult";
       id: number;
       value: JsonValue;
-      error?: string;
+      error?: CallError;
       unavailable?: true;
       providerError?: true;
     }
@@ -268,12 +270,12 @@ export function workerDispatch(
       const op = pending.get(message.id);
       pending.delete(message.id);
       if (op) {
-        if (typeof message.error === "string") {
+        if (message.error !== undefined) {
           const { error, unavailable, providerError } = message;
           op.reject(
-            unavailable || providerError
+            typeof error === "string" && (unavailable || providerError)
               ? new ContractCallError(error, unavailable === true, providerError === true)
-              : new Error(error),
+              : new RemoteFunctionError(error),
           );
         } else op.resolve(message.value);
       }

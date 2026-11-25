@@ -16,6 +16,58 @@ use std::{
     time::Instant,
 };
 
+pub type CallFuture<'a> = Pin<Box<dyn Future<Output = Result<Json, CallError>> + 'a>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallError {
+    pub message: String,
+    pub details: Option<Json>,
+}
+
+impl From<&str> for CallError {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+
+impl From<String> for CallError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            details: None,
+        }
+    }
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.message.fmt(f)
+    }
+}
+
+impl From<crate::Error> for CallError {
+    fn from(error: crate::Error) -> Self {
+        match error {
+            crate::Error::Call(error) => error,
+            other => other.to_string().into(),
+        }
+    }
+}
+
+pub trait StageExecutor {
+    fn run(&self, call: ModuleCall) -> CallFuture<'_>;
+}
+
+pub trait CallTransforms: Send + Sync {
+    fn before<'a>(&'a self, executor: &'a dyn StageExecutor, input: Json) -> CallFuture<'a>;
+    fn after<'a>(
+        &'a self,
+        executor: &'a dyn StageExecutor,
+        input: Json,
+        value: Json,
+    ) -> CallFuture<'a>;
+}
+
 type OpResult = Result<Json, String>;
 
 type OpFuture = Pin<Box<dyn Future<Output = OpResult> + Send>>;
@@ -25,6 +77,13 @@ type OpenModule = Pin<Box<dyn Future<Output = Result<CompleteModule, String>> + 
 enum Op {
     Sync(Box<dyn Fn(Json) -> OpResult + Send + Sync>),
     Async(Box<dyn Fn(Json) -> OpFuture + Send + Sync>),
+    Call(
+        Box<
+            dyn Fn(Json) -> Pin<Box<dyn Future<Output = Result<Json, CallError>> + Send>>
+                + Send
+                + Sync,
+        >,
+    ),
     Module(Box<dyn Fn(Json) -> Result<ModuleCall, String> + Send + Sync>),
 }
 
@@ -37,9 +96,8 @@ pub struct ModuleCall {
     ops: Arc<OpRegistry>,
     on_error: Box<dyn Fn(String) + Send + Sync>,
     scope: Option<OpenModule>,
-    depth_increment: u8,
-    error_context: Option<String>,
     finished: bool,
+    catch_structured: bool,
 }
 impl ModuleCall {
     pub fn new(
@@ -56,9 +114,8 @@ impl ModuleCall {
             ops,
             on_error: Box::new(on_error),
             scope: None,
-            depth_increment: 1,
-            error_context: None,
             finished: false,
+            catch_structured: false,
         }
     }
 
@@ -81,22 +138,10 @@ impl ModuleCall {
         self
     }
 
-    /// A trusted host adapter routes calls without adding a logical module level.
-    pub fn as_adapter(mut self) -> Self {
-        self.depth_increment = 0;
+    /// A read-only call can propagate a structured failure without poisoning the caller.
+    pub fn catch_structured(mut self) -> Self {
+        self.catch_structured = true;
         self
-    }
-
-    pub fn with_error_context(mut self, context: String) -> Self {
-        self.error_context = Some(context);
-        self
-    }
-
-    fn contextualize(&self, error: String) -> String {
-        match &self.error_context {
-            Some(context) => format!("{context}: {error}"),
-            None => error,
-        }
     }
 
     fn finish(&mut self, error: Option<String>) {
@@ -109,9 +154,7 @@ impl ModuleCall {
 impl Drop for ModuleCall {
     fn drop(&mut self) {
         if !self.finished {
-            (self.on_error)(
-                self.contextualize("delegated module operation abandoned before completion".into()),
-            );
+            (self.on_error)("delegated module operation abandoned before completion".into());
         }
     }
 }
@@ -123,6 +166,7 @@ pub struct OpRegistry(
     BTreeMap<String, Op>,
     pub(crate) Option<Determinism>,
     Vec<String>,
+    pub(crate) Option<Arc<dyn CallTransforms>>,
 );
 
 impl OpRegistry {
@@ -133,6 +177,11 @@ impl OpRegistry {
     /// Opt into replayable time and randomness for a query or mutation.
     pub fn set_determinism(&mut self, inputs: Determinism) {
         self.1 = Some(inputs);
+    }
+
+    pub fn with_transforms(mut self, transforms: impl CallTransforms + 'static) -> Self {
+        self.3 = Some(Arc::new(transforms));
+        self
     }
 
     /// Only the action engine consumes these kernel-selected grants. Grants
@@ -172,6 +221,21 @@ impl OpRegistry {
         )
     }
 
+    pub fn register_call<F, Fut>(
+        &mut self,
+        name: impl Into<String>,
+        op: F,
+    ) -> Result<(), crate::Error>
+    where
+        F: Fn(Json) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Json, CallError>> + Send + 'static,
+    {
+        self.insert(
+            name.into(),
+            Op::Call(Box::new(move |args| Box::pin(op(args)))),
+        )
+    }
+
     /// Domain routing/authority belongs to the native resolver. The error
     /// observer also runs on cancellation, allowing transactional hosts to
     /// poison the outer call even when JS catches a nested exception.
@@ -186,10 +250,17 @@ impl OpRegistry {
     /// Dispatch an action's existing capabilities from a process transport.
     /// Module operations belong to transactional QuickJS worlds, not actions.
     pub async fn dispatch(&self, name: &str, args: Json) -> OpResult {
+        self.dispatch_call(name, args)
+            .await
+            .map_err(|error| error.message)
+    }
+
+    pub async fn dispatch_call(&self, name: &str, args: Json) -> Result<Json, CallError> {
         match self.0.get(name) {
-            Some(Op::Sync(op)) => op(args),
-            Some(Op::Async(op)) => op(args).await,
-            _ => Err(format!("unknown action host op: {name}")),
+            Some(Op::Sync(op)) => op(args).map_err(Into::into),
+            Some(Op::Async(op)) => op(args).await.map_err(Into::into),
+            Some(Op::Call(op)) => op(args).await,
+            _ => Err(format!("unknown action host op: {name}").into()),
         }
     }
 
@@ -248,17 +319,7 @@ pub fn install_ops<'js>(
     registry: Arc<OpRegistry>,
     invocation: &Invocation,
 ) -> rquickjs::Result<Object<'js>> {
-    install_leased(
-        ctx,
-        registry,
-        Lease {
-            active: invocation.active.clone(),
-            deadline: invocation.deadline,
-            modules: Arc::new(AtomicU64::new(0)),
-            depth: 0,
-            determinism: invocation.determinism,
-        },
-    )
+    install_leased(ctx, registry, Lease::root(invocation))
 }
 
 #[derive(Clone)]
@@ -266,8 +327,89 @@ struct Lease {
     active: Arc<AtomicBool>,
     deadline: Option<Instant>,
     modules: Arc<AtomicU64>,
+    sequence: Arc<AtomicU64>,
     depth: u8,
     determinism: Option<Determinism>,
+}
+
+impl Lease {
+    fn root(invocation: &Invocation) -> Self {
+        Self {
+            active: invocation.active.clone(),
+            deadline: invocation.deadline,
+            modules: Arc::default(),
+            sequence: Arc::default(),
+            depth: 0,
+            determinism: invocation.determinism,
+        }
+    }
+}
+
+struct Executor<'js> {
+    ctx: Ctx<'js>,
+    lease: Lease,
+}
+
+impl StageExecutor for Executor<'_> {
+    fn run(&self, call: ModuleCall) -> CallFuture<'_> {
+        let mut lease = self.lease.clone();
+        lease.modules = Arc::default();
+        Box::pin(invoke_module(self.ctx.clone(), call, lease, false))
+    }
+}
+
+pub(crate) async fn invoke_export<'js>(
+    ctx: &Ctx<'js>,
+    invocation: &Invocation,
+    ops: Arc<OpRegistry>,
+    function: Function<'js>,
+    args: Json,
+    bundle: &crate::Bundle,
+) -> Result<Json, crate::Error> {
+    let executor = Executor {
+        ctx: ctx.clone(),
+        lease: Lease::root(invocation),
+    };
+    execute_export(
+        &executor,
+        ops,
+        function,
+        args,
+        bundle,
+        crate::source_map::BUNDLE_NAME,
+    )
+    .await
+    .map_err(crate::Error::Call)
+}
+
+async fn execute_export<'js>(
+    executor: &Executor<'js>,
+    ops: Arc<OpRegistry>,
+    function: Function<'js>,
+    mut args: Json,
+    bundle: &crate::Bundle,
+    name: &str,
+) -> Result<Json, CallError> {
+    if let Some(transforms) = &ops.3 {
+        args = transforms.before(executor, args).await?;
+    }
+    let ctx = &executor.ctx;
+    let result = async {
+        check(ctx, &executor.lease.active, executor.lease.deadline)?;
+        let args = encode(ctx, args.clone())?;
+        let host = install_leased(ctx, ops.clone(), executor.lease.clone())?;
+        let pending: MaybePromise = function.call((args, host))?;
+        let value: Value = pending.into_future().await?;
+        check(ctx, &executor.lease.active, executor.lease.deadline)?;
+        decode(ctx, value)
+    }
+    .await
+    .map_err(|error| module_error(ctx, error, bundle, name))?;
+
+    match &ops.3 {
+        Some(transforms) => transforms.after(executor, args, result).await,
+        None => Ok(result),
+    }
 }
 
 fn install_leased<'js>(
@@ -296,22 +438,22 @@ fn install_leased<'js>(
                         encode(&ctx, result)
                     }
                     Op::Module(resolve) => {
-                        let mut call = resolve(args)
+                        let call = resolve(args)
                             .map_err(|error| Exception::throw_message(&ctx, &error))?;
-                        let number = lease.modules.fetch_add(1, Ordering::Relaxed);
-                        if lease.depth + call.depth_increment > 16 || number >= 256 {
-                            let error = call.contextualize(
-                                "delegated module depth/count budget exceeded".into(),
-                            );
-                            call.finish(Some(error.clone()));
-                            return Err(Exception::throw_message(&ctx, &error));
-                        }
-                        Ok(Promise::wrap_future(
-                            &ctx,
-                            invoke_module(ctx.clone(), call, lease.clone(), number),
-                        )?
+                        let lease = lease.clone();
+                        let ctx = ctx.clone();
+                        Ok(Promise::wrap_future(&ctx.clone(), async move {
+                            let result = invoke_module(ctx.clone(), call, lease, true)
+                                .await
+                                .map_err(|error| throw_call(&ctx, error))?;
+                            encode(&ctx, result)
+                        })?
                         .into_value())
                     }
+                    Op::Call(_) => Err(Exception::throw_message(
+                        &ctx,
+                        "operation requires an action process",
+                    )),
                     Op::Async(op) => {
                         let future = op(args);
                         Ok(Promise::wrap_future(
@@ -330,72 +472,91 @@ fn install_leased<'js>(
 async fn invoke_module<'js>(
     ctx: Ctx<'js>,
     mut call: ModuleCall,
-    lease: Lease,
-    number: u64,
-) -> rquickjs::Result<Value<'js>> {
+    mut lease: Lease,
+    delegated: bool,
+) -> Result<Json, CallError> {
+    if lease.depth >= 16 || (delegated && lease.modules.fetch_add(1, Ordering::Relaxed) >= 256) {
+        let message = "delegated module depth/count budget exceeded".to_owned();
+        call.finish(Some(message.clone()));
+        return Err(message.into());
+    }
+
+    let number = lease.sequence.fetch_add(1, Ordering::Relaxed);
     let name = format!("tokamak-module-{number}.js");
-    let child = lease.determinism.map(|inputs| inputs.child(number));
-    let source = child.map(|inputs| inputs.module_source(&call.bundle.source));
+    lease.depth += 1;
+    lease.determinism = lease.determinism.map(|inputs| inputs.child(number));
+    let source = lease
+        .determinism
+        .map(|inputs| inputs.module_source(&call.bundle.source));
     let result = async {
-        check(&ctx, &lease.active, lease.deadline)?;
         let complete = match call.scope.take() {
-            Some(open) => Some(open.await.map_err(|e| Exception::throw_message(&ctx, &e))?),
+            Some(open) => Some(open.await.map_err(CallError::from)?),
             None => None,
         };
-        check(&ctx, &lease.active, lease.deadline)?;
-        let module = Module::declare(
-            ctx.clone(),
-            name.as_str(),
-            source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
-        )
-        .map_err(|error| {
-            let error = crate::engine::js_error_named(&ctx, error, &call.bundle, true, &name);
-            Exception::throw_message(&ctx, &error.to_string())
-        })?;
-        let (module, evaluated) = module.eval()?;
-        evaluated.into_future::<()>().await?;
-        check(&ctx, &lease.active, lease.deadline)?;
-        let namespace = module.namespace()?;
-        let function: Function = namespace.get(call.export.as_str())?;
-        let args = encode(&ctx, call.args.clone())?;
-        let host = install_leased(
-            &ctx,
+        let function = async {
+            check(&ctx, &lease.active, lease.deadline)?;
+            let module = Module::declare(
+                ctx.clone(),
+                name.as_str(),
+                source.as_deref().unwrap_or(&call.bundle.source).as_bytes(),
+            )?;
+            let (module, evaluated) = module.eval()?;
+            evaluated.into_future::<()>().await?;
+            module.namespace()?.get::<_, Function>(call.export.as_str())
+        }
+        .await
+        .map_err(|error| module_error(&ctx, error, &call.bundle, &name))?;
+        let executor = Executor { ctx, lease };
+        let value = execute_export(
+            &executor,
             call.ops.clone(),
-            Lease {
-                active: lease.active.clone(),
-                deadline: lease.deadline,
-                modules: lease.modules,
-                depth: lease.depth + call.depth_increment,
-                determinism: child,
-            },
-        )?;
-        let pending: MaybePromise = function.call((args, host))?;
-        let result: Value = pending.into_future().await?;
-        check(&ctx, &lease.active, lease.deadline)?;
-        let result = decode(&ctx, result)?;
-        let result = match complete {
-            Some(complete) => complete(result)
-                .await
-                .map_err(|e| Exception::throw_message(&ctx, &e))?,
-            None => result,
-        };
-        check(&ctx, &lease.active, lease.deadline)?;
-        encode(&ctx, result)
+            function,
+            call.args.clone(),
+            &call.bundle,
+            &name,
+        )
+        .await?;
+        match complete {
+            Some(complete) => complete(value).await.map_err(CallError::from),
+            None => Ok(value),
+        }
     }
     .await;
-    match result {
-        Ok(value) => {
-            call.finish(None);
-            Ok(value)
+
+    let poison = result
+        .as_ref()
+        .err()
+        .filter(|error| !call.catch_structured || error.details.is_none())
+        .map(|error| error.message.clone());
+    call.finish(poison);
+    result
+}
+
+fn throw_call(ctx: &Ctx<'_>, error: CallError) -> rquickjs::Error {
+    let result = Exception::from_message(ctx.clone(), &error.message).and_then(|exception| {
+        if let Some(details) = error.details {
+            let value = encode(ctx, details)?;
+            exception.as_object().set("callDetails", value.clone())?;
+            if let Some(fields) = value.as_object() {
+                for key in ["plugin", "hook", "stage", "kind", "data"] {
+                    exception
+                        .as_object()
+                        .set(key, fields.get::<_, Value>(key)?)?;
+                }
+            }
         }
-        Err(error) => {
-            let error = call.contextualize(
-                crate::engine::js_error_named(&ctx, error, &call.bundle, false, &name).to_string(),
-            );
-            call.finish(Some(error.clone()));
-            Err(Exception::throw_message(&ctx, &error))
-        }
-    }
+        Ok(exception.throw())
+    });
+    result.unwrap_or_else(|error| error)
+}
+
+fn module_error(
+    ctx: &Ctx<'_>,
+    error: rquickjs::Error,
+    bundle: &crate::Bundle,
+    name: &str,
+) -> CallError {
+    crate::engine::js_error_named(ctx, error, bundle, false, name).into()
 }
 
 async fn await_operation<'js>(

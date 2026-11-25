@@ -73,7 +73,7 @@ impl Loaded {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
-            hooks: BTreeMap::new(),
+            query_hooks: BTreeMap::new(),
             transaction_bundles: BTreeMap::new(),
             descriptor: Value::Null,
             catalog_text: String::new(),
@@ -270,8 +270,9 @@ impl Loaded {
                                 .unwrap_or(&function["args"])
                                 .clone(),
                         ),
-                        result: inspected.descriptor["results"]
-                            .get(local_name)
+                        result: function
+                            .get("returns")
+                            .or_else(|| inspected.descriptor["results"].get(local_name))
                             .map(|validator| Arc::new(validator.clone())),
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
@@ -346,7 +347,7 @@ impl Loaded {
     }
 
     fn register_hooks(&mut self) -> Result<(), Error> {
-        self.hooks.clear();
+        let mut registry = BTreeMap::<String, Vec<Hook>>::new();
 
         for (owner, inspected) in &self.inspected {
             let Some(hooks) = inspected.descriptor.get("hooks") else {
@@ -378,15 +379,12 @@ impl Loaded {
                 if !before && !after {
                     continue;
                 }
-                let Some((target_owner, _)) = target.split_once('/') else {
-                    return Err(invalid(format!(
-                        "Hook {owner}/{name} must target another plugin"
-                    )));
-                };
-                if target_owner == owner {
-                    return Err(invalid(format!(
-                        "Hook {owner}/{name} must target another plugin"
-                    )));
+                if !target
+                    .split_once('/')
+                    .is_some_and(|(target_owner, _)| target_owner != owner)
+                {
+                    eprintln!("Skipping hook {owner}/{name}: must target another plugin");
+                    continue;
                 }
                 let Some(function) = self.targets.get(target) else {
                     eprintln!("Skipping hook {owner}/{name}: target {target} is missing");
@@ -401,7 +399,17 @@ impl Loaded {
                     continue;
                 }
 
-                self.hooks.entry(target.to_owned()).or_default().push(Hook {
+                if after
+                    && function.result.is_none()
+                    && !registry
+                        .get(target)
+                        .is_some_and(|hooks| hooks.iter().any(|hook| hook.after))
+                {
+                    eprintln!(
+                        "Hook target {target} has no result validator; accepting its after-hook results"
+                    );
+                }
+                registry.entry(target.to_owned()).or_default().push(Hook {
                     owner: owner.clone(),
                     name: name.to_owned(),
                     before,
@@ -412,6 +420,10 @@ impl Loaded {
             }
         }
 
+        self.query_hooks = registry
+            .into_iter()
+            .map(|(name, chain)| (name, chain.into()))
+            .collect();
         Ok(())
     }
 

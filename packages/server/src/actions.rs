@@ -20,7 +20,7 @@ pub(crate) struct NestedCall {
     pub args: Json,
     pub kind: FunctionKind,
     pub contract: Option<String>,
-    pub reply: oneshot::Sender<Result<Json, String>>,
+    pub reply: oneshot::Sender<Result<Json, crate::protocol::CallError>>,
 }
 
 pub(crate) fn operations(
@@ -89,7 +89,7 @@ pub(crate) fn register_nested_calls(
         let owner = owner.clone();
         let environment = environment.clone();
         let note = note.clone();
-        ops.register_async(operation, move |payload| {
+        ops.register_call(operation, move |payload| {
             let environment = environment.clone();
             let commands = commands.clone();
             let generation = generation.clone();
@@ -123,7 +123,10 @@ pub(crate) fn register_nested_calls(
                 // commit. The coordinator owns finalization and the writer barrier.
                 wait.await
                     .map_err(|_| "server closed before nested call completed".to_owned())?
-                    .map_err(|error| environment.redact(error))
+                    .map_err(|mut error| {
+                        *error.message_mut() = environment.redact(error.to_string());
+                        error.into()
+                    })
             }
         })?;
     }
@@ -141,7 +144,7 @@ fn register_plugin_call(
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
     let caller = owner.clone();
-    ops.register_async("plugin.call", move |payload| {
+    ops.register_call("plugin.call", move |payload| {
         let loaded = catalog.clone();
         let owner = caller.clone();
         let commands = commands.clone();
@@ -176,7 +179,8 @@ fn register_plugin_call(
                     .map_err(|e| format!("nested call not admitted: {e}"))?;
                 return wait
                     .await
-                    .map_err(|_| "server closed before plugin call completed".to_owned())?;
+                    .map_err(|_| "server closed before plugin call completed")?
+                    .map_err(Into::into);
             }
             let note = note.enter(name, Some(&target.args), &args)?;
             let environment = Arc::new(crate::environment::Snapshot::new(
@@ -200,7 +204,7 @@ fn register_plugin_call(
             process
                 .invoke(source, target.local_name, args, ops)
                 .await
-                .map_err(|error| environment.redact(error))
+                .map_err(|error| environment.redact(error).into())
         }
     })?;
 

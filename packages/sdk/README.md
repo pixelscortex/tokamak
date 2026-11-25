@@ -776,11 +776,18 @@ export const moderateUsers = hook(team.api.list, {
 Either stage can be omitted. `before` returns valid arguments for the target
 or stops the query with `fail(kind, data?)`. `after` receives the query's
 result and the final arguments and returns a result of the same type. The
-server checks both stages' output and rejects extra fields. For an older
-bundle or a return type without a finite validator, the server checks the
-result against the shape of the value returned by the query. A failure or
-exception reports the hooking plugin to the caller. Hook order across plugins
-is unspecified; each stage receives the previous stage's value.
+server checks both stages' output against the target validators and rejects
+extra fields on validated objects. The result validator comes from the query's
+`returns` option or its TypeScript result type. Open values such as `unknown`
+remain unchecked inside otherwise validated results. For older bundles without
+a result validator, the server accepts after-hook results and warns on load.
+
+A hook's `fail("forbidden", data)` rejects the window call or nested
+`ctx.runQuery` with an error whose `kind` is `"forbidden"` and whose `data`
+is the supplied value (or `null`). The error also exposes `plugin`, `hook`,
+and `stage`. An exception or invalid return has the same fields, with kind
+`hookException` or `invalidHookResult`. Hook order across plugins is unspecified;
+each stage receives the previous stage's value.
 
 A query hook can only read its own plugin's database. It has the original
 caller in `ctx.auth` and shares the call note in `ctx.call` at one greater

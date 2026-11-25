@@ -46,6 +46,27 @@ fn build_fixture(workspace: &Path, installation: &Path, id: &str) {
         let entry = entry.unwrap();
         fs::copy(entry.path(), target.join(entry.file_name())).unwrap();
     }
+
+    if id == "moderation" {
+        let path = target.join("transactions.js");
+        let bundle = fs::read_to_string(&path).unwrap();
+        // Send a write directly through the stage bridge, bypassing the SDK's database reader.
+        let export = "  invoke_hook,";
+        assert!(bundle.contains(export));
+        let bundle = bundle.replace(export, "  test_invoke_hook as invoke_hook,");
+        fs::write(
+            path,
+            bundle
+                + r#"
+function test_invoke_hook(request, host) {
+  if (request.stage === "before" && request.args.mode === "raw-write")
+    return host.op("db.insert", { table: "bans", value: { name: "Alice" } });
+  return invoke_hook(request, host);
+}
+"#,
+        )
+        .unwrap();
+    }
 }
 
 #[tokio::test]

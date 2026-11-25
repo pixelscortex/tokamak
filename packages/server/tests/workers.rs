@@ -83,7 +83,9 @@ impl Fixture {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 match self.session.recv().await.unwrap().unwrap() {
-                    Event::Response { id, result } => return (id, result),
+                    Event::Response { id, result } => {
+                        return (id, result.map_err(|error| error.to_string()));
+                    }
                     Event::PluginChanged { .. } => {}
                     event => panic!("{event:?}"),
                 }

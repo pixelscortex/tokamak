@@ -148,28 +148,24 @@ impl Engine for QuickJsEngine {
             call_end,
             "call",
             world.context.async_with(async |ctx| {
-                let result = async {
+                let function = (|| {
                     let namespace: Object = namespace.restore(&ctx)?;
-                    let function: Function = namespace
-                        .get::<_, Value>(export)?
-                        .into_function()
-                        .ok_or_else(|| {
-                            rquickjs::Exception::throw_type(
-                                &ctx,
-                                &format!("bundle export {export:?} is missing or not a function"),
-                            )
-                        })?;
+                    namespace.get::<_, Function>(export)
+                })()
+                .map_err(|e| js_error(&ctx, e, bundle, false))?;
+                if ops.3.is_some() {
+                    return bridge::invoke_export(&ctx, &invocation, ops, function, args, bundle)
+                        .await;
+                }
+                async {
                     let args = bridge::encode(&ctx, args)?;
                     let host = bridge::install_ops(&ctx, ops, &invocation)?;
-                    // One JSON argument plus the unforgeable per-call capability.
-                    // SDK's wrapper is invoke({name,args}, host); no SDK concepts
-                    // need to leak into this generic exported-function primitive.
                     let pending: MaybePromise = function.call((args, host))?;
                     let value: Value = pending.into_future().await?;
                     bridge::decode(&ctx, value)
                 }
-                .await;
-                result.map_err(|e| js_error(&ctx, e, bundle, false))
+                .await
+                .map_err(|error| js_error(&ctx, error, bundle, false))
             }),
         )
         .await;
@@ -210,6 +206,17 @@ pub(crate) fn js_error_named(
         return Error::Engine(error.to_string());
     }
     let thrown = ctx.catch();
+    if let Some(object) = thrown.as_object()
+        && let Ok(value) = object.get::<_, Value>("callDetails")
+        && value.is_object()
+        && let Ok(details) = bridge::decode(ctx, value)
+        && let Ok(message) = object.get::<_, String>("message")
+    {
+        return Error::Call(crate::CallError {
+            message,
+            details: Some(details),
+        });
+    }
     let message = thrown
         .as_object()
         .and_then(|o| o.get::<_, String>("message").ok())

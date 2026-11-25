@@ -96,6 +96,7 @@ pub enum Error {
         stack: Option<String>,
     },
     Engine(String),
+    Call(crate::CallError),
 }
 
 impl fmt::Display for Error {
@@ -104,6 +105,7 @@ impl fmt::Display for Error {
             Self::InvalidInput(s) | Self::Engine(s) => f.write_str(s),
             Self::Overloaded => f.write_str("runtime overloaded: admission queue is full"),
             Self::Closed => f.write_str("Transaction runtime is closed"),
+            Self::Call(error) => error.fmt(f),
             Self::Timeout { phase } => write!(f, "runtime {phase} exceeded its wall-clock budget"),
             Self::JavaScript { message, stack } => {
                 f.write_str(message)?;
