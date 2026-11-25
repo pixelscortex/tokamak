@@ -1,0 +1,38 @@
+packages/server/src/data/README.md
+  s_ba25387409099f::t_da81ab3862812a 37-39
+  s_ba25387409099f::t_62d7aa5fc8a917 36,66-68
+packages/server/src/data/transaction/references.rs
+  s_ba25387409099f::t_fb00aa6840f234 106-112,118-121,123
+packages/server/src/schema.rs
+  s_ba25387409099f::t_fb00aa6840f234 95-99,139,142-144,148-157,162,165-169,175,183,192,201-202,204,215,288-308
+  s_ba25387409099f::t_5ed4c6a3e5aa95 309
+packages/server/src/plugins/grants.rs
+  s_ba25387409099f::t_61d3da0062cc62 38,58,70,73-79,87,109,147,188-199,201-217,219-239
+packages/server/src/data/query.rs
+  s_ba25387409099f::t_fb00aa6840f234 159
+packages/server/src/service/startup.rs
+  s_ba25387409099f::t_61d3da0062cc62 310-324
+packages/server/tests/internal/references.rs
+  s_ba25387409099f::t_43c7005ae6d3c8 5-9,12-34,46-47,49,62-85,96-130,132-140,142-144,146-159,162-252
+  s_ba25387409099f::t_6803035eb9be3b 2
+packages/server/src/plugins/tests.rs
+  s_ba25387409099f::t_b284746fb9bd85 216-367
+packages/server/tests/refs-driver.mjs
+  s_ba25387409099f::t_c9def7872f8f5c 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee442a3c9f8877e638e7889e87e660924ba15b0a",
+  "prompts": {},
+  "sessions": {
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
