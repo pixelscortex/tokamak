@@ -22,9 +22,9 @@ use crate::{
 const OUTPUT_BYTES: usize = 4 * WORKER_FRAME_BYTES;
 // Two safe JS integer IDs, the fixed frame envelope and a newline.
 const CANCEL_FRAME_BYTES: usize = 80;
-const CANCELLED: &str = "Plugin local function cancelled";
+const CANCELLED: &str = "Plugin action cancelled";
 const DID_NOT_YIELD: &str =
-    "Plugin local function did not yield for 5 seconds; QuickJS runtime reset";
+    "Plugin caller action did not yield for 5 seconds; QuickJS runtime reset";
 
 #[derive(Default)]
 struct State {

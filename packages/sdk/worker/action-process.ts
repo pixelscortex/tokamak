@@ -25,7 +25,7 @@ export function logging(send: (json: string) => void) {
 }
 
 export function initialize(send: (json: string) => void, nextOp: () => number, functions: FunctionRegistry) {
-  const dispatch = workerDispatch("action", functions, (message) => emit(send, message), nextOp, {
+  const dispatch = workerDispatch("server", functions, (message) => emit(send, message), nextOp, {
     observeInvocation: true,
     abort(controller) {
       try {

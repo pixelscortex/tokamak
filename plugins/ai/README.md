@@ -139,7 +139,7 @@ never sent to windows. A queued row has no reply until it starts.
   plugin process. Steer returns `NoSteerHandler` without storing the draft if the
   provider never registers a handler.
 - `turns:begin`, `turns:write`, `turns:steer`, `turns:requestStop` and
-  `turns:finish` record the turn. The local part calls the server on the window's
+  `turns:finish` record the turn. The caller action calls the server on the window's
   session, so each mutation checks the sender and device (`begin` also checks
   the original message's sender).
 - `turns:enqueue` stages the message and settings; `turns:failQueued` marks a head
@@ -153,7 +153,7 @@ never sent to windows. A queued row has no reply until it starts.
   not per composer.
 - `turns:write` carries what changed since the last write: text and thinking
   as appended deltas, the latest tasks, plan and usage, and the changed
-  steps; the local part keeps each write under 640 KB. Table `steps` holds
+  steps; the caller action keeps each write under 640 KB. Table `steps` holds
   one row per step or helper (`key` is the agent's id, `n` its place); the
   turn keeps the actions count and the step in progress. Limits
   (`src/server/limits.ts`): 256 KB of text, thinking and each helper's
@@ -168,7 +168,7 @@ never sent to windows. A queued row has no reply until it starts.
   `turns:helper`, local `agents:list` (every agent with its `info`).
 - Local `agents:list` returns every agent with its `info`.
 - `turns:ask` puts the turn in `waiting` with its question and a token the
-  asking local part keeps (never on Full access); `turns:answer` clears the
+  asking caller action keeps (never on Full access); `turns:answer` clears the
   question and lets the turn run on. Both check the sender's device inside,
   and `answer` also wants the token, so another window, even on the same
   device, cannot let a turn run on while its agent still waits. The answer
@@ -176,7 +176,7 @@ never sent to windows. A queued row has no reply until it starts.
 - Local `run:answer({ turnId, questionId, answer })` is how the card answers;
   local `run:pending({ turnId, questionId })` tells the card whether this local
   part still holds the question. Waiting questions live in the memory of the
-  local part running the turn, so they expire when the app quits: answering
+  caller action running the turn, so they expire when the app quits: answering
   one then fails with `Expired`.
 - `turns:questions()` lists the questions waiting for the caller on this
   device. Local `agents:list` returns every agent with its `info`.

@@ -22,7 +22,7 @@ pub(super) fn quickjs_bundle(
         .into_iter()
         .flat_map(|field| manifest[field].as_array().into_iter().flatten())
     {
-        if contract["place"] == "local" && contract["dataMethods"] != true {
+        if contract["on"] == "caller" && contract["dataMethods"] != true {
             let name = contract["name"].as_str().unwrap_or("<unnamed>");
             let owner = contract["owner"].as_str().unwrap_or(&request.id);
             return Err(format!(
@@ -77,7 +77,7 @@ pub(super) fn artifact_folder(
         })
         .ok_or_else(|| {
             format!(
-                "Install the matching build of {plugin} on this machine to run its local functions"
+                "Install the matching build of {plugin} on this machine to run its caller actions"
             )
         })?;
     let folder = folder.canonicalize().map_err(|error| error.to_string())?;

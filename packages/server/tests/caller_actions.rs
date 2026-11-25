@@ -10,19 +10,19 @@ use std::{
 mod local_runtime;
 
 #[test]
-fn local_functions_reach_the_live_server() {
+fn caller_actions_reach_the_live_server() {
     run(false);
 }
 
 #[test]
-fn local_functions_and_actions_run_with_an_empty_path() {
+fn caller_actions_and_actions_run_with_an_empty_path() {
     run(true);
 }
 
 fn run(without_bun: bool) {
     let mut command = local_runtime::driver(
         Command::new("bun"),
-        "packages/server/tests/local-functions-driver.mjs",
+        "packages/server/tests/caller-actions-driver.mjs",
     );
     if without_bun {
         command.arg("--without-bun");
@@ -52,7 +52,7 @@ fn run(without_bun: bool) {
             }
             let _ = child.kill();
             let _ = child.wait();
-            panic!("local function acceptance test did not finish");
+            panic!("caller action acceptance test did not finish");
         }
         thread::sleep(Duration::from_millis(20));
     }

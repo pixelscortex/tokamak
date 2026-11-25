@@ -100,7 +100,8 @@ async function syntheticHosts() {
   try {
     const url = new URL("/local-worker", await address);
     const digest = (value) => createHash("sha256").update(value).digest("hex");
-    const code = 'export const functions={warm:{kind:"local",args:{kind:"any"},invoke:()=>null}};';
+    const code =
+      'export const functions={warm:{kind:"action",on:"caller",visibility:"public",args:{kind:"any"},invoke:()=>null}};';
     const entryHash = digest("");
     const codeHash = digest(code);
     async function warm(index) {
@@ -129,7 +130,7 @@ async function syntheticHosts() {
         socket.addEventListener("message", ({ data }) => {
           const frame = JSON.parse(data);
           if (frame.type === "started")
-            send({ type: "write", message: { type: "invoke", id: 1, fn: "warm", args: null } });
+            send({ type: "write", message: { type: "invoke", id: 1, fn: "warm", args: null, action: true } });
           else if (frame.message?.type === "op")
             send({ type: "write", message: { type: "opResult", id: frame.message.id, value: null } });
           else if (frame.message?.type === "result")

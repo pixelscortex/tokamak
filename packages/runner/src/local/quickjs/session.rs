@@ -285,6 +285,10 @@ pub(in crate::local) async fn connection(
                     let id = frame_id(&message["id"])?;
                     match message["type"].as_str() {
                         Some("invoke") if message.get("contract").is_none() => {
+                            if message["action"] != true {
+                                send(socket, result(id, Some("local() was removed; use client.action(...)"), Value::Null)).await?;
+                                continue;
+                            }
                             if active.contains_key(&id) {
                                 return Err("Duplicate plugin process invocation".into());
                             }
@@ -356,7 +360,7 @@ pub(in crate::local) async fn action(
     };
     let host = pool.host(&lease.build, &lease.slot, false).await?;
     let frame = json!({
-        "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
+        "type":"invoke", "fn":action.name, "args":action.args, "admittedAction":true,
     });
     let result = tokio::select! {
         () = pool.stopping.cancelled() => return Err("Runner stopped".into()),
@@ -377,7 +381,7 @@ async fn root_call(
     frame: Value,
     cancel: CancellationToken,
 ) -> (u64, Result<Value, String>) {
-    let label = format!("Plugin {} local function cancelled", lease.build.id);
+    let label = format!("Plugin {} caller action cancelled", lease.build.id);
     let response = tokio::select! {
         biased;
         () = cancel.cancelled() => Err(label),
@@ -400,24 +404,17 @@ async fn invoke_root(
     if let Some(fields) = frame.as_object_mut() {
         fields.remove("threadId");
         fields.remove("admittedAction");
-        if fields.get("action") == Some(&Value::Bool(true))
-            && let Some(note) = fields.remove("note")
-        {
+        if let Some(note) = fields.remove("note") {
             fields.insert("actionDepth".into(), note["depth"].clone());
             fields.insert("threadId".into(), note["thread"].clone());
         } else {
             fields.remove("actionDepth");
         }
     }
-    let _slot = if frame["action"] == true {
-        Some(
-            pool.actions
-                .try_acquire()
-                .map_err(|_| "Runner action capacity exceeded")?,
-        )
-    } else {
-        None
-    };
+    let _slot = pool
+        .actions
+        .try_acquire()
+        .map_err(|_| "Runner action capacity exceeded")?;
     let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
@@ -706,7 +703,7 @@ impl<'a> CallRoute<'a> {
                 Invocation::Ordinary { upstream } | Invocation::Linked { upstream, .. },
             ) => CallUpstream::Embedded(upstream.ok_or("Missing embedded Runner operation scope")?),
             (Upstream::Window(connection), _) => {
-                let action_ops = (frame["action"] == true)
+                let action_ops = matches!(invocation, Invocation::Root)
                     .then(|| {
                         host.action_ops
                             .get_or_init(|| WindowActionOps::new(pool, &host.build))
@@ -878,14 +875,7 @@ impl<'a> CallRoute<'a> {
                     .await;
             }
             _ => {
-                // Legacy local contract handlers use local.run* inside the same admitted invocation.
-                let operation = match name {
-                    "local.runQuery" => "action.runQuery",
-                    "local.runMutation" => "action.runMutation",
-                    "local.runAction" => "plugin.call",
-                    name => name,
-                }
-                .to_owned();
+                let operation = name.to_owned();
                 match upstream
                     .operations()
                     .dispatch_call(&operation, frame["payload"].take())
@@ -922,7 +912,7 @@ impl<'a> CallRoute<'a> {
 
         if matches!(
             fields.get("name").and_then(Value::as_str),
-            Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
+            Some("plugin.call")
         ) {
             fields.insert(
                 "continuation".into(),
@@ -1094,14 +1084,14 @@ mod tests {
         assert!(route.thread.get().is_none());
 
         let mut query = json!({
-            "name": "local.runQuery",
+            "name": "plugin.call",
             "continuation": {"depth": 0, "thread": "chat/threads:forged"},
             "threadId": "chat/threads:forged",
         });
         route.attach_continuation(&mut query, false);
         assert_eq!(
             query,
-            json!({"name": "local.runQuery", "continuation": {"depth": 1, "thread": null}})
+            json!({"name": "plugin.call", "continuation": {"depth": 1, "thread": null}})
         );
     }
 

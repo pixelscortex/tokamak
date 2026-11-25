@@ -65,7 +65,7 @@ They cover loopback, desktop token authentication and a configured origin list.
 
 ## Plugin imports
 
-Production source (server, window and local part; tests excluded) must stay inside
+Production source (server, window and caller actions; tests excluded) must stay inside
 its own plugin folder. Relative paths, absolute paths, source aliases and
 symlinks cannot reach another folder. Dependencies installed through
 `node_modules`, including workspace packages, are allowed; another plugin's

@@ -146,7 +146,7 @@ throws clearly when a custom transport has not implemented it.
 An action without an `on` setting runs beside the server in its action process.
 Set `on: "caller"` to run it in the caller's desktop Runner. It can use
 `ctx.proc`, Runner Node modules such as `node:fs/promises` and `node:path`,
-and the program scopes and cancellation controls used by local functions.
+and the program scopes and cancellation controls below.
 The Runner needs the matching plugin build installed. Use a literal
 `on: "caller"` or `on: "server"` in a definition so the builder can place its
 imports. Queries and mutations still run on the workspace server.
@@ -182,18 +182,40 @@ as a person on an embedded Runner's machine uses that Runner, including for
 nested actions. For a shared workspace, the window forwards caller actions
 and their nested caller actions to its own Runner.
 
+`ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
+one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
+a signal. The invocation stays alive until the handler settles. To cancel
+from the window, pass `{ signal }` to `client.action`; the plugin process stops programs
+still running for that invocation. Use `node:fs/promises` for local files.
+
+**Await the programs you need finished before returning.** Any
+call (including a routed contract method) can return while its unawaited
+programs are still being reaped. These programs still count toward the host's
+256-program limit. Normal cleanup sends TERM and gives a live process group
+up to two seconds before sending KILL.
+
+Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
+started through `scoped.proc` and providers selected with `scoped`. Calling
+`forceStop()` ends those process groups without cancelling the invocation
+or its other programs. `withPrograms` can return while the scope
+is still being reaped. Force stop sends KILL immediately, including to groups
+already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
+actions so the lookup follows the caller across awaits.
+Queries and mutations still use `contract.list()` and `contract.get(id)`.
+
+Caller actions have no database context. Use `ctx.runQuery`,
+`ctx.runMutation`, or `ctx.runAction` to call the connected server. Use public
+`api` references when the window forwards calls to the Runner.
+
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
-Providers can implement its methods with `action({ on: "caller", handler })`
-or `local()`. Methods run inside the Runner with live input, including
-callbacks, signals, and channels. Existing `place: "local"` contracts still work.
+Providers can implement its methods with `action({ on: "caller", handler })`. Methods run inside the Runner with live input, including
+callbacks, signals, and channels.
 
 Both Runner routes support local contracts and their channels. On a shared
 workspace the window connects with the public client API, so private function
 calls and server contract discovery return `runnerCapabilityUnavailable`
 with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
-are available on the embedded Runner path. A Runner connected directly to
-its workspace server can make these calls; a shared-server window currently
-has the same limits as `local()`.
+are available on the embedded Runner path.
 
 Runner actions use the Runner's program scope and lifetime rules, including
 no fixed deadline while the build is current. When the build is retired, the
@@ -241,61 +263,6 @@ callee's writes roll back. The caller can handle it and commit its own writes,
 or return the failure to roll back the caller's writes too. Actions are not
 transactional: returning `fail` from an action does not undo mutations it
 already called. Throw for unexpected errors.
-
-## Local functions
-
-`local()` is being phased out. Use an [action with `on: "caller"`](#choose-where-an-action-runs) for new work.
-
-`local({ args, handler })` runs in the client's local part. Put it
-under the plugin's `src/`; it can share a module with server functions.
-The plugin build emits its own `local.js` and a typed reference in the
-generated `api`. The desktop client uses the matching plugin build installed
-on the computer. A browser without the desktop client cannot run it.
-
-```ts
-import { local } from "@tokamak/sdk";
-import { api } from "./_generated/api";
-
-export const collect = local({
-  handler: async (ctx) => {
-    const program = ctx.proc(["git", "status", "--short"], { cwd: "/path/to/repo" });
-    for await (const text of program.stdout) {
-      await ctx.runMutation(api.records.save, { text });
-    }
-    return await program.exited;
-  },
-});
-// From the window: await client.local(api.jobs.collect, {});
-```
-
-`client.hasLocal` is true when the window has a local part (the desktop
-client); in a plain browser `client.local` throws, so check it first when local
-work is optional.
-
-`ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
-one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
-a signal. The invocation stays alive until the handler settles. To cancel
-from the window, pass `{ signal }` to `client.local`; the plugin process stops programs
-still running for that invocation. Use `node:fs/promises` for local files.
-
-**Await the programs you need finished before returning.** Any
-call (including a routed contract method) can return while its unawaited
-programs are still being reaped. These programs still count toward the host's
-256-program limit. Normal cleanup sends TERM and gives a live process group
-up to two seconds before sending KILL.
-
-Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
-started through `scoped.proc` and providers selected with `scoped`. Calling
-`forceStop()` ends those process groups without cancelling the invocation
-or its other programs. `withPrograms` can return while the scope
-is still being reaped. Force stop sends KILL immediately, including to groups
-already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
-local functions and server actions so the lookup follows the caller across awaits.
-Queries and mutations still use `contract.list()` and `contract.get(id)`.
-
-Local functions have no database context. Use `ctx.runQuery`,
-`ctx.runMutation`, or `ctx.runAction` with references from the public `api` to
-call the connected server. Only server functions can use `_generated/internal`.
 
 ## Build and consume typed references
 
@@ -474,22 +441,21 @@ SurrealDB integration remains for the host issues and their tests.
 
 ## Plugin process and action process
 
-On macOS and Linux, a plugin process runs local functions and caller actions.
+On macOS and Linux, a plugin process runs caller actions.
 The action process runs server actions in `tokamak-plugin-host`. Queries and mutations run
-in the server's engine. On Windows, local functions and server actions report
+in the server's engine. On Windows, caller actions and server actions report
 “Plugin code is not supported on Windows yet.”
 
-A local function can import `node:path`, `node:os`, `node:crypto`,
-`node:url`, and `node:fs/promises`. Caller actions can also import
-`node:fs/promises`; an action sent to the server returns `noMachine` if it
+A caller action can import `node:path`, `node:os`, `node:crypto`,
+`node:url`, and `node:fs/promises`; an action sent to the server returns `noMachine` if it
 uses that module. The build checks imports,
 including bare names such as `path`. Unsupported imports such as `node:timers`,
 `events`, or `node:path/posix` fail the build. Built-ins reached indirectly,
 such as `process.getBuiltinModule`, `import.meta.require`, `process.binding`,
-or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a local
-function to run a separate program when needed.
+or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a caller
+action to run a separate program when needed.
 
-Local functions get `process.platform` (`darwin` or `linux`), an
+Caller actions get `process.platform` (`darwin` or `linux`), an
 empty `process.versions`, and a snapshot in `process.env`. Writing to that
 object does not change the environment of later programs. Pass `env` to
 `ctx.proc` instead. The local host supplies global timers and fetch. It caps
@@ -607,7 +573,7 @@ the device.
 
 ### Call notes
 
-Queries, mutations, actions and local functions receive a read-only
+Queries, mutations, and actions receive a read-only
 `ctx.call` with `user`, `device`, `depth`, and an optional `threadId`.
 Anonymous calls have `null` for `user` and `device`; `ctx.auth` behaves
 as before.
@@ -626,9 +592,9 @@ are visited in key order and arrays in element order.
 access check; verify the caller's access before reading or changing that thread.
 
 The Runner preserves the note across routed local contracts and when a
-local function calls a server query, mutation, or action through the window.
+caller action calls a server query, mutation, or action through the window.
 The server uses the window's authenticated identity and advances the depth.
-A typed thread ID in the local function's own arguments carries into its
+A typed thread ID in the caller action's own arguments carries into its
 server calls when no earlier call set the thread.
 
 ### Membership hooks
@@ -698,7 +664,7 @@ export const agent = contract<{
   id: string;
   name: string;
   start: (run: { report(text: string): void }) => Promise<void>;
-}>("agent", { place: "local" });
+}>("agent", { on: "caller" });
 ```
 
 A provider declares the defining plugin in `depends` or `optional` in
@@ -717,7 +683,7 @@ export default provide(agent, {
 });
 ```
 
-In a local function or server action belonging to the defining plugin, pass
+In a caller action or server action belonging to the defining plugin, pass
 the handler's `ctx`: call `await agent.list(ctx)`, `await agent.get(id, ctx)`
 (returns `undefined` when absent), or `await agent.get(id, ctx).start(run)`
 for a required method. Queries and mutations leave `ctx` out. Use the awaited
@@ -725,8 +691,8 @@ provider to read data or check optional methods. Lookups use the current
 catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
-A local contract is called from `local`. Declare
-`{ place: "local", dataMethods: true }`. The Runner routes every call
+Declare a Runner contract with `{ on: "caller" }` and call it from a caller
+action. The Runner routes every call
 to the provider's process, reusing the caller's host when the provider is the
 same plugin. Lookups read provider data
 and available method names from that process. Keep the fields static for a
@@ -739,24 +705,23 @@ Pass `{ signal }` to a local contract lookup to cancel its pending routed
 calls without ending the caller's invocation. A method that accepts one object
 can also take that same signal as `input.signal`. QuickJS sends only the other
 fields and assigns the provider invocation's signal to `input.signal` before
-calling the regular `local({ handler })` definition. If the live input uses a different signal than the
+calling the regular `action({ on: "caller", handler })` definition. If the live input uses a different signal than the
 routed call, use `inputSignal` to identify the value to keep off the wire.
 A provider can use `{ unavailable: "…" }` in
 `provide()` to supply a notice for the lookup's `onUnavailable` callback even
 when its process cannot start; errors thrown by the handler still reject.
 
-The plugin build rejects local contracts without `dataMethods: true`, including
-old declarations that mark only some methods as data. QuickJS also refuses
-older built plugins that declare live methods.
+The builder marks caller contracts as plain data in the manifest, and QuickJS
+checks that marker before routing a provider call.
 
-Turn hook authors declare a regular `local({ handler })` and read
+Turn hook authors declare a regular `action({ on: "caller", handler })` and read
 `turn.signal`. The SDK attaches the hook invocation's signal
 as described above. Stop cancels the before hook; after hooks run together
 under one deadline and are also cancelled if the turn is lost. Code stores
 the before snapshot under a Git ref scoped to the thread and turn ID, so a
 replacement Code process can pair it with the after snapshot.
 
-Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
+Use `action({ on: "caller", handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
 All local methods receive the calling member and device in their context. A
 matching provider build must be installed on the client.
@@ -797,7 +762,7 @@ reports within 750 ms, the host can still kill the invocation's programs
 without running JavaScript. A stuck realm may subsequently be reset by the
 watchdog, which also ends its other invocations.
 
-A server contract defaults to `place: "server"`. For each
+A server contract runs on the server by default. For each
 method provide a server function definition such as `internalAction` or
 `internalQuery`; calls obey the usual kind rules and cross the server function
 boundary as JSON. Data fields are JSON, and the implementation uses an object

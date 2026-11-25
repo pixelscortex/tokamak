@@ -5,8 +5,8 @@ description: Declare what other plugins can provide and find their installed imp
 
 Export a typed contract from `src/contracts.ts`. A provider declares the owner
 as a dependency, imports the key from `plugin:<id>/contracts`, and exports a
-`provide(key, implementation)` declaration. Set `{ place: "local", dataMethods: true }` for contracts whose implementations
-run in the local part. Cross-plugin methods on QuickJS exchange plain JSON
+`provide(key, implementation)` declaration. Set `{ on: "caller" }` for contracts whose implementations
+run on the caller’s Runner. Cross-plugin methods on QuickJS exchange plain JSON
 with the provider process. For an optional dependency, the
 provider can keep a byte-identical copy of the owner’s contract file under
 `contracts/<id>.ts`.

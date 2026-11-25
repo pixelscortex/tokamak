@@ -16,7 +16,7 @@ async function fixture(run) {
       `
       import { contract } from "@tokamak/sdk";
       export const service = contract<{ read: (input: { text: string }) => string }>("service");
-      export const line = contract<{ id: string; read: (input: string) => string }>("line", { place: "local", dataMethods: true });
+      export const line = contract<{ id: string; read: (input: string) => string }>("line", { on: "caller", dataMethods: true });
     `,
     );
     const implementation = join(provider, "src/line.ts");
@@ -54,8 +54,8 @@ test("an optional contract provider builds without a built owner and stays in th
     assert.equal(manifest.plugin.optional["line-owner"], "*");
     assert.equal(manifest.plugin.depends?.["line-owner"], undefined);
     assert.deepEqual(
-      manifest.contractProviders.map(({ owner, name, place }) => ({ owner, name, place })),
-      [{ owner: "line-owner", name: "line", place: "local" }],
+      manifest.contractProviders.map(({ owner, name, on }) => ({ owner, name, on })),
+      [{ owner: "line-owner", name: "line", on: "caller" }],
     );
     assert.match(await readFile(join(dist, manifest.entries.local.code), "utf8"), /basename/);
     for (const entry of [manifest.entries.ui, manifest.entries.server])
@@ -92,13 +92,13 @@ test("a local contract must declare every method as plain data", async () => {
     );
     const result = build(provider);
     assert.notEqual(result.status, 0);
-    assert.match(result.stdout + result.stderr, /local contract "line".*non-data methods: live/);
+    assert.match(result.stdout + result.stderr, /dataMethods must be true for caller contracts/);
   });
 }, 30_000);
 
 function serverProviderSource(read) {
   return `
-    import { internalQuery, local, provide, v } from "@tokamak/sdk";
+    import { internalQuery, action, provide, v } from "@tokamak/sdk";
     import * as owner from "plugin:line-owner/contracts";
     const read = ${read};
     export default provide(owner.service, { read });
@@ -131,21 +131,6 @@ test("a server provider must declare its contract owner as a dependency", async 
     const result = build(provider);
     assert.notEqual(result.status, 0);
     assert.match(result.stdout + result.stderr, /line-owner.*(depends|optional)/);
-  });
-}, 30_000);
-
-test("a local provider of a server contract gets the local placement fix", async () => {
-  await fixture(async (_owner, provider, implementation) => {
-    await writeFile(
-      implementation,
-      serverProviderSource("local({ handler: (_ctx, { text }: { text: string }) => text })"),
-    );
-    const result = build(provider);
-    assert.notEqual(result.status, 0);
-    assert.match(
-      result.stdout + result.stderr,
-      /contract "service" is server-side.*\{ place: "local", dataMethods: true \}/,
-    );
   });
 }, 30_000);
 

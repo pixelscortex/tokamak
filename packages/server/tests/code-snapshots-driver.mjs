@@ -135,14 +135,14 @@ export default definePlugin({ id: "other-hook", version: "1.0.0", depends: ["ai"
   await writeFile(
     join(folder, "src/server/hook.ts"),
     `
-import { local, provide } from "@tokamak/sdk";
+import { action, provide } from "@tokamak/sdk";
 import { turnHooks, type TurnInfo } from "plugin:ai/contracts";
 export const hooks = provide(turnHooks, {
-  before: local({ handler: async (ctx, turn: TurnInfo) => {
+  before: action({ on: "caller", handler: async (ctx, turn: TurnInfo) => {
     if (turn.signal !== ctx.signal || turn.signal.aborted) throw new Error("Missing provider signal");
     return 1 as never; // Non-object hook results have always been ignored.
   } }),
-  after: local({ handler: async (_ctx, turn: TurnInfo) => {
+  after: action({ on: "caller", handler: async (_ctx, turn: TurnInfo) => {
     if (turn.folder.endsWith("/third-party-after")) throw new Error("The example hook could not update its report");
   } }),
 });

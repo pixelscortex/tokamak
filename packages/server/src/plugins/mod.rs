@@ -100,7 +100,8 @@ use assets::asset;
 use contracts::Contracts;
 pub(crate) use contracts::register_contract_list;
 pub use contracts::{
-    ContractDeclaration, ContractPlace, ContractRegistration, SignInField, SignInForm, SignInMethod,
+    ContractDeclaration, ContractRegistration, ContractTarget, SignInField, SignInForm,
+    SignInMethod,
 };
 use dependencies::resolve;
 pub(crate) use loading::StartupPolicy;

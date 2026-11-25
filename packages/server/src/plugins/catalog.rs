@@ -174,10 +174,10 @@ impl Catalog {
             if let Some(object) = value.as_object_mut() {
                 object.remove("pluginFunctions");
                 if let Some(Value::Array(providers)) = object.get_mut("contractProviders") {
-                    providers.retain(|provider| provider["place"] == "local");
+                    providers.retain(|provider| provider["on"] == "caller");
                 }
             }
-            let routes = manifest.contracts.iter().filter(|key| key.place == ContractPlace::Local)
+            let routes = manifest.contracts.iter().filter(|key| key.on == ContractTarget::Caller)
                 .map(|key| (key.name.clone(), json!(self.runner_contract_providers(id, key))))
                 .collect::<serde_json::Map<_, _>>();
             if !routes.is_empty() {
@@ -251,7 +251,7 @@ pub(crate) fn runner_provider_routes(
         .filter(|entry| {
             entry.owner == owner
                 && entry.name == declaration.name
-                && entry.place == ContractPlace::Local
+                && entry.on == ContractTarget::Caller
         })
         .collect();
     if registrations

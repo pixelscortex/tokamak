@@ -51,9 +51,9 @@ export async function initialize(
 
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
-    contractProviders?: Record<string, Provider<"local">>;
+    contractProviders?: Record<string, Provider<"caller">>;
   };
-  const dispatch = workerDispatch("local", root.functions, emit, nextOp, {
+  const dispatch = workerDispatch("runner", root.functions, emit, nextOp, {
     createPrograms: (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     contracts: workerContracts(),
     contract: dataContracts(root),

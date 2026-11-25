@@ -1,6 +1,6 @@
 # Plugin host
 
-On macOS and Linux, the plugin process runs local functions and the action
+On macOS and Linux, the plugin process runs caller actions and the action
 process runs server actions. Both use QuickJS. On Windows, these calls report
 “Plugin code is not supported on Windows yet.” See the SDK's
 [plugin process and action process guide](../sdk/README.md#plugin-process-and-action-process)
@@ -54,7 +54,7 @@ is delayed by 250 ms, doubling with repeated crashes up to 30 seconds. A run
 of at least 60 seconds resets the delay. Routed calls fail immediately during
 that delay so a lookup can continue with other providers. Reload retires changed builds; unchanged local bytes reuse the existing process.
 
-Local functions can start up to 256 live programs per host with `proc` and
+Caller actions can start up to 256 live programs per host with `proc` and
 `withPrograms`. Programs get their own process groups. On macOS and Linux a
 guardian in each group watches a private pipe held by the host. Closing it
 sends TERM to the group. The guardian exits as soon as no live programs remain.
@@ -85,7 +85,7 @@ runs so low that QuickJS cannot run the rejection handler, the call can
 still be cancelled. Process exit fails outstanding calls, and the next call
 starts a new process.
 
-Local functions get `process.platform` (`darwin` or `linux`), an empty
+Caller actions get `process.platform` (`darwin` or `linux`), an empty
 `process.versions` (no `node` entry), and `process.env`, an ordinary object
 with a snapshot of the short launch environment. Setting `process.env.X`
 changes only the snapshot. Pass `env` to `ctx.proc` to set a program's environment.

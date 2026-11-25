@@ -15,11 +15,11 @@ export function nodeModule(path) {
 function unavailable(pluginRoot, importer, module, lane) {
   const file = isAbsolute(importer) ? relative(pluginRoot, importer) : importer;
   const advice = suppliedNodeModules.local.includes(module)
-    ? ' Move it into a local function or an action with on: "caller".'
+    ? ' Move it into an action with on: "caller".'
     : "";
 
   return new Error(
-    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function or caller action.`,
+    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a caller action.`,
   );
 }
 
@@ -36,7 +36,7 @@ export function workerBuiltins(pluginRoot) {
         const module = nodeModule(path);
         if (!module || supplied.includes(module)) return;
 
-        throw unavailable(pluginRoot, importer, module, "local functions");
+        throw unavailable(pluginRoot, importer, module, "caller actions");
       });
     },
   };

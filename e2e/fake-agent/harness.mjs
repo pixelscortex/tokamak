@@ -340,7 +340,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       await mkdir(folder);
       const entry = await readFile(join(plugins, "ai", "local-entry.js"));
       const code =
-        'export const functions = { probe: { kind: "local", args: { kind: "any" }, invoke: () => typeof Bun } };';
+        'export const functions = { probe: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: () => typeof Bun } };';
       await writeFile(join(folder, "local-entry.js"), entry);
       await writeFile(join(folder, "local.js"), code);
 

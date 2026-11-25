@@ -37,7 +37,7 @@ export const add = mutation({
 
 ## Handler context
 
-Queries, mutations, actions and local functions receive `ctx.auth.user`
+Queries, mutations and actions receive `ctx.auth.user`
 (`id`, `name`, `role`) and `ctx.auth.device` (`id`, `name`) from the
 signed-in connection. Subscriptions retain their caller,
 and nested action calls and plugin-to-plugin calls preserve the original user.
@@ -79,13 +79,11 @@ Use an action for effects. Internal functions can be called by their own plugin 
 
 <api-declaration path="../../../../packages/sdk/src/functions.ts" name="pluginOnly" />
 
-## Local functions
+## Choose where an action runs
 
-Local functions run in the local part of the client. Server calls they make use the window’s session. Use `ctx.proc` to run a program and `ctx.signal` to observe cancellation.
+Actions run beside the server by default. Set `on: "caller"` to run an action on the caller’s Runner, where it can use files and start programs with `ctx.proc`. Call it with `client.action` and handle `noMachine` if there is no Runner. Use `ctx.signal` to observe cancellation.
 
-<api-declaration path="../../../../packages/sdk/src/functions.ts" name="local" />
-
-<api-declaration path="../../../../packages/sdk/src/functions.ts" name="LocalContext" />
+<api-declaration path="../../../../packages/sdk/src/functions.ts" name="CallerActionContext" />
 
 <api-declaration path="../../../../packages/sdk/src/local.ts" name="LocalProcess" />
 

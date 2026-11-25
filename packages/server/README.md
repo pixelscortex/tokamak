@@ -492,4 +492,4 @@ Owned-probe measured release executable SHA-256:
 ## Plugin code
 
 See [Plugin host](../host/README.md) for the action process and the Runner's
-plugin process. Local functions and server actions are unavailable on Windows.
+plugin process. Caller actions and server actions are unavailable on Windows.

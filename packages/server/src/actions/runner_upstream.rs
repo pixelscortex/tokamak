@@ -4,7 +4,7 @@ use super::{
 use crate::{
     identity::CallNote,
     plugins::{
-        ContractDeclaration, ContractPlace, LocalDataMethods, Manifest, runner_provider_routes,
+        ContractDeclaration, ContractTarget, LocalDataMethods, Manifest, runner_provider_routes,
     },
     service::Command,
 };
@@ -170,7 +170,7 @@ impl Scope {
             .get(&self.owner)
             .is_some_and(|plugin| {
                 plugin.manifest.contracts.iter().any(|key| {
-                    key.place == ContractPlace::Local
+                    key.on == ContractTarget::Caller
                         && key.name == declaration.name
                         && key.declaration_hash == declaration.declaration_hash
                 })
@@ -198,7 +198,7 @@ impl Scope {
             .manifest
             .contracts
             .iter()
-            .find(|entry| entry.name == name && entry.place == ContractPlace::Local)
+            .find(|entry| entry.name == name && entry.on == ContractTarget::Caller)
             .ok_or_else(|| format!("Unknown local contract: {}/{name}", self.owner))?;
         if !matches!(declaration.data_methods, Some(LocalDataMethods::All(true))) {
             return Err("QuickJS local contracts require dataMethods: true".into());

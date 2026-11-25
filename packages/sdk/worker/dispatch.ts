@@ -15,7 +15,6 @@ export type WorkerMessage =
       args: JsonValue;
       contract?: ContractInvocation;
       routed?: boolean;
-      action?: boolean;
       admittedAction?: boolean;
     }
   | {
@@ -44,7 +43,7 @@ type AttachChannel = (
 ) => { bridge: HostBridge["channel"]; dispose(): void };
 
 export function workerDispatch(
-  kind: "local" | "action",
+  lane: "runner" | "server",
   functions: FunctionRegistry,
   send: (message: object) => void,
   allocateOp: () => number,
@@ -117,7 +116,6 @@ export function workerDispatch(
     args: JsonValue,
     target?: ContractInvocation,
     routed?: boolean,
-    action?: boolean,
     admittedAction?: boolean,
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
@@ -230,13 +228,10 @@ export function workerDispatch(
     try {
       if (
         !(target && options.contract) &&
-        (functions[name]?.kind !== (action && kind === "local" ? "action" : kind) ||
-          (action &&
-            kind === "local" &&
-            functions[name]?.visibility !== Visibility.Public &&
-            !admittedAction))
+        (functions[name]?.kind !== "action" ||
+          (lane === "runner" && functions[name]?.visibility !== Visibility.Public && !admittedAction))
       )
-        throw new Error(`Unknown local ${kind} function: ${name}`);
+        throw new Error(`Unknown action: ${name}`);
       const value =
         target && options.contract
           ? await options.contract(target, args, invocation.host(), recordThread)
@@ -244,7 +239,7 @@ export function workerDispatch(
               functions,
               { name, args },
               invocation.host(),
-              kind === "local" ? recordThread : undefined,
+              lane === "runner" ? recordThread : undefined,
             );
       close();
       if (calls.get(id) === call) {
@@ -281,7 +276,6 @@ export function workerDispatch(
         message.args,
         message.contract,
         message.routed,
-        message.action,
         message.admittedAction,
       );
       if (options.observeInvocation) return invocation;
@@ -312,7 +306,7 @@ export function workerDispatch(
       for (const [id, op] of pending)
         if (op.call === message.id) {
           pending.delete(id);
-          op.reject(new Error(`Plugin ${kind} function cancelled`));
+          op.reject(new Error("Plugin action cancelled"));
         }
       retire(message.id);
     } else throw new Error("Invalid plugin process message");

@@ -15,16 +15,14 @@ import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
 import { resultValidator } from "./result-validator.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
-const serverFunction = (kind) => kind !== "local";
-export function runnerFunction(kind, actionsOnly = false) {
-  return kind === "action" || (!actionsOnly && kind === "local");
-}
+const serverFunction = () => true;
+export const runnerFunction = (kind) => kind === "action";
 export function runnerProvider(provider) {
-  return localProvider(provider) || provider.methods.some((method) => runnerFunction(method.kind, true));
+  return localProvider(provider) || provider.methods.some((method) => runnerFunction(method.kind));
 }
 
 export function runnerActionFiles(modules, providers, on) {
-  const action = (entry) => runnerFunction(entry.kind, true) && (on === undefined || entry.on === on);
+  const action = (entry) => runnerFunction(entry.kind) && (on === undefined || entry.on === on);
   return new Set([
     ...[...modules].filter(([, exports]) => [...exports.values()].some(action)).map(([path]) => path),
     ...providers
@@ -32,9 +30,9 @@ export function runnerActionFiles(modules, providers, on) {
       .map((p) => p.path),
   ]);
 }
-const serverProvider = (provider) => provider.place === "server";
-const localProvider = (provider) => provider.place === "local";
-const action = (kind) => kind === "action";
+const serverProvider = (provider) => provider.on === "server";
+const localProvider = (provider) => provider.on === "caller";
+const transaction = (kind) => kind !== "action";
 const noFunctions = () => false;
 
 export const lanes = {
@@ -46,9 +44,9 @@ export const lanes = {
   },
   server: { keep: serverFunction, provider: serverProvider, method: serverFunction },
   descriptor: {
-    keep: (kind) => serverFunction(kind) && !action(kind),
+    keep: transaction,
     provider: serverProvider,
-    method: (kind) => serverFunction(kind) && !action(kind),
+    method: transaction,
   },
 };
 

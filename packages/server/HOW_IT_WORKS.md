@@ -113,11 +113,11 @@ client; a shared server can serve several members and their devices. The
 server holds threads, messages and plugin tables. Windows subscribe to its
 queries, so every connected window sees the same saved data.
 
-The local part of the client runs plugin functions that need files or programs
+The Runner executes caller actions that need files or programs
 on that computer. For example, AI starts Claude or Codex there using the
 member's own login, while the server stores the reply. The window reaches the
 local part in the desktop app; a plain browser has no local part. On a shared
-server, local functions need matching plugin builds installed on the client.
+server, caller actions need matching plugin builds installed on the client.
 
 Offline writes to shared data are planned. The current client needs a server
 connection to write workspace data.

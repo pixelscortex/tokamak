@@ -52,6 +52,7 @@ function client(): TokamakClient {
       actions.push(name);
       if (name === "chat/folders:resolve") return "/fixture";
       if (!hasMachine) return fail("noMachine", null);
+      if (name === "chat/folders:resolve") return "/fixture";
       if (name === "ai/working:list") return [];
       if (name === "ai/run:stop") return null;
       if (name === "ai/run:steer") return { error: null };
@@ -61,12 +62,7 @@ function client(): TokamakClient {
       return structuredClone(installed) as unknown as JsonValue;
     },
   } as unknown as ClientTransport;
-  return new TokamakClient(transport, {
-    invoke: async (name) => {
-      if (name === "chat/folders:resolve") return "/fixture";
-      throw new Error(`Unexpected local call ${name}`);
-    },
-  });
+  return new TokamakClient(transport);
 }
 
 /** A picker by its "<name>: <value>" text (jsdom drops the space that browsers keep). */
