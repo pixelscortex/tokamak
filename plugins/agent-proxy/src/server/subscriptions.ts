@@ -98,7 +98,7 @@ export const setEnabled = pluginOnly(
  * `maintenance` entry is a mutation), so a screen that shows subscriptions
  * asks for this while it is open, and the proxy will renew each login before
  * it uses it. `waiting` counts logins that could not be renewed now and wait
- * for their next try; a login Claude will not renew turns "Signed out".
+ * for their next try; a login its company will not renew turns "Signed out".
  */
 export const renewLogins = pluginOnly(
   action({

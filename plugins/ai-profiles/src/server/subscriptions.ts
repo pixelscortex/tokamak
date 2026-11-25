@@ -25,7 +25,7 @@ export const list = query({
 /** Starts a sign-in and returns the company's page; `repair` signs a subscription in again. */
 export const startSignIn = action({
   args: {
-    company: v.literal("anthropic"),
+    company: v.union(v.literal("anthropic"), v.literal("openai")),
     method: v.literal("subscription"),
     repair: v.optional(v.string()),
   },
