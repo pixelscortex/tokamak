@@ -1,0 +1,21 @@
+packages/sdk/client.tsx
+  s_7485715999886d::t_2c3c8a0f1f8fd3 204,212-213
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_7485715999886d::t_32328da4c4bec0 4,21-27,32-33,36-39,63-66,75-79,102-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a767287b50ab3f65e0d7a0e8833ed1b6cbcbbaf0",
+  "prompts": {},
+  "sessions": {
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
