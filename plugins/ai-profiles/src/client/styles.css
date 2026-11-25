@@ -8,4 +8,10 @@
    define the variable in, so the utility carries the value itself. */
 @theme inline {
   --container-profiles: 1220px;
+  /* The subscription details (Paper "3 · Subscription · details"): a 912 px column,
+     its accounts 536 px of it. */
+  --container-subscription: 912px;
+  --container-accounts: 536px;
+  /* The 2 px between the card's four 24 px icon buttons, as drawn (TKM-265). */
+  --spacing-hair: 2px;
 }

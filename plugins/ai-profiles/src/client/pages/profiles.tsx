@@ -7,6 +7,10 @@ import { profilesIcon } from "../lib/icons";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
+import { openSubscription } from "../lib/manage";
+import { CardActions } from "../ui/card-actions";
+import { RemoveDialog } from "../ui/remove-dialog";
+import { SubscriptionDetails } from "./subscription";
 
 /**
  * How often the open screen asks the server to renew logins that run out
@@ -39,17 +43,19 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   }, RENEW_EVERY_MS);
   onCleanup(() => clearInterval(timer));
 
-  const start = (repair?: string) =>
-    client.action(api.subscriptions.startSignIn, {
-      company: "anthropic",
-      method: "subscription",
-      ...(repair !== undefined && { repair }),
-    });
+  const start = (repair?: string, addTo?: string) =>
+    addTo !== undefined
+      ? client.action(api.manage.addAccount, { id: addTo })
+      : client.action(api.subscriptions.startSignIn, {
+          company: "anthropic",
+          method: "subscription",
+          ...(repair !== undefined && { repair }),
+        });
   /** "Sign in" on a signed-out card, and "Start again" on an expired one. */
-  async function startAndOpen(repair?: string) {
+  async function startAndOpen(repair?: string, addTo?: string) {
     setProblem(undefined);
     try {
-      const started = await start(repair);
+      const started = await start(repair, addTo);
       if (isFailure(started)) setProblem(started.data.message);
       else setStep({ kind: "sign-in", signIn: started });
     } catch {
@@ -91,8 +97,9 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
         if (still.expired !== open.signIn.expired) setStep({ kind: "sign-in", signIn: still });
         return;
       }
-      const added: Subscription | undefined = open.signIn.repair
-        ? data.subscriptions.find((item) => item.id === open.signIn.repair && item.status === "ok")
+      const target = open.signIn.repair ?? open.signIn.addTo;
+      const added: Subscription | undefined = target
+        ? data.subscriptions.find((item) => item.id === target && item.status === "ok")
         : data.subscriptions.find((item) => item.createdAt >= open.signIn.startedAt);
       if (added) setStep({ kind: "connected", subscription: added });
       else {
@@ -116,7 +123,12 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
 
   return (
     <div class="flex flex-col px-8 pb-12">
-      <section aria-label="Subscriptions" class="mx-auto flex w-full max-w-profiles flex-col gap-3 pt-6">
+      <SubscriptionDetails subscriptions={listed.data()?.subscriptions} />
+      <section
+        aria-label="Subscriptions"
+        hidden={openSubscription() !== undefined}
+        class="mx-auto flex w-full max-w-profiles flex-col gap-3 pt-6"
+      >
         <header class="flex h-8 items-center justify-between">
           <h2 class="m-0 flex items-center gap-2">
             <span class="text-row font-medium text-ink">Subscriptions</span>
@@ -150,6 +162,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
                 }
                 onSignIn={() => startAndOpen(subscription.id)}
+                actions={<CardActions subscription={subscription} />}
               />
             )}
           </For>
@@ -162,7 +175,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   setStep({ kind: "sign-in", signIn });
                 }}
                 onCancel={() => cancel(signIn)}
-                onRestart={() => startAndOpen(signIn.repair)}
+                onRestart={() => startAndOpen(signIn.repair, signIn.addTo)}
               />
             )}
           </For>
@@ -173,10 +186,14 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           </p>
         </Show>
       </section>
+      <RemoveDialog subscriptions={subscriptions()} />
       <AddDialog
         step={step()}
         onStep={setStep}
-        start={start}
+        start={(repair) => {
+          const open = step();
+          return start(repair, open?.kind === "sign-in" ? open.signIn.addTo : undefined);
+        }}
         finish={(signIn, pasted) =>
           local(
             signIn.id,
