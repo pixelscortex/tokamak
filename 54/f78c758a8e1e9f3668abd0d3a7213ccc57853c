@@ -1,0 +1,23 @@
+packages/server/src/data/transaction/references.rs
+  s_62d8de3fec7e8a::t_5ceec0db6ae089 106-108,117-119,149-153
+packages/server/src/plugins/grants.rs
+  s_62d8de3fec7e8a::t_6091501c400196 38,77
+packages/server/tests/internal/references.rs
+  s_62d8de3fec7e8a::t_5e3ed3987d1f40 65,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "54f78c758a8e1e9f3668abd0d3a7213ccc57853c",
+  "prompts": {},
+  "sessions": {
+    "s_62d8de3fec7e8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68ee70d4-9653-4451-880a-97d966f1069a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
