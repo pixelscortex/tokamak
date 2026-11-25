@@ -1,0 +1,19 @@
+packages/sdk/src/protocol.ts
+  s_a318c7bdadc5bd::t_d3effb028cc82b 3,7-14,18-35,37-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1cbbf926c79ba5433694769036e4e0eab4371c5",
+  "prompts": {},
+  "sessions": {
+    "s_a318c7bdadc5bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-45f3-77a0-b99b-dd5e3ad3243d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
