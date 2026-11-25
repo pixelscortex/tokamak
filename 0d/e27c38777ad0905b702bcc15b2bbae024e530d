@@ -1,0 +1,38 @@
+packages/ui/README.md
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 3-4,6-7,10-11,13-23
+  s_f25a3a73ba783c::t_6cfd5c84ddb8ea 24
+packages/ui/src/kit/inputs.tsx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 1-53
+packages/ui/src/input.tsx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 1-86
+packages/ui/src/index.ts
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 14-15
+packages/ui/tests/fields.test.tsx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 1-118
+wiki/content/docs/design/index.mdx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 57,243-244,362-365
+packages/ui/src/switch.tsx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 1-73
+packages/ui/src/kit/kit.tsx
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 12,51
+design/shell.md
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 18-22
+packages/ui/lint/plugin.js
+  s_f25a3a73ba783c::t_a00aaada7b3ba4 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0de27c38777ad0905b702bcc15b2bbae024e530d",
+  "prompts": {},
+  "sessions": {
+    "s_f25a3a73ba783c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc1e9c2e-987a-409a-bf2b-65354272e8a9",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
