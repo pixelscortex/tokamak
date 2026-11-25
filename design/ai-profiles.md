@@ -153,7 +153,15 @@ the converter clips the dialog to the stage while the browser draws it in the
 top layer. The dialog screens share the shell of `Profiles · subscriptions`
 and swap only the Subscriptions section. The Switch's transparent 2 px border
 is left out (Paper measures from inside it). Matched to this branch,
-`feature/tkm-261`.
+`feature/tkm-261`. The four Profiles-section artboards (`Profiles · profiles`, `Profiles · hover a
+profile`, `Profiles · dragging a card`, `Profiles · new profile`) sit in a row of
+their own under the others and were made the same way from `feature/tkm-264`:
+`Profiles · profiles` pasted whole, the other three copied from it with the
+converter's differences applied (opacity, rings, "added", the drop slot, the
+drag ghost and the dialog). The ghost is tilted by hand (the converter keeps no
+rotation). The older Profiles artboards predate the section: under their cards
+the app now also draws "Profiles 0" and "No profiles yet…"; they are left for
+whoever merges this branch with TKM-265's, which redrew `Profiles · subscriptions`.
 
 ## Open questions
 
