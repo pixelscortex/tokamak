@@ -1,21 +1,46 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type MagicString from "magic-string";
 import ts from "typescript";
-import { brand, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
+import { brand, importModule, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
 import { partProps } from "./part-props.ts";
 
-type Part = { target: string; props: string; type: string };
-type Tree = { part?: Part; children: Map<string, Tree>; names: Map<string, number> };
-type Scope = { path: string; tree: Tree; props: string; type: () => string };
+type Part = { target: string; props: string; type: string; fingerprint: string; row?: string };
+type Tree = {
+  part?: Part;
+  children: Map<string, Tree>;
+  names: Map<string, { count: number; node: ts.Node; fixed: boolean }>;
+};
+type Scope = {
+  path: string;
+  tree: Tree;
+  props: string;
+  type: () => string;
+  fingerprint?: string;
+  row?: { item: string; index: string; type: () => string };
+};
 type Binding = { node: ts.ConciseBody; parameter: ts.ParameterDeclaration };
 
 const branch = (): Tree => ({ children: new Map(), names: new Map() });
+const inlineTags = new Set("b code em i kbd s small span strong sub sup time u".split(" "));
+const nativeTags = new Set(
+  "article aside blockquote div dl figcaption figure footer header h1 h2 h3 h4 h5 h6 main nav ol p pre section ul".split(
+    " ",
+  ),
+);
 const voidTags = new Set("area base br col embed hr img input link meta param source track wbr".split(" "));
 
-function child(parent: Tree, name: string) {
-  const count = (parent.names.get(name) ?? 0) + 1;
-  parent.names.set(name, count);
+function child(parent: Tree, name: string, node: ts.Node, fixed = false) {
+  const previous = parent.names.get(name);
+  if (previous && (fixed || previous.fixed)) {
+    throw problem(
+      node,
+      `Duplicate screen segment "${name}" (first declared in ${previous.node.getSourceFile().fileName})`,
+    );
+  }
+  const count = (previous?.count ?? 0) + 1;
+  parent.names.set(name, { count, node: previous?.node ?? node, fixed });
   const key = count === 1 ? name : `${name}$${count}`;
   const tree = branch();
   parent.children.set(key, tree);
@@ -30,8 +55,12 @@ function segment(name: string) {
 
 export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin: string, root: string) {
   const files = new Map<ts.SourceFile, Map<Element, Part>>();
-  const bindings = new Map<ts.SourceFile, Binding[]>();
-  const paths = new Set<string>();
+  const bindings = new Map<ts.SourceFile, (Binding & { name: string })[]>();
+  const rows = new Map<
+    ts.SourceFile,
+    { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[]
+  >();
+  const paths = new Map<string, string>();
   const tree = branch();
   const checker = program.getTypeChecker();
   const module = checker.getSymbolAtLocation(entry);
@@ -51,16 +80,53 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
   const { propsType, privateDeclarations } = partProps(entry, checker, root, sources);
   const aliases = new Map<string, string>();
+  let captures = 0;
+  const solidBuiltins = new Set([
+    "Show",
+    "For",
+    "Index",
+    "Switch",
+    "Match",
+    "Suspense",
+    "ErrorBoundary",
+    "Dynamic",
+    "Portal",
+    "Errored",
+  ]);
+
+  function solidTag(tag: ts.JsxTagNameExpression) {
+    const name = ts.isPropertyAccessExpression(tag) ? tag.name : tag;
+    const binding = checker.getSymbolAtLocation(ts.isPropertyAccessExpression(tag) ? tag.expression : tag);
+    const declaration = binding?.declarations?.find(
+      (node) => ts.isImportSpecifier(node) || ts.isNamespaceImport(node),
+    );
+    const module = importModule(declaration);
+    if (module !== "solid-js" && module !== "@solidjs/web" && module !== "solid-js/web") return;
+    return declaration && ts.isImportSpecifier(declaration)
+      ? (declaration.propertyName ?? declaration.name).text
+      : name.getText();
+  }
+
+  function alias(shape: string) {
+    if (shape === "{}") return shape;
+    const name = aliases.get(shape) ?? `Props${aliases.size + 1}`;
+    aliases.set(shape, name);
+    return name;
+  }
+
   for (const source of sources) {
     const elements = new Map<Element, Part>();
-    const pending: Binding[] = [];
+    const pending: (Binding & { name: string })[] = [];
+    const rowBindings: { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[] = [];
     const base: Scope = { tree, path: plugin, props: "{}", type: () => "{}" };
 
     function visit(node: ts.Node, scope: Scope) {
       if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
         const variable = ts.isVariableDeclaration(node.parent)
           ? node.parent
-          : ts.isCallExpression(node.parent) && ts.isVariableDeclaration(node.parent.parent)
+          : ts.isCallExpression(node.parent) &&
+              ts.isVariableDeclaration(node.parent.parent) &&
+              brand(checker.getTypeAtLocation(node.parent), "viewBrand")
             ? node.parent.parent
             : undefined;
         const name = ts.isFunctionDeclaration(node) ? node.name : variable?.name;
@@ -73,31 +139,32 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           const declared = name && checker.getSymbolAtLocation(name);
           const publicName = isDefault ? "default" : declared && exported.get(declared);
           const parameter = node.parameters[0];
-          const props = parameter ? "__tokamakProps" : "{}";
+          const props = parameter ? `__tokamakProps${++captures}` : scope.props;
+          const outer = scope;
           let group: ReturnType<typeof child>;
-          const identity = () => (group ??= child(tree, segment(name?.getText(source) ?? "Default")));
+          const identity = () =>
+            (group ??= child(outer.tree, segment(name?.getText(source) ?? "Default"), node, true));
           let type: string;
           scope = {
             get tree() {
               return identity().tree;
             },
             get path() {
-              return `${plugin}.${identity().key}`;
+              return `${outer.path}.${identity().key}`;
             },
             props,
+            fingerprint: outer.fingerprint,
+            row: outer.row,
             type: () => {
               if (type) return type;
-              if (!parameter) return "{}";
-              pending.push({ node: node.body!, parameter });
+              if (!parameter) return outer.type();
+              pending.push({ node: node.body!, parameter, name: props });
               const callable = declared && checker.getTypeOfSymbolAtLocation(declared, node);
               const shape =
                 publicName && callable && (!ts.isCallExpression(node.parent) || brand(callable, "viewBrand"))
                   ? `Parameters<typeof import(${entryImport})[${JSON.stringify(publicName)}]>[0]`
                   : propsType(parameter);
-              if (shape === "{}") return (type = shape);
-              type = aliases.get(shape) ?? `Props${aliases.size + 1}`;
-              aliases.set(shape, type);
-              return type;
+              return (type = alias(shape));
             },
           };
           visit(node.body, scope);
@@ -106,13 +173,70 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       }
 
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const tag = (ts.isJsxElement(node) ? node.openingElement : node).tagName;
-        const { tree: group, key } = child(scope.tree, segment(tag.getText(source)));
+        const opening = ts.isJsxElement(node) ? node.openingElement : node;
+        const tag = opening.tagName;
+        const builtin = solidTag(tag);
+        if (builtin && solidBuiltins.has(builtin)) {
+          const callback = builtin === "For" ? childCallback(node) : undefined;
+          if (callback && !callback.parameters.some((p) => p.dotDotDotToken)) {
+            const item = `__tokamakItem${++captures}`;
+            const index = `__tokamakIndex${captures}`;
+            let rowType: string | undefined;
+            const row = {
+              item,
+              index,
+              type: () => {
+                if (rowType) return rowType;
+                rowBindings.push({ node: callback, item, index });
+                const [first, second] = callback.parameters;
+                const contextual = checker.getContextualType(callback);
+                const signature = contextual?.getCallSignatures()[0];
+                const contextualItem = signature?.parameters[0];
+                const itemType = first
+                  ? propsType(first)
+                  : contextualItem
+                    ? checker.typeToString(checker.getTypeOfSymbolAtLocation(contextualItem, callback))
+                    : "unknown";
+                const keyed = opening.attributes.properties.find(
+                  (attr): attr is ts.JsxAttribute =>
+                    ts.isJsxAttribute(attr) && attr.name.getText() === "keyed",
+                )?.initializer;
+                const positional =
+                  keyed && ts.isJsxExpression(keyed) && keyed.expression?.kind === ts.SyntaxKind.FalseKeyword;
+                const indexType = second ? propsType(second) : positional ? "number" : "() => number";
+                return (rowType = `{ readonly $row: { readonly item: ${itemType}; readonly index: ${indexType} } }`);
+              },
+            };
+            function visitRow(child: ts.Node) {
+              if (child === callback) visit(callback.body, { ...scope, row });
+              else if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) visit(child, scope);
+              else ts.forEachChild(child, visitRow);
+            }
+            ts.forEachChild(node, visitRow);
+          } else ts.forEachChild(node, (child) => visit(child, scope));
+          return;
+        }
+        const tagName = tag.getText(source);
+        const named = staticName(opening, "data-part") ?? staticName(opening, "id");
+        const { tree: group, key } = child(scope.tree, segment(named ?? tagName), node, named !== undefined);
         const target = `${scope.path}.${key}`;
-        const part = { target, props: scope.props, type: scope.type() };
+        const identity =
+          named === undefined ? opening.attributes.properties.map((p) => p.getText(source)) : [];
+        const fingerprint = createHash("sha256")
+          .update(JSON.stringify([scope.fingerprint, tagName, identity]))
+          .digest("base64url")
+          .slice(0, 12);
+        const type = scope.type();
+        const part = {
+          target,
+          fingerprint,
+          props: scope.props,
+          type: scope.row ? alias(`${type} & ${scope.row.type()}`) : type,
+          row: scope.row && `{ item: ${scope.row.item}, index: ${scope.row.index} }`,
+        };
         group.part = part;
-        paths.add(target);
-        scope = { ...scope, tree: group, path: target };
+        paths.set(target, fingerprint);
+        scope = { ...scope, tree: group, path: target, fingerprint };
         ts.forEachChild(node, (child) => visit(child, scope));
         elements.set(node, part);
       } else ts.forEachChild(node, (child) => visit(child, scope));
@@ -120,6 +244,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     visit(source, base);
     if (elements.size) files.set(source, elements);
     if (pending.length) bindings.set(source, pending);
+    if (rowBindings.length) rows.set(source, rowBindings);
   }
 
   function describe(node: Tree, value: (part: Part) => string, indent = ""): string {
@@ -145,7 +270,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
 
   return {
     has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
-    part: (names: string[]) => paths.has(`${plugin}.${names.join(".")}`),
+    part: (names: string[]) => paths.get(`${plugin}.${names.join(".")}`) ?? false,
     transform(
       source: ts.SourceFile,
       output: MagicString,
@@ -154,9 +279,8 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     ) {
       const elements = files.get(source);
       if (elements) {
-        for (const { node, parameter } of bindings.get(source) ?? []) {
+        for (const { node, parameter, name } of bindings.get(source) ?? []) {
           if (erased(node)) continue;
-          const name = "__tokamakProps";
           const binding = parameter.name.getText(source);
           const destructured = !ts.isIdentifier(parameter.name);
           if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
@@ -164,13 +288,95 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, capture);
           else output.prependLeft(node.getStart(source), `{ ${capture} return (`);
         }
-        for (const [node, part] of elements) {
-          if (!erased(node)) transformElement(node, part, output, source, mounts?.get(node));
+        for (const { node, item, index } of rows.get(source) ?? []) {
+          if (erased(node)) continue;
+          output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
         }
+        const native = new Set<Element>();
+        const nativeRoots = new Map<Element, string>();
+        let island = 0;
+        const tables: string[] = [];
+        function collect(
+          node: Element,
+          inline = false,
+        ): readonly [string, string, readonly unknown[]] | undefined {
+          const opening = ts.isJsxElement(node) ? node.openingElement : node;
+          const part = elements!.get(node);
+          const tag = opening.tagName.getText(source);
+          if (!part || !(inlineTags.has(tag) || (!inline && nativeTags.has(tag))) || mounts?.has(node))
+            return;
+          const inlineChildren = inline || inlineTags.has(tag) || /^(p|h[1-6])$/.test(tag);
+          if (
+            opening.attributes.properties.some(
+              (attr) =>
+                !ts.isJsxAttribute(attr) ||
+                /^(ref|children|on|inner|outer|textContent|use:)/.test(attr.name.getText(source)) ||
+                (attr.initializer && !ts.isStringLiteral(attr.initializer)),
+            )
+          )
+            return;
+          const children: unknown[] = [];
+          if (ts.isJsxElement(node))
+            for (const child of node.children) {
+              if (ts.isJsxText(child)) continue;
+              if (ts.isJsxExpression(child)) {
+                if (!child.expression) continue;
+                const type = checker.getTypeAtLocation(child.expression);
+                if (type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike)) continue;
+                return;
+              }
+              if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) return;
+              const site = collect(child, inlineChildren);
+              if (!site) return;
+              children.push(site);
+            }
+          return [part.target, part.fingerprint, children];
+        }
+        function skipChildren(node: Element) {
+          if (ts.isJsxElement(node))
+            for (const child of node.children) {
+              if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) continue;
+              native.add(child);
+              skipChildren(child);
+            }
+        }
+        // Parent before child: consume closed DOM trees as a single Solid template.
+        for (const node of [...elements.keys()].reverse()) {
+          if (erased(node) || native.has(node)) continue;
+          const site = collect(node);
+          if (!site?.[2].length) continue;
+          skipChildren(node);
+          native.add(node);
+          const name = `__tokamakIsland${++island}`;
+          tables.push(`const ${name} = ${JSON.stringify(site[2])};`);
+          nativeRoots.set(node, name);
+        }
+        // Edit in JSX postorder so adjacent boundaries at the same offset
+        // close the previous sibling before opening the next one.
+        for (const [node, part] of elements) {
+          if (erased(node)) continue;
+          const island = nativeRoots.get(node);
+          if (!island) {
+            if (!native.has(node)) transformElement(node, part, output, source, mounts?.get(node));
+            continue;
+          }
+          const container = ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
+          output.appendLeft(
+            node.getStart(source),
+            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part)}, () => `,
+          );
+          output.appendLeft(node.end, `, ${island})${container ? "}" : ""}`);
+        }
+        if (tables.length) output.prepend(tables.join("\n") + "\n");
         for (const { node } of bindings.get(source) ?? []) {
           if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
         }
-        output.prepend('import { __renderPart as __tokamakRenderPart } from "@tokamak/sdk/client";\n');
+        for (const { node, item, index } of rows.get(source) ?? []) {
+          if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
+        }
+        output.prepend(
+          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart } from "@tokamak/sdk/client";\n',
+        );
       }
       if (source === entry && paths.size)
         output.append(
@@ -215,9 +421,16 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           } catch {
             continue; // The catalog reports invalid artifacts.
           }
-          for (const { target } of installed?.contributes?.["component-action"] ?? []) {
-            if (typeof target !== "string" || !target.startsWith(plugin + ".") || paths.has(target)) continue;
-            const message = `Plugin "${installed.id}" targets missing screen part ${target}; skipping this addition`;
+          for (const { target, fingerprint } of installed?.contributes?.["component-action"] ?? []) {
+            if (typeof target !== "string" || !target.startsWith(plugin + ".")) continue;
+            const current = paths.get(target);
+            const reason = !current
+              ? `targets missing screen part ${target}`
+              : fingerprint && current !== fingerprint
+                ? `targets a changed screen part: path ${target} now names a different element`
+                : "";
+            if (!reason) continue;
+            const message = `Plugin "${installed.id}" ${reason}; skipping this addition`;
             if (reported.has(message)) continue;
             reported.add(message);
             warn(message);
@@ -237,6 +450,15 @@ function readOptional(path: string) {
     return readFileSync(path, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+function staticName(opening: ts.JsxOpeningLikeElement, key: string) {
+  for (const attribute of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attribute) || attribute.name.getText() !== key) continue;
+    const value = attribute.initializer;
+    const expression = value && ts.isJsxExpression(value) ? value.expression : value;
+    if (expression && ts.isStringLiteralLike(expression) && expression.text) return expression.text;
   }
 }
 
@@ -263,6 +485,11 @@ function childCallback(node: Element) {
   );
 }
 
+function partArguments(part: Part) {
+  const row = part.row ? `() => (${part.row})` : "undefined";
+  return `${JSON.stringify(part.target)}, ${JSON.stringify(part.fingerprint)}, ${part.props} ?? {}, ${row}`;
+}
+
 function transformElement(
   node: Element,
   part: Part,
@@ -274,8 +501,7 @@ function transformElement(
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const target = JSON.stringify(part.target);
-  const prefix = `${child ? "{" : ""}__tokamakRenderPart(${target}, ${part.props} ?? {}, (__tokamakContents) => `;
+  const prefix = `${child ? "{" : ""}__tokamakRenderPart(${partArguments(part)}, (__tokamakContents) => `;
   const suffix = `)${child ? "}" : ""}`;
   output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
   const endMount = mount?.suffix ?? "";

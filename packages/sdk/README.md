@@ -498,7 +498,7 @@ plugin. In the add-on, import the parts and export a placement:
 import { after } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Cost = after(chat.parts.Composer.div.div$2, (props) => (
+export const Cost = after(chat.parts.Composer.div.box, (props) => (
   <small>{props.draft.length} characters</small>
 ));
 ```
@@ -506,8 +506,9 @@ export const Cost = after(chat.parts.Composer.div.div$2, (props) => (
 Use `before` and `after` for siblings, `prepend` and `append` for children,
 `wrap` to surround an element, `replace` to substitute another element, or
 `hide` to remove it. A placement and its optional live `when` function
-receive the owning render function's props. If a path disappears, the build
-warns and skips that placement. See the
+receive the owning render function's props, plus `$row.item` and
+`$row.index` in a Solid `For` row. If a path disappears or identifies a
+different element, the build warns and the window skips that placement. See the
 [builder guide](../build/README.md#extending-a-screen) for the naming rule.
 
 ## Caller identity

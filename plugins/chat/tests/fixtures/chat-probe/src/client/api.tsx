@@ -4,13 +4,13 @@ import { after, append, before, prepend, replace, wrap } from "@tokamak/sdk/clie
 import { createSignal, onCleanup } from "solid-js";
 import * as chat from "plugin:chat/client";
 
-export const Question = prepend(chat.parts.Composer.div.div, () => <p>Probe question</p>);
-export const AgentRow = after(chat.parts.Composer.div.div$2, (props) => (
+export const Question = prepend(chat.parts.Composer.div.top, () => <p>Probe question</p>);
+export const AgentRow = after(chat.parts.Composer.div.box, (props) => (
   <p>Probe agent row for {props.threadId ?? "a new thread"}</p>
 ));
 // Only under the last message: `when` reads the props of each message.
 export const ChangeCard = append(
-  chat.parts.Message.article.div$2,
+  chat.parts.Message.article.footer,
   (props) => <p>Probe change card in {props.threadId}</p>,
   {
     when: (props) => props.isLast,
@@ -18,7 +18,7 @@ export const ChangeCard = append(
 );
 // Appending a user message takes away this frame while leaving the reply and its other layers in place.
 export const LastReplyFrame = wrap(
-  chat.parts.Message.article.div$2,
+  chat.parts.Message.article.footer,
   (props) => <aside>{props.children}</aside>,
   {
     order: -1,
@@ -27,7 +27,7 @@ export const LastReplyFrame = wrap(
 );
 // Local state detects an accidental remount when the neighboring frame's condition flips.
 export const ReplyActions = wrap(
-  chat.parts.Message.article.div$2,
+  chat.parts.Message.article.footer,
   (props) => (
     <>
       <ReplyDisclosure part="footer" message={props.message} />
@@ -37,7 +37,7 @@ export const ReplyActions = wrap(
   { when: (props) => props.message.role === "assistant" && props.next?.role !== "assistant" },
 );
 export const ReplyWork = before(
-  chat.parts.Message.article.div,
+  chat.parts.Message.article.body,
   (props) => <ReplyDisclosure part="body" message={props.message} />,
   { when: (props) => props.message.role === "assistant" },
 );
@@ -65,15 +65,15 @@ function ReplyDisclosure(props: { part: "body" | "footer"; message: chat.Message
   );
 }
 
-export const Heading = replace(chat.parts.Empty.div.div.h2, () => <h2>What should Probe work on?</h2>);
-export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.span, (props) => (
+export const Heading = replace(chat.parts.Empty.div.div.heading, () => <h2>What should Probe work on?</h2>);
+export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.status, (props) => (
   <span aria-label={`Probe status of ${props.thread.title}`}>●</span>
 ));
 export const Detail = append(
-  chat.parts.ThreadRow.ListboxItem.span.span$2,
+  chat.parts.ThreadRow.ListboxItem.span.detail,
   () => <span>opus 5.5 · invoices-app</span>,
   {
     when: (props) => props.thread.title === "Add CSV export",
   },
 );
-export const Branch = after(chat.parts.Header.div.div, () => <span>Probe branch</span>);
+export const Branch = after(chat.parts.Header.div.title, () => <span>Probe branch</span>);

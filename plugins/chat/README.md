@@ -78,16 +78,16 @@ import { onCleanup } from "solid-js";
 import { after, append, prepend, replace } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Row = after(chat.parts.Composer.div.div$2, AgentRow);
-export const Question = prepend(chat.parts.Composer.div.div, PermissionCard, {
+export const Row = after(chat.parts.Composer.div.box, AgentRow);
+export const Question = prepend(chat.parts.Composer.div.top, PermissionCard, {
   when: (c) => waiting(c.threadId),
 });
-export const Card = append(chat.parts.Message.article.div$2, ChangeCard, {
+export const Card = append(chat.parts.Message.article.footer, ChangeCard, {
   when: (m) => !m.next || m.next.role === "user",
 });
-export const Heading = replace(chat.parts.Empty.div.div.h2, AgentHeading);
-export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.span, StatusIcon);
-export const Branch = after(chat.parts.Header.div.div, BranchChip);
+export const Heading = replace(chat.parts.Empty.div.div.heading, AgentHeading);
+export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.status, StatusIcon);
+export const Branch = after(chat.parts.Header.div.title, BranchChip);
 
 // After each Send, once the message is stored and the folder exists on this computer:
 // { threadId, messageId, text, folder, first }.

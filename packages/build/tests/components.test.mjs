@@ -97,7 +97,7 @@ test("a renamed part warns about the installed addon and only its stale action i
       'Plugin "addon" targets missing screen part owner.Picker.section.Price',
     );
     expect((await manifest(addon)).plugin.contributes["component-action"]).toEqual([
-      { id: "Note", action: "after", target: "owner.Picker.section.aside" },
+      expect.objectContaining({ id: "Note", action: "after", target: "owner.Picker.section.aside" }),
     ]);
   });
 }, 30_000);
@@ -118,5 +118,73 @@ test("two replacements of the same compiler named element fail the build", async
     const failure = build(addon);
     expect(failure.status).not.toBe(0);
     expect(failure.stderr).toContain("First and Second both replace owner.Picker.section.Price");
+  });
+}, 30_000);
+
+test("same-tag insertions keep named parts and warn when a positional part changes identity", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      import { Show } from "solid-js";
+      export function Message(props: { text: string }) {
+        const helper = () => <i>{props.text}</i>;
+        const items = [props.text].map(text => <li>{text}</li>);
+        return <article><div class="body"/><div data-part="footer" id="bar"/><div id="123"/>{helper()}{items}</article>;
+      }
+    `,
+    );
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      `
+      import { replace, append } from "@tokamak/sdk/client";
+      import { parts } from "plugin:owner/client";
+      export const Body = replace(parts.Message.article.div, () => "body");
+      export const Footer = append(parts.Message.article.footer, () => "footer");
+      export const Title = append(parts.Message.article["123"], () => "title");
+      export const Helper = append(parts.Message.helper.i, ({ text }) => text);
+      export const Row = append(parts.Message.li, ({ text }) => text);
+    `,
+    );
+    built(addon);
+
+    const entry = resolve(owner, "src/main.tsx");
+    const original = await readFile(entry, "utf8");
+    await writeFile(
+      entry,
+      original.replace(
+        '<div class="body"/>',
+        '<div class="notice"/><Show when={true}><div class="body"/></Show>',
+      ),
+    );
+    const result = build(owner);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain(
+      'Plugin "addon" targets a changed screen part: path owner.Message.article.div now names a different element',
+    );
+    expect(result.stderr).not.toMatch(/targets .*owner\.Message\.article\.(footer|123)/);
+    expect(await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8")).toContain(
+      "owner.Message.article.div$2",
+    );
+  });
+}, 30_000);
+
+test("duplicate top-level render names report both files", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      export { Message as Helper } from "./a-helpers";
+      export function Message() { return <article/>; }
+    `,
+    );
+    await writeFile(resolve(owner, "src/a-helpers.tsx"), "export function Message() { return <div/>; }");
+    const result = build(owner);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/main\.tsx.*Duplicate screen segment "Message".*a-helpers\.tsx/);
   });
 }, 30_000);

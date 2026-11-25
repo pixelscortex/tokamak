@@ -29,10 +29,10 @@ generated references in `src/server/_generated/` and component declarations in
   public generated references. Use `useClient().local(ref, args)` when the
   client has a local part, and `auth.me()` to read the signed-in member.
   Export a page with `view({ route: "/", title: "Editor" }, () => <Editor />)`.
-  Use `component("editor", {}, () => <section part="tools">…</section>)` to
-  expose an element from a reusable component. Mark an element `locked` to
-  forbid actions on it. A dependent plugin imports `plugin:<id>/client` and
-  exports an action such as `after(owner.Editor.tools, Tools)`. The actions
+  Write plain JSX. A build publishes typed paths under the client entry's
+  `parts` export. A dependent plugin imports `plugin:<id>/client` and
+  exports an action such as `after(owner.parts.Editor.section.button, Tools)`.
+  A static `data-part` or `id` supplies the path segment when present. The actions
   are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.

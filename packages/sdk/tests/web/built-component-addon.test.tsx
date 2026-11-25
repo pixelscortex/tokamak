@@ -3,7 +3,7 @@ import { render } from "@solidjs/web";
 import { expect, test, vi } from "vitest";
 import { createPluginLoader, type PluginModuleHost } from "../../../runtime/js/plugins";
 import { ExtensionProvider } from "../../client";
-import { Composer } from "./fixtures/parts/owner/src/client/api";
+import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
 import { loadActions, manifest, RenamedComposer } from "virtual:built-component-addon";
 
 test.each([
@@ -13,7 +13,7 @@ test.each([
     matches: true,
   },
   {
-    title: "an installed add-on keeps its other placement after a part is renamed",
+    title: "an installed add-on skips renamed and shifted parts while its other placements render",
     Screen: RenamedComposer,
     matches: false,
   },
@@ -56,6 +56,7 @@ test.each([
     () => (
       <ExtensionProvider host={loader}>
         <Screen label="Send" lifecycle={() => {}} />
+        <Labels labels={["work", "quick"]} />
       </ExtensionProvider>
     ),
     root,
@@ -63,6 +64,13 @@ test.each([
   try {
     await waitFor(() => expect(root.querySelector("section + p")?.textContent).toBe("Notes for Send"));
     expect(root.querySelector("button + small")?.textContent).toBe(matches ? "Built for Send" : undefined);
+    expect(root.querySelector('[aria-label="replacement"]') !== null).toBe(matches);
+    expect(root.querySelector('[aria-label="body"]') !== null).toBe(!matches);
+    expect(root.querySelector('[aria-label="notice"]') !== null).toBe(!matches);
+    expect([...root.querySelectorAll("span + small")].map((row) => row.textContent)).toEqual([
+      "Profile 1: work of 2",
+      "Profile 2: quick of 2",
+    ]);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/addon.*MissingBadge.*manifest/));
   } finally {
     dispose();

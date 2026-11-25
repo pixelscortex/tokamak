@@ -70,7 +70,7 @@ function SnapshotNotice(props: chat.MessageProps) {
   );
 }
 
-export const Notices = append(chat.parts.Message.article.div$2, SnapshotNotice, {
+export const Notices = append(chat.parts.Message.article.footer, SnapshotNotice, {
   when: ({ message }) =>
     message.role === "assistant" &&
     message.status !== "streaming" &&
@@ -94,15 +94,15 @@ function SnapshotCleanup() {
   return null;
 }
 
-export const Cleanup = prepend(chat.parts.Composer.div.div, SnapshotCleanup);
+export const Cleanup = prepend(chat.parts.Composer.div.top, SnapshotCleanup);
 
 /** The change card under the last reply of a turn, only when the turn changed something. */
-export const Changes = append(chat.parts.Message.article.div$2, ChangeCard, {
+export const Changes = append(chat.parts.Message.article.footer, ChangeCard, {
   when: (m) => lastOfTurn(m) && turnChanged(m),
 });
 
 /** The branch after the thread's title. */
-export const Branch = after(chat.parts.Header.div.div, BranchChip);
+export const Branch = after(chat.parts.Header.div.title, BranchChip);
 
 /** The layout control that opens the review panel, before the thread menu. */
 export const Review = before(chat.parts.Header.div.ThreadMenu, ReviewToggle);

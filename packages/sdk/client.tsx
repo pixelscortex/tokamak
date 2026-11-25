@@ -1,5 +1,5 @@
 /** Client extension points share the shell's owner and plugin generations. */
-import { createEffect, createContext, createMemo, createSignal, onCleanup, useContext } from "solid-js";
+import { createEffect, createContext, createSignal, onCleanup, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { componentActionKind, isComponentAction, type ComponentAction } from "./component-actions";
 export {
@@ -13,7 +13,7 @@ export {
   type ComponentPart,
   type ComponentActionOptions,
 } from "./component-actions";
-import { PartActions, type LoadedPartAction } from "./component-parts";
+import { PartActions, type LoadedPartAction, type PartRegistry } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
 export { state, derived, type StateOptions, type WindowDerived, type WindowState } from "./window-state";
@@ -41,11 +41,65 @@ export function ExtensionProvider(props: {
   onAlerts?: (messages: readonly string[]) => void;
   children?: JSX.Element;
 }) {
-  const [partActions, setPartActions] = createSignal<LoadedPartAction[]>([], { ownedWrite: true });
+  const slots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
+  const current = new Map<string, readonly LoadedPartAction[]>();
+  const observers = new Map<string, Set<(actions: readonly LoadedPartAction[]) => void>>();
+  function slot(target: string) {
+    let signal = slots.get(target);
+    if (!signal)
+      slots.set(target, (signal = createSignal<readonly LoadedPartAction[]>([], { ownedWrite: true })));
+    return signal;
+  }
+
+  const registry: PartRegistry = {
+    read: (target) => slot(target)[0],
+    observe(target, callback) {
+      let listeners = observers.get(target);
+      if (!listeners) observers.set(target, (listeners = new Set()));
+      listeners.add(callback);
+      const actions = current.get(target);
+      if (actions?.length) callback(actions);
+      return () => {
+        listeners.delete(callback);
+        if (!listeners.size) observers.delete(target);
+      };
+    },
+  };
+  function update(
+    target: string,
+    change: (items: readonly LoadedPartAction[]) => readonly LoadedPartAction[],
+  ) {
+    const next = change(current.get(target) ?? []);
+    if (next.length) current.set(target, next);
+    else current.delete(target);
+    slot(target)[1](next);
+    for (const notify of observers.get(target) ?? []) notify(next);
+  }
+
   const plugins = new Map<string, { signature: string; stop(): void }>();
+  const targets = new Map<string, Set<string>>();
   let reported = new Set<string>();
   function clear(id: string) {
-    setPartActions((previous) => previous.filter((c) => c.plugin !== id));
+    for (const target of targets.get(id) ?? [])
+      update(target, (items) => items.filter((c) => c.plugin !== id));
+    targets.delete(id);
+  }
+
+  function publish(id: string, parts: LoadedPartAction[]) {
+    const group = new Map<string, LoadedPartAction[]>();
+    for (const part of parts) {
+      const target = part.action.target;
+      let items = group.get(target);
+      if (!items) group.set(target, (items = []));
+      items.push(part);
+    }
+    targets.set(id, new Set(group.keys()));
+    for (const [target, added] of group)
+      update(target, (items) =>
+        [...items, ...added].sort(
+          (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
+        ),
+      );
   }
   onCleanup(() => {
     for (const plugin of plugins.values()) plugin.stop();
@@ -111,28 +165,14 @@ export function ExtensionProvider(props: {
                 );
               }
             }
-            if (parts.length) setPartActions((previous) => [...previous, ...parts]);
+            if (parts.length) publish(id, parts);
           },
           (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
         );
       }
     },
   );
-  const byTarget = createMemo(() => {
-    const result = new Map<string, LoadedPartAction[]>();
-    for (const action of partActions()) {
-      const values = result.get(action.action.target) ?? [];
-      values.push(action);
-      result.set(action.action.target, values);
-    }
-    for (const values of result.values()) {
-      values.sort(
-        (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
-      );
-    }
-    return result;
-  });
-  return <PartActions value={(target) => byTarget().get(target) ?? []}>{props.children}</PartActions>;
+  return <PartActions value={registry}>{props.children}</PartActions>;
 }
 
 function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPartAction {
@@ -141,6 +181,7 @@ function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPa
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
     action,
+    fingerprint: typeof c.options.fingerprint === "string" ? c.options.fingerprint : undefined,
     enabled(props) {
       try {
         return action.when?.(props) ?? true;
@@ -162,13 +203,13 @@ function resolveReplacements(contributions: CatalogExtension[]) {
   // Resolve from the catalog, before any module loads or when accessors run.
   for (const c of contributions) {
     if (!isReplacement(c)) continue;
-    const target = String(c.options.target);
+    const target = JSON.stringify([c.options.target, c.options.fingerprint]);
     const first = winners.get(target);
     if (!first || (c.installOrder ?? Infinity) < (first.installOrder ?? Infinity)) winners.set(target, c);
   }
   const accepted = contributions.filter((c) => {
     if (!isReplacement(c)) return true;
-    const winner = winners.get(String(c.options.target))!;
+    const winner = winners.get(JSON.stringify([c.options.target, c.options.fingerprint]))!;
     if (winner === c) return true;
     refused.add(
       `Replacement from ${c.plugin} (${c.id}) refused for ${c.options.target}: ${winner.plugin} (${winner.id}) installed first`,
@@ -203,4 +244,4 @@ export {
   type RegionName,
 } from "./regions";
 
-export { renderPart as __renderPart } from "./component-parts";
+export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";

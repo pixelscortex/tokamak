@@ -119,20 +119,30 @@ reference metadata; installed artifacts remain independent of that source.
 ## Extending a screen
 
 Build the owner plugin to publish a typed `parts` export on its public client
-API. No part declarations are needed: the compiler names each JSX tag in
-the plugin's window code, including HTML tags and Solid controls.
+API. No part declarations are needed: every authored JSX element in window
+code is addressable. Solid control flow (`Show`, `For`, `Index`, `Switch`,
+`Match`, `Suspense`, `ErrorBoundary`/`Errored`, `Dynamic`, and `Portal`) is
+transparent, like fragments. Wrapping an element with one does not rename it.
 
-A path starts with the enclosing named render function, followed by the tag
-names along its JSX ancestry. For example, a `Picker` with
-`<Row><Price /></Row>` publishes `parts.Picker.Row.Price`. Fragments and
-inline callbacks do not add segments. Each same-named sibling after the first
-gets `$2`, `$3`, and so on in source order. This count is local to its parent
-and tag name; inserting another tag elsewhere does not change the path.
-Duplicate render function names follow the same rule in source file order.
-Tag names retain their case; punctuation is escaped as a dollar sign, its
-hex code, and a closing dollar sign (for example, `Menu.Root` becomes
-`Menu$2e$Root`). The names `target`, `constructor`, `prototype`, and
-`__proto__` are prefixed with `$`.
+A path follows the named render function and the element's JSX ancestry.
+Nested named functions add a segment under their enclosing function and
+inherit its props if they declare no parameter. Inline callbacks, including
+callbacks passed to calls such as `map` or `createMemo`, add no segment. A
+duplicate render name in the same scope fails the build with both locations
+rather than assigning file-order suffixes.
+
+Each element's segment is its nonempty static `data-part`, then its static
+`id`, then its tag or component name. An explicit name cannot collide with another
+segment in the same parent. Unnamed siblings with the same name use source order:
+`div`, `div$2`, `div$3`. Inserting another tag or editing another branch
+does not renumber them. Adding an earlier unnamed sibling with the same name
+can change a positional path; static names keep their paths. Names retain
+case. Punctuation is escaped as a dollar sign, its hex code, and a closing
+dollar sign (`Menu.Root` becomes `Menu$2e$Root`). The names `target`,
+`constructor`, `prototype`, and `__proto__` are prefixed with `$`.
+
+For example, Chat's message body is `chat.parts.Message.article.body` and
+AI's picker option is `ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item`.
 
 Commit the generated `_generated/components.d.ts` next to the client entry.
 Export actions from the contributing plugin's client entry:
@@ -141,7 +151,7 @@ Export actions from the contributing plugin's client entry:
 import { after } from "@tokamak/sdk/client";
 import * as ai from "plugin:ai/client";
 
-export const Profile = after(ai.parts.Picker.Row.Price, ProfileColumn);
+export const Profile = after(ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item, ProfileColumn);
 ```
 
 `before` and `after` render siblings. `prepend` and `append` render inside
@@ -149,13 +159,20 @@ elements that accept children. `wrap` receives the element as `props.children`.
 `replace` substitutes another element; `hide` also removes the sibling
 additions. `replace` and `hide` dispose the original element and its
 descendants while active. Actions and their live `when` option receive the
-props of the render function that owns the tag. Layers at one position are
+props of the render function that owns the tag. Parts within a `For` row
+also get `props.$row.item` and `props.$row.index`, typed as Solid passes
+them to that callback. Layers at one position are
 ordered by `order` (default 0) and then plugin ID. The first installed
 replacement owns the position even while its condition is false.
 
 If an installed plugin targets a path that is renamed or removed, the build
-warns with the contributing plugin's ID. Only that placement is skipped;
-other placements still render. Update the add-on to use the new path.
+warns with the contributing plugin's ID. The add-on manifest also stores
+a fingerprint of the target and its ancestors: tags and source attributes for
+positional segments, tags alone for elements with a static name. If a path
+now names a different fingerprint, the build warns and the window skips
+only that placement. An insertion between identical opening tags cannot
+be distinguished automatically; use existing stable names for elements
+that need to survive such edits.
 
 ### Contract registrations
 

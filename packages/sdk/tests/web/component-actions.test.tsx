@@ -3,7 +3,7 @@ import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
 import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
-import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
+import { BenchmarkRow, Composer, Labels } from "./fixtures/parts/owner/src/client/api";
 import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
 
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
@@ -198,7 +198,7 @@ test("a later replacement is refused even while the first installed replacement 
 });
 
 test("render props, forwarded and explicit children, and void elements keep their behavior", async () => {
-  const list = parts.Labels.section.For;
+  const list = parts.Labels.section.span;
   const search = parts.Labels.section.input;
   const body = parts.Labels.section.Region.span;
   const button = parts.Labels.section.button;
@@ -322,5 +322,98 @@ test("each action's `when` reads the props of the instance it would change", asy
     } finally {
       dispose();
     }
+  }
+});
+
+test("a cloned native subtree supports live placements and restores its original nodes", async () => {
+  const [layers, setLayers] = createSignal<Layer[]>([]);
+  const [hidden, setHidden] = createSignal(false);
+  const [replaced, setReplaced] = createSignal(false);
+  const header = parts.BenchmarkRow.article.header;
+  const bold = header.b;
+  const additions = [
+    layer(
+      "Before",
+      before(header, () => <i>before</i>),
+      "before",
+      header,
+    ),
+    layer(
+      "After",
+      after(header, () => <i>after</i>),
+      "after",
+      header,
+    ),
+    layer(
+      "Prepend",
+      prepend(header, () => <i>prepend</i>),
+      "prepend",
+      header,
+    ),
+    layer(
+      "Append",
+      append(header, () => <i>append</i>),
+      "append",
+      header,
+    ),
+    layer(
+      "Wrap",
+      wrap(header, (p) => <aside>{p.children}</aside>),
+      "wrap",
+      header,
+    ),
+    layer(
+      "Replace",
+      replace(header, () => <strong>replacement</strong>, { when: replaced }),
+      "replace",
+      header,
+    ),
+    layer("Hide", hide(header, { when: hidden }), "hide", header),
+    layer(
+      "Nested",
+      after(bold, () => <i>nested</i>),
+      "after",
+      bold,
+    ),
+  ];
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={{
+          ...host([]),
+          contributions: (kind) => host(layers()).contributions(kind),
+          load: (id) => host(layers()).load(id),
+        }}
+      >
+        <BenchmarkRow text="message" />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    const original = root.querySelector("header");
+    expect(root.textContent).toBe("Person10:00messageSent");
+    setLayers(additions);
+    await waitFor(() =>
+      expect(root.textContent).toBe("beforeprependPersonnested10:00appendaftermessageSent"),
+    );
+    expect(root.querySelector("aside > header")).toBe(original);
+    setHidden(true);
+    flush();
+    expect(root.textContent).toBe("messageSent");
+    setHidden(false);
+    setReplaced(true);
+    flush();
+    expect(root.textContent).toBe("beforereplacementaftermessageSent");
+    setReplaced(false);
+    flush();
+    expect(root.textContent).toBe("beforeprependPersonnested10:00appendaftermessageSent");
+    setLayers([]);
+    flush();
+    expect(root.textContent).toBe("Person10:00messageSent");
+    expect(root.querySelector("header")).toBe(original);
+  } finally {
+    dispose();
   }
 });

@@ -248,7 +248,7 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  lookup: (owner: string, names: string[]) => boolean | undefined,
+  lookup: (owner: string, names: string[]) => string | false | undefined,
   checkAction: (call: ts.CallExpression) => void,
   edit: (node: ts.Node, replacement: string) => void,
   warn: (message: string) => void,
@@ -271,7 +271,7 @@ function componentActionOptions(
   if (!exists || !brand(type, "componentPartBrand"))
     throw problem(path, `Screen element is not a typed path: ${path.getText()}; build its owner first`);
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
-  const values: Record<string, string | number> = { action, target };
+  const values: Record<string, string | number> = { action, target, fingerprint: exists };
   if (options) {
     if (!ts.isObjectLiteralExpression(options))
       throw problem(options, "Use literal component action options");
@@ -295,8 +295,15 @@ function componentActionOptions(
 function importedPart(path: ts.Expression, checker: ts.TypeChecker) {
   while (ts.isParenthesizedExpression(path)) path = path.expression;
   const names: string[] = [];
-  while (ts.isPropertyAccessExpression(path) && !path.questionDotToken) {
-    names.unshift(path.name.text);
+  while (true) {
+    if (ts.isPropertyAccessExpression(path) && !path.questionDotToken) names.unshift(path.name.text);
+    else if (
+      ts.isElementAccessExpression(path) &&
+      !path.questionDotToken &&
+      ts.isStringLiteralLike(path.argumentExpression)
+    )
+      names.unshift(path.argumentExpression.text);
+    else break;
     path = path.expression;
   }
   if (!ts.isIdentifier(path)) return;

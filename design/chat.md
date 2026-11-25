@@ -22,19 +22,19 @@ The compiler publishes every JSX tag under `parts` in `plugin:chat/client`.
 See `plugins/chat/src/client/_generated/components.d.ts` for the full tree.
 These are the paths used by the starter add-ons:
 
-| Path under `parts`                     | File                   | What goes there                                                                                  |
-| -------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `Composer.div.div`                     | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
-| `Composer.div.div$2`                   | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
-| `Composer.div.div$2.div.SendButton`    | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
-| `Empty.div.div.h2`                     | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
-| `Message.article.header`               | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
-| `Message.article.div`                  | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
-| `Message.article.div$2`                | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
-| `ThreadRow.ListboxItem.span.span.span` | `ui/thread-list.tsx`   | Status icon in the lane before the title.                                                        |
-| `ThreadRow.ListboxItem.span.span$2`    | `ui/thread-list.tsx`   | Agent detail inside the second line; helper rows after it.                                       |
-| `Header.div.div`                       | `ui/thread-header.tsx` | Branch chip after the title.                                                                     |
-| `Header.div.ThreadMenu`                | `ui/thread-header.tsx` | Review toggle before the menu; review panel mount after it.                                      |
+| Path under `parts`                       | File                   | What goes there                                                                                  |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `Composer.div.top`                       | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
+| `Composer.div.box`                       | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
+| `Composer.div.box.div.SendButton`        | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
+| `Empty.div.div.heading`                  | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
+| `Message.article.header`                 | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
+| `Message.article.body`                   | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
+| `Message.article.footer`                 | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
+| `ThreadRow.ListboxItem.span.span.status` | `ui/thread-list.tsx`   | Status icon in the lane before the title.                                                        |
+| `ThreadRow.ListboxItem.span.detail`      | `ui/thread-list.tsx`   | Agent detail inside the second line; helper rows after it.                                       |
+| `Header.div.title`                       | `ui/thread-header.tsx` | Branch chip after the title.                                                                     |
+| `Header.div.ThreadMenu`                  | `ui/thread-header.tsx` | Review toggle before the menu; review panel mount after it.                                      |
 
 Other hooks (not drawn): `holdSend` turns Send off in a composer, `onSent`
 announces each Send, `onDraftSubmit` handles a draft before Send.

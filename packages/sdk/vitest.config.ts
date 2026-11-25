@@ -32,7 +32,12 @@ export default defineConfig({
           '{"name":"owner","version":"1.0.0","type":"module"}',
         );
         writeFileSync(resolve(renamedOwner, "plugin.ts"), readFileSync(resolve(fixtures, "owner/plugin.ts")));
-        writeFileSync(entry, readFileSync(owner, "utf8").replaceAll("SendButton", "PostButton"));
+        writeFileSync(
+          entry,
+          readFileSync(owner, "utf8")
+            .replaceAll("SendButton", "PostButton")
+            .replace('<div aria-label="body" />', '<div aria-label="notice" /><div aria-label="body" />'),
+        );
         build(renamedOwner);
         return `
           export { default as manifest } from ${JSON.stringify(resolve(addon, "dist/manifest.json"))};

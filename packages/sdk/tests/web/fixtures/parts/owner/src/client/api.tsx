@@ -15,6 +15,7 @@ const SendButton = (props: ExampleProps) => {
 export const Composer = (props: ExampleProps) => (
   <section aria-label="toolbar">
     <SendButton {...props} />
+    <div aria-label="body" />
   </section>
 );
 
@@ -34,3 +35,20 @@ export const Labels = (props: { labels: string[] }) => (
     <button {...{ children: "Forwarded" }} />
   </section>
 );
+
+export function BenchmarkRow(props: { text: string }) {
+  return (
+    <article>
+      <header>
+        <b>Person</b>
+        <time>10:00</time>
+      </header>
+      <div data-region="body">
+        <p>{props.text}</p>
+      </div>
+      <footer>
+        <span>Sent</span>
+      </footer>
+    </article>
+  );
+}
