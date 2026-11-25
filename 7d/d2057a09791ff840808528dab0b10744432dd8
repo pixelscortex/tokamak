@@ -1,0 +1,41 @@
+plugins/agent-proxy/src/server/company.ts
+  s_503e9e7253d05e::t_ec82e052450080 37-46,53-56,64,66-70,79,81-85
+plugins/agent-proxy/src/server/signins.ts
+  s_503e9e7253d05e::t_7614b65b6567bf 47-50,158-160,166-168,211,213,219,231,233-234,241-243,245,247,251,269,282,320-326,332-336,362,368,370
+plugins/agent-proxy/tests/openai.test.ts
+  s_503e9e7253d05e::t_cca242238cd48e 22,26-44,113-126,169-170
+plugins/agent-proxy/tests/plan-known.test.ts
+  s_503e9e7253d05e::t_cca242238cd48e 1-62
+plugins/agent-proxy/tests/chatgpt-sign-in.test.ts
+  s_503e9e7253d05e::t_0655d7bfd49dfe 127-128,172-181,189-190,253-272,303-304,307
+plugins/agent-proxy/src/server/schema.ts
+  s_503e9e7253d05e::t_f774996c60969d 22,39-44
+plugins/agent-proxy/src/server/claude.ts
+  s_503e9e7253d05e::t_21b7dab6a585b2 111,160,233,241-247,250
+  s_503e9e7253d05e::t_cca242238cd48e 112-115,168-171
+plugins/agent-proxy/tests/fake-companies/oauth.ts
+  s_503e9e7253d05e::t_f9e892c09d978d 14-15
+plugins/agent-proxy/src/server/openai.ts
+  s_503e9e7253d05e::t_2e200a177f335e 21-22,27-32,41-43,61-68,72-73,159-170,172-186,252-253,292-293,301,309,331,375,404-406,409,428
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_503e9e7253d05e::t_f9e892c09d978d 54-55,140-141,215,430
+plugins/agent-proxy/src/server/logins.ts
+  s_503e9e7253d05e::t_d53099f75455b4 38-42,50-52,170-177,179
+  s_503e9e7253d05e::t_f774996c60969d 125,131,213-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7dd2057a09791ff840808528dab0b10744432dd8",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
