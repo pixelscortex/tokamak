@@ -387,9 +387,10 @@ test("build rejects a trigger as a hook target", async () => {
     await file(
       consumer,
       "src/server/policy.ts",
-      `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
-       const refs = createApi<{functions: {run: FunctionReference<"trigger", {}, null, never, "owner">}}>("owner");
-       export const invalid = hook(refs.functions.run, {});`,
+      `import {createTrigger, defineSchema, defineTable, hook} from "@tokamak/sdk";
+       const trigger = createTrigger(defineSchema({items: defineTable({})}));
+       const changed = trigger("items", () => {});
+       export const invalid = hook(changed, {before: (_ctx, args) => args});`,
     );
     const result = build(consumer);
     expect(result.status).not.toBe(0);

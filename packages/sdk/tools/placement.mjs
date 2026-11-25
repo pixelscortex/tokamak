@@ -88,6 +88,11 @@ export function functionPlacement(root, selected, namespace) {
     ["hook", "trigger"].find((kind) =>
       type.getProperties().some((p) => p.name.startsWith(`__@${kind}Brand@`)),
     );
+  function targetsStage(symbol) {
+    const expression = originalSymbol(checker, symbol)?.valueDeclaration?.initializer;
+    const target = expression && ts.isCallExpression(expression) && expression.arguments[0];
+    return target && stageKind(checker.getTypeAtLocation(target));
+  }
   function hookInfo(type, source) {
     const reference = checker.getTypeOfSymbolAtLocation(type.getProperty("reference"), source);
     const brand = reference.getProperties().find((p) => p.name.startsWith("__@referenceTypes@"));
@@ -124,8 +129,9 @@ export function functionPlacement(root, selected, namespace) {
         if (path.startsWith(resolve(src, "client") + sep))
           throw new Error("Hooks must be exported from the plugin's server part");
         const info = hookInfo(type, source);
+        if (info.targetKind ? !hookable(info.targetKind) : targetsStage(value))
+          throw new Error("Only queries, mutations and actions can be hooked");
         if (!info.targetKind) throw new Error("Hook target reference could not be resolved");
-        if (!hookable(info.targetKind)) throw new Error("Only queries, mutations and actions can be hooked");
         if (namespace && info.owner === namespace) throw new Error("Hooks must target another plugin");
         exports.set(value.name, info);
       } else if (definition?.kind) {
