@@ -374,7 +374,7 @@ pub(crate) async fn action(
         upstream: Upstream::Embedded(action.upstream),
     };
     let host = if hook {
-        stage_host(&pool, &lease, true).await?
+        stage_host(&pool, &lease).await?
     } else {
         match pool.start_or_reuse(&lease.build, &lease.slot, false).await {
             Ok(host) => host,
@@ -535,15 +535,11 @@ struct WindowStage<'a> {
     proof: Option<&'a str>,
 }
 
-async fn stage_host(
-    pool: &Pool,
-    lease: &Lease,
-    hook: bool,
-) -> Result<Arc<Host>, engine::CallError> {
-    match pool.host(&lease.build, &lease.slot, false).await {
+async fn stage_host(pool: &Pool, lease: &Lease) -> Result<Arc<Host>, engine::CallError> {
+    match pool.start_or_reuse(&lease.build, &lease.slot, false).await {
         Ok(host) => Ok(host),
-        Err(error) if hook => Err(hook_artifact_error(pool, &lease.build, &error)),
-        Err(error) => Err(error.into()),
+        Err(StartError::Artifact(_)) => Err(server::runner_action_artifact_unavailable()),
+        Err(error) => Err(error.message(&lease.build.id).into()),
     }
 }
 
@@ -600,7 +596,7 @@ async fn window_hook(
             _ => return Err("Runner hook scope unavailable".into()),
         }
     }
-    let host = stage_host(pool, &lease, true).await?;
+    let host = stage_host(pool, &lease).await?;
     host.action_ops
         .get_or_init(|| WindowActionOps::new(pool, &host.build))
         .as_ref()
