@@ -28,6 +28,7 @@ export const primitiveShapes = {
   "Command.Item": [8, null],
   "Menu.RadioItem": [8, null],
   "Collapsible.Trigger": [8, null],
+  Input: [12, null],
   CodeBlock: [12, 4],
   "Menu.Content": [12, 4],
   "Select.Content": [12, 4],
