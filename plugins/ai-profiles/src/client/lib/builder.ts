@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { useQuery } from "@tokamak/sdk/client";
 import type { ProfileView } from "../../server/profiles";
@@ -67,15 +67,21 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
       .filter((profile) => profile.subscriptions.includes(subscription))
       .map((profile) => profile.code);
 
-  // A row moved by the keyboard is drawn again in its new place, which takes
-  // focus off its menu button: put focus back once the new list has drawn.
-  let refocus: string | undefined;
+  // A row moved or removed from its menu is drawn again, or gone, which takes
+  // focus off its menu button. Once the new list has drawn, focus goes back to
+  // the row (or to its profile), but only while focus is still lost, and only
+  // shortly after the change: a person who has moved on keeps their place.
+  let refocus: { selector: string; until: number } | undefined;
   const focusAgain = () => {
-    const selector = refocus;
-    if (!selector) return;
+    const wanted = refocus;
+    if (!wanted) return;
     requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>(selector);
-      if (!target || refocus !== selector) return;
+      if (refocus !== wanted) return;
+      if (Date.now() > wanted.until) return void (refocus = undefined);
+      const active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      const target = document.querySelector<HTMLElement>(wanted.selector);
+      if (!target) return;
       refocus = undefined;
       target.focus();
     });
@@ -84,10 +90,11 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     () => listed.data(),
     () => focusAgain(),
   );
+  onCleanup(() => (refocus = undefined));
 
   async function run(call: () => Promise<unknown>, done: () => string, focus?: string): Promise<boolean> {
     setProblem(undefined);
-    refocus = focus;
+    refocus = focus ? { selector: focus, until: Date.now() + 1000 } : undefined;
     try {
       const result = await call();
       if (isFailure(result)) {
@@ -108,15 +115,13 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     }
   }
 
-  const where = (profile: Profile, position: number) => `number ${position + 1} in ${profile.code}`;
-
   function add(profileId: string, subscription: string, at?: number) {
     const profile = profileOf(profileId);
     if (!profile || profile.subscriptions.includes(subscription)) return Promise.resolve(false);
     const position = Math.min(at ?? profile.subscriptions.length, profile.subscriptions.length);
     return run(
       () => client.mutation(api.profiles.add, { profile: profile.id, subscription, at: position }),
-      () => `${nameOf(subscription)} added to ${profile.code}, ${where(profile, position)}.`,
+      () => `${nameOf(subscription)} added to ${profile.code} as number ${position + 1}.`,
     );
   }
 
@@ -128,7 +133,7 @@ export function createBuilder(client: TokamakClient, subscriptions: () => readon
     if (profile.subscriptions.indexOf(subscription) === position) return Promise.resolve(false);
     return run(
       () => client.mutation(api.profiles.move, { profile: profile.id, subscription, to: position }),
-      () => `${nameOf(subscription)} is now ${where(profile, position)}.`,
+      () => `${nameOf(subscription)} is now number ${position + 1} in ${profile.code}.`,
       entryMenu(profile.id, subscription),
     );
   }
