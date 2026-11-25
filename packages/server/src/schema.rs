@@ -1,10 +1,11 @@
 //! Bundle schema registry. Indexes and typed references are enforced by the data layer.
 use crate::{
     Error,
-    data::{DataSpace, Reference, Table, Transaction},
+    data::{DataSpace, REF_INDEX_PREFIX, Reference, Table, Transaction},
 };
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default, Deserialize)]
@@ -133,8 +134,9 @@ impl Schema {
         space: &DataSpace,
         startup: bool,
     ) -> Result<Option<String>, Error> {
-        self.apply_references(tx, space)?;
-        let Some(reason) = self.apply_indexes(tx, space).await? else {
+        let references = self.references(space)?;
+        let Some(reason) = self.apply_indexes(tx, space, &references).await? else {
+            tx.set_references(space, references).map_err(data_error)?;
             return Ok(None);
         };
         if !startup {
@@ -146,14 +148,14 @@ impl Schema {
         Box::pin(tx.reset_schema_space(space, &declared))
             .await
             .map_err(|e| invalid(format!("{reason}; schema reset failed: {e}")))?;
-        if let Some(incompatibility) = self.apply_indexes(tx, space).await? {
+        if let Some(incompatibility) = self.apply_indexes(tx, space, &references).await? {
             return Err(invalid(incompatibility));
         }
+        tx.set_references(space, references).map_err(data_error)?;
         Ok(Some(reason))
     }
 
-    fn apply_references(&self, tx: &mut Transaction, space: &DataSpace) -> Result<(), Error> {
-        let map_error = |error: crate::data::Error| invalid(error.to_string());
+    fn references(&self, space: &DataSpace) -> Result<Vec<Reference>, Error> {
         let mut references = Vec::new();
         for (table, definition) in &self.tables {
             let Some(fields) = definition.description["fields"].as_object() else {
@@ -182,27 +184,36 @@ impl Schema {
                             "Invalid ref {table}.{field}: expected plugin.table"
                         ))
                     })?;
-                let target_space = DataSpace::plugin(owner).map_err(map_error)?;
+                let target_space = DataSpace::plugin(owner).map_err(data_error)?;
                 references.push(Reference {
                     source: space
-                        .table(&Table::new(table).map_err(map_error)?)
-                        .map_err(map_error)?,
+                        .table(&Table::new(table).map_err(data_error)?)
+                        .map_err(data_error)?,
                     field: field.clone(),
+                    index: definition
+                        .indexes
+                        .iter()
+                        .find(|index| index.fields.first() == Some(field))
+                        .map_or_else(
+                            || format!("{REF_INDEX_PREFIX}{:x}", Sha256::digest(field)),
+                            |index| index.name.clone(),
+                        ),
                     target: target_space
-                        .table(&Table::new(target).map_err(map_error)?)
-                        .map_err(map_error)?,
+                        .table(&Table::new(target).map_err(data_error)?)
+                        .map_err(data_error)?,
                     space: target_space,
                     optional,
                 });
             }
         }
-        tx.set_references(space, references).map_err(map_error)
+        Ok(references)
     }
 
     async fn apply_indexes(
         &self,
         tx: &mut Transaction,
         space: &DataSpace,
+        references: &[Reference],
     ) -> Result<Option<String>, Error> {
         let mut declared = BTreeMap::new();
         for (name, definition) in &self.tables {
@@ -212,7 +223,7 @@ impl Schema {
             declared.insert(table, (name, definition));
         }
 
-        let names = declared
+        let mut names: BTreeMap<_, BTreeSet<_>> = declared
             .iter()
             .map(|(table, (_, definition))| {
                 (
@@ -225,6 +236,12 @@ impl Schema {
                 )
             })
             .collect();
+        for reference in references {
+            names
+                .entry(reference.source.as_str())
+                .or_default()
+                .insert(&reference.index);
+        }
         Box::pin(tx.drop_undeclared_indexes(space, &names))
             .await
             .map_err(|e| invalid(e.to_string()))?;
@@ -237,10 +254,22 @@ impl Schema {
                     .map_err(|error| index_error(space, name, &index.name, error))?;
             }
         }
+        for reference in references
+            .iter()
+            .filter(|r| r.index.starts_with(REF_INDEX_PREFIX))
+        {
+            Box::pin(tx.define_ref_index(&reference.source, &reference.index, &reference.field))
+                .await
+                .map_err(data_error)?;
+        }
         // Index edits never request a reset. Keep the startup reset path for
         // schema incompatibilities that cannot be applied to the stored data.
         Ok(None)
     }
+}
+
+fn data_error(error: crate::data::Error) -> Error {
+    invalid(error.to_string())
 }
 
 fn contains_ref(description: &Value) -> bool {

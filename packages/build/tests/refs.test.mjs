@@ -36,3 +36,26 @@ test("refs require a declared dependency and a real table", async () => {
     assert.match(result.stdout + result.stderr, error);
   }
 }, 45_000);
+
+test("defineTable rejects refs nested in arrays, objects and unions", async () => {
+  const { dependent } = await fixture();
+  await writeFile(
+    join(dependent, "src/schema.ts"),
+    `
+    import { defineTable, defineSchema, v } from "@tokamak/sdk";
+    import { tables } from "plugin:owner/tables";
+    const ref = v.ref(tables.items);
+    export default defineSchema({ links: defineTable({
+      item: v.array(ref),
+      object: v.object({ item: ref }),
+      union: v.optional(v.union(v.string(), ref)),
+    }) });
+  `,
+  );
+  const result = build(dependent);
+  assert.notEqual(result.status, 0);
+  assert.equal(
+    result.stdout.match(/^schema\.ts[^\n]*error TS[^\n]*A ref must be a top-level field/gm)?.length,
+    3,
+  );
+}, 30_000);

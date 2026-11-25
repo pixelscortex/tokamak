@@ -1,8 +1,8 @@
 // Schemas provide authoring types and install index and reference metadata.
 // General field validation and migrations remain deferred.
 import { assertTable } from "./values";
-import type { Fields, ObjectValue, ValidatorDescription } from "./validators";
-import { v } from "./validators";
+import type { Fields, ObjectValue, TableField, ValidatorDescription } from "./validators";
+import { containsRef, v } from "./validators";
 
 export interface IndexDefinition<F extends readonly string[] = readonly string[]> {
   readonly name: string;
@@ -66,11 +66,19 @@ export function assertIndexName(name: string): void {
     throw new Error(`Index name is longer than ${MAX_NAME_LENGTH} characters`);
 }
 
-export function defineTable<F extends Fields>(fields: F): TableDefinition<F, Record<never, never>> {
+export function defineTable<F extends Fields>(
+  fields: F & { [K in keyof F]: TableField<F[K]> },
+): TableDefinition<F, Record<never, never>> {
   if (Object.hasOwn(fields, "_id") || Object.hasOwn(fields, "_creationTime")) {
     throw new Error("Table fields cannot declare _id or _creationTime: the host owns them");
   }
-  const snapshot = Object.freeze({ ...fields });
+  for (const { description } of Object.values<Fields[string]>(fields)) {
+    const field = description.kind === "optional" ? description.inner : description;
+    if (field.kind !== "ref" && containsRef(field))
+      throw new Error("A ref must be a top-level field (optional allowed)");
+  }
+
+  const snapshot: F = Object.freeze({ ...fields });
   const description = v.object(snapshot).description;
   const table = (indexes: readonly IndexDefinition[]): TableDefinition<F, Indexes> => {
     const add = (name: string, keys: readonly string[], unique: boolean) => {

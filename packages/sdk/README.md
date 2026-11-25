@@ -607,11 +607,12 @@ export default defineSchema({
 ```
 
 The field has type `Id<"chat.threads">`. The builder copies the owner's table
-types into `.tokamak/types/` and refreshes the copy each time you build. Use `TableDocument<typeof chat.tables.threads>`
-for the owner’s document type. You can
-reuse the same validator for a function argument to accept a qualified ID from
-a caller. The ref works with an index like any other field and may be optional
-with `v.optional`.
+types into `.tokamak/types/` and refreshes the copy each time you build.
+Use `TableDocument<typeof chat.tables.threads>` for the owner's document type. When you import an owner's table handles, its
+generated public function references also use qualified IDs, so you can pass
+IDs between those functions and your ref field directly. You can use the same
+validator for function arguments. The ref works with an index like any other
+field and may be optional with `v.optional`.
 
 A ref does not give `ctx.db` access to the owner's table. To read a referenced
 row, call the owner's public query. Saving a ref requires an existing row in

@@ -118,7 +118,9 @@ impl Transaction {
                 creation_time: millis,
                 fields,
             };
-            Box::pin(tx.validate_references(&row)).await?;
+
+            Box::pin(tx.validate_references(None, &row)).await?;
+
             let core = &tx.state.storage;
             tx.inner
                 .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
@@ -186,7 +188,8 @@ impl Transaction {
                 fields,
             };
 
-            Box::pin(tx.validate_references(&persisted)).await?;
+            Box::pin(tx.validate_references(Some(&old), &persisted)).await?;
+
             let rid = id.record();
 
             let core = &tx.state.storage;
@@ -211,39 +214,47 @@ impl Transaction {
 
     /// Deleting an absent record is a no-op and must not report its table.
     pub async fn delete(&mut self, id: &Id) -> Result<()> {
-        let mutation = Mutation::new(self);
+        Box::pin(self.delete_documents(id)).await.map(drop)
+    }
 
+    pub(crate) async fn delete_documents(&mut self, id: &Id) -> Result<Vec<Document>> {
+        let mutation = Mutation::new(self);
         let tx = &mut *mutation.tx;
 
         let result = async {
             tx.ready(true)?;
 
-            tx.catalog(false)?;
+            let mut deleted = Vec::new();
             let mut pending = vec![id.clone()];
             while let Some(id) = pending.pop() {
-                if Box::pin(tx.delete_record(&id)).await? {
+                if let Some(old) = Box::pin(tx.delete_record(&id)).await? {
                     pending.extend(Box::pin(tx.referring_rows(&id)).await?);
+                    deleted.push(old);
                 }
             }
 
-            Ok(())
+            Ok(deleted)
         }
         .await;
         mutation.finish(result)
     }
 
-    async fn delete_record(&mut self, id: &Id) -> Result<bool> {
+    async fn delete_record(&mut self, id: &Id) -> Result<Option<Document>> {
         let Some(old) = self.get(id).await? else {
-            return Ok(false);
+            return Ok(None);
         };
+
+        self.catalog(false)?;
         let rid = id.record();
         let core = &self.state.storage;
         self.indexes(Some(&old), None).await?;
         self.inner
             .del_record(core.ns, core.db, &rid.table, &rid.key)
             .await?;
+
         self.written.insert(id.table().clone());
         self.record(Some(&old), None);
-        Ok(true)
+
+        Ok(Some(old))
     }
 }

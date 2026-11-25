@@ -1,6 +1,7 @@
 // UI references carry names and compile-time argument/result types, never
 // handlers. The generated api imports backend modules ONLY in type positions.
 import type { FunctionDefinition, FunctionKind } from "./functions";
+import type { Id } from "./values";
 import type { Visibility } from "./visibility";
 
 const referenceTypes: unique symbol = Symbol("tokamak.reference.types");
@@ -24,6 +25,24 @@ export type ReferenceFromDefinition<D> =
 export type ApiFromModule<M> = ReferencesFromModule<M, typeof Visibility.Public>;
 export type InternalFromModule<M> = ReferencesFromModule<M, typeof Visibility.Internal>;
 export type PluginFunctionsFromModule<M> = ReferencesFromModule<M, typeof Visibility.PluginOnly>;
+
+type QualifyIds<Owner extends string, T> =
+  T extends Id<infer Table>
+    ? string extends Table
+      ? T
+      : Table extends `${string}.${string}`
+        ? T
+        : Id<`${Owner}.${Table}`>
+    : T extends object
+      ? { [Key in keyof T]: QualifyIds<Owner, T[Key]> }
+      : T;
+
+/** Cross-plugin references in a consumer that imports the owner's table handles. */
+export type QualifiedPluginApi<Owner extends string, Api> = {
+  [Key in keyof Api]: Api[Key] extends FunctionReference<infer Kind, infer Args, infer Result>
+    ? FunctionReference<Kind, QualifyIds<Owner, Args>, QualifyIds<Owner, Result>>
+    : never;
+};
 
 export type ArgsOf<R> = R extends FunctionReference<FunctionKind, infer A, unknown> ? A : never;
 

@@ -28,6 +28,14 @@ export interface Validator<T, Optional extends boolean = false> {
   readonly _type?: T;
 }
 
+declare const refLocation: unique symbol;
+type RefLocation<V> = V extends { readonly [refLocation]: infer Kind } ? Kind : never;
+type MarkRef<V, Kind> = [Kind] extends [never] ? V : V & { readonly [refLocation]: Kind };
+type NestRef<V, Result> = [RefLocation<V>] extends [never] ? Result : MarkRef<Result, "nested">;
+export type TableField<V> = V extends { readonly [refLocation]: "nested" }
+  ? "A ref must be a top-level field (optional allowed)"
+  : V;
+
 export type Fields = Record<string, Validator<unknown, boolean>>;
 
 export type Infer<V> = V extends Validator<infer T, boolean> ? T : never;
@@ -79,37 +87,54 @@ export const v = {
     assertTable(table);
     return validator({ kind: "id", table });
   },
-  ref<T extends string>(table: TableReference<T>): Validator<Id<T>> {
-    return validator({ kind: "ref", table: table.qualifiedName });
+  ref<T extends string>(table: TableReference<T>): MarkRef<Validator<Id<T>>, "ref"> {
+    return validator({ kind: "ref", table: table.qualifiedName }) as MarkRef<Validator<Id<T>>, "ref">;
   },
-  array<T>(item: Validator<T>): Validator<T[]> {
-    return validator({ kind: "array", item: item.description });
+  array<V extends Validator<unknown>>(item: V): NestRef<V, Validator<Infer<V>[]>> {
+    return validator({ kind: "array", item: item.description }) as NestRef<V, Validator<Infer<V>[]>>;
   },
-  object<F extends Fields>(fields: F): Validator<ObjectValue<F>> {
+  object<F extends Fields>(fields: F): NestRef<F[keyof F], Validator<ObjectValue<F>>> {
     return validator({
       kind: "object",
       fields: Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, field.description])),
-    });
+    }) as NestRef<F[keyof F], Validator<ObjectValue<F>>>;
   },
 
-  optional<T>(inner: Validator<T>): Validator<T, true> {
+  optional<V extends Validator<unknown>>(inner: V): MarkRef<Validator<Infer<V>, true>, RefLocation<V>> {
     return Object.freeze({
       description: freezeDescription({
         kind: "optional",
         inner: inner.description,
       }),
       optional: true,
-    });
+    }) as MarkRef<Validator<Infer<V>, true>, RefLocation<V>>;
   },
   union<V extends readonly [Validator<unknown>, ...Validator<unknown>[]]>(
     ...members: V
-  ): Validator<Infer<V[number]>> {
+  ): NestRef<V[number], Validator<Infer<V[number]>>> {
     return validator({
       kind: "union",
       members: members.map((member) => member.description),
-    });
+    }) as NestRef<V[number], Validator<Infer<V[number]>>>;
   },
 };
+
+export function containsRef(description: ValidatorDescription): boolean {
+  switch (description.kind) {
+    case "ref":
+      return true;
+    case "array":
+      return containsRef(description.item);
+    case "optional":
+      return containsRef(description.inner);
+    case "object":
+      return Object.values(description.fields).some(containsRef);
+    case "union":
+      return description.members.some(containsRef);
+    default:
+      return false;
+  }
+}
 
 /** Optional means an absent object key; explicit undefined is never a wire value. */
 export function validate(description: ValidatorDescription, value: unknown, path = "args"): void {

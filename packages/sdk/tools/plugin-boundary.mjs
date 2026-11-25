@@ -1,3 +1,4 @@
+import { readDescriptor } from "./plugin-descriptor.ts";
 import { Visibility } from "../src/visibility.ts";
 // One import policy for the SDK's Bun bundles and the public Vite builder.
 // Provider source is read by TypeScript for types/metadata, never evaluated or bundled.
@@ -190,7 +191,7 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   );
 }
 
-function declarePlugin(root, id, declared, depends) {
+function declarePlugin(root, id, declared, depends, tableOwners) {
   if (declared.has(id)) return;
   declared.add(id);
   const target = provider(root, id);
@@ -218,13 +219,17 @@ function declarePlugin(root, id, declared, depends) {
     return;
   }
   const { refs, imports } = publicReferences(target.folder, target.entry);
+  const apiTypes = `Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry})> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry})>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>`;
+  const api = tableOwners.has(target.id)
+    ? `import("@tokamak/sdk").QualifiedPluginApi<${JSON.stringify(target.id)}, ${apiTypes}>`
+    : apiTypes;
   writeFileSync(
     path,
     `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
       (target.side === "client"
         ? `export * from ${entry};\n`
         : `export type * from ${entry};\n` +
-          `type PublicApi = Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry})> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry})>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>;\n` +
+          `type PublicApi = ${api};\n` +
           `export declare const api: PublicApi;\n` +
           refs
             .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)
@@ -232,13 +237,16 @@ function declarePlugin(root, id, declared, depends) {
   );
   // Public API types can themselves depend on other sanctioned public types.
   // Materialize that type graph in the consumer; no provider code is emitted.
-  for (const dependency of imports) declarePlugin(root, dependency, declared, depends);
+  for (const dependency of imports) declarePlugin(root, dependency, declared, depends, tableOwners);
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root, depends) {
+export function checkPluginImports(root) {
   root = resolve(root);
   const declared = new Set();
+  const depends = readDescriptor(root)?.depends ?? {};
+  const imports = new Map();
+  const tableOwners = new Set();
   function checkFile(path) {
     const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
     const options = configuration(path).options;
@@ -249,11 +257,10 @@ export function checkPluginImports(root, depends) {
       if (/^src\/(?:server|local)\//.test(relative(root, path).split(sep).join("/")))
         assertWindowSide(path, id);
       if (id.startsWith("plugin:")) {
-        try {
-          declarePlugin(root, id, declared, depends);
-        } catch (error) {
-          throw new Error(`${diagnostic(path, id).message} ${error.message}`);
-        }
+        if (!imports.has(id)) imports.set(id, path);
+        const reference = parsePluginSpecifier(id);
+        if (reference?.side === "tables" && Object.hasOwn(depends, reference.id))
+          tableOwners.add(reference.id);
         return;
       }
       if (id.startsWith("@plugins/")) throw diagnostic(path, id);
@@ -333,6 +340,13 @@ export function checkPluginImports(root, depends) {
     }
   }
   walk(root);
+  for (const [id, path] of imports) {
+    try {
+      declarePlugin(root, id, declared, depends, tableOwners);
+    } catch (error) {
+      throw new Error(`${diagnostic(path, id).message} ${error.message}`);
+    }
+  }
 }
 
 export function bunPluginReferences(root, options) {

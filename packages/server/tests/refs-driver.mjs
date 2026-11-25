@@ -9,11 +9,12 @@ import { createApi } from "../../sdk/src/index.ts";
 const target = join(workspace, "packages/server/target");
 await mkdir(target, { recursive: true });
 const scratch = await mkdtemp(join(target, "refs-runtime-"));
-const { owner, dependent } = await refFixtures(join(scratch, "sources"));
+const { owner, dependent, leaf } = await refFixtures(join(scratch, "sources"), { chain: true });
 const pluginsDir = join(scratch, "installed");
 for (const [id, source] of [
   ["owner", owner],
   ["dependent", dependent],
+  ["leaf", leaf],
 ]) {
   built(source);
   await cp(join(source, "dist"), join(pluginsDir, id), { recursive: true });
@@ -32,6 +33,7 @@ try {
   const client = await connect(address, { cleanup });
   const items = createApi("owner").rows;
   const links = createApi("dependent").rows;
+  const leaves = createApi("leaf").rows;
 
   const { item: id, other } = await client.mutation(items.add, {});
   const { item: unrelated } = await client.mutation(items.add, {});
@@ -40,6 +42,14 @@ try {
   const first = await client.mutation(links.add, { id });
   const second = await client.mutation(links.add, { id });
   const kept = await client.mutation(links.add, { id: unrelated });
+  const deletedLeaf = await client.mutation(leaves.add, { link: first });
+  const keptLeaf = await client.mutation(leaves.add, { link: kept });
+  for (const replace of [false, true]) {
+    await assert.rejects(
+      client.mutation(links.update, { link: first, id: other, replace }),
+      /id of the declared table/,
+    );
+  }
 
   const linked = async (id) => (await client.query(links.byItem, { id })).map((row) => row._id).sort();
   assert.deepEqual(await linked(id), [first, second].sort());
@@ -48,6 +58,7 @@ try {
   await assert.rejects(client.query(links.foreignRead, { id }), /does not own that record/);
   await assert.rejects(client.mutation(links.foreignWrite, { id }), /does not own that record/);
 
+  const leafIds = async () => (await client.query(leaves.list, {})).map((row) => row._id).sort();
   const ownerIds = async () => (await client.query(items.list, {})).map((row) => row._id).sort();
   assert.deepEqual(await client.mutation(items.remove, { id, undo: true }), {
     failed: true,
@@ -57,10 +68,14 @@ try {
   assert.deepEqual(await ownerIds(), [id, unrelated].sort());
   assert.deepEqual(await linked(id), [first, second].sort());
 
+  assert.deepEqual(await leafIds(), [deletedLeaf, keptLeaf].sort());
+
   await client.mutation(items.remove, { id, undo: false });
   assert.deepEqual(await ownerIds(), [unrelated]);
   assert.deepEqual(await linked(id), []);
   assert.deepEqual(await linked(unrelated), [kept]);
+  assert.deepEqual(await leafIds(), [keptLeaf]);
+  assert.equal(await client.mutation(links.addFromOwner, {}), "owner");
 } finally {
   for (const close of cleanup.reverse()) await close();
   for (const server of servers) {

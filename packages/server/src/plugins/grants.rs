@@ -89,6 +89,7 @@ impl Loaded {
 
         let result: Result<_, InstallFailure> = async {
             // Schemas and grants commit together for the candidate generation.
+            self.clear_removed_references(&mut tx, previous)?;
             let mut resets = Vec::new();
             for id in ids {
                 if let Some(reason) = Box::pin(self.stage_schema(&mut tx, id, previous.is_none()))
@@ -150,6 +151,28 @@ impl Loaded {
                 Err(error)
             }
         }
+    }
+
+    fn clear_removed_references(
+        &self,
+        tx: &mut Transaction,
+        previous: Option<&Self>,
+    ) -> Result<(), Error> {
+        let Some(previous) = previous else {
+            return Ok(());
+        };
+
+        for id in previous
+            .catalog
+            .plugins
+            .keys()
+            .filter(|id| !self.catalog.plugins.contains_key(*id))
+        {
+            let space = DataSpace::plugin(id).map_err(|e| invalid(e.to_string()))?;
+            tx.set_references(&space, Vec::new())
+                .map_err(|e| invalid(e.to_string()))?;
+        }
+        Ok(())
     }
 
     async fn stage_schema(

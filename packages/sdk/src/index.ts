@@ -91,6 +91,7 @@ export { createApi, functionName } from "./api";
 export type {
   FunctionReference,
   ApiFromModule,
+  QualifiedPluginApi,
   InternalFromModule,
   PluginFunctionsFromModule,
   ReferenceFromDefinition,

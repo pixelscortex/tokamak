@@ -1,7 +1,6 @@
 use super::*;
 use crate::data::{DataSpace, types::check_field};
-use std::{borrow::Cow, collections::BTreeMap};
-use surrealdb_datastore::key::schema::RecordPrefix;
+use std::collections::BTreeMap;
 use surrealdb_idx::catalog::{Index, IndexDefinition, TableId, providers::*};
 use surrealdb_idx::val::{TableName, Value as StoredValue};
 
@@ -16,13 +15,35 @@ impl Transaction {
         fields: &[&str],
         unique: bool,
     ) -> Result<()> {
+        Box::pin(self.define_value_index(table, name, fields, unique, false)).await
+    }
+
+    pub(crate) async fn define_ref_index(
+        &mut self,
+        table: &Table,
+        name: &str,
+        field: &str,
+    ) -> Result<()> {
+        Box::pin(self.define_value_index(table, name, &[field], false, true)).await
+    }
+
+    async fn define_value_index(
+        &mut self,
+        table: &Table,
+        name: &str,
+        fields: &[&str],
+        unique: bool,
+        hidden: bool,
+    ) -> Result<()> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
 
         let result = async {
             tx.ready(true)?;
-            check_field(name)?;
+            if !hidden {
+                check_field(name)?;
+            }
 
             if fields.is_empty() {
                 return Err(Error::Invalid("an index needs at least one field"));
@@ -31,7 +52,9 @@ impl Transaction {
             let mut seen = BTreeSet::new();
 
             for field in fields {
-                check_field(field)?;
+                if !hidden {
+                    check_field(field)?;
+                }
 
                 if !seen.insert(*field) {
                     return Err(Error::Invalid("index fields must be distinct"));
@@ -191,23 +214,31 @@ impl Transaction {
             tx.ready(true)?;
             tx.catalog(true)?;
             let core = &tx.state.storage;
-            for table in tx.inner.all_tb(core.ns, core.db, None).await?.iter() {
+            let tables = tx.inner.all_tb(core.ns, core.db, None).await?;
+
+            for table in tables.iter() {
                 let tb = &table.name;
                 if !space.owns_schema_table(tb.as_str(), declared) {
                     continue;
                 }
+                let table = Table::new(tb.as_str())?;
+                for row in tx.scan_table(&table).await? {
+                    Box::pin(tx.delete(&row.id)).await?;
+                }
+            }
+
+            let core = &tx.state.storage;
+            for table in tables
+                .iter()
+                .filter(|table| space.owns_schema_table(table.name.as_str(), declared))
+            {
+                let tb = &table.name;
                 let indexes = tx.inner.all_tb_indexes(core.ns, core.db, tb, None).await?;
                 for index in indexes.iter() {
                     tx.inner
                         .del_tb_index(core.ns, core.db, tb, &index.name)
                         .await?;
                 }
-                let records = RecordPrefix {
-                    ns: core.ns,
-                    db: core.db,
-                    tb: Cow::Borrowed(tb),
-                };
-                tx.inner.delr(records.range()?).await?;
             }
             tx.catalog_changed = true;
             Ok(())

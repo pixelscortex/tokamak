@@ -212,3 +212,5 @@ impl Database {
         result.map_err(|e| Error::Database(anyhow::anyhow!(e)))
     }
 }
+
+pub(crate) const REF_INDEX_PREFIX: &str = "$ref:";

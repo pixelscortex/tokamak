@@ -161,11 +161,11 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 }
 
 /** Called only by moon; there is no installable binary or SDK CLI. */
-export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined, depends) {
+export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
   const pluginRoot = featurePluginRoot(root);
-  checkPluginImports(pluginRoot, depends);
+  checkPluginImports(pluginRoot);
   // An explicit empty plugin server part is valid; a missing root still fails.
   const organized = isServerRoot(root);
   const flat = root === join(pluginRoot, "src");
@@ -303,10 +303,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
 }
 
 if (import.meta.main) {
-  if (
-    process.argv.length !== 3 &&
-    !([5, 6].includes(process.argv.length) && process.argv[3] === "--plugin")
-  ) {
+  if (process.argv.length !== 3 && !(process.argv.length === 5 && process.argv[3] === "--plugin")) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id>");
   }
   // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
@@ -314,7 +311,7 @@ if (import.meta.main) {
   const feature = resolve(sdkRoot, "../..", process.argv[2]);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
-  await bundleFeature(feature, process.argv[4], true, JSON.parse(process.argv[5] ?? "{}"));
+  await bundleFeature(feature, process.argv[4], true);
 }
 
 async function scanFiles(root) {

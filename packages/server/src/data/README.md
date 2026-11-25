@@ -61,12 +61,16 @@ The loader validates declarations and installs indexes before publishing a
 plugin generation, in the same transaction as grant records. Aggregate metadata
 keys schemas by plugin ID, keeping logical table names separate. The legacy
 single-bundle loader applies the same registry in its selected DataSpace.
-General field descriptions travel as metadata (TKM-92). For a typed ref,
-inserts and updates check the target ID and confirm the row exists. Deleting a
-target uses the normal indexed record delete path for every matching source row
-in the same transaction. The reference registry is staged alongside indexes.
-Reference writes and target deletes take the catalog write gate to prevent a
-concurrent snapshot from leaving a dangling ref.
+Field schema assertions are not evaluated for ordinary fields. Inserting or
+changing a typed ref checks the target ID and confirms the row exists. The
+reference write stages an unchanged write of the target key so a concurrent
+delete conflicts on that key, while writes to unrelated rows can proceed.
+
+Deleting a target looks up referring rows by index and deletes them through the
+same record path in the same transaction. The server reuses an author index
+whose first field is the ref, or maintains a hidden index on that field. The
+reference registry is staged alongside indexes and cleared for removed plugins
+on reload.
 
 Repeated identical declarations are no-ops. At startup and reload, the server
 fills new indexes from stored rows, replaces changed definitions under the same
