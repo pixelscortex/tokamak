@@ -76,6 +76,9 @@ try {
     cleanup,
     localDir,
     callMs: benchmarking ? undefined : 5000,
+    // The bulk case delegates 300 queries in one world, each with an isolated
+    // module. Give the fixture room for their bytecode as the SDK grows.
+    heapBytes: benchmarking ? undefined : 96 * 1024 * 1024,
   });
   const client = await connect(address, { cleanup, token });
   const http = new URL(address);

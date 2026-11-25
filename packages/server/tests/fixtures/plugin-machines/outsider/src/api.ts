@@ -1,1 +1,1 @@
-export { where } from "./work";
+export { hookedAction, hookedPoint, where } from "./work";

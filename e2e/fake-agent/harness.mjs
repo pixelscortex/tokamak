@@ -122,6 +122,7 @@ export async function startServer({
   localDir,
   ownerToken,
   callMs,
+  heapBytes,
   servers,
   cleanup,
   env = {},
@@ -132,6 +133,7 @@ export async function startServer({
   await mkdir(dir);
   const args = ["--plugins", pluginsDir, "--data", join(dir, "store"), "--listen", "127.0.0.1:0"];
   if (callMs !== undefined) args.push("--call-ms", String(callMs));
+  if (heapBytes !== undefined) args.push("--heap-bytes", String(heapBytes));
   if (localDir) args.push("--local-dir", localDir);
   if (shared) {
     await writeFile(join(dir, "index.html"), "End-to-end server");
