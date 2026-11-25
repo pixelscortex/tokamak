@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { isFailure, type TokamakClient } from "@tokamak/sdk";
+import { createApi, isFailure, type FunctionReference, type TokamakClient } from "@tokamak/sdk";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { startFakeCompanies } from "../../agent-proxy/tests/fake-companies";
 import { builds, startWorkspace, type Workspace } from "../../agent-proxy/tests/workspace";
@@ -12,7 +12,17 @@ import { api } from "../src/server/_generated/api";
 //
 // agent-proxy cannot remove a subscription yet (TKM-265), so the installed copy
 // here stops listing one labelled "Removed": to ai-profiles that is the same as
-// the subscription being gone.
+// the subscription being hidden. And the installed copy of ai-profiles makes
+// `forgetSubscription` public, so a window can stand in for the removal flow
+// that will call it.
+
+const removal = createApi<{
+  profiles: { forgetSubscription: FunctionReference<"mutation", { subscription: string }, number> };
+}>("ai-profiles", ["profiles:forgetSubscription"]);
+
+/** The other spelling agent-proxy accepts for the same subscription id. */
+const otherForm = (id: string) =>
+  id.startsWith("agent-proxy/") ? id.slice("agent-proxy/".length) : `agent-proxy/${id}`;
 
 const available = builds();
 if (!available.length)
@@ -49,6 +59,9 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     return added.id;
   }
   const list = (client: TokamakClient) => client.query(api.profiles.list, {});
+  let alex: TokamakClient | undefined;
+  /** Another member of the same server, made once. */
+  const member = async () => (alex ??= await workspace.member("alex"));
   async function create(client: TokamakClient, name: string, code: string) {
     const made = await client.mutation(api.profiles.create, { name, code });
     if (isFailure(made)) throw new Error(made.data.message);
@@ -62,6 +75,11 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
         {
           find: "subscriptions: subscriptions.sort(",
           replace: 'subscriptions: subscriptions.filter((row) => row.label !== "Removed").sort(',
+        },
+        {
+          plugin: "ai-profiles",
+          find: "var forgetSubscription = internalMutation2(",
+          replace: "var forgetSubscription = mutation2(",
         },
       ],
     });
@@ -121,27 +139,68 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     ]);
   });
 
-  test("a subscription agent-proxy no longer lists drops out of every profile, and stays out", async () => {
-    const gone = await subscribe(owner, "fourth");
-    const kept = subs[0]!;
+  test("a subscription agent-proxy stops listing is hidden, kept in place, and back when listed again", async () => {
+    const hidden = await subscribe(owner, "fourth");
+    const [a, b, c] = subs as [string, string, string];
     const one = await create(owner, "One", "ONE");
     const two = await create(owner, "Two", "TWO");
-    for (const profile of [one, two]) {
-      await owner.mutation(api.profiles.add, { profile: profile.id, subscription: gone });
-      await owner.mutation(api.profiles.add, { profile: profile.id, subscription: kept });
-    }
-    await owner.mutation(api.subscriptions.setLabel, { id: gone, label: "Removed" });
-    const codes = async () =>
+    for (const id of [a, hidden, b])
+      await owner.mutation(api.profiles.add, { profile: one.id, subscription: id });
+    await owner.mutation(api.profiles.add, { profile: two.id, subscription: hidden });
+    const shown = async () =>
       (await list(owner)).filter((p) => p.code === "ONE" || p.code === "TWO").map((p) => p.subscriptions);
-    expect(await codes()).toEqual([[kept], [kept]]);
-    // It cannot be added while gone. Any write then clears it from every
-    // profile, so it does not come back when agent-proxy lists it again.
-    expect(await owner.mutation(api.profiles.add, { profile: one.id, subscription: gone })).toMatchObject(
+
+    await owner.mutation(api.subscriptions.setLabel, { id: hidden, label: "Removed" });
+    expect(await shown()).toEqual([[a, b], []]);
+    // It cannot be added while hidden.
+    expect(await owner.mutation(api.profiles.add, { profile: one.id, subscription: hidden })).toMatchObject(
       plain("NotFound"),
     );
-    await owner.mutation(api.profiles.move, { profile: one.id, subscription: kept, to: 0 });
-    await owner.mutation(api.subscriptions.setLabel, { id: gone, label: "Back" });
-    expect(await codes()).toEqual([[kept], [kept]]);
+    // Positions count the visible list: "at 1" lands between a and b, after
+    // the hidden entry, and moving b to 0 passes it too. Writes keep it.
+    await owner.mutation(api.profiles.add, { profile: one.id, subscription: c, at: 1 });
+    expect(await shown()).toEqual([[a, c, b], []]);
+    await owner.mutation(api.profiles.move, { profile: one.id, subscription: b, to: 0 });
+    expect(await shown()).toEqual([[b, a, c], []]);
+    await create(owner, "Three", "THR");
+
+    await owner.mutation(api.subscriptions.setLabel, { id: hidden, label: "Back" });
+    expect(await shown()).toEqual([[b, a, hidden, c], [hidden]]);
+  });
+
+  test("forgetSubscription deletes it from every profile of the calling member, and no one else's", async () => {
+    const gone = subs[2]!;
+    const holding = async () =>
+      (await list(owner)).filter((p) => p.subscriptions.includes(gone)).map((p) => p.code);
+    await owner.mutation(api.profiles.add, { profile: (await list(owner))[0]!.id, subscription: gone });
+    const before = await holding();
+    expect(before.length).toBeGreaterThan(1);
+    // Another member's call reaches none of the owner's profiles.
+    expect(await (await member()).mutation(removal.profiles.forgetSubscription, { subscription: gone })).toBe(
+      0,
+    );
+    expect(await holding()).toEqual(before);
+    // The owner's, in the other spelling of the id, reaches all of them.
+    expect(await owner.mutation(removal.profiles.forgetSubscription, { subscription: otherForm(gone) })).toBe(
+      before.length,
+    );
+    expect(await holding()).toEqual([]);
+  });
+
+  test("either spelling of a subscription id is the same subscription", async () => {
+    const id = subs[1]!;
+    const spelled = await create(owner, "Spelled", "SPEL");
+    const added = await owner.mutation(api.profiles.add, {
+      profile: spelled.id,
+      subscription: otherForm(id),
+    });
+    // Shown as agent-proxy lists it, and the listed spelling is already in.
+    expect(added).toMatchObject({ subscriptions: [id] });
+    expect(await owner.mutation(api.profiles.add, { profile: spelled.id, subscription: id })).toMatchObject(
+      plain("AlreadyAdded"),
+    );
+    await owner.mutation(api.profiles.remove, { profile: spelled.id, subscription: otherForm(id) });
+    expect((await list(owner)).find((p) => p.code === "SPEL")!.subscriptions).toEqual([]);
   });
 
   test("ids of another table, or malformed, get a plain answer and change nothing", async () => {
@@ -156,7 +215,13 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
         plain("NotFound"),
       );
     }
-    for (const id of [profile, "agent-proxy/signIns:abc", "nonsense"])
+    for (const id of [
+      profile,
+      "agent-proxy/signIns:abc",
+      "subscriptions:",
+      "agent-proxy/subscriptions:nope",
+      "nonsense",
+    ])
       expect(await owner.mutation(api.profiles.add, { profile, subscription: id })).toMatchObject(
         plain("NotFound"),
       );
@@ -166,7 +231,7 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
   test("another member sees none of them and can change none, and has codes of their own", async () => {
     const before = await list(owner);
     const work = before.find((profile) => profile.code === "WORK")!;
-    const other = await workspace.member("alex");
+    const other = await member();
     expect(await list(other)).toEqual([]);
     const first = work.subscriptions[0]!;
     expect(
@@ -181,6 +246,15 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
       plain("NotFound"),
     );
     expect(await list(owner)).toEqual(before);
+  });
+
+  test("a person has at most 32 profiles", async () => {
+    const other = await member();
+    for (let n = (await list(other)).length; n < 32; n++) await create(other, `P${n}`, `P${n}`);
+    expect(await other.mutation(api.profiles.create, { name: "One more", code: "MORE" })).toMatchObject(
+      plain("TooMany"),
+    );
+    expect(await list(other)).toHaveLength(32);
   });
 
   test("profiles survive a restart of the server", async () => {
