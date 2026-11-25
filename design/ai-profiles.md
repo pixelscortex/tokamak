@@ -24,8 +24,8 @@ ChatGPT and building profiles, the details and removing).
 | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------ |
 | Dialog, step 1: company (Anthropic and OpenAI; "More later" listed, not offered)          | `ui/add-dialog.tsx` (`CompanyStep`)                                         | `Profiles · add · company`                 |
 | Dialog, step 2: method for Anthropic ("Claude subscription"; "API key", marked "Later")   | `ui/add-dialog.tsx` (`MethodStep`), words in `lib/companies.ts`             | `Profiles · add · method`                  |
-| Dialog, step 3: sign-in, the address field shown, "Signed in on another device?" folded   | `ui/add-dialog.tsx` (`SignInStep`)                                          | `Profiles · add · sign-in`                 |
-| Dialog, step 3 with an address pasted and the other-device note open                      | `ui/add-dialog.tsx` (`SignInStep`)                                          | `Profiles · add · sign-in, address pasted` |
+| Dialog, step 3: sign-in in the desktop app, the address field shown under its own line    | `ui/add-dialog.tsx` (`SignInStep`)                                          | `Profiles · add · sign-in`                 |
+| Dialog, step 3 with an address pasted                                                     | `ui/add-dialog.tsx` (`SignInStep`)                                          | `Profiles · add · sign-in, address pasted` |
 | Dialog, step 4: connected, plan, email, models, label                                     | `ui/add-dialog.tsx` (`ConnectedStep`)                                       | `Profiles · add · connected`               |
 | One subscription card, with its model line and action row                                 | `pages/profiles.tsx`, `ui/subscription-card.tsx`, `ui/card-actions.tsx`     | `Profiles · subscriptions`                 |
 | The same with a sign-in left waiting: the "Awaiting sign-in" card                         | `ui/subscription-card.tsx` (`AwaitingCard`)                                 | `Profiles · awaiting sign-in`              |
@@ -48,7 +48,7 @@ still waiting), an ended sign-in ("Start again"), an expired one (card and
 dialog), "Awaiting sign-in again" for a repair, "Awaiting another account", the
 "Copied" state of Copy link, "That sign-in was cancelled in another window.", a
 plain browser (neutral company marks, "Open sign-in page" as a link), the
-desktop listener's "Tokamak can finish sign-in for you" wording, the card
+sign-in step's desktop and browser wording, the card
 actions' tooltips, an unknown plan ("plan unknown" beside Check again), a
 failed "Check again" (the line under the card's buttons), a row's menu (Move
 up, Move down, Remove from PERS) and the card's "Add to profile" menu. The
@@ -66,14 +66,17 @@ edge ring with an 18 px logo on a 32 px card-tone tile. The dialog is 440 wide,
 `text-read` semibold; the address field is `Input` `md` `mono` with an `sm`
 ghost "Continue" beside it, the label field `Input` `lg`.
 
-The card (one layout for everything): title, label and switch; the emails and
-the plan line; the status; the model line ("1 model · not used yet") ending
-with the codes of the profiles that use it, each a 12 px stack icon and the
-code in data mono ink-3, 4 apart, 8 between codes; and last the action row:
+The card (one layout for everything): title, label and switch; the emails and,
+under them, the workspace line; the status; the model line ("1 model · not
+used yet") followed by the codes of the profiles that use it, each a 12 px
+stack icon and the code in data mono ink-3, 4 apart, 8 between codes; and last
+the action row:
 ghost `sm` icon-only buttons (24 × 24, 14 px icons in ink-3), 2 px apart
 (`gap-hair`; under the 32 px target rule, an exception pending the owner):
 Models, Check again, Details, Add to profile, Remove, each with a `Tooltip` and
-a name that says which subscription ("Remove Claude Team"). "Add to profile" is
+a name that says which subscription, its title and label ("Remove Claude Team,
+Acme"; `nameOf` in `lib/format.ts`), in a toolbar named the same way ("Claude
+Team, Acme actions"). "Add to profile" is
 always shown; it opens the menu that lists the profiles, those that hold the
 card marked "added". A card is a drag source: a press anywhere but a button,
 link, field or switch starts a drag (`lib/drag.ts`, `INTERACTIVE`).
@@ -120,9 +123,17 @@ ink-3 (0 until threads record a profile, TKM-266).
   not pulled 6 px left as drawn (no negative margins), and has no 2 px top
   offset (`pt-0.5`, off the 4 px scale).
 - An unknown plan is never a word: the title is the product alone ("Claude",
-  "ChatGPT") on the card, in the details and in the connected step, the line
-  under the emails names the organisation alone, and a quiet "plan unknown"
-  sits beside Check again, which reads it.
+  "ChatGPT") on the card, in the details and in the connected step, and a
+  quiet "plan unknown" sits beside Check again, which reads it.
+- The line under the emails is the workspace alone (the account's organisation
+  or ChatGPT workspace, as the company writes it) and is left out for a
+  personal account; the plan is in the title only. The drawing writes the
+  workspace in lower case ("acme · team"), with the plan after it.
+- The model line and the codes, measured on `1 · Profiles · screen`: drawn as
+  one line, the text then the codes, 8 apart, never wrapping. As built the
+  codes follow the text on the same line while they fit, and move to a line of
+  their own (4 under it) when they do not, so neither is cut; a card shows up
+  to three codes, and with more, two and "+N" in data mono ink-3.
 - The pending card's 6 px dot is the 12 px waiting spinner, as on the dialog's
   waiting line, and it has ghost `sm` "Continue" (reopens the dialog at its
   sign-in step) and "Cancel".
@@ -164,7 +175,19 @@ ink-3 (0 until threads record a profile, TKM-266).
 - The sign-in step is one step for both companies (the same words; only the
   title and the field's example address differ, from `lib/companies.ts`).
   An account's own "Sign in" signs in that one account; signing in as another
-  is refused and the dialog keeps waiting.
+  is refused and the dialog keeps waiting. Its words, in the layout drawn (the
+  help line over "Open sign-in page" and "Copy link", then the field):
+  - the desktop app listening: "Sign in in your browser. Tokamak finishes by
+    itself when you are done.", and over the field "Signing in on another
+    device, or it did not finish? The browser ends on a page that may not
+    load. Copy its whole address and paste it here.";
+  - a plain browser, or the listener busy or not available: "Sign in in your
+    browser. It ends on a page that may not load. Copy its whole address and
+    paste it here."
+- A sign-in the page's return watch ended is said as it ended in whichever
+  dialog waits on it (the details' "Add account" too): "Connected", the
+  account in, or the failure's own words. "That sign-in was cancelled in
+  another window." is only for one that left the list with neither.
 
 ## Parts it offers
 
@@ -189,7 +212,8 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   shows the subscription's status, the details each account's.
 - The card's action row: five 24 px buttons and the "plan unknown" hint fit a
   296 px card; another button needs that width checked. The buttons are named
-  from `titleOf` ("Remove Claude Team") and "Add to profile" from the builder
+  from `nameOf`, title and label ("Remove Claude Team, Acme"), and "Add to
+  profile" from the builder
   ("Add Claude Pro, Personal to a profile"); the tests and the browser screens
   find them by those names.
 - The details hide the Subscriptions section (`hidden`) and the Profiles
@@ -229,12 +253,22 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   entry there, in `productOf` and `agentOf` (`lib/api.ts`), its sign-in module
   in agent-proxy (`design/agent-proxy.md`), and its port in the shell's
   listener (`allowed_port` in `app/src-tauri/src/sign_in_return.rs`).
-- The return watch: the Profiles page listens for every waiting sign-in of the
-  member (a new subscription, a repair, another account, one account's sign-in)
-  and finishes it; the dialog that waits for it (the page's or the details')
-  sees it end through its own `lib/sign-in-watch.ts`. A sign-in started from
-  the details is handed to the page (`returns.started`) so it is listened for
-  before the list shows it.
+- The return watch: the Profiles page listens, per company, for the newest
+  waiting sign-in of the member (a new subscription, a repair, another account,
+  one account's sign-in) and finishes it; each company has one port, so an
+  older sign-in of the same company still waiting is finished by pasting. The
+  dialog that waits for it (the page's or the details') sees it end through its
+  own `lib/sign-in-watch.ts`, and reads how the page ended it
+  (`returns.ended`). A sign-in started from the details is handed to the page
+  (`returns.started`) so it is listened for before the list shows it.
+- The listener stays up while that sign-in waits: it restarts only for a
+  different sign-in (a memo in front of the effect: an effect source computed
+  again re-runs the effect even for the same id, and the list answers again on
+  every change), a port in use or a failed listen is tried again every 5 s, a
+  cancel it did not ask for after 1 s, and only the return finished, a cancel,
+  expiry or leaving the page stop it. The shell's listener keeps its port
+  across stray connections and closes those it gives up on with a reset, so
+  they leave nothing in TIME_WAIT on the port (`design/shell.md`).
 
 ## Primitives used
 
@@ -242,7 +276,7 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
 "Continue", "Cancel"; `md` ghost "Add subscription", "Copy link", "Back", "New
 profile"; `bare` "Profiles" in the header; brand "Open sign-in page" (a link in
 a browser, a button in the desktop app), "Done", "Start again", "Create";
-destructive "Remove"), `Chip` (`sm`), `Collapsible` (`quiet` trigger), `Dialog`
+destructive "Remove"), `Chip` (`sm`), `Dialog`
 (also "New profile" and the remove confirmation), `Icon` (12, 14, 16), `icons`,
 `Input` (`md`, `md` `mono`, `lg`), `Menu` (`Root`, `Trigger` as a ghost `sm`
 icon button, `Content`, `Group`, `GroupLabel`, `Item`, `Separator`), `Row`
@@ -252,8 +286,9 @@ trigger through the tooltip's); its own `CompanyMark`, profile box, row and
 drop slot (`ui/profile-box.tsx`), and drag ghost.
 
 How the Paper copies were made: `e2e/browser/screens.spec.ts` ("profiles
-screens") takes each screen in the desktop app's window (the test desktop has
-no return listener, so the sign-in step shows the paste wording);
+screens") takes each screen in the desktop app's window (the test desktop's
+listener waits until cancelled and no return comes, so the sign-in step shows
+the desktop wording and the test pastes);
 `e2e/paper-html.ts` turns the page with
 `PAPER_DROP="dialog-,FixtureView,PanelView,ThrowingView,WindowStateView,OtherDraftView"`
 (the dialog layers and the fixture plugins' rail marks) and the dialog and its
@@ -275,15 +310,17 @@ Switch's transparent 2 px border is left out (Paper measures from inside it).
 - **"Add to profile" is not drawn.** It sits in the action row before Remove,
   always shown. Where should it go in the drawing, and should removing a row
   from a profile be drawn (an × on the row) rather than only in its menu?
-- **The model line truncates** "not used yet" when a card holds two or more
-  profile codes. Should the codes move to a line of their own?
+- **The codes wrap under the model line** when they do not fit beside it (see
+  "Decided here"). Should the drawing show that, or the codes always on their
+  own line?
 - A second account on another plan is refused (`OtherPlan`). If the owner
   wants mixed plans under one card, the card needs a plan per account.
 - **The sign-in step differs from the drawing**, for both companies. The
   drawing puts the paste field under "Signed in on another device?" and
-  expects Claude's page to show `code#state`. As built the field shows at once;
-  in the desktop app the step says Tokamak can finish the sign-in itself and
-  keeps the field for when it cannot. A pasted `code#state` or bare code is
+  expects Claude's page to show `code#state`. As built the field shows at once,
+  with its own line; in the desktop app the step says Tokamak finishes by
+  itself and keeps the field for another device or a return that did not
+  come. A pasted `code#state` or bare code is
   still accepted for Claude; ChatGPT has no code page.
 - **Profiles: a row dragged onto another profile is copied** (it stays in its
   own). Should it move instead, or ask?

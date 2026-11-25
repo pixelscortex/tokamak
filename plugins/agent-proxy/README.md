@@ -235,6 +235,11 @@ moon run agent-proxy:test
 Set `TOKAMAK_TEST_SERVER_BIN` and `TOKAMAK_PLUGIN_HOST` to use other builds.
 If the native binaries are absent the native test prints a skip reason.
 
+An existing store: rows written on the TKM-261 base, or on any one ticket
+branch as merged (TKM-262, 264, 265, 295), still fit this schema, since fields
+were only added or widened; a store made on an early TKM-262 build (`e9578ba9`
+up to `7dd2057a`, logins with an `idToken`) does not, and must be recreated.
+
 ## Write an offline test
 
 Use the same Vitest runner as the other plugins. From this directory run

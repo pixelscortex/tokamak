@@ -26,10 +26,13 @@ Company logos are the marks of the `claude` and `codex` agent plugins, read
 from ai's agent list on this computer (`ui/company-mark.tsx`). A window without a reachable Runner shows a neutral mark.
 
 In the desktop app the page listens for the browser's return after a sign-in
-(`lib/sign-in-return.ts`, through the shell's commands in `lib/desktop.ts`):
-for every waiting sign-in of the member, of either company, on the company's
-port and path, and finishes it without a paste. Without the desktop app the
-person pastes the address the browser ended on.
+(`lib/sign-in-return.ts`, through the shell's commands in `lib/desktop.ts`) and
+finishes it without a paste. Each company has one port, so it listens, per
+company, for the newest waiting sign-in of the member only; an older sign-in of
+the same company that still waits is finished by pasting. The listener stays up
+while that sign-in waits: a port in use or a failed listen is tried again every
+5 s, and only the return, a cancel, expiry or leaving the page stop it. Without
+the desktop app the person pastes the address the browser ended on.
 
 The screen asks the server to renew logins that run out soon when it opens
 and every minute while it stays open (server code has no network timer).
