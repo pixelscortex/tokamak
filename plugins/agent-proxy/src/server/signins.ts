@@ -18,6 +18,7 @@ import {
 import { companyAddresses } from "./addresses";
 import { SignInError, accountDetails, exchange, models, readPasted, signInLink } from "./claude";
 import { attachAccount } from "./manage";
+import { storeRead } from "./reads";
 import { randomToken } from "./pkce";
 
 /**
@@ -53,8 +54,16 @@ export const begin = internalMutation({
     repair: v.optional(v.id("subscriptions")),
     /** A subscription to add another provider account to (`addAccount` in manage.ts). */
     addTo: v.optional(v.id("subscriptions")),
+    /** One account to sign in again (`signInAccount` in manage.ts); its subscription is the repair. */
+    repairAccount: v.optional(v.id("accounts")),
   },
-  handler: async (ctx, { owner, verifier, state, link, repair, addTo }) => {
+  handler: async (ctx, { owner, verifier, state, link, addTo, repairAccount, ...rest }) => {
+    let repair = rest.repair;
+    if (repairAccount) {
+      const account = await ctx.db.get(repairAccount);
+      if (!account || account.owner !== owner) return notFound("account");
+      repair = account.subscription;
+    }
     for (const target of [repair, addTo]) {
       if (!target) continue;
       const subscription = await ctx.db.get(target);
@@ -67,7 +76,11 @@ export const begin = internalMutation({
       .collect();
     // The same target is replaced; expired ones of any target go too.
     for (const row of open)
-      if ((row.repair === repair && row.addTo === addTo) || isExpired(row, now)) await ctx.db.delete(row._id);
+      if (
+        (row.repair === repair && row.addTo === addTo && row.repairAccount === repairAccount) ||
+        isExpired(row, now)
+      )
+        await ctx.db.delete(row._id);
     const id = await ctx.db.insert("signIns", {
       owner,
       company: "anthropic",
@@ -78,6 +91,7 @@ export const begin = internalMutation({
       startedAt: now,
       ...(repair && { repair }),
       ...(addTo && { addTo }),
+      ...(repairAccount && { repairAccount }),
     });
     return signInViewOf((await ctx.db.get(id))!, now);
   },
@@ -238,10 +252,15 @@ export const connect = internalMutation({
         return fail("OtherAccount", {
           message: `You signed in as ${found.email ?? "another account"}, not the account of this subscription. Sign in with that account.`,
         });
+      // An account's own "Sign in" takes that account only; without one, only a signed-out account.
+      if (signIn.repairAccount ? same._id !== signIn.repairAccount : same.status === "ok")
+        return fail("OtherAccount", {
+          message: `You signed in as ${found.email ?? "another account"}, which is not the account to sign in again. Sign in with that account.`,
+        });
       subscriptionId = subscription._id;
       accountId = same._id;
       await ctx.db.patch(same._id, { ...identity, status: "ok" });
-      await ctx.db.patch(subscription._id, { plan: found.plan, models: found.models });
+      await storeRead(ctx, same._id, found);
       const old = await ctx.db
         .query("logins")
         .withIndex("by_account", (q) => q.eq("account", same._id))
@@ -259,9 +278,10 @@ export const connect = internalMutation({
         company: "anthropic",
         method: "subscription",
         label: "",
-        plan: found.plan,
+        // Filled from the read below, by the one rule for reads.
+        plan: "",
         enabled: true,
-        models: found.models,
+        models: [],
         createdAt: Date.now(),
       });
       accountId = await ctx.db.insert("accounts", {
@@ -271,6 +291,7 @@ export const connect = internalMutation({
         ...identity,
         status: "ok",
       });
+      await storeRead(ctx, accountId, found);
     }
     await ctx.db.insert("logins", { owner, account: accountId, access, refresh, expiresAt });
     const subscription = (await ctx.db.get(subscriptionId))!;

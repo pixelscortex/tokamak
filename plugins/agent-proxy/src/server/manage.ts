@@ -25,6 +25,7 @@ import {
 import { companyAddresses } from "./addresses";
 import { accountDetails, models, signInLink } from "./claude";
 import { randomToken } from "./pkce";
+import { plansFit, storeRead } from "./reads";
 
 /**
  * Managing a subscription once it exists: another provider account under it,
@@ -38,8 +39,8 @@ import { randomToken } from "./pkce";
  * in, since the proxy (TKM-263) can still use it; each account carries its own
  * status, and the subscription turns "Signed out" only when every account is.
  * A second account must be on the subscription's plan: one on another plan is
- * refused (add it as a subscription of its own), unless Claude did not say
- * which plan it is, in which case the subscription keeps the plan it has.
+ * refused (add it as a subscription of its own). A plan that is not known, on
+ * either side, fits; the first known read fills it in (reads.ts).
  */
 
 type Failed = { failed: true; kind: string; data: { message: string } };
@@ -66,6 +67,31 @@ export const addAccount = pluginOnly(
         state,
         link,
         addTo: target,
+      });
+    },
+  }),
+);
+
+/**
+ * Starts a sign-in that signs one account (`id`, of the accounts table) in
+ * again in place: an account's own "Sign in" in the details. Finishing it as
+ * any other account is refused with `OtherAccount` and it keeps waiting.
+ */
+export const signInAccount = pluginOnly(
+  action({
+    args: { id: v.string() },
+    handler: async (ctx, { id }): Promise<SignInView | Failed> => {
+      const target = idIn("accounts", id);
+      if (!target) return notFound("account");
+      const verifier = randomToken();
+      const state = randomToken();
+      const link = signInLink(await companyAddresses(ctx), verifier, state);
+      return ctx.runMutation(internal.signins.begin, {
+        owner: ownerOf(ctx.auth),
+        verifier,
+        state,
+        link,
+        repairAccount: target,
       });
     },
   }),
@@ -105,7 +131,6 @@ export async function attachAccount(
     .first();
   const refused = await refusal(ctx, args, same);
   if (refused) return refused;
-  const subscription = (await ctx.db.get(args.subscription))!;
   const identity = {
     ...(found.email !== undefined && { email: found.email }),
     ...(found.organization !== undefined && { organization: found.organization }),
@@ -120,7 +145,7 @@ export async function attachAccount(
   } else {
     account = await ctx.db.insert("accounts", {
       owner,
-      subscription: subscription._id,
+      subscription: args.subscription,
       accountId: found.accountId,
       ...identity,
       status: "ok",
@@ -133,11 +158,9 @@ export async function attachAccount(
     refresh: args.refresh,
     expiresAt: args.expiresAt,
   });
-  // Models the new login may use join the list; none is dropped for an account that lacks it.
-  const known = new Set(subscription.models.map((model) => model.id));
-  const added = found.models.filter((model) => !known.has(model.id));
-  if (added.length) await ctx.db.patch(subscription._id, { models: [...subscription.models, ...added] });
-  return viewOf((await ctx.db.get(subscription._id))!, await accountsOf(ctx, subscription._id));
+  // Its models join the subscription's; an unknown subscription plan takes this one's.
+  await storeRead(ctx, account, found);
+  return viewOf((await ctx.db.get(args.subscription))!, await accountsOf(ctx, args.subscription));
 }
 
 /** Why `attachAccount` will not take this account, or null when it will. */
@@ -160,7 +183,7 @@ async function refusal(
   }
   if (same?.status === "ok")
     return fail("AlreadyAdded", { message: `${who} is already in this subscription.` });
-  if (found.planKnown !== false && found.plan !== subscription.plan)
+  if (!plansFit(subscription.plan, found))
     return fail("OtherPlan", {
       message: `${who} is on Claude ${found.plan}, not ${subscription.plan}. Add it as a subscription of its own.`,
     });
@@ -202,8 +225,7 @@ export const signOutAccount = pluginOnly(
  * Removes a subscription with everything under it, in one transaction: its
  * accounts, their logins, and any sign-in still waiting to repair it or add
  * an account to it. A sign-in that finishes later finds it gone and adds
- * nothing. Profiles that held it are the caller's to update (agent-proxy does
- * not know them).
+ * nothing. Anything that held it is the caller's to update.
  */
 export const removeSubscription = pluginOnly(
   mutation({
@@ -244,9 +266,10 @@ export const accounts = internalQuery({
 const model = v.object({ id: v.string(), name: v.string() });
 
 /**
- * Keeps what "Check again" read. Only what Claude answered replaces what is
- * stored: an account it did not answer for keeps its email and organisation,
- * and the plan and models stay when no account answered for them.
+ * Keeps what "Check again" read, by the one rule for reads (reads.ts): each
+ * account's models when its read returned some, the subscription's models as
+ * the union of all its accounts', and the first plan Claude said. An account
+ * Claude did not answer for keeps its email and organisation.
  */
 export const checked = internalMutation({
   args: {
@@ -266,18 +289,16 @@ export const checked = internalMutation({
   handler: async (ctx, { owner, subscription: id, read }) => {
     const subscription = await ctx.db.get(id);
     if (!subscription || subscription.owner !== owner) return notFound("subscription");
+    let planTaken = false;
     for (const answer of read) {
       const account = await ctx.db.get(answer.account);
-      if (!answer.known || !account || account.subscription !== id) continue;
+      if (!account || account.subscription !== id) continue;
       await ctx.db.patch(account._id, {
         ...(answer.email !== undefined && { email: answer.email }),
         ...(answer.organization !== undefined && { organization: answer.organization }),
       });
-    }
-    const plan = read.find((answer) => answer.known)?.plan;
-    const found = read.find((answer) => answer.models.length)?.models;
-    if (plan !== undefined || found) {
-      await ctx.db.patch(id, { ...(plan !== undefined && { plan }), ...(found && { models: found }) });
+      await storeRead(ctx, account._id, { ...answer, planKnown: answer.known && !planTaken });
+      planTaken ||= answer.known;
     }
     return viewOf((await ctx.db.get(id))!, await accountsOf(ctx, id));
   },

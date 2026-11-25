@@ -249,8 +249,9 @@ const PLANS: Record<string, string> = {
 
 /**
  * The plan, email and organisation Claude reports for the login (`/api/oauth/profile`).
- * `known` is false when Claude did not answer: the plan then reads "Free" and
- * must not replace one read before ("Check again" keeps the old one).
+ * `known` is true only when the answer carried a plan field (the organisation
+ * type or one of the `has_claude_*` flags): a failed read, or a 200 without
+ * them, must not store a guessed "Free" (reads.ts).
  */
 export async function accountDetails(
   addresses: Addresses,
@@ -277,7 +278,10 @@ export async function accountDetails(
       email: text(answer?.account?.email),
       organization: text(answer?.organization?.name),
     },
-    known: answer !== undefined,
+    known:
+      type !== undefined ||
+      typeof answer?.account?.has_claude_max === "boolean" ||
+      typeof answer?.account?.has_claude_pro === "boolean",
   };
 }
 

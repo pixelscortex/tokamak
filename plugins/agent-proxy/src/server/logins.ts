@@ -193,8 +193,9 @@ export const fresh = internalAction({
     const refresh = claimed.refresh;
     if (answer.kind === "renewed") {
       const { access, refresh: next, expiresAt } = answer.login;
-      await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
-      return { access, expiresAt, renewed: true };
+      // Signed out or removed while Claude answered: the login is gone, and so is this one.
+      const kept = await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
+      return kept ? { access, expiresAt, renewed: true } : null;
     }
     if (answer.kind === "refused") {
       await ctx.runMutation(internal.logins.refused, { ...args, refresh });
