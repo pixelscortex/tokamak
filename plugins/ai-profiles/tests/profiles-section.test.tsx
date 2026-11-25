@@ -22,7 +22,7 @@ const card = (id: string, plan: string, label: string): Subscription => ({
   plan,
   enabled: true,
   status: "ok",
-  accounts: [{ email: `${id}@example.test`, status: "ok" }],
+  accounts: [{ id: `agent-proxy/accounts:${id}`, email: `${id}@example.test`, status: "ok" }],
   models: [],
   createdAt: 1,
 });

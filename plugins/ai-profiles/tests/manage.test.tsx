@@ -74,6 +74,11 @@ function client(): TokamakClient {
     action: call,
     subscribe(name, args, onEvent) {
       calls.push([name, args]);
+      // The Profiles section's own list (TKM-264): none here.
+      if (name === "ai-profiles/profiles:list") {
+        queueMicrotask(() => onEvent({ value: [] }));
+        return () => {};
+      }
       const send = () =>
         onEvent({
           value: structuredClone(
