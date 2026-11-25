@@ -9,9 +9,9 @@ settings come with a later ticket (TKM-266).
 
 It depends on `ai` and `agent-proxy`. Subscriptions belong to `agent-proxy`;
 this plugin stores only profiles (`src/server/schema.ts`), each one person's,
-holding subscription ids. A subscription `agent-proxy` no longer lists drops
-out of every profile: readers skip it, the next write deletes it, and the flow
-that removes a subscription calls `internal.profiles.forgetSubscription`. Its server functions
+holding subscription ids. A subscription `agent-proxy` does not list right now
+is hidden from every profile but kept, and shows again when listed; only the
+flow that removes a subscription deletes it, with `internal.profiles.forgetSubscription`. Its server functions
 (`src/server/subscriptions.ts`) pass the window's calls on to
 `agent-proxy`'s plugin-only exports, which answer for the calling member only
 and never with a login.

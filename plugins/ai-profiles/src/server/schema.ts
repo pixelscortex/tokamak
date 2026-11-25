@@ -18,8 +18,9 @@ export default defineSchema({
      * The subscriptions, first used first. Each `subscription` is the id of an
      * `agent-proxy` subscription as a plain string: there is no typed ref to
      * another plugin's row yet (`v.ref`, Plugin API v2), so nothing deletes an
-     * entry when its subscription goes. Readers skip entries whose subscription
-     * `agent-proxy` no longer lists, and the next write drops them. An object per
+     * entry when its subscription goes. Readers hide entries whose subscription
+     * `agent-proxy` does not list right now; only `forgetSubscription` deletes
+     * them (`profiles.ts`). Stored as `subscriptionKey` gives it. An object per
      * entry, so the models a profile allows from each (TKM-269) can join it.
      */
     entries: v.array(v.object({ subscription: v.string() })),
