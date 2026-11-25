@@ -1,0 +1,73 @@
+packages/server/src/service/action_coordination.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 124
+  s_50b61fe9c78095::t_c805ca92d337b4 119,123
+packages/server/src/actions/runner_upstream.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 91,112,137,167-190,192-193
+packages/runner/src/remote.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 107-110,238
+packages/server/src/actions/machines.rs
+  s_50b61fe9c78095::t_2c3b6d980300f8 95
+  s_50b61fe9c78095::t_2b2b5553087d37 7,13,17-21,31,41-49,59,69-80,89,94,96-100
+  s_50b61fe9c78095::t_207a0769bd35b8 34-37,51-57,62-65
+  s_50b61fe9c78095::t_b1cfd7a10baa30 50,67
+packages/server/src/identity/devices.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 285-287
+  s_50b61fe9c78095::t_2b2b5553087d37 31,47,119,265,282-284,288-291
+packages/runner/Cargo.toml
+  s_50b61fe9c78095::t_98e299b0460ecf 30,35-36
+  s_50b61fe9c78095::t_4857bf04da925e 37
+.ci/check.sh
+  s_50b61fe9c78095::t_98e299b0460ecf 131
+packages/server/src/websocket.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 50
+packages/server/src/websocket/machine.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 7-10,97,123,130,141,144-149,201-202,236-241
+  s_50b61fe9c78095::t_2c3b6d980300f8 160-163,181
+  s_50b61fe9c78095::t_98e299b0460ecf 220-224
+  s_50b61fe9c78095::t_2b2b5553087d37 175,179,182-183,193,207,235
+  s_50b61fe9c78095::t_485f232506cde5 180
+packages/server/src/machine_wire.rs
+  s_50b61fe9c78095::t_207a0769bd35b8 23
+packages/server/src/service/requests.rs
+  s_50b61fe9c78095::t_b289e5a1e65e98 107-110
+  s_50b61fe9c78095::t_9d525746fefcb2 25-27,61,81
+packages/runner/README.md
+  s_50b61fe9c78095::t_98e299b0460ecf 176-194
+packages/sdk/src/transport.ts
+  s_50b61fe9c78095::t_2c3b6d980300f8 234
+  s_50b61fe9c78095::t_207a0769bd35b8 89-96
+packages/sdk/README.md
+  s_50b61fe9c78095::t_98e299b0460ecf 183-191
+packages/server/README.md
+  s_50b61fe9c78095::t_98e299b0460ecf 496-500
+packages/server/src/actions.rs
+  s_50b61fe9c78095::t_2b2b5553087d37 121
+  s_50b61fe9c78095::t_84abc730ed6907 22
+packages/runtime/js/local.ts
+  s_50b61fe9c78095::t_207a0769bd35b8 91-94,96,109,185-186
+  s_50b61fe9c78095::t_02d2c2a805454f 95
+e2e/fake-agent/harness.mjs
+  s_50b61fe9c78095::t_aa55a7f247867d 128,141,143,151
+packages/server/src/service/command_loop.rs
+  s_50b61fe9c78095::t_7132d475c63f04 79
+packages/server/src/service/mod.rs
+  s_50b61fe9c78095::t_f1723e8343a20d 276
+packages/server/tests/connected-runner.mjs
+  s_50b61fe9c78095::t_a26289027b853e 3,21,65,88-112,117,200-212,217,259-260,281,324,326-348,362-368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7087689596af18722bf32c21732b339f6ded1142",
+  "prompts": {},
+  "sessions": {
+    "s_50b61fe9c78095": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213e3-4ba7-7ff2-89d1-7c2c4da8b5d6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
