@@ -1,0 +1,110 @@
+packages/server/src/plugins/loading.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 277
+  s_a318c7bdadc5bd::t_66cf8d9e57d093 278-280
+packages/engine/src/bridge.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 24-28,33,47,92,102,113,152,251-258,343-344,356-357,373,458,494-506,529-536,565,595-599
+  s_a318c7bdadc5bd::t_8ae4a227eb701c 23,508-514,600
+packages/server/src/actions.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 182-184
+  s_a318c7bdadc5bd::t_0a64034b1ea664 126
+packages/server/src/plugins/mod.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 53
+packages/server/src/host.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 23,33,38,52,54,168-173,282-283,285,303-309
+  s_a318c7bdadc5bd::t_bf56a5c6aa438e 16
+packages/server/src/identity/call.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 5-13,57-58
+packages/server/src/bin/export-protocol.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 4,10,12
+packages/server/src/protocol.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 26-32,56,60,62-69,81,233-236,241-244,251-263,265-272
+  s_a318c7bdadc5bd::t_881f1933fbef67 264
+packages/server/src/service/delivery.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 10,26,52,63
+packages/server/src/host/hooks.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 15,47-51,53-55,57-58,68-85,87-89,91-97,103,135,137-140,142-147,157-165,193,223,230-236,238-241,277-282,284,286-288
+  s_a318c7bdadc5bd::t_ea8058267cd4cb 52,56,86,90,136,141,245-250,283,285
+packages/server/src/service/subscriptions.rs
+  s_a318c7bdadc5bd::t_b607236f2e99b2 84
+  s_a318c7bdadc5bd::t_0f83178dfdcd37 86-87,94
+packages/engine/src/lib.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 17
+  s_a318c7bdadc5bd::t_164a3153c76d57 18
+packages/server/src/service/requests.rs
+  s_a318c7bdadc5bd::t_4c48dda2b1fd91 57
+  s_a318c7bdadc5bd::t_3d9b4bd6b1ecd0 58-59
+packages/build/tests/boundary.test.mjs
+  s_a318c7bdadc5bd::t_88c9f6d33e7a75 339-341
+packages/engine/tests/modules.rs
+  s_a318c7bdadc5bd::t_d9b80ba4cc84e0 53
+packages/sdk/README.md
+  s_a318c7bdadc5bd::t_6e7f14fb84566d 784-785,790-792,803
+packages/sdk/src/call-error.ts
+  s_a318c7bdadc5bd::t_c23a3044d5aae1 1-3,19,23
+packages/sdk/src/hooks.ts
+  s_a318c7bdadc5bd::t_000bda1f90de90 44-46
+packages/sdk/src/protocol.ts
+  s_7485715999886d::t_81f4e5cb28d007 7,30-36
+packages/sdk/src/transport.ts
+  s_a318c7bdadc5bd::t_2dad13be2dd218 273-276,288-293
+packages/sdk/src/websocket-transport.ts
+  s_a318c7bdadc5bd::t_ab755b159660fe 34-35,50,54
+packages/sdk/tests/transport.test.mjs
+  s_a318c7bdadc5bd::t_9e48bccd19c274 200,202-204,209
+packages/sdk/tools/result-validator.mjs
+  s_a318c7bdadc5bd::t_37ff6aee69af6d 31,48,70
+packages/sdk/worker/dispatch.ts
+  s_a318c7bdadc5bd::t_f6f922d78ec626 1
+packages/server/README.md
+  s_a318c7bdadc5bd::t_215ae45a0ac0d0 79-80
+packages/server/src/service/action_coordination.rs
+  s_a318c7bdadc5bd::t_dad0b084dfee10 155
+packages/server/tests/actions.rs
+  s_a318c7bdadc5bd::t_8af22d84ff10b2 128,328,338,374-375,413
+packages/server/tests/fixtures/query-hooks/moderation/src/server/policy.ts
+  s_a318c7bdadc5bd::t_7199cc72c9eedf 1-2,6,21-24,114-140
+packages/server/tests/fixtures/query-hooks/team/src/contracts.ts
+  s_a318c7bdadc5bd::t_a634ebfcec3d79 1-5
+packages/server/tests/fixtures/query-hooks/team/src/server/api.ts
+  s_a318c7bdadc5bd::t_283daa1e451341 1
+packages/server/tests/fixtures/query-hooks/team/src/server/users.ts
+  s_a318c7bdadc5bd::t_3c6f450c7e01fb 1,40-52
+packages/server/tests/helpers/actions_dns.rs
+  s_a318c7bdadc5bd::t_6888561368ad4a 325
+packages/server/tests/plugins.rs
+  s_a318c7bdadc5bd::t_5882b8ef835527 113-115,117,148-149,159,724
+packages/server/tests/query-hooks-driver.ts
+  s_a318c7bdadc5bd::t_3db5846b00b87a 71-79,124-148,177-181,190
+packages/server/tests/query_hooks.rs
+  s_a318c7bdadc5bd::t_c6a3bd8dc784e3 145-152
+packages/server/tests/schema_indexes.rs
+  s_a318c7bdadc5bd::t_d7fec946618246 351-353,355,1645
+packages/server/tests/service.rs
+  s_a318c7bdadc5bd::t_eb44cd93112a6b 320-322,324,332-334,638-639
+packages/server/tests/workers.rs
+  s_a318c7bdadc5bd::t_3ac22e8b4d4229 86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71d9e4f30c61c487635aeb99d798a61b9cd2fe7d",
+  "prompts": {},
+  "sessions": {
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_a318c7bdadc5bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-45f3-77a0-b99b-dd5e3ad3243d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
