@@ -1,0 +1,48 @@
+packages/runner/tests/local-routing.mjs
+  s_cf69c1ffa229c9::t_a8d1570fb938f8 40-62,68-69,71-98,180-183,285-286
+packages/sdk/src/protocol.ts
+  s_cf69c1ffa229c9::t_33478f07a05c16 11,19
+  s_cf69c1ffa229c9::t_d8c7c168a32952 12-18
+packages/runner/src/local/quickjs/session.rs
+  s_cf69c1ffa229c9::t_e999e6f1a4880f 9,399,415,547-566,572,588,602,610-648
+packages/runtime/js/local.ts
+  s_cf69c1ffa229c9::t_b36683b8309c1c 59,61-66,148-149,275-281,307-318,372,465,510-516
+packages/sdk/README.md
+  s_cf69c1ffa229c9::t_f0ec9be1d3781c 544,553-557
+packages/sdk/src/functions.ts
+  s_cf69c1ffa229c9::t_b6c4fa6f8d6a39 545-546,550
+packages/sdk/src/transport.ts
+  s_cf69c1ffa229c9::t_2df41252406df8 76-85
+packages/sdk/worker/contracts.ts
+  s_cf69c1ffa229c9::t_1c409049019e1a 108-109,114
+packages/sdk/worker/dispatch.ts
+  s_cf69c1ffa229c9::t_469c35611bfb15 196
+packages/server/src/identity/call.rs
+  s_cf69c1ffa229c9::t_c7c4a00cb8bb39 21-45
+packages/server/src/protocol.rs
+  s_cf69c1ffa229c9::t_d30f2a84192f9a 45-58,97
+packages/server/src/service/action_coordination.rs
+  s_cf69c1ffa229c9::t_b73456860ff6b5 7
+packages/server/src/service/mod.rs
+  s_cf69c1ffa229c9::t_d9dd7bc8fc01fa 24-26,224
+packages/server/src/service/requests.rs
+  s_cf69c1ffa229c9::t_401895c40702f0 39,48-60,83,85-88,91,129,133-140
+packages/server/src/service/session.rs
+  s_cf69c1ffa229c9::t_3f14d7ff91ec84 22,78,85,92-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "652fbda829e20762005b29765dffb313a5e79652",
+  "prompts": {},
+  "sessions": {
+    "s_cf69c1ffa229c9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-350f-70e1-88e9-c5c55e08e7ad",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
