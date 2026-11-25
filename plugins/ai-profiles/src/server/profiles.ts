@@ -75,12 +75,7 @@ const gone = (what: "profile" | "subscription") => fail("NotFound", { message: `
  * owner with it (`except` is the profile being renamed). Checked in the same
  * transaction as the write; the unique index on owner and code is the backstop.
  */
-export async function checkCode(
-  ctx: Reader,
-  owner: string,
-  raw: string,
-  except?: string,
-): Promise<{ code: string } | ReturnType<typeof fail>> {
+export async function checkCode(ctx: Reader, owner: string, raw: string, except?: string) {
   const code = raw.trim().toUpperCase();
   if (!CODE.test(code))
     return fail("Invalid", { field: "code", message: "A code is 1 to 4 letters or digits." });
