@@ -52,9 +52,13 @@ export function AddToProfile(props: { subscription: Subscription; builder: Build
           variant="ghost"
           icon={profileAddGlyph}
           label={label()}
-          render={(attrs: Record<string, unknown>) => (
-            <Menu.Trigger {...attrs} size="sm" variant="ghost" icon={profileAddGlyph} label={label()} />
-          )}
+          render={(attrs: Record<string, unknown>) => {
+            // The tooltip's own content is left out: the menu trigger draws the icon once.
+            const { children: _content, ...rest } = attrs;
+            return (
+              <Menu.Trigger {...rest} size="sm" variant="ghost" icon={profileAddGlyph} label={label()} />
+            );
+          }}
         />
         <Tooltip.Content>Add to profile</Tooltip.Content>
       </Tooltip.Root>

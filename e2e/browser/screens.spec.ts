@@ -287,8 +287,10 @@ async function unlinkGo(folder: string) {
   await unlink(join(folder, "go")).catch(() => {});
 }
 
-// The Profiles screen and the add-subscription dialog, signed in against the
-// fake Claude and ChatGPT sign-ins. They run on a copy of the plugins with agent-proxy,
+// The Profiles screen in flow order (TKM-261, 262, 264, 265): adding a Claude
+// subscription, then a ChatGPT one, making profiles and dragging both in, the
+// subscription details, and removing; signed in against the fake Claude and
+// ChatGPT sign-ins. They run on a copy of the plugins with agent-proxy,
 // ai-profiles and claude added (browser.ts builds them), so Claude's own mark
 // is the logo and the other screens keep the rail they are drawn with.
 test("profiles screens", async ({ browser }) => {
@@ -306,13 +308,21 @@ test("profiles screens", async ({ browser }) => {
     `TOKAMAK_AGENT_PROXY_ADDRESSES='${JSON.stringify(fake.addresses)}'\n`,
   );
   const context = await browser.newContext(screen);
+  let desktop: Awaited<ReturnType<typeof asDesktop>>;
   try {
     process.env.TOKAMAK_PLUGIN_DIR = plugins;
     try {
-      await asDesktop(context);
+      desktop = await asDesktop(context);
     } finally {
       process.env.TOKAMAK_PLUGIN_DIR = shared;
     }
+    /** The sign-in page the dialog's "Open sign-in page" asks the desktop to open. */
+    const signInPage = async () => {
+      await dialog.getByRole("button", { name: "Open sign-in page" }).click();
+      await expect.poll(() => desktop.opened.length).toBeGreaterThan(opened);
+      return desktop.opened[opened++]!;
+    };
+    let opened = 0;
     const page = await context.newPage();
     await page.goto("/p/ai-profiles");
     const subscriptions = page.getByRole("region", { name: "Subscriptions" });
@@ -336,13 +346,12 @@ test("profiles screens", async ({ browser }) => {
     await rest();
     await shot(page, "profiles-add-method");
     await dialog.getByRole("button", { name: /Claude subscription/ }).click();
-    const open = dialog.getByRole("link", { name: "Open sign-in page" });
-    await expect(open).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Open sign-in page" })).toBeVisible();
     await rest();
     await shot(page, "profiles-add-sign-in");
 
     // The person signs in on Claude's page in their browser and ends on the callback link.
-    const signedIn = await fetch((await open.getAttribute("href"))!, { redirect: "manual" });
+    const signedIn = await fetch(await signInPage(), { redirect: "manual" });
     const callback = signedIn.headers.get("location")!;
     // The address goes in the field the step shows; the other-device note is opened too.
     await dialog.getByRole("textbox", { name: /Address the sign-in ended on/ }).fill(callback);
@@ -364,50 +373,13 @@ test("profiles screens", async ({ browser }) => {
     await subscriptions.getByRole("button", { name: "Add subscription" }).click();
     await dialog.getByRole("button", { name: /Anthropic/ }).click();
     await dialog.getByRole("button", { name: /Claude subscription/ }).click();
-    await expect(dialog.getByRole("link", { name: "Open sign-in page" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Open sign-in page" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(subscriptions.getByRole("article", { name: "Claude, awaiting sign-in" })).toBeVisible();
     await rest();
     await shot(page, "profiles-awaiting");
 
-    // The subscription details (TKM-265): one account, then a second added
-    // through the same sign-in, then that one signed out.
-    await subscriptions.getByRole("button", { name: "Claude Pro details" }).click();
-    const details = page.getByRole("region", { name: "Claude Pro details" });
-    await expect(details.getByText("personal@example.test")).toBeVisible();
-    await rest();
-    await shot(page, "profiles-details");
-    fake.addAccount("anthropic", "work");
-    await details.getByRole("button", { name: "Add account" }).click();
-    const another = dialog.getByRole("link", { name: "Open sign-in page" });
-    await expect(another).toBeVisible();
-    fake.nextSignIn("work");
-    const added = await fetch((await another.getAttribute("href"))!, { redirect: "manual" });
-    await dialog
-      .getByRole("textbox", { name: /Address the sign-in ended on/ })
-      .fill(added.headers.get("location")!);
-    await dialog.getByRole("button", { name: "Continue" }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(details.getByText("work@example.test")).toBeVisible();
-    await rest();
-    await shot(page, "profiles-details-two-accounts");
-    await details.getByRole("listitem").filter({ hasText: "work@example.test" }).getByRole("button").click();
-    await expect(details.getByText("Signed out")).toBeVisible();
-    await rest();
-    await shot(page, "profiles-details-signed-out");
-
-    // Back to the cards, and the remove confirmation (no profile uses it yet).
-    await page
-      .getByRole("navigation", { name: "Breadcrumb" })
-      .getByRole("button", { name: "Profiles" })
-      .click();
-    await subscriptions.getByRole("button", { name: "Remove Claude Pro" }).click();
-    await expect(dialog.getByText("No profile uses it.")).toBeVisible();
-    await rest();
-    await shot(page, "profiles-remove");
-    await dialog.getByRole("button", { name: "Cancel" }).click();
-
-    // TKM-262: the same steps for OpenAI, ending with a ChatGPT card beside the Claude one.
+    // The same steps for OpenAI (TKM-262), ending with a ChatGPT card beside the Claude one.
     // Starting it replaces the waiting Claude sign-in (one new sign-in waits at a time).
     fake.addAccount("openai", "chatgpt");
     await subscriptions.getByRole("button", { name: "Add subscription" }).click();
@@ -416,10 +388,8 @@ test("profiles screens", async ({ browser }) => {
     await rest();
     await shot(page, "profiles-add-method-openai");
     await dialog.getByRole("button", { name: /ChatGPT subscription/ }).click();
-    const openai = dialog.getByRole("link", { name: "Open sign-in page" });
-    await expect(openai).toBeVisible();
     fake.nextSignIn("chatgpt");
-    const returned = await fetch((await openai.getAttribute("href"))!, { redirect: "manual" });
+    const returned = await fetch(await signInPage(), { redirect: "manual" });
     await dialog
       .getByRole("textbox", { name: /Address the sign-in ended on/ })
       .fill(returned.headers.get("location")!);
@@ -433,7 +403,7 @@ test("profiles screens", async ({ browser }) => {
     await shot(page, "profiles-both-companies");
 
     // The Profiles section (TKM-264): two profiles made with "New profile", then
-    // the card dragged in with the mouse, as a person does it.
+    // both cards dragged in with the mouse, as a person does it.
     const section = page.getByRole("region", { name: "Profiles" });
     async function newProfile(name: string, code: string, picture?: string) {
       await section.getByRole("button", { name: "New profile" }).click();
@@ -450,35 +420,79 @@ test("profiles screens", async ({ browser }) => {
     }
     await newProfile("Personal", "pers", "profiles-new-profile");
     await newProfile("Sandbox work", "sbox");
-    const card = subscriptions.getByRole("article", { name: "Claude Pro, Personal" });
+    const claude = subscriptions.getByRole("article", { name: "Claude Pro, Personal" });
+    const chatgpt = subscriptions.getByRole("article", { name: "ChatGPT Plus, Personal" });
     const box = (code: string) => section.locator(`[data-profile][aria-label^="${code},"]`);
-    /** Presses on the card's email line and carries it to the bottom of `code`'s box. */
-    async function carry(code: string) {
+    /** Presses on a card's email line and carries it to the bottom of `code`'s box. */
+    async function carry(card: typeof claude, code: string) {
       const from = (await card.boundingBox())!;
       await page.mouse.move(from.x + 48, from.y + 64);
       await page.mouse.down();
       const to = (await box(code).boundingBox())!;
       await page.mouse.move(to.x + to.width / 2, to.y + to.height - 8, { steps: 12 });
     }
-    await carry("PERS");
-    await page.mouse.up();
-    await expect(box("PERS").getByRole("listitem")).toHaveCount(1);
+    for (const [card, code] of [
+      [claude, "PERS"],
+      [chatgpt, "PERS"],
+      [chatgpt, "SBOX"],
+    ] as const) {
+      await carry(card, code);
+      await page.mouse.up();
+    }
+    await expect(box("PERS").getByRole("listitem")).toHaveCount(2);
+    await expect(box("SBOX").getByRole("listitem")).toHaveCount(1);
     await rest();
     await shot(page, "profiles-profiles");
 
-    // Pointing at a profile dims the cards it does not hold (the awaiting one here).
-    await box("PERS").hover();
+    // Pointing at a profile dims the cards it does not hold: Claude's, for SBOX.
+    await box("SBOX").hover();
     await expect(subscriptions.locator("article[data-dimmed]")).toHaveCount(1);
     await shot(page, "profiles-hover-profile");
 
-    // Carrying the card: the box that holds it fades and says "added"; the other
+    // Carrying the Claude card: the box that holds it fades and says "added"; the other
     // rings and shows where it would land.
-    await carry("SBOX");
+    await carry(claude, "SBOX");
     await expect(box("PERS")).toHaveAttribute("data-added", "");
     await expect(box("SBOX")).toHaveAttribute("data-target", "");
     await shot(page, "profiles-dragging");
     await page.mouse.up();
-    await expect(card.getByText("SBOX")).toBeVisible();
+    await expect(claude.getByText("SBOX")).toBeVisible();
+
+    // The subscription details (TKM-265): one account, then a second added
+    // through the same sign-in, then that one signed out. "Used by" names both profiles.
+    await subscriptions.getByRole("button", { name: "Claude Pro details" }).click();
+    const details = page.getByRole("region", { name: "Claude Pro details" });
+    await expect(details.getByText("personal@example.test")).toBeVisible();
+    await expect(details.getByRole("region", { name: "Used by" }).getByRole("listitem")).toHaveCount(2);
+    await rest();
+    await shot(page, "profiles-details");
+    fake.addAccount("anthropic", "work");
+    await details.getByRole("button", { name: "Add account" }).click();
+    fake.nextSignIn("work");
+    const added = await fetch(await signInPage(), { redirect: "manual" });
+    await dialog
+      .getByRole("textbox", { name: /Address the sign-in ended on/ })
+      .fill(added.headers.get("location")!);
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(details.getByText("work@example.test")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-two-accounts");
+    await details.getByRole("listitem").filter({ hasText: "work@example.test" }).getByRole("button").click();
+    await expect(details.getByText("Signed out")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-signed-out");
+
+    // Back to the cards, and the remove confirmation: it names the profiles that lose it.
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("button", { name: "Profiles" })
+      .click();
+    await subscriptions.getByRole("button", { name: "Remove Claude Pro" }).click();
+    await expect(dialog.getByText(/PERS/)).toBeVisible();
+    await rest();
+    await shot(page, "profiles-remove");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
   } finally {
     await context.close();
     await fake.stop();

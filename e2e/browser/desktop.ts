@@ -27,6 +27,8 @@ export async function asDesktop(context: BrowserContext): Promise<{
   requestQuit(): Promise<void>;
   /** The window's answers so far: "hold", "cancel", "confirm". */
   readonly quitAnswers: readonly string[];
+  /** The pages "Open sign-in page" asked the system browser to open, oldest first. */
+  readonly opened: readonly string[];
 }> {
   // Inside the run's folder, which the runner removes at the end.
   const plugins = process.env.TOKAMAK_PLUGIN_DIR!;
@@ -50,10 +52,11 @@ export async function asDesktop(context: BrowserContext): Promise<{
   context.once("close", () => void runner.stop());
   let quitChannel: ((message: unknown) => Promise<void>) | undefined;
   const quitAnswers: string[] = [];
+  const opened: string[] = [];
 
   await context.exposeBinding(
     "__tokamakDesktop",
-    async ({ page }, command: string, args: { events: number }) => {
+    async ({ page }, command: string, args: { events: number; url?: string }) => {
       switch (command) {
         case "tokamak_endpoint":
           return runner.endpoint;
@@ -73,6 +76,15 @@ export async function asDesktop(context: BrowserContext): Promise<{
         case "quit_confirm":
           await runner.stop();
           quitAnswers.push("confirm");
+          return null;
+        // The sign-in return (app/src-tauri/src/sign_in_return.rs): the test desktop opens no
+        // browser and has no listener, so the dialog shows the paste path, as a plain browser does.
+        case "sign_in_open_browser":
+          opened.push(args.url!);
+          return "opened";
+        case "sign_in_return_listen":
+          return { status: "unavailable" };
+        case "sign_in_return_cancel":
           return null;
         default:
           throw new Error(`The test desktop has no ${command}`);
@@ -125,5 +137,6 @@ export async function asDesktop(context: BrowserContext): Promise<{
       await quitChannel({ type: "quit" });
     },
     quitAnswers,
+    opened,
   };
 }
