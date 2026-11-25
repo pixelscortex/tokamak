@@ -1,0 +1,21 @@
+packages/build/tests/components.test.mjs
+  s_62d8de3fec7e8a::t_e3be3ee82686c3 211-214
+packages/sdk/client.tsx
+  s_62d8de3fec7e8a::t_92d61769228e73 110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b9dd8f5b3fac4e9fc9dac056e590224a736a072",
+  "prompts": {},
+  "sessions": {
+    "s_62d8de3fec7e8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68ee70d4-9653-4451-880a-97d966f1069a",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
