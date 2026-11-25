@@ -1,7 +1,11 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { createServer } from "node:http";
+import { createInterface } from "node:readline";
+import { syntheticJwt } from "./fake-companies/oauth";
+import { mkdtemp, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { startFakeCompanies } from "./fake-companies";
 
@@ -34,12 +38,124 @@ function run(executable: string, args: string[], cwd: string, env: NodeJS.Proces
   });
 }
 
-for (const cli of ["claude", "codex"] as const) {
-  test(`${cli} completes a turn using a path-prefixed base URL`, { timeout: 45_000 }, async (context) => {
+async function blockingProxy() {
+  const attempts: string[] = [];
+  const proxy = createServer((request, response) => {
+    attempts.push(new URL(request.url ?? "/", `http://${request.headers.host ?? "unknown"}`).host);
+    response.writeHead(403).end();
+  });
+  proxy.on("connect", (request, socket) => {
+    attempts.push(request.url ?? "unknown");
+    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+  });
+  await new Promise<void>((done) => proxy.listen(0, "127.0.0.1", done));
+  const address = proxy.address();
+  if (!address || typeof address === "string") throw new Error("Blocking listener has no port");
+  return {
+    attempts,
+    url: `http://127.0.0.1:${address.port}`,
+    stop: () => {
+      proxy.close();
+      proxy.closeAllConnections();
+    },
+  };
+}
+
+async function appServer(home: string, env: NodeJS.ProcessEnv, prompt: string) {
+  const child = spawn("codex", ["app-server"], { cwd: home, env, stdio: ["pipe", "pipe", "pipe"] });
+  const lines = createInterface({ input: child.stdout });
+  const exited = new Promise<number | null>((done) => child.once("close", done));
+  const send = (method: string, params?: object, id?: number) =>
+    child.stdin.write(JSON.stringify({ method, params, id }) + "\n");
+  let stdout = "";
+  let stderr = "";
+  let code = 1;
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  child.stdin.on("error", () => {});
+  const timeout = setTimeout(() => child.kill("SIGKILL"), 20_000);
+  try {
+    const result = new Promise<void>((done) => {
+      void exited.then(() => done());
+      lines.on("line", (line) => {
+        const message = JSON.parse(line);
+        if (message.method === "item/completed" && message.params.item.type === "agentMessage")
+          stdout += message.params.item.text;
+        if (message.method === "error") stderr += `${message.params?.error?.message ?? "App-server error"}\n`;
+        if (message.error) return done();
+        if (message.id === 1) {
+          send("initialized");
+          send(
+            "thread/start",
+            { cwd: home, approvalPolicy: "never", sandbox: "read-only", ephemeral: true },
+            2,
+          );
+        } else if (message.id === 2) {
+          send(
+            "turn/start",
+            {
+              threadId: message.result.thread.id,
+              input: [{ type: "text", text: prompt, text_elements: [] }],
+            },
+            3,
+          );
+        } else if (message.method === "turn/completed") {
+          code = message.params.turn.status === "completed" ? 0 : 1;
+          done();
+        }
+      });
+    });
+    send("initialize", { clientInfo: { name: "fixture-probe", version: "0.1.0" } }, 1);
+    await result;
+  } finally {
+    lines.close();
+    child.stdin.end();
+    await exited;
+    clearTimeout(timeout);
+  }
+  return { code, stdout, stderr };
+}
+
+async function loopbackTls(home: string) {
+  const key = join(home, "loopback-key.pem");
+  const cert = join(home, "loopback.pem");
+  const config = join(home, "openssl.cnf");
+  await writeFile(config, "[req]\ndistinguished_name=dn\n[dn]\n[tls]\nsubjectAltName=IP:127.0.0.1\n");
+  await promisify(execFile)(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-days",
+      "1",
+      "-subj",
+      "/CN=127.0.0.1",
+      "-config",
+      config,
+      "-extensions",
+      "tls",
+      "-keyout",
+      key,
+      "-out",
+      cert,
+    ],
+    { cwd: home },
+  );
+  return { key: await readFile(key), cert: await readFile(cert), path: cert };
+}
+
+for (const variant of ["claude", "codex", "codex-app-server"] as const) {
+  const cli = variant === "claude" ? "claude" : "codex";
+  test(`${variant} completes a turn using a path-prefixed base URL`, { timeout: 45_000 }, async (context) => {
     const home = await mkdtemp(join(tmpdir(), "fake-company-cli-"));
-    const fake = await startFakeCompanies();
+    let fake: Awaited<ReturnType<typeof startFakeCompanies>> | undefined;
+    const proxy = await blockingProxy();
     try {
-      const blocked = "http://127.0.0.1:1";
+      const blocked = proxy.url;
       const env = {
         PATH: process.env.PATH,
         HOME: home,
@@ -75,10 +191,22 @@ for (const cli of ["claude", "codex"] as const) {
         return;
       }
       expect(version.code).toBe(0);
-      console.log(version.stdout.trim());
-      const account = fake.addAccount(cli === "claude" ? "anthropic" : "openai", cli);
+      console.log(`${variant}: ${version.stdout.trim()}`);
+      let tls;
+      try {
+        if (variant === "codex-app-server") tls = await loopbackTls(home);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        console.log("Skipping: openssl is required for the isolated Codex HTTPS probe");
+        context.skip("openssl is not installed");
+        return;
+      }
+      fake = await startFakeCompanies({ tls });
+      const account = fake.addAccount(cli === "claude" ? "anthropic" : "openai", cli, {
+        strict: variant === "codex-app-server",
+      });
       const base = `${fake.address}/plugins/agent-proxy/ACME`;
-      const prompt = "Reply with exactly: Fake reply.";
+      const prompt = "Say hello in two words.";
       let result;
       if (cli === "claude") {
         result = await run(
@@ -90,6 +218,50 @@ for (const cli of ["claude", "codex"] as const) {
             ANTHROPIC_BASE_URL: base,
             ANTHROPIC_API_KEY: account.accessToken,
           },
+        );
+      } else if (variant === "codex-app-server") {
+        await writeFile(
+          join(home, "config.toml"),
+          `
+model = "gpt-5"
+openai_base_url = "${base}/backend-api/codex"
+chatgpt_base_url = "${base}/backend-api"
+check_for_update_on_startup = false
+cli_auth_credentials_store = "file"
+[features]
+apps = false
+plugins = false
+[analytics]
+enabled = false
+`,
+        );
+        const idToken = syntheticJwt({
+          email: "fixture@example.test",
+          "https://api.openai.com/auth": { chatgpt_account_id: account.id, chatgpt_plan_type: "plus" },
+        });
+        await writeFile(
+          join(home, "auth.json"),
+          JSON.stringify({
+            auth_mode: "chatgpt",
+            OPENAI_API_KEY: null,
+            last_refresh: new Date().toISOString(),
+            tokens: {
+              id_token: idToken,
+              access_token: account.accessToken,
+              refresh_token: account.refreshToken,
+              account_id: account.id,
+            },
+          }),
+          { mode: 0o600 },
+        );
+        result = await appServer(
+          home,
+          {
+            ...env,
+            CODEX_REFRESH_TOKEN_URL_OVERRIDE: fake.addresses.openai.token,
+            CODEX_CA_CERTIFICATE: tls!.path,
+          },
+          prompt,
         );
       } else {
         await writeFile(
@@ -126,7 +298,9 @@ stream_max_retries = 0
             key,
             /authorization|api-key|cookie|token/i.test(key)
               ? "[masked]"
-              : /^(accept|content-type|user-agent|anthropic-version|anthropic-beta)$/.test(key)
+              : /^(accept|content-type|content-encoding|user-agent|anthropic-version|anthropic-beta)$/.test(
+                    key,
+                  )
                 ? value
                 : "[present]",
           ]),
@@ -142,9 +316,15 @@ stream_max_retries = 0
             : typeof body;
         console.log(`${method} ${path} headers=${JSON.stringify(safe)} body=${JSON.stringify(shape)}`);
       }
+      console.log(`Blocked outbound hosts: ${JSON.stringify(proxy.attempts)}`);
       expect(result.code, result.stderr + result.stdout).toBe(0);
       expect(result.stdout).toContain("Fake reply.");
-      const endpoint = cli === "claude" ? "/v1/messages" : "/responses";
+      const endpoint =
+        cli === "claude"
+          ? "/v1/messages"
+          : variant === "codex-app-server"
+            ? "/backend-api/codex/responses"
+            : "/responses";
       expect(
         fake.requests.some(
           ({ method, account, path }) =>
@@ -155,7 +335,8 @@ stream_max_retries = 0
         `Missing authenticated POST to the prefixed ${endpoint} endpoint`,
       ).toBe(true);
     } finally {
-      await fake.stop();
+      proxy.stop();
+      await fake?.stop();
       await empty(home);
     }
   });
