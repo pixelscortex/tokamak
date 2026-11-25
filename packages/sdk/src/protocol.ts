@@ -17,7 +17,15 @@ export type CallErrorDetails = {
 export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }
   | { type: "mutation"; id: number; name: string; args: JsonValue }
-  | { type: "action"; id: number; name: string; args: JsonValue; on?: "server" | "caller"; window?: boolean }
+  | {
+      type: "action";
+      id: number;
+      name: string;
+      args: JsonValue;
+      on?: "server" | "caller";
+      window?: boolean;
+      hookPlans?: boolean;
+    }
   | {
       type: "localcall";
       id: number;

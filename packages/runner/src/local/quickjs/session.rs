@@ -393,23 +393,7 @@ async fn invoke_root(
     lease: &Arc<Lease>,
     mut frame: Value,
 ) -> Result<Value, String> {
-    let plan = frame["hooks"].take();
-    let continuation = frame["note"].clone();
-    if let Some(fields) = frame.as_object_mut() {
-        fields.remove("hooks");
-        fields.remove("hookScope");
-        fields.remove("threadId");
-        fields.remove("admittedAction");
-        if fields.get("action") == Some(&Value::Bool(true))
-            && let Some(note) = fields.remove("note")
-        {
-            fields.insert("actionDepth".into(), note["depth"].clone());
-            fields.insert("hookScope".into(), note["hookScope"].clone());
-            fields.insert("threadId".into(), note["thread"].clone());
-        } else {
-            fields.remove("actionDepth");
-        }
-    }
+    let (plan, continuation) = root_action_frame(&mut frame);
     let _slot = if frame["action"] == true {
         Some(
             pool.actions
@@ -481,6 +465,27 @@ async fn invoke_root(
         Ok(value) => json!({"type":"result","value":value}),
         Err(error) => json!({"type":"result","error":error.message,"details":error.details}),
     })
+}
+
+fn root_action_frame(frame: &mut Value) -> (Value, Value) {
+    let plan = frame["hooks"].take();
+    let continuation = frame["note"].clone();
+    if let Some(fields) = frame.as_object_mut() {
+        fields.remove("hooks");
+        fields.remove("hookScope");
+        fields.remove("threadId");
+        fields.remove("admittedAction");
+        if fields.get("action") == Some(&Value::Bool(true))
+            && let Some(note) = fields.remove("note")
+        {
+            fields.insert("actionDepth".into(), note["depth"].clone());
+            fields.insert("hookScope".into(), note["hookScope"].clone());
+            fields.insert("threadId".into(), note["thread"].clone());
+        } else {
+            fields.remove("actionDepth");
+        }
+    }
+    (plan, continuation)
 }
 
 struct WindowStage<'a> {
