@@ -148,5 +148,8 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   sender's own computer today.
 - The drawing marks the picked row with a fill and medium text; the menu's radio item marks
   it with its check only.
+- The agent rows on every `AI ·` artboard and the whole `AI · picker open` artboard were
+  taken again from `feature/tkm-259` (TKM-259); the rest of those artboards is still the
+  earlier copy. The picker's "Runs on" shows "This Mac" in Paper, not the test computer's name.
 - The Paper copy uses the test agent ("Fake agent", models named after
   replays such as "work"). Real agents show their own names and models.
