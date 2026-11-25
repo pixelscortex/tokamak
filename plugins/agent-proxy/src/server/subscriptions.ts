@@ -1,26 +1,34 @@
-import { fail, pluginOnly, v, type Id } from "@tokamak/sdk";
+import { fail, pluginOnly, v } from "@tokamak/sdk";
 import { internal } from "./_generated/internal";
 import {
   action,
+  idIn,
   mutation,
+  notFound,
   ownerOf,
   query,
+  signInViewOf,
   viewOf,
   type SignInView,
   type SubscriptionView,
 } from "./_functions";
 
 /**
- * What other plugins (today `ai-profiles`, for its screen) may read and
- * change of a person's subscriptions. All plugin-only, all for the caller:
- * another member of the same server never sees them.
+ * What other plugins may read and change of a person's subscriptions. All
+ * plugin-only, all for the caller: another member of the same server never
+ * sees them. Every id is checked to be of the right table before it is read.
  */
 
-/** The caller's subscriptions, oldest first, and their sign-ins that have not ended. */
+/**
+ * The caller's subscriptions, oldest first, and their sign-ins that have not
+ * ended. A sign-in older than 15 minutes is marked `expired`: it can no longer
+ * finish, and the next change to sign-ins deletes it (a query cannot).
+ */
 export const listSubscriptions = pluginOnly(
   query({
     handler: async (ctx): Promise<{ subscriptions: SubscriptionView[]; signIns: SignInView[] }> => {
       const owner = ownerOf(ctx.auth);
+      const now = Date.now();
       const subscriptions = await ctx.db
         .query("subscriptions")
         .withIndex("by_owner", (q) => q.eq("owner", owner))
@@ -42,16 +50,7 @@ export const listSubscriptions = pluginOnly(
               accounts.filter((account) => account.subscription === subscription._id),
             ),
           ),
-        signIns: signIns
-          .sort((a, b) => a.startedAt - b.startedAt)
-          .map(({ _id, company, method, link, startedAt, repair }) => ({
-            id: _id,
-            company,
-            method,
-            link,
-            startedAt,
-            ...(repair !== undefined && { repair }),
-          })),
+        signIns: signIns.sort((a, b) => a.startedAt - b.startedAt).map((row) => signInViewOf(row, now)),
       };
     },
   }),
@@ -64,9 +63,9 @@ export const setLabel = pluginOnly(
   mutation({
     args: { id: v.string(), label: v.string() },
     handler: async (ctx, { id, label }) => {
-      const subscription = await ctx.db.get(id as Id<"subscriptions">);
-      if (!subscription || subscription.owner !== ownerOf(ctx.auth))
-        return fail("Gone", { message: "That subscription is gone." });
+      const ref = idIn("subscriptions", id);
+      const subscription = ref && (await ctx.db.get(ref));
+      if (!subscription || subscription.owner !== ownerOf(ctx.auth)) return notFound("subscription");
       const text = label.trim().replace(/\s+/g, " ");
       if (text.length > MAX_LABEL)
         return fail("TooLong", { message: `A label is at most ${MAX_LABEL} characters.` });
@@ -77,16 +76,16 @@ export const setLabel = pluginOnly(
 );
 
 /**
- * Switched off, a subscription stays with its login, and profiles skip it
- * (once the proxy exists, TKM-263) until it is switched on again.
+ * Switched off, a subscription keeps its login, and the proxy (TKM-263) will
+ * skip it until it is switched on again.
  */
 export const setEnabled = pluginOnly(
   mutation({
     args: { id: v.string(), enabled: v.boolean() },
     handler: async (ctx, { id, enabled }) => {
-      const subscription = await ctx.db.get(id as Id<"subscriptions">);
-      if (!subscription || subscription.owner !== ownerOf(ctx.auth))
-        return fail("Gone", { message: "That subscription is gone." });
+      const ref = idIn("subscriptions", id);
+      const subscription = ref && (await ctx.db.get(ref));
+      if (!subscription || subscription.owner !== ownerOf(ctx.auth)) return notFound("subscription");
       await ctx.db.patch(subscription._id, { enabled });
       return null;
     },
@@ -95,23 +94,27 @@ export const setEnabled = pluginOnly(
 
 /**
  * Renews every one of the caller's logins that runs out soon, without the
- * person. There is no timer a plugin's server code can run that may use the
- * network (the `maintenance` entry is a mutation), so the Profiles screen
+ * person. A plugin's server code has no timer that may use the network (the
+ * `maintenance` entry is a mutation), so a screen that shows subscriptions
  * asks for this while it is open, and the proxy will renew each login before
- * it uses it. A login Claude will not renew turns its card "Signed out".
+ * it uses it. `waiting` counts logins that could not be renewed now and wait
+ * for their next try; a login Claude will not renew turns "Signed out".
  */
 export const renewLogins = pluginOnly(
   action({
-    handler: async (ctx): Promise<{ renewed: number; signedOut: number }> => {
-      const due = await ctx.runQuery(internal.logins.due, {});
+    handler: async (ctx): Promise<{ renewed: number; signedOut: number; waiting: number }> => {
+      const owner = ownerOf(ctx.auth);
+      const due = await ctx.runQuery(internal.logins.due, { owner });
       let renewed = 0;
       let signedOut = 0;
+      let waiting = 0;
       for (const { account } of due) {
-        const login = await ctx.runAction(internal.logins.fresh, { account });
-        if (login) renewed++;
-        else if (!(await ctx.runQuery(internal.logins.read, { account }))) signedOut++;
+        const login = await ctx.runAction(internal.logins.fresh, { owner, account });
+        if (login?.renewed) renewed++;
+        else if (!(await ctx.runQuery(internal.logins.read, { owner, account }))) signedOut++;
+        else waiting++;
       }
-      return { renewed, signedOut };
+      return { renewed, signedOut, waiting };
     },
   }),
 );

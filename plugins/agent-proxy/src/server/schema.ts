@@ -49,6 +49,15 @@ export default defineSchema({
     refresh: v.string(),
     /** Milliseconds since the epoch. */
     expiresAt: v.number(),
+    /**
+     * Set while one call renews this login, so a refresh token goes to the
+     * company once: other callers use the stored token or wait for the new one.
+     */
+    renewingUntil: v.optional(v.number()),
+    /** No renewal before this time: the company asked to wait, or could not be reached. */
+    retryAt: v.optional(v.number()),
+    /** Renewals in a row that could not reach the company; the wait doubles with each. */
+    failures: v.optional(v.number()),
   }).index("by_account", ["account"]),
 
   /**
@@ -66,5 +75,7 @@ export default defineSchema({
     startedAt: v.number(),
     /** The subscription this sign-in repairs in place; absent for a new one. */
     repair: v.optional(v.id("subscriptions")),
+    /** Set while one call finishes it, so a second paste cannot race the first. */
+    finishingUntil: v.optional(v.number()),
   }).index("by_owner", ["owner"]),
 });
