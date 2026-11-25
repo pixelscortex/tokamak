@@ -431,6 +431,54 @@ test("profiles screens", async ({ browser }) => {
     await expect(subscriptions.getByRole("article", { name: "ChatGPT Plus, Personal" })).toBeVisible();
     await rest();
     await shot(page, "profiles-both-companies");
+
+    // The Profiles section (TKM-264): two profiles made with "New profile", then
+    // the card dragged in with the mouse, as a person does it.
+    const section = page.getByRole("region", { name: "Profiles" });
+    async function newProfile(name: string, code: string, picture?: string) {
+      await section.getByRole("button", { name: "New profile" }).click();
+      const form = page.getByRole("dialog", { name: "New profile" });
+      await form.getByRole("textbox", { name: "Name" }).fill(name);
+      // Typed in lower case: the field shows it upper case.
+      await form.getByRole("textbox", { name: "Code" }).fill(code);
+      if (picture) {
+        await rest();
+        await shot(page, picture);
+      }
+      await form.getByRole("button", { name: "Create" }).click();
+      await expect(form).toHaveCount(0);
+    }
+    await newProfile("Personal", "pers", "profiles-new-profile");
+    await newProfile("Sandbox work", "sbox");
+    const card = subscriptions.getByRole("article", { name: "Claude Pro, Personal" });
+    const box = (code: string) => section.locator(`[data-profile][aria-label^="${code},"]`);
+    /** Presses on the card's email line and carries it to the bottom of `code`'s box. */
+    async function carry(code: string) {
+      const from = (await card.boundingBox())!;
+      await page.mouse.move(from.x + 48, from.y + 64);
+      await page.mouse.down();
+      const to = (await box(code).boundingBox())!;
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height - 8, { steps: 12 });
+    }
+    await carry("PERS");
+    await page.mouse.up();
+    await expect(box("PERS").getByRole("listitem")).toHaveCount(1);
+    await rest();
+    await shot(page, "profiles-profiles");
+
+    // Pointing at a profile dims the cards it does not hold (the awaiting one here).
+    await box("PERS").hover();
+    await expect(subscriptions.locator("article[data-dimmed]")).toHaveCount(1);
+    await shot(page, "profiles-hover-profile");
+
+    // Carrying the card: the box that holds it fades and says "added"; the other
+    // rings and shows where it would land.
+    await carry("SBOX");
+    await expect(box("PERS")).toHaveAttribute("data-added", "");
+    await expect(box("SBOX")).toHaveAttribute("data-target", "");
+    await shot(page, "profiles-dragging");
+    await page.mouse.up();
+    await expect(card.getByText("SBOX")).toBeVisible();
   } finally {
     await context.close();
     await fake.stop();

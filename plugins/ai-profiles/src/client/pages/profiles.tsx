@@ -12,6 +12,9 @@ import { ENDING, createSignInWatch } from "../lib/sign-in-watch";
 import { CardActions } from "../ui/card-actions";
 import { RemoveDialog } from "../ui/remove-dialog";
 import { SubscriptionDetails } from "./subscription";
+import { createBuilder } from "../lib/builder";
+import { CardProfiles } from "../ui/card-profiles";
+import { ProfilesSection } from "../ui/profiles-section";
 
 /**
  * How often the open screen asks the server to renew logins that run out
@@ -78,6 +81,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
 
   const subscriptions = () => listed.data()?.subscriptions ?? [];
   const signIns = () => listed.data()?.signIns ?? [];
+  const builder = createBuilder(client, subscriptions);
   async function cancel(signIn: SignIn) {
     await local(
       signIn.id,
@@ -130,6 +134,9 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                 }
                 onSignIn={() => startAndOpen({ company: subscription.company, repair: subscription.id })}
                 actions={<CardActions subscription={subscription} />}
+                dimmed={builder.dimmed(subscription.id)}
+                profiles={<CardProfiles subscription={subscription} builder={builder} />}
+                onPointerDown={(event) => builder.drag.start(event, { subscription: subscription.id })}
               />
             )}
           </For>
@@ -143,6 +150,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                 }}
                 onCancel={() => cancel(signIn)}
                 onRestart={() => startAndOpen(signIn)}
+                dimmed={builder.dimmed()}
               />
             )}
           </For>
@@ -153,6 +161,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           </p>
         </Show>
       </section>
+      <ProfilesSection builder={builder} subscriptions={subscriptions()} />
       <RemoveDialog subscriptions={subscriptions()} />
       <AddDialog
         step={step()}

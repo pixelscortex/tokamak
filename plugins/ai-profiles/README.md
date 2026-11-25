@@ -5,9 +5,18 @@ Claude or ChatGPT subscription (company, method, sign-in, connected; the same
 steps for both, with each company's words in `lib/companies.ts`) and sees it
 as a card. Profiles themselves, the picker column and the launch settings come with
 later tickets (TKM-264, TKM-266).
+The Profiles screen. Its Subscriptions section: a person adds a Claude
+subscription (company, method, sign-in, connected) and sees it as a card. Its
+Profiles section: a person makes a profile (a name and a code of up to four
+characters, unique for them) and drags subscription cards into it, in the
+order they are used, first one first. The picker column and the launch
+settings come with a later ticket (TKM-266).
 
 It depends on `ai` and `agent-proxy`. Subscriptions belong to `agent-proxy`;
-this plugin stores nothing about them. Its server functions
+this plugin stores only profiles (`src/server/schema.ts`), each one person's,
+holding subscription ids. A subscription `agent-proxy` does not list right now
+is hidden from every profile but kept, and shows again when listed; only the
+flow that removes a subscription deletes it, with `internal.profiles.forgetSubscription`. Its server functions
 (`src/server/subscriptions.ts`) pass the window's calls on to
 `agent-proxy`'s plugin-only exports, which answer for the calling member only
 and never with a login.
@@ -22,5 +31,9 @@ Tests: `moon run ai-profiles:test` (the dialog, the cards, the awaiting card,
 with a stand-in server; `tests/chatgpt.test.tsx` for the OpenAI path). The
 same flow runs on a real server against the fake sign-ins in
 `plugins/agent-proxy/tests/sign-in.test.ts` and `chatgpt-sign-in.test.ts`.
+the Profiles section with dragging and its keyboard menus, with a stand-in
+server; and profiles on a real server, `tests/profiles-server.test.ts`, when
+the server and plugin host are built). The same flow runs on a real server against the fake
+Claude sign-in in `plugins/agent-proxy/tests/sign-in.test.ts`.
 
 Screens and their Paper copies: `design/ai-profiles.md`.

@@ -9,6 +9,14 @@ profile details and the picker column come with later tickets. Subscriptions are
 Paper page: `App 1:1 · AI profiles plugin`. Drawn from the owner's
 "Flow · Profiles (proposal)" artboards `1 · Profiles · screen`, `2a` to `2d`
 and `3 · Subscription · details`.
+Subscriptions section, the add-subscription dialog, and the Profiles section
+with its "New profile" dialog (TKM-264); the subscription and profile details
+and the picker column come with later tickets. Subscriptions are `agent-proxy`'s data
+(`design/agent-proxy.md`); company logos are the marks of the `claude` and
+`codex` agent plugins, read from ai's agent list on this computer.
+Paper page: `App 1:1 · AI profiles plugin`. Drawn from the owner's
+"Flow · Profiles (proposal)" artboards `1 · Profiles · screen`, `2a` to `2d`,
+`4a · Profiles · hover a profile` and `4b · Profiles · dragging a card`.
 
 ## Screens
 
@@ -27,6 +35,10 @@ and `3 · Subscription · details`.
 | The same with a second account added through "Add account"                              | `pages/subscription.tsx`, the dialog's sign-in step                             | `Profiles · subscription · two accounts`   |
 | The same with one of the two signed out (its own "Sign in"; the card still "OK")        | `pages/subscription.tsx` (`AccountRow`)                                         | `Profiles · subscription · one signed out` |
 | Remove confirmation, no profile using it                                                | `ui/remove-dialog.tsx`                                                          | `Profiles · remove`                        |
+| "New profile": name and code (typed "pers", shown "PERS")                               | `ui/profile-dialog.tsx`                                                         | `Profiles · new profile`                   |
+| Two profiles, the card in one; its code on the card                                     | `ui/profiles-section.tsx`, `ui/profile-box.tsx`, `ui/card-profiles.tsx`         | `Profiles · profiles`                      |
+| Pointing at a profile: the cards it does not hold dim                                   | `ui/profile-box.tsx`, `lib/builder.ts` (`dimmed`)                               | `Profiles · hover a profile`               |
+| Dragging the card: the box that holds it says "added", the other rings with a slot      | `lib/drag.ts`, `ui/profile-box.tsx`, the ghost in `ui/profiles-section.tsx`     | `Profiles · dragging a card`               |
 
 Not drawn yet: no subscriptions ("No subscriptions yet…"), a "Signed out" card
 with "Sign in", a refused or wrong paste (the line under the field, the sign-in
@@ -37,6 +49,12 @@ link, "That sign-in was cancelled in another window.", a plain browser
 (the line under the card's buttons), "Used by" with profiles and the remove
 confirmation naming them (no profiles exist before TKM-264). The window tests
 cover each of them.
+link, "That sign-in was cancelled in another window.", and a plain browser
+(neutral company marks). The window tests cover each of them. For profiles:
+no profiles yet ("No profiles yet. Make one, then drag subscriptions into
+it."), an empty box ("Drag a subscription here"), a code refused in the dialog,
+a row's menu (Move up, Move down, Remove from PERS) and a card's "Add to
+profile" menu; the window tests in `profiles-section.test.tsx` cover them.
 
 Measured on the owner's artboards and kept: the column is 1220 wide and
 centred (`max-w-profiles`, a token in this plugin's `styles.css`), 24 from
@@ -47,6 +65,46 @@ card is an edge ring with an 18 px logo on a 32 px card-tone tile. The dialog
 is 440 wide, 24 in, 20 between its parts; four 24 × 4 step pills 4 apart; the
 title is `text-read` semibold; the address field is `Input` `md` `mono` with an
 `sm` ghost "Continue" beside it, the label field `Input` `lg`.
+
+The Profiles section, measured on `1 · Profiles · screen`, `4a` and `4b`: the
+header is 40 under the cards (`pt-10`), "Profiles", the count in data mono and
+the hint "Drag subscriptions into a profile. Top one is used first." in
+`text-label` ink-3, 8 after the count; "New profile" is a ghost `md` with the
+add icon. Boxes share the column, 12 apart; a box is radius 12, 4 in, on the
+tray tone, 4 between its parts. Its head is 40 tall: the stack icon at 14 in
+ink-3, the code in `text-code` (13 mono) medium ink, the name in `text-row`
+ink-2, and "Fill first" in `text-label` ink-3 at the end. A row is 40 tall,
+radius 8, on the card tone, 8 in at the start: the grip at 12 in ink-3, the
+number in data mono ink-3, the logo at 16, the name in `text-row` medium ink,
+and the label in `text-label` ink-3 at the end ("2 accounts" in its place for
+a subscription with several). On a card the codes follow the model line, each
+a 12 px stack icon and the code in data mono ink-3, 4 apart, 8 between codes.
+Pointing at a box ("4a") turns it to the card tone with an edge ring, and
+every card it does not hold, the awaiting one too, goes to 40%. Dragging
+("4b"): the carried card waits at 40%, a box that holds it goes to 40% and
+says "✓ added" instead of "Fill first", the box under the pointer turns to the
+card tone with the strong edge ring, and a dashed strong-edge slot, 40 tall
+and radius 8, shows the number the card would get; the ghost follows the
+pointer, tilted 2°, on the band tone with the raised shadow.
+
+As built, a row dragged onto another profile is copied there and stays in
+its own; inside its own profile it moves. Removing it is the row menu's job.
+
+Decided here for the Profiles section, not drawn (or not on the scale): the
+pointed box's ring is the edge (drawn at 20% ink, between `edge` 12% and
+`edge-strong` 40%); the head is 12 in (drawn 10) and the number column 12 wide
+(drawn 10); boxes sit three to a row and wrap; the drop slot's number is 32 in
+(drawn 28); the ghost is radius 12 (drawn 10) and as tall as its text with 4 in
+(drawn 44 fixed, 300 wide); a box with no rows says "Drag a subscription
+here"; a disabled subscription's row says "Off" where the label goes; the
+"New profile" dialog is the add-subscription dialog's frame with two `Input`
+`md` fields (`mono` for the code) and the help "Up to 4 letters or digits.
+Threads show it in the picker."; each row ends in a ghost `sm` "more" button
+and each card's model line in a ghost `sm` add button (its "Add to profile"
+menu), both shown only while the row or card is pointed at or focused, so a
+row ends 4 in (drawn 12) to make room for that button; the carried card keeps
+its tray fill at 40% (drawn without fill, with a 20% ring at 40%: no token has
+20%, and it would take another `SubscriptionCard` prop).
 
 Decided here, not drawn (or not on the scale): a card's gap is 12 (drawn 14)
 and its height follows the tallest card in its row (drawn 236); icon-to-text
@@ -119,6 +177,8 @@ from one cancelled there.
 the details' "Used by" and the remove confirmation (through `manage:usedBy`),
 and `subscriptionRemoved(ctx, id)` runs in the same transaction as
 `manage:remove`. Both are empty today.
+24 (drawn 28); the card's action row (models, refresh, settings, remove) comes with TKM-265. Button `sm` keeps radius 8
+(drawn 6) and ghost `sm` text is ink-2 (drawn ink), as the package draws them.
 
 ## Parts it offers
 
@@ -163,6 +223,43 @@ trigger), `Dialog`, `Icon`, `icons`, `Input` (`md`, `md` `mono`, `lg`), `Row`
 (single and double), `Switch` (solid-js's `Switch` is imported as `Choose`),
 `Tooltip` (`sm` ghost icon triggers); its own `CompanyMark`.
 
+- Adding OpenAI (TKM-262): the company row becomes a button, a method step and
+  a sign-in title per company; `productOf` and `agentOf` in `lib/api.ts`.
+- The card's model line holds the profile codes and the "Add to profile"
+  button (`profiles` slot of `SubscriptionCard`); the card's action row
+  (TKM-265) sits under it. A card is a drag source: a press on anything but a
+  button, link, field or switch starts a drag (`lib/drag.ts`, `INTERACTIVE`).
+- Dimming reads `data-dimmed` on the cards (`SubscriptionCard`, `AwaitingCard`);
+  a new kind of card in the grid needs it too, or it stays bright while a
+  profile is pointed at.
+- A drop is found from the page: boxes carry `data-profile`, rows `data-entry`.
+  Renaming those breaks dragging, not the tests of the menus.
+- Profiles hold `agent-proxy` subscription ids, in one spelling
+  (`subscriptionKey`). One `agent-proxy` does not list right now is hidden
+  everywhere but stays stored, in place, and shows again when listed; the
+  positions the window sends count shown rows only. Only
+  `internal.profiles.forgetSubscription` deletes entries: the flow that removes
+  a subscription (TKM-265) calls it in the same transaction, and it throws
+  rather than return a failure. Every other change to a profile's list goes
+  through `save()` in `src/server/profiles.ts`, the single write path.
+- The picker column (TKM-266) lists profiles with `profiles.list`. Starting a
+  turn reads the chosen profile's enabled subscriptions in use order with
+  `internal.profiles.inUseOrder`; the order shown here is that order.
+- A person has at most 32 profiles (`MAX_PROFILES`); the code rules are
+  `checkCode`, for making a profile and for renaming one later (TKM-269).
+
+## Primitives used
+
+`Button` (`sm` ghost "Sign in", "Continue", "Cancel"; `md` ghost "Add
+subscription", "Copy link", "Back", "New profile"; brand "Open sign-in page" as
+a link, "Done", "Start again", "Create"), `Chip` (`sm`), `Collapsible`
+(`quiet` trigger), `Dialog` (also "New profile"), `Icon` (12, 14, 16), `icons`,
+`Input` (`md` `mono`, `md`, `lg`), `Menu` (`Root`, `Trigger` as a ghost `sm`
+icon button, `Content`, `Group`, `GroupLabel`, `Item`, `Separator`), `Row`
+(single and double), `Switch` (solid-js's `Switch` is imported as `Choose`);
+its own `CompanyMark`, profile box, row and drop slot (`ui/profile-box.tsx`),
+and drag ghost.
+
 How the Paper copies were made: `e2e/browser/screens.spec.ts` ("profiles
 screens") takes each screen; `e2e/paper-html.ts` turns the page with
 `PAPER_DROP="dialog-"` and the dialog and its backdrop with `--page`, since
@@ -201,6 +298,44 @@ for the card with the action row. Matched to `feature/tkm-265`.
 - **The sign-in step differs from the drawing**, for Claude and ChatGPT alike
   (one step, the same words; only the title and the field's example address
   differ). The drawing puts the paste
+  `feature/tkm-261`. The four Profiles-section artboards (`Profiles · profiles`, `Profiles · hover a
+  profile`, `Profiles · dragging a card`, `Profiles · new profile`) sit in a row of
+  their own under the others and were made the same way from `feature/tkm-264`:
+  `Profiles · profiles` pasted whole, the other three copied from it with the
+  converter's differences applied (opacity, rings, "added", the drop slot, the
+  drag ghost and the dialog). The ghost is tilted by hand (the converter keeps no
+  rotation). The older Profiles artboards predate the section: under their cards
+  the app now also draws "Profiles 0" and "No profiles yet…"; they are left for
+  whoever merges this branch with TKM-265's, which redrew `Profiles · subscriptions`.
+
+## Open questions
+
+- **Profiles: a row dragged onto another profile is copied** (it stays in its
+  own). Should it move instead, or ask?
+- **Profiles: the carried card** keeps its tray fill at 40%; the drawing has
+  no fill and a 20% ring. A 20% edge token and a "carried" state on the card
+  would match it.
+- **Profiles: a row's end padding** is 4 (drawn 12) because its menu button sits
+  there.
+
+- **Profiles: fields and dialog.** No "New profile" dialog or field is drawn;
+  it uses `Input` `md` (40) for both fields, since there is no 32 px dense
+  `Input` (TKM-291's open question 3). Should the code field be dense, or sit
+  beside the name?
+- **Profiles: keyboard controls are not drawn.** The keyboard does what dragging
+  does through two menus: a ghost `sm` button at the end of each row (Move up,
+  Move down, Remove from the profile) and one at the end of each card's model
+  line ("Add to profile", the profiles that hold it marked "added"). Both show
+  only while the row or card is pointed at or focused. Where should they sit
+  in the drawing, and should removing a row also be drawn (an × on the row)?
+- **Profiles: the pointed box's ring** is drawn at 20% ink, which no token has;
+  it uses `edge` (12%).
+- **Profiles: touch.** A touch on a card scrolls the page; only a mouse or pen
+  drags. Touch users use the menus.
+- **Profiles: rename and delete** are not on this screen (TKM-269 adds the
+  profile details).
+
+- **The sign-in step differs from the drawing.** The drawing puts the paste
   field under "Signed in on another device?" and expects Claude's page to show
   `code#state`. With the redirect as built (`http://localhost:54545/callback`,
   the Claude Code CLI's own), nothing listens there, so after signing in on

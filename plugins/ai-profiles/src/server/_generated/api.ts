@@ -9,6 +9,13 @@ type References = {
     readonly "signOut": ReferenceFromDefinition<typeof import("../manage")["signOut"]>;
     readonly "usedBy": ReferenceFromDefinition<typeof import("../manage")["usedBy"]>;
   };
+  readonly "profiles": {
+    readonly "add": ReferenceFromDefinition<typeof import("../profiles")["add"]>;
+    readonly "create": ReferenceFromDefinition<typeof import("../profiles")["create"]>;
+    readonly "list": ReferenceFromDefinition<typeof import("../profiles")["list"]>;
+    readonly "move": ReferenceFromDefinition<typeof import("../profiles")["move"]>;
+    readonly "remove": ReferenceFromDefinition<typeof import("../profiles")["remove"]>;
+  };
   readonly "subscriptions": {
     readonly "cancelSignIn": ReferenceFromDefinition<typeof import("../subscriptions")["cancelSignIn"]>;
     readonly "finishSignIn": ReferenceFromDefinition<typeof import("../subscriptions")["finishSignIn"]>;
@@ -26,6 +33,11 @@ export const api: References = createApi("ai-profiles", [
   "manage:signInAccount",
   "manage:signOut",
   "manage:usedBy",
+  "profiles:add",
+  "profiles:create",
+  "profiles:list",
+  "profiles:move",
+  "profiles:remove",
   "subscriptions:cancelSignIn",
   "subscriptions:finishSignIn",
   "subscriptions:list",
