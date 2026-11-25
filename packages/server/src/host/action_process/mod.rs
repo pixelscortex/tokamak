@@ -302,14 +302,32 @@ impl Supervisor {
         &self,
         source: &Source,
         run: impl FnOnce(CancellationToken) -> crate::RunnerFuture,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, crate::protocol::CallError> {
+        use crate::protocol::{
+            CallError, CallErrorDetails, LOCAL_RELOAD_GRACE_MS, StructuredCallError,
+        };
+
         if source.retired.is_cancelled() {
             return Err("Plugin action cancelled by reload".into());
         }
+        let reload_deadline = async {
+            source.retired.cancelled().await;
+            tokio::time::sleep(Duration::from_millis(LOCAL_RELOAD_GRACE_MS)).await;
+        };
         tokio::select! {
             biased;
             () = self.closed.cancelled() => Err("Server closed".into()),
-            result = run(source.retired.clone()) => result,
+            result = run(source.retired.clone()) => result.map_err(Into::into),
+            () = reload_deadline => Err(CallError::Structured(Box::new(StructuredCallError {
+                message: "Local plugin build retired".into(),
+                details: CallErrorDetails {
+                    plugin: source.name.clone(),
+                    hook: String::new(),
+                    stage: "runner".into(),
+                    kind: "LocalReloadTimeout".into(),
+                    data: Value::Null,
+                },
+            }))),
         }
     }
 

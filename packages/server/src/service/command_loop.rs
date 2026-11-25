@@ -43,7 +43,7 @@ impl Coordinator {
                 Some(completion) = self.action_jobs.join_next() => {
                     if let Ok((session, id, result)) = completion {
                         self.action_cancellations.remove(&(session, id));
-                        self.respond(session, id, result);
+                        self.respond_call(session, id, result);
                     }
                 }
                 _ = self.cleanup.notified() => {},

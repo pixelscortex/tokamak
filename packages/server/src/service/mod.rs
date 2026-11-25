@@ -271,7 +271,7 @@ struct Coordinator {
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
     runner: Arc<crate::actions::RunnerSlot>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
-    action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
+    action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, CallError>)>,
     action_cancellations: BTreeMap<(u64, u64), (tokio_util::sync::CancellationToken, bool)>,
     commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,

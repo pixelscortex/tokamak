@@ -196,8 +196,13 @@ its workspace server can make these calls; a shared-server window currently
 has the same limits as `local()`.
 
 Runner actions use the Runner's program scope and lifetime rules, including
-no fixed deadline. A Runner action resolves `ctx.env` grants from its
-installation on that machine. A call returns the typed failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
+no fixed deadline while the build is current. When the build is retired, the
+action has five seconds to settle. If it is still running, the Runner cancels
+it and `client.action` rejects. Use `isLocalReloadTimeout(error)` from
+`@tokamak/sdk` to detect this on either Runner route.
+
+A Runner action resolves `ctx.env` grants from its installation on that machine.
+A call returns the typed failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
 and has none, or when it requests a file or program from the server action
 process. This includes calls to stubbed modules such as `node:path`,
 `node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their

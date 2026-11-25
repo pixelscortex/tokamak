@@ -80,22 +80,6 @@ pub(crate) enum MachineFailure {
 }
 
 impl MachineFailure {
-    pub fn wire_error(self) -> crate::protocol::CallError {
-        use crate::protocol::{CallError, CallErrorDetails, StructuredCallError};
-        match self {
-            Self::NoMachine => CallError::Structured(Box::new(StructuredCallError {
-                message: "This needs a machine".into(),
-                details: CallErrorDetails {
-                    plugin: String::new(),
-                    hook: String::new(),
-                    stage: "runner".into(),
-                    kind: "noMachine".into(),
-                    data: Json::Null,
-                },
-            })),
-        }
-    }
-
     pub fn value(self) -> Json {
         match self {
             Self::NoMachine => serde_json::json!({"failed":true,"kind":"noMachine","data":null}),
@@ -170,18 +154,17 @@ impl Destination {
         name: String,
         args: Json,
         upstream: ActionOperations,
-    ) -> Result<Json, String> {
+    ) -> Result<Json, crate::protocol::CallError> {
         match self {
-            Self::Server => {
-                process
-                    .invoke(
-                        source.ok_or("Plugin action has no action process bundle")?,
-                        name,
-                        args,
-                        upstream.ops,
-                    )
-                    .await
-            }
+            Self::Server => process
+                .invoke(
+                    source.ok_or("Plugin action has no action process bundle")?,
+                    name,
+                    args,
+                    upstream.ops,
+                )
+                .await
+                .map_err(Into::into),
             Self::AttachedRunner {
                 dispatch,
                 plugin,
@@ -421,7 +404,7 @@ fn register_plugin_call(
                 .invoke(&process, source, target.local_name, args, ops)
                 .await;
 
-            result.map_err(|error| environment.redact(error).into())
+            result.map_err(|error| error.map_text(|text| environment.redact(text)).into())
         }
     })?;
 

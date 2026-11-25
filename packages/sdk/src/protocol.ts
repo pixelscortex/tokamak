@@ -3,6 +3,7 @@
 import type { JsonValue } from "./values";
 
 export const MAX_WIRE_MESSAGE_BYTES = 1048576;
+export const LOCAL_RELOAD_GRACE_MS = 5000;
 
 export type CallErrorDetails = { plugin: string; hook: string; stage: string; kind: string; data: JsonValue };
 

@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
+pub const LOCAL_RELOAD_GRACE_MS: u64 = 5_000;
+
 // Keep this wire shape in sync with the SDK's isFailure guard.
 pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
     if value.get("failed")?.as_bool()? && value.get("data").is_some() {

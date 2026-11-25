@@ -341,3 +341,45 @@ test("caller contracts reject server definitions as methods", async () => {
     }
   });
 }, 30_000);
+
+test("caller action builds reject a helper invoked at module load", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/helper.ts"),
+      'import { homedir } from "node:os"; export function home() { return homedir(); }',
+    );
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import { home } from "./helper";
+      export function Window() {}
+      const value = home();
+      export const run = action({ on: "caller", handler: () => value });
+      `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/helper\.ts.*used at module load\. Move it inside the handler/,
+    );
+  });
+}, 30_000);
+
+test("caller action builds allow types and instance fields to reference Runner imports", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import * as os from "node:os";
+      export function Window() {}
+      type Home = ReturnType<typeof os.homedir>;
+      class Project { home: Home = os.homedir(); }
+      export const run = action({ on: "caller", handler: () => new Project().home });
+      `,
+    );
+    built(folder);
+  });
+}, 30_000);

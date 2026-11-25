@@ -1,4 +1,4 @@
-import { fail } from "./functions";
+import { LocalReloadTimeout } from "./client";
 import type { ActionSignal } from "./host";
 import type { ActionTarget } from "./functions";
 // Correlation and subscription lifecycle are shared by both transports. Hosts
@@ -93,23 +93,17 @@ export class InProcessTransport implements ClientTransport {
     signal?: ActionSignal,
     window?: true,
   ): Promise<JsonValue> {
-    try {
-      return await this.control(
-        (id) => ({
-          type: "action",
-          id,
-          name,
-          args,
-          ...(window && { window }),
-          ...(on === undefined ? {} : { on }),
-        }),
-        signal,
-      );
-    } catch (error) {
-      if (!(error instanceof RemoteFunctionError) || error.kind !== "noMachine") throw error;
-      const value = fail("noMachine", null);
-      return window ? { destination: "result", value } : value;
-    }
+    return this.control(
+      (id) => ({
+        type: "action",
+        id,
+        name,
+        args,
+        ...(window && { window }),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
   }
 
   /** Forward the continuation supplied by the Runner on its private socket. */
@@ -122,26 +116,19 @@ export class InProcessTransport implements ClientTransport {
     window?: boolean,
     signal?: ActionSignal,
   ): Promise<JsonValue> {
-    try {
-      return await this.control(
-        (id) => ({
-          type: "localcall",
-          id,
-          name,
-          args,
-          kind,
-          ...parent,
-          ...(window ? { window } : {}),
-          ...(on === undefined ? {} : { on }),
-        }),
-        signal,
-      );
-    } catch (error) {
-      if (kind !== "action" || !(error instanceof RemoteFunctionError) || error.kind !== "noMachine")
-        throw error;
-      const value = fail("noMachine", null);
-      return window ? { destination: "result", value } : value;
-    }
+    return this.control(
+      (id) => ({
+        type: "localcall",
+        id,
+        name,
+        args,
+        kind,
+        ...parent,
+        ...(window ? { window } : {}),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
   }
 
   async plugins(): Promise<JsonValue> {
@@ -357,7 +344,9 @@ export class InProcessTransport implements ClientTransport {
         if ("Ok" in result) pending.resolve(result.Ok);
         else
           pending.reject(
-            new RemoteFunctionError(event.error ? { ...event.error, message: result.Err } : result.Err),
+            event.error?.kind === "LocalReloadTimeout" && event.error.stage === "runner"
+              ? new LocalReloadTimeout()
+              : new RemoteFunctionError(event.error ? { ...event.error, message: result.Err } : result.Err),
           );
         return;
       }

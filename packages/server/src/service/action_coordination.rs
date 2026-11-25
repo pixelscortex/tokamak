@@ -32,7 +32,7 @@ impl Coordinator {
             &note,
         );
         if let crate::actions::Destination::Failed(error) = destination {
-            self.respond_call(session, id, Err(error.wire_error()));
+            self.respond(session, id, Ok(placement.response(error.value())));
             return;
         }
         if let Some(reply) = destination.immediate_reply(&note) {
@@ -92,7 +92,7 @@ impl Coordinator {
                 .invoke(&process, source, local_name, args, ops)
                 .await
                 .map(|value| placement.response(value))
-                .map_err(|error| environment.redact(error))
+                .map_err(|error| error.map_text(|text| environment.redact(text)))
         };
         self.spawn_action_job(session, id, output, invocation);
     }
@@ -102,7 +102,7 @@ impl Coordinator {
         session: u64,
         id: u64,
         output: Option<mpsc::Sender<Event>>,
-        invocation: impl std::future::Future<Output = Result<Json, String>> + Send + 'static,
+        invocation: impl std::future::Future<Output = Result<Json, CallError>> + Send + 'static,
     ) {
         if self.action_cancellations.contains_key(&(session, id)) {
             self.respond(session, id, Err("Duplicate action request ID".into()));
@@ -155,7 +155,7 @@ impl Coordinator {
 
         while let Some(completion) = self.action_jobs.join_next().await {
             if let Ok((session, id, result)) = completion {
-                self.respond(session, id, result);
+                self.respond_call(session, id, result);
             }
         }
     }
@@ -224,8 +224,8 @@ impl Coordinator {
 async fn action_job(
     cancel: tokio_util::sync::CancellationToken,
     output: Option<mpsc::Sender<Event>>,
-    invocation: impl std::future::Future<Output = Result<Json, String>>,
-) -> Result<Json, String> {
+    invocation: impl std::future::Future<Output = Result<Json, CallError>>,
+) -> Result<Json, CallError> {
     tokio::select! {
         biased;
         () = cancel.cancelled() => Err("Action cancelled".into()),

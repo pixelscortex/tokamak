@@ -184,6 +184,7 @@ export function discoverProviders(root, files, program, checker) {
             !(ts.isIdentifier(field.name) || ts.isStringLiteralLike(field.name)) ||
             !contractName.test(field.name.text)
           ) {
+            // Spread and computed Runner methods are resolved when the provider binds.
             if (contract.place === "local") continue;
             throw new Error(`${path}: a server provider requires statically named members`);
           }

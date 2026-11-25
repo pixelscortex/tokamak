@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { build, connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
-import { authCaller } from "../../sdk/src/index.ts";
+import { authCaller, isLocalReloadTimeout } from "../../sdk/src/index.ts";
+import { LOCAL_RELOAD_GRACE_MS } from "../../sdk/src/protocol.ts";
 import { stageServerPlugin } from "../../build/src/stage-server-plugin.ts";
 
 const [server, runner, mode] = process.argv.slice(2);
@@ -153,32 +154,60 @@ async function assertDisconnectAndCapacity(address, token, observer) {
     assert.deepEqual(await observer.action(api.work.serverDefault, {}), { runner: false, depth: 0 });
     await closing.pop()();
     await within(results, "close action session", 5000);
-    await within(
-      (async () => {
-        let running = pids;
-        while (running.length) {
-          running = running.filter((pid) => {
-            try {
-              process.kill(pid, 0);
-              return true;
-            } catch (error) {
-              if (error.code !== "ESRCH") throw error;
-              return false;
-            }
-          });
-          if (running.length) await Bun.sleep(20);
-        }
-      })(),
-      "reap programs after caller disconnect",
-      5000,
-    );
+    await assertProgramsReaped(pids, "reap programs after caller disconnect");
   } finally {
     for (const close of closing) await close();
   }
 }
 
-async function reloadProvider(address, token) {
-  const route = new URL("/plugins/fixture-hooks/reload", address.replace(/^ws:/, "http:"));
+async function assertProgramsReaped(pids, label) {
+  await within(
+    (async () => {
+      let running = pids;
+      while (running.length) {
+        running = running.filter((pid) => {
+          try {
+            process.kill(pid, 0);
+            return true;
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+            return false;
+          }
+        });
+        if (running.length) await Bun.sleep(20);
+      }
+    })(),
+    label,
+    5000,
+  );
+}
+
+async function assertReloadTimeout(client, reload) {
+  const previous = (await client.query(api.work.rows, {})).rows.length;
+  const action = client.action(api.work.wait, {});
+  void action.catch(() => {});
+  const pid = await within(
+    (async () => {
+      for (;;) {
+        const { rows } = await client.query(api.work.rows, {});
+        if (rows.length > previous) return Number(rows.at(-1).text);
+        await Bun.sleep(20);
+      }
+    })(),
+    "start action on retiring build",
+    5000,
+  );
+  assert.ok(Number.isInteger(pid) && pid > 0);
+  await reload();
+  await assert.rejects(
+    within(action, "retired action times out", LOCAL_RELOAD_GRACE_MS + 3000),
+    isLocalReloadTimeout,
+  );
+  await assertProgramsReaped([pid], "reap program from retired action");
+}
+
+async function reloadProvider(address, token, plugin = "fixture-hooks") {
+  const route = new URL(`/plugins/${plugin}/reload`, address.replace(/^ws:/, "http:"));
   const response = await fetch(route, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
   assert.equal(response.status, 200, await response.text());
 }
@@ -325,6 +354,32 @@ try {
     await reloadProvider(address, sharedToken);
   });
   await assertDisconnectAndCapacity(local.endpoint.ws, local.endpoint.token, embedded);
+  const oldAction = join(scratch, "old-action");
+  await cp(join(source, "dist"), oldAction, { recursive: true });
+  const actionSource = join(source, "src/work.ts");
+  await writeFile(
+    actionSource,
+    (await readFile(actionSource, "utf8")).replace("exec /bin/sleep 30", "exec /bin/sleep 31"),
+  );
+  build(source);
+  const newAction = join(source, "dist");
+
+  await assertReloadTimeout(embedded, async () => {
+    await cp(newAction, join(plugins, "ai"), { recursive: true });
+    await reloadProvider(local.endpoint.http, local.endpoint.token, "ai");
+  });
+  await cp(oldAction, join(plugins, "ai"), { recursive: true });
+  await reloadProvider(local.endpoint.http, local.endpoint.token, "ai");
+
+  await assertReloadTimeout(window, async () => {
+    await cp(newAction, join(plugins, "ai"), { recursive: true });
+    if (mode === "--cloud") {
+      const staged = join(scratch, "new-action-cloud");
+      await stageServerPlugin(newAction, staged);
+      await cp(staged, join(serverPlugins, "ai"), { recursive: true });
+    }
+    await reloadProvider(address, sharedToken, "ai");
+  });
   await local.stop();
   const offlineWindow = await connect(address, { launch: local.launch, token: sharedToken, cleanup });
   assert.deepEqual(

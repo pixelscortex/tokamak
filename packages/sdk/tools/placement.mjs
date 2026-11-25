@@ -234,7 +234,14 @@ export function functionPlacement(root, selected, namespace) {
       else for (const binding of bindings?.elements ?? []) if (!binding.isTypeOnly) add(binding.name);
     }
     function checkModuleLoad(node) {
-      if (ts.isImportDeclaration(node) || ts.isFunctionLike(node)) return;
+      if (ts.isImportDeclaration(node) || ts.isFunctionLike(node) || ts.isTypeNode(node)) return;
+      if (
+        ts.isPropertyDeclaration(node) &&
+        !node.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword)
+      ) {
+        if (ts.isComputedPropertyName(node.name)) checkModuleLoad(node.name);
+        return;
+      }
       if (
         ts.isIdentifier(node) &&
         !isDeclarationName(node) &&

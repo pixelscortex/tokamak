@@ -282,12 +282,25 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
       if (!built.success) throw new AggregateError(built.logs, "Feature bundle failed");
       return built;
     }
+    const stubImporters = new Set();
     const built = await buildServer("bundle.js", source, [
       ...(placement ? [placementTransform(placement, lanes.server)] : []),
       serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions", {
         callerFiles: placement?.callerFiles,
+        onStub: (path) => stubImporters.add(relative(pluginRoot, path)),
       }),
     ]);
+    if (stubImporters.size) {
+      try {
+        await import(join(root, "dist/bundle.js"));
+      } catch (error) {
+        if (!(error instanceof Error) || error.kind !== "noMachine") throw error;
+        throw new Error(
+          `Plugin import boundary: a Runner binding from ${[...stubImporters].join(", ")} was used at module load. Move it inside the handler.\n${error.stack}`,
+          { cause: error },
+        );
+      }
+    }
     if (splitActions) {
       const descriptor = transactionSources({
         root,

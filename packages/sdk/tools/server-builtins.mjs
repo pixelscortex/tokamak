@@ -42,7 +42,7 @@ export function workerBuiltins(pluginRoot) {
   };
 }
 
-export function serverBuiltins(name, pluginRoot, lane, { callerFiles } = {}) {
+export function serverBuiltins(name, pluginRoot, lane, { callerFiles, onStub } = {}) {
   return {
     name,
     setup(build) {
@@ -50,8 +50,10 @@ export function serverBuiltins(name, pluginRoot, lane, { callerFiles } = {}) {
         if (!importer) return;
 
         const module = nodeModule(path);
-        if (suppliedNodeModules.local.includes(module) && callerFiles?.has(importer))
+        if (suppliedNodeModules.local.includes(module) && callerFiles?.has(importer)) {
+          onStub?.(importer);
           return { path: module, namespace: "unavailable-machine-module" };
+        }
 
         if (module) throw unavailable(pluginRoot, importer, module, lane);
       });

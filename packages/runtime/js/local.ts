@@ -1,3 +1,4 @@
+import { LOCAL_RELOAD_GRACE_MS } from "../../sdk/src/protocol";
 import { RemoteFunctionError } from "../../sdk/src/call-error";
 import {
   authCaller,
@@ -700,7 +701,7 @@ class LocalWorker {
     if (this.invoking > 0) {
       // Give this build's admitted calls a bounded chance to settle on reload.
       const retired = "Local plugin build retired";
-      this.reloadTimer = setTimeout(() => void this.close(new LocalReloadTimeout()), 5_000);
+      this.reloadTimer = setTimeout(() => void this.close(new LocalReloadTimeout()), LOCAL_RELOAD_GRACE_MS);
       void this.endpoint.then((worker) => worker.retire(this.artifact)).catch(() => this.close(retired));
     }
     this.finishDraining();
