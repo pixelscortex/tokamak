@@ -861,5 +861,27 @@ fn stage_bundles_share_state_within_a_call_and_replay_from_a_fresh_world() {
         assert_eq!(first[1][1], 42);
         assert_ne!(first[0][2], first[1][2]);
         assert_eq!(call().await.unwrap(), first);
+
+        let parent = "export async function read(_, host) {
+            return [await host.op('delegate', null), await host.op('delegate', null)];
+        }";
+        let delegated = bundle("export function read(value) { return value; }");
+        let mut parent_ops = OpRegistry::new();
+        parent_ops
+            .register_module("delegate", move |args| {
+                Ok(ModuleCall::new(
+                    delegated.clone(),
+                    "read",
+                    args,
+                    ops.clone(),
+                    drop,
+                ))
+            })
+            .unwrap();
+        let nested = invoke(&pool, parent, "read", Json::Null, Arc::new(parent_ops))
+            .await
+            .unwrap();
+        assert_eq!(nested[0][0][0], 1);
+        assert_eq!(nested[1][1][0], 4);
     });
 }

@@ -241,8 +241,10 @@ impl OpRegistry {
         self.insert(name.into(), Op::Staged(Arc::new(op)))
     }
 
-    pub(crate) fn has_stages(&self) -> bool {
-        self.0.values().any(|op| matches!(op, Op::Staged(_)))
+    pub(crate) fn may_run_stages(&self) -> bool {
+        self.0
+            .values()
+            .any(|op| matches!(op, Op::Staged(_) | Op::Module(_)))
     }
 
     pub fn register_call<F, Fut>(
