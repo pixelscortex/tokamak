@@ -19,7 +19,7 @@ export const ai = createApi<{
 }>("ai", ["agents:list"]);
 
 /** The agent plugin whose mark stands for each company. */
-export const agentOf: Record<Company | "openai", string> = { anthropic: "claude", openai: "codex" };
+export const agentOf: Record<Company, string> = { anthropic: "claude", openai: "codex" };
 
 /** "Claude Pro": the product a company sells its subscription as, then the plan. */
 export const productOf: Record<Company, string> = { anthropic: "Claude", openai: "ChatGPT" };

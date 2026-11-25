@@ -6,6 +6,7 @@ import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sd
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
 import { Profiles } from "../src/client/pages/profiles";
+import { returnPath, returnPort } from "../src/client/lib/companies";
 
 // The OpenAI path of the add-subscription dialog and the ChatGPT card, with a
 // stand-in server (the same harness as profiles.test.tsx, kept separate so
@@ -197,4 +198,18 @@ test("a ChatGPT card sits beside a Claude one, shows its workspace, and signs in
     "Claude Max, Personal",
     "ChatGPT Business",
   ]);
+});
+
+test("a plan the company did not name is left out of the title, never shown as Free", async () => {
+  listed = { subscriptions: [{ ...business, plan: "", label: "Work" }], signIns: [] };
+  mount();
+  const card = await screen.findByRole("article", { name: "ChatGPT, Work" });
+  // The line under the email names the workspace alone.
+  expect(within(card).getByText("acme")).toBeTruthy();
+  expect(within(card).queryByText(/free/i)).toBeNull();
+});
+
+test("each company's return address is written once; its port and path come from it", () => {
+  expect([returnPort("anthropic"), returnPath("anthropic")]).toEqual([54545, "/callback"]);
+  expect([returnPort("openai"), returnPath("openai")]).toEqual([1455, "/auth/callback"]);
 });

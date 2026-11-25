@@ -1,8 +1,11 @@
 import { productOf, type Subscription } from "./api";
 
-/** "Claude Pro": the card's and the connected step's title. */
+/**
+ * "Claude Pro": the card's and the connected step's title. A plan the company
+ * did not name is stored empty and the title is the product alone ("ChatGPT").
+ */
 export const titleOf = (subscription: Pick<Subscription, "company" | "plan">) =>
-  `${productOf[subscription.company]} ${subscription.plan}`;
+  [productOf[subscription.company], subscription.plan].filter(Boolean).join(" ");
 
 /** The data line under the emails: "fake organization · pro" (Paper sets it in lower case). */
 export function planLine(subscription: Subscription): string {

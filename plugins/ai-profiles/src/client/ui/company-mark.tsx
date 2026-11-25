@@ -70,7 +70,7 @@ function parse(svg: string): Mark | null {
   return mark;
 }
 
-export function markOf(company: Company | "openai"): Mark {
+export function markOf(company: Company): Mark {
   const svg = marks()[agentOf[company]];
   return (svg ? parse(svg) : null) ?? NEUTRAL;
 }
@@ -84,7 +84,7 @@ export function markPath(company: Company): string | undefined {
 const sizes = { 12: "size-3", 14: "size-mark", 16: "size-4", 18: "size-avatar", 24: "size-6" } as const;
 
 export function CompanyMark(props: {
-  company: Company | "openai";
+  company: Company;
   size: keyof typeof sizes;
   class?: string;
 }): JSX.Element {
