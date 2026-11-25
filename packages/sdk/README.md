@@ -534,6 +534,25 @@ The core provides identity even without any installed plugins. A local
 server supplies the owner automatically and uses the computer's name for
 the device.
 
+### Call notes
+
+Queries, mutations, actions and local functions receive a read-only
+`ctx.call` with `user`, `device`, `depth`, and an optional `threadId`.
+Anonymous calls have `null` for `user` and `device`; `ctx.auth` behaves
+as before.
+
+A root call starts at depth zero. Each nested server call or routed local contract call adds one,
+and attempts to go past depth 15 fail with the target plugin and function
+in the error. The first call in the chain with a validated
+`v.id("threads")` argument whose value is a qualified `chat/threads:…` ID
+sets the thread for its descendants. The argument can be inside an object
+or array and can have any name. An ordinary string that looks like a thread
+ID does not set it. If multiple typed IDs occur in one call, object fields
+are visited in key order and arrays in element order.
+
+The Runner preserves the note across routed local contract calls. The window dispatches calls from local functions to the server as separate
+server requests.
+
 ### Membership hooks
 
 Plugins with `depends: ["auth"]` can export a server hook to react when a

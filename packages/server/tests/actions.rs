@@ -240,6 +240,16 @@ fn acceptance_over(scenario: &str, websocket: bool) {
 
 // Each name is a runnable regression; the driver documents the failure prevented.
 #[test]
+fn call_note_survives_three_plugins_and_rejects_overrides() {
+    acceptance("call-note");
+}
+
+#[test]
+fn call_depth_limits_a_cycle_between_plugins() {
+    acceptance("call-depth");
+}
+
+#[test]
 fn action_kind_and_independent_transactions_outlive_normal_budget() {
     acceptance("contract");
 }

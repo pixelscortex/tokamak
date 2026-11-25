@@ -100,6 +100,10 @@ await plugin(
       return probe.get("custom-alpha", ctx).identify();
     },
   });
+  export const callNote = local({
+    args: { selection: v.optional(v.id("threads")) },
+    handler: async (ctx) => [ctx.call, await probe.get("custom-alpha", ctx).callNote()],
+  });
   export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
   export const unavailable = local({
     handler: async (ctx) => {
@@ -110,10 +114,11 @@ await plugin(
   });
 `,
   `
-  import { contract, type ActionSignal, type AuthContext } from "@tokamak/sdk";
+  import { contract, type ActionSignal, type AuthContext, type CallContext } from "@tokamak/sdk";
   export const probe = contract<{
     id?: string;
     identify(): Promise<AuthContext>;
+    callNote(): Promise<CallContext>;
     hold(input: { path: string; signal: ActionSignal }): Promise<string>;
     badResult(): Promise<string>;
     echo(value: unknown): Promise<unknown>;
@@ -149,6 +154,7 @@ function provider(id) {
     } });
     export default provide(probe, {
       id: "custom-alpha", identify, hold,
+      callNote: local({ handler: (ctx) => ctx.call }),
       badResult: async () => (() => {}) as unknown as string,
       echo: async (value) => value,
       deepResult: async () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown),
@@ -217,6 +223,11 @@ try {
   const auth = await client.query(authCaller, {});
   assert.deepEqual(await client.local(api.identify, { id: "custom-alpha" }), auth);
   assert.deepEqual(await client.local(api.identify, { id: "custom-beta" }), auth);
+  const threadId = "chat/threads:local-route";
+  assert.deepEqual(await client.local(api.callNote, { selection: threadId }), [
+    { ...auth, threadId, depth: 0 },
+    { ...auth, threadId, depth: 1 },
+  ]);
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);

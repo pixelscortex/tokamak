@@ -6,7 +6,7 @@ import type { HostBridge } from "./host";
 import type { DataModel, ModelFromSchema, SchemaDefinition } from "./schema";
 import type { Fields, ObjectValue, ValidatorDescription } from "./validators";
 import { v, validate } from "./validators";
-import type { JsonObject, JsonValue } from "./values";
+import type { Id, JsonObject, JsonValue } from "./values";
 import { jsonSnapshot } from "./values";
 import { functionName, type FunctionReference } from "./api";
 import { callHost } from "./host";
@@ -41,6 +41,28 @@ export const FALLBACK_LOCAL_DEVICE: Device = Object.freeze({ id: "device:local",
 export interface AuthContext {
   readonly user: User;
   readonly device: Device;
+}
+
+/** Host-owned metadata for this invocation. Anonymous calls have no user or device. */
+export interface CallContext {
+  readonly user: User | null;
+  readonly device: Device | null;
+  readonly threadId?: Id<"threads">;
+  readonly depth: number;
+}
+
+export function callContext(
+  auth: AuthContext | null,
+  note?: CallContext | null,
+  threadId?: Id<"threads">,
+): CallContext {
+  const thread = note?.threadId ?? threadId;
+  return Object.freeze({
+    user: auth ? Object.freeze({ ...auth.user }) : null,
+    device: auth ? Object.freeze({ ...auth.device }) : null,
+    depth: note?.depth ?? 0,
+    ...(thread === undefined ? {} : { threadId: thread }),
+  });
 }
 
 /**
@@ -115,6 +137,7 @@ type RunFunction<K extends FunctionKind> = <A, R>(
 
 export interface QueryContext<M extends DataModel> extends ContractContext {
   readonly auth: AuthContext;
+  readonly call: CallContext;
   readonly db: DatabaseReader<M>;
   runQuery: RunFunction<"query">;
   use<T>(api: T): PluginCalls<T, "query">;
@@ -122,6 +145,7 @@ export interface QueryContext<M extends DataModel> extends ContractContext {
 
 export interface MutationContext<M extends DataModel> extends ContractContext {
   readonly auth: AuthContext;
+  readonly call: CallContext;
   readonly db: DatabaseWriter<M>;
   runQuery: RunFunction<"query">;
   runMutation: RunFunction<"mutation">;
@@ -131,6 +155,7 @@ export interface MutationContext<M extends DataModel> extends ContractContext {
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext extends ContractContext {
   readonly auth: AuthContext;
+  readonly call: CallContext;
   use<T>(api: T): PluginCalls<T, ServerFunctionKind>;
   readonly signal?: HostBridge["signal"];
   readonly crypto: {
@@ -153,6 +178,7 @@ export interface ActionContext extends ContractContext {
 
 export interface LocalContext extends ContractContext {
   readonly auth: AuthContext;
+  readonly call: CallContext;
   readonly signal: NonNullable<HostBridge["signal"]>;
   /** QuickJS root call only: its own installed build was replaced. Calls can still settle. */
   readonly retiring?: HostBridge["signal"];
@@ -178,7 +204,7 @@ export interface FunctionDefinition<
   readonly args: ValidatorDescription;
   readonly _types?: { args: A; result: R };
   invoke(args: unknown, host: HostBridge): Promise<JsonValue>;
-  invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext): unknown;
+  invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext, call?: CallContext): unknown;
 }
 
 export type FunctionBuilder<
@@ -216,9 +242,9 @@ function builder<
         ? {
             // Contract members are called in the same worker and can receive
             // live objects. Window calls still enter invoke() and validate JSON.
-            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext) =>
+            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call = callContext(auth)) =>
               handler(
-                localContext(host, auth) as Parameters<typeof handler>[0],
+                localContext(host, auth, call) as Parameters<typeof handler>[0],
                 input as Parameters<typeof handler>[1],
               ),
           }
@@ -239,6 +265,11 @@ function builder<
                 ),
                 device: Object.freeze(host.auth?.device ?? FALLBACK_LOCAL_DEVICE),
               });
+        const call = callContext(
+          auth,
+          host.call,
+          kind === "local" && !host.call?.threadId ? threadArgument(description, args) : undefined,
+        );
         const caller = () => {
           if (!auth) throw new Error("There is no caller before sign-in");
           return auth;
@@ -256,9 +287,10 @@ function builder<
           };
         const ctx = Object.freeze(
           kind === "local"
-            ? localContext(host, caller())
+            ? localContext(host, caller(), call)
             : kind === "action"
               ? {
+                  call,
                   get auth() {
                     return caller();
                   },
@@ -278,6 +310,7 @@ function builder<
                   runAction: run("action"),
                 }
               : {
+                  call,
                   get auth() {
                     return caller();
                   },
@@ -305,7 +338,40 @@ function builder<
   };
 }
 
-export function localContext(host: HostBridge, auth: AuthContext): LocalContext {
+// Local function validators run in the worker; a qualified ID identifies its owner.
+export function threadArgument(schema: ValidatorDescription, value: unknown): Id<"threads"> | undefined {
+  switch (schema.kind) {
+    case "id":
+      return schema.table === "threads" && typeof value === "string" && value.startsWith("chat/threads:")
+        ? (value as Id<"threads">)
+        : undefined;
+    case "optional":
+      return value === undefined ? undefined : threadArgument(schema.inner, value);
+    case "object":
+      for (const key of Object.keys(schema.fields).sort()) {
+        const id = threadArgument(schema.fields[key], (value as JsonObject)[key]);
+        if (id !== undefined) return id;
+      }
+      return;
+    case "array":
+      for (const item of value as unknown[]) {
+        const id = threadArgument(schema.item, item);
+        if (id !== undefined) return id;
+      }
+      return;
+    case "union":
+      for (const member of schema.members) {
+        try {
+          validate(member, value);
+        } catch {
+          continue;
+        }
+        return threadArgument(member, value);
+      }
+  }
+}
+
+export function localContext(host: HostBridge, auth: AuthContext, call: CallContext): LocalContext {
   if (!host.proc || !host.signal) throw new Error("Local functions require a plugin process");
   async function run<A, R>(
     operation: "local.runQuery" | "local.runMutation" | "local.runAction",
@@ -317,8 +383,9 @@ export function localContext(host: HostBridge, auth: AuthContext): LocalContext 
       args: jsonSnapshot(input, "nested call args"),
     })) as R;
   }
-  return {
+  return Object.freeze<LocalContext>({
     auth,
+    call,
     proc: host.proc,
     [contractScope]: host.contracts ?? {
       list() {
@@ -327,14 +394,14 @@ export function localContext(host: HostBridge, auth: AuthContext): LocalContext 
     },
     withPrograms(run) {
       if (!host.withPrograms) throw new Error("Program scopes require a plugin process");
-      return host.withPrograms((forceStop, scoped) => run(forceStop, localContext(scoped, auth)));
+      return host.withPrograms((forceStop, scoped) => run(forceStop, localContext(scoped, auth, call)));
     },
     signal: host.signal,
     retiring: host.retiring,
     runQuery: (reference, args) => run("local.runQuery", reference, args),
     runMutation: (reference, args) => run("local.runMutation", reference, args),
     runAction: (reference, args) => run("local.runAction", reference, args),
-  };
+  });
 }
 
 function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, ServerFunctionKind> {
@@ -469,15 +536,21 @@ export async function invokeFunction(
   registry: FunctionRegistry,
   request: { name: string; args: JsonValue },
   host: HostBridge,
+  recordThread?: (threadId: Id<"threads">) => void,
 ): Promise<JsonValue> {
   if (!Object.hasOwn(registry, request.name)) throw new Error(`Unknown function: ${request.name}`);
   const args = jsonSnapshot(request.args, "args");
-  validate(registry[request.name].args, args);
-  const auth = await callHost(host, "auth.current", {});
   const definition = registry[request.name];
+  validate(definition.args, args);
+  const note = await callHost(host, "auth.current", { call: true });
+  const auth =
+    note && note.user !== null && note.device !== null ? { user: note.user, device: note.device } : null;
+  const threadId = note?.threadId ?? (recordThread && threadArgument(definition.args, args));
+  if (threadId) recordThread?.(threadId);
   const invoke = () =>
     definition.invoke(args, {
       auth,
+      call: threadId ? callContext(auth, note, threadId) : note,
       signal: host.signal,
       retiring: host.retiring,
       proc: host.proc,

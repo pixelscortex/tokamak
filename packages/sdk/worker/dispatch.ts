@@ -1,5 +1,5 @@
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
-import type { JsonValue } from "../src/values";
+import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
@@ -54,7 +54,12 @@ export function workerDispatch(
     errorMessage(error: unknown): string;
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
-    contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
+    contract?(
+      target: ContractInvocation,
+      args: JsonValue,
+      bridge: HostBridge,
+      recordThread: (threadId: Id<"threads">) => void,
+    ): Promise<JsonValue>;
     attachChannel?: AttachChannel;
     sendWaiting?(message: object): void | Promise<void>;
   },
@@ -111,6 +116,10 @@ export function workerDispatch(
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Plugin process invocation capacity exceeded");
+    let threadId: Id<"threads"> | undefined;
+    const recordThread = (id: Id<"threads">) => {
+      threadId ??= id;
+    };
     const controller = new AbortController();
     const retiring = routed && !target ? new AbortController() : undefined;
     const call = {
@@ -184,6 +193,7 @@ export function workerDispatch(
               ...(signal && { cancellable: true }),
               ...(plugin === undefined ? {} : { plugin }),
               ...metadata,
+              ...(name === "local.contract.call" && threadId !== undefined && { threadId }),
             };
             sending = transmit(message);
             if (sending) void sending.catch(failed);
@@ -216,8 +226,13 @@ export function workerDispatch(
         throw new Error(`Unknown local ${kind} function: ${name}`);
       const value =
         target && options.contract
-          ? await options.contract(target, args, invocation.host())
-          : await invokeFunction(functions, { name, args }, invocation.host());
+          ? await options.contract(target, args, invocation.host(), recordThread)
+          : await invokeFunction(
+              functions,
+              { name, args },
+              invocation.host(),
+              kind === "local" ? recordThread : undefined,
+            );
       close();
       if (calls.get(id) === call) {
         const sending = transmit({ type: "result", id, value });

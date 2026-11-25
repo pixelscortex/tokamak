@@ -44,14 +44,21 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
+        let note = crate::identity::CallNote::from(Some(auth));
+        let note = match &self.plugins {
+            Some(loaded) => {
+                let target = &loaded.targets[&name];
+                note.with_args(&target.args, &args)
+            }
+            None => note,
+        };
         let ops = match crate::actions::operations(
             self.commands.clone(),
             self.plugins.clone(),
             owner.clone(),
             environment.clone(),
             process.clone(),
-            vec![name.clone()],
-            Some(auth),
+            note,
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -93,15 +100,19 @@ impl Coordinator {
     }
 
     pub(super) async fn run_function(&mut self, call: crate::actions::NestedCall) {
-        let result = match self.validate_nested(&call) {
+        let result = match self
+            .validate_nested(&call)
+            .and_then(|()| call.note.clone().nested(&call.name))
+        {
             Err(error) => Err(error),
-            Ok(()) => {
+            Ok(note) => {
                 let result = self
-                    .invoke_function(
+                    .invoke_function_in(
+                        self.plugins.clone(),
                         &call.name,
                         call.args.clone(),
                         call.kind == FunctionKind::Mutation,
-                        call.auth.clone(),
+                        note,
                     )
                     .await;
                 self.drain_changes();
@@ -123,7 +134,6 @@ impl Coordinator {
                     owner,
                     &call.name,
                     call.kind == FunctionKind::Mutation,
-                    &[],
                     call.contract.as_deref(),
                 )?;
 
@@ -135,7 +145,7 @@ impl Coordinator {
                     );
                 }
 
-                if call.auth.is_none() {
+                if call.note.auth.is_none() {
                     target.check_anonymous_scope(owner)?;
                 }
                 Some(target.kind)

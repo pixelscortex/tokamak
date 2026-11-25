@@ -248,16 +248,28 @@ impl Loaded {
             ..
         }) = server
         {
-            for (local_name, kind) in &inspected.kinds {
+            for function in inspected.descriptor["functions"]
+                .as_array()
+                .expect("inspected")
+            {
+                let local_name = function["name"].as_str().expect("inspected");
+                let kind = inspected.kinds[local_name];
                 let name = format!("{id}/{local_name}");
                 self.targets.insert(
                     name,
                     Target {
                         owner: id.clone(),
-                        local_name: local_name.clone(),
-                        mutation: *kind == FunctionKind::Mutation,
+                        local_name: local_name.to_owned(),
+                        args: Arc::new(
+                            source
+                                .as_ref()
+                                .and_then(|source| source.validator(local_name))
+                                .unwrap_or(&function["args"])
+                                .clone(),
+                        ),
+                        mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
-                        kind: *kind,
+                        kind,
                         bundle: bundle.clone(),
                         space: space.clone(),
                     },
@@ -397,10 +409,9 @@ impl Loaded {
         caller: &str,
         name: &str,
         writable: bool,
-        path: &[String],
         contract: Option<&str>,
     ) -> Result<Target, String> {
-        let target = self.action_target(caller, name, path, contract)?;
+        let target = self.action_target(caller, name, contract)?;
         if target.kind == crate::service::FunctionKind::Action {
             return Err("Queries and mutations cannot call actions".into());
         }
@@ -415,7 +426,6 @@ impl Loaded {
         &self,
         caller: &str,
         name: &str,
-        path: &[String],
         contract: Option<&str>,
     ) -> Result<Target, String> {
         let target = self
@@ -458,10 +468,6 @@ impl Loaded {
                     target.local_name, target.owner
                 ));
             }
-        }
-
-        if path.len() >= 16 || path.iter().any(|entry| entry == name) {
-            return Err("Plugin call cycle".into());
         }
 
         Ok(target.clone())

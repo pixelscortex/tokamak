@@ -12,7 +12,9 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 mod accounts;
+mod call;
 mod cli;
+pub(crate) use call::CallNote;
 mod devices;
 pub(crate) use accounts::AccountBinding;
 pub use cli::command;
@@ -84,17 +86,6 @@ impl AuthContext {
             device: Device::local(),
         }
     }
-}
-
-pub(crate) fn register_caller(
-    caller: Option<&AuthContext>,
-    ops: &mut engine::OpRegistry,
-) -> Result<(), engine::Error> {
-    // Old bundles still ask for the user alone.
-    let user = serde_json::json!(caller.map(|auth| &auth.user));
-    ops.register_sync("user.current", move |_| Ok(user.clone()))?;
-    let auth = serde_json::json!(caller);
-    ops.register_sync("auth.current", move |_| Ok(auth.clone()))
 }
 
 impl Device {

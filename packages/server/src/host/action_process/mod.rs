@@ -43,6 +43,7 @@ pub(crate) struct Source {
     code: Snapshot,
     bundle: Arc<Bundle>,
     worker_entry: bool,
+    validators: std::sync::OnceLock<Value>,
     retired: CancellationToken,
     calls: Arc<Semaphore>,
     operations: Arc<Semaphore>,
@@ -79,6 +80,7 @@ impl Source {
             code,
             bundle,
             worker_entry,
+            validators: Default::default(),
             retired: CancellationToken::new(),
             calls: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
             operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
@@ -90,9 +92,15 @@ impl Source {
         if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
             return Ok(());
         }
-        inspection::inspect_action(self.path(), self.worker_entry)
+        let validators = inspection::inspect_action(self.path(), self.worker_entry)
             .await
-            .map_err(crate::Error::Invalid)
+            .map_err(crate::Error::Invalid)?;
+        let _ = self.validators.set(validators);
+        Ok(())
+    }
+
+    pub(crate) fn validator(&self, name: &str) -> Option<&Value> {
+        self.validators.get()?.get(name)
     }
 
     fn path(&self) -> &Path {

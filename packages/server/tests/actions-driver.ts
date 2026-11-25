@@ -3,7 +3,14 @@
 import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { createInterface } from "node:readline";
-import { TokamakClient, InProcessTransport, WebSocketTransport, type Event } from "@tokamak/sdk";
+import {
+  TokamakClient,
+  InProcessTransport,
+  WebSocketTransport,
+  authCaller,
+  type Event,
+  type Id,
+} from "@tokamak/sdk";
 import { api } from "./a/src/server/_generated/api";
 import { api as b } from "./b/src/server/_generated/api";
 import { within } from "./within";
@@ -122,7 +129,31 @@ assert.ok(address && typeof address !== "string");
 const base = `http://127.0.0.1:${address.port}`;
 
 try {
-  if (scenario === "contract") {
+  if (scenario === "call-note") {
+    const auth = await client.query(authCaller, {});
+    const root = { ...auth, depth: 0 };
+    const child = { ...auth, depth: 1 };
+    assert.deepEqual(await client.query(api.ops.callNoteQuery, {}), [root, child]);
+    assert.deepEqual(await client.mutation(api.ops.callNoteMutation, {}), [root, child]);
+
+    const threadId = "chat/threads:chosen" as Id<"threads">;
+    const assertChain = async (selection?: { id: Id<"threads"> }, pickLater = false) => {
+      const note = (depth: number) => ({
+        ...auth,
+        depth,
+        ...(selection ? { threadId } : pickLater && depth > 0 ? { threadId: "chat/threads:other" } : {}),
+      });
+      assert.deepEqual(
+        await client.action(api.ops.callNoteAction, { ...(selection && { selection }), threadId, pickLater }),
+        { call: note(0), nested: { call: note(1), query: note(2), mutation: note(2) } },
+      );
+    };
+    await assertChain({ id: threadId });
+    await assertChain();
+    await assertChain(undefined, true);
+  } else if (scenario === "call-depth") {
+    await assert.rejects(client.query(b.ops.loop, {}), /depth limit at b\/ops:loop/);
+  } else if (scenario === "contract") {
     // Prove the configured normal call budget is real, then outlive it in action.
     await assert.rejects(client.query(api.ops.timeoutQuery, {}), /wall-clock budget/);
     await assert.rejects(client.mutation(api.ops.timeoutMutation, {}), /wall-clock budget/);

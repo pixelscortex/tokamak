@@ -47,6 +47,7 @@ export type {
   User,
   Device,
   AuthContext,
+  CallContext,
   MutationContext,
   ActionContext,
   LocalContext,

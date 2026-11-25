@@ -41,7 +41,7 @@ import { RELOADED } from "../shared/turn-timing";
  */
 export const turn = local({
   args: {
-    threadId: v.string(),
+    threadId: v.id("threads"),
     messageId: v.string(),
     replyToken: v.optional(v.string()),
     /** The thread's folder on this computer, from chat's `onSent`. */
@@ -91,7 +91,7 @@ export const turn = local({
       return failed;
     }
     const { turnId, prompt, history, sessionId } = begun;
-    const hooks = hooksFor(ctx, { threadId: threadId as Id<"threads">, turnId, folder });
+    const hooks = hooksFor(ctx, { threadId, turnId, folder });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
     // device), so "Always allow this session" answers hold across turns exactly while the session does.

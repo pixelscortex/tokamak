@@ -2,6 +2,7 @@
 //! A nested call rejoins the ordered coordinator and gets its own normal world.
 
 use crate::host::action_process::Supervisor;
+use crate::identity::CallNote;
 use crate::{
     plugins::Loaded,
     service::{Command, FunctionKind},
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct NestedCall {
-    pub auth: Option<crate::identity::AuthContext>,
+    pub note: CallNote,
     pub generation: Option<Arc<Loaded>>,
     pub owner: Option<String>,
     pub name: String,
@@ -28,11 +29,10 @@ pub(crate) fn operations(
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
     process: Arc<Supervisor>,
-    path: Vec<String>,
-    auth: Option<crate::identity::AuthContext>,
+    note: CallNote,
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
-    crate::identity::register_caller(auth.as_ref(), &mut ops)?;
+    note.register(&mut ops)?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         ops.set_network_permissions(
             loaded.catalog.plugins[owner]
@@ -56,7 +56,7 @@ pub(crate) fn operations(
         generation.clone(),
         owner.clone(),
         environment.clone(),
-        auth.clone(),
+        note.clone(),
     )?;
     if let (Some(loaded), Some(owner)) = (generation, owner) {
         register_plugin_call(
@@ -65,8 +65,7 @@ pub(crate) fn operations(
             owner.clone(),
             commands,
             process,
-            path,
-            auth,
+            note,
         )?;
         crate::plugins::register_contract_list(&mut ops, loaded, owner)?;
     }
@@ -79,7 +78,7 @@ pub(crate) fn register_nested_calls(
     generation: Option<Arc<Loaded>>,
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
-    auth: Option<crate::identity::AuthContext>,
+    note: CallNote,
 ) -> Result<(), engine::Error> {
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -89,13 +88,13 @@ pub(crate) fn register_nested_calls(
         let generation = generation.clone();
         let owner = owner.clone();
         let environment = environment.clone();
-        let auth = auth.clone();
+        let note = note.clone();
         ops.register_async(operation, move |payload| {
             let environment = environment.clone();
             let commands = commands.clone();
             let generation = generation.clone();
             let owner = owner.clone();
-            let auth = auth.clone();
+            let note = note.clone();
             async move {
                 let name = payload["name"]
                     .as_str()
@@ -110,7 +109,7 @@ pub(crate) fn register_nested_calls(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
-                        auth,
+                        note,
                         generation,
                         owner,
                         name,
@@ -138,8 +137,7 @@ fn register_plugin_call(
     owner: String,
     commands: mpsc::WeakSender<Command>,
     process: Arc<Supervisor>,
-    path: Vec<String>,
-    auth: Option<crate::identity::AuthContext>,
+    note: CallNote,
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
     let caller = owner.clone();
@@ -148,8 +146,7 @@ fn register_plugin_call(
         let owner = caller.clone();
         let commands = commands.clone();
         let process = process.clone();
-        let mut path = path.clone();
-        let auth = auth.clone();
+        let note = note.clone();
         async move {
             let name = payload["name"]
                 .as_str()
@@ -159,7 +156,7 @@ fn register_plugin_call(
                 .ok_or("plugin call requires args")?
                 .clone();
             let contract = payload.get("contract").and_then(Json::as_str);
-            let target = loaded.action_target(&owner, name, &path, contract)?;
+            let target = loaded.action_target(&owner, name, contract)?;
             target.kind.check_requested(&payload)?;
             if target.kind != FunctionKind::Action {
                 let (reply, wait) = oneshot::channel();
@@ -167,7 +164,7 @@ fn register_plugin_call(
                     .upgrade()
                     .ok_or("server is closed")?
                     .try_send(Command::RunFunction(NestedCall {
-                        auth,
+                        note,
                         generation: Some(loaded),
                         owner: Some(owner),
                         name: name.into(),
@@ -181,7 +178,7 @@ fn register_plugin_call(
                     .await
                     .map_err(|_| "server closed before plugin call completed".to_owned())?;
             }
-            path.push(name.into());
+            let note = note.nested(name)?.with_args(&target.args, &args);
             let environment = Arc::new(crate::environment::Snapshot::new(
                 Some(&loaded),
                 Some(&target.owner),
@@ -197,8 +194,7 @@ fn register_plugin_call(
                 Some(target.owner),
                 environment.clone(),
                 process.clone(),
-                path,
-                auth,
+                note,
             )
             .map_err(|e| e.to_string())?;
             process

@@ -19,6 +19,7 @@ use super::{BUNDLE, call::CallOutput, heap::OUT_OF_MEMORY, number};
 pub(super) type InvocationPromise = Persistent<Promise<'static>>;
 
 pub(super) struct Realm {
+    pub validators: Value,
     dispatch: Persistent<Function<'static>>,
     context: AsyncContext,
     output: Rc<CallOutput>,
@@ -47,7 +48,7 @@ impl Realm {
         })?;
         let invocation = Invocation::unbounded();
         let call_output = output.clone();
-        let dispatch = context
+        let (dispatch, validators) = context
             .async_with(async |ctx| {
                 let run = async {
                     // Worker entries were built for Bun and may depend on these globals.
@@ -67,6 +68,7 @@ impl Realm {
                     evaluated.into_future::<()>().await?;
                     let logging: Function = entry.get("logging")?;
                     let initialize: Function = entry.get("initialize")?;
+                    let validators: Function = entry.get("validators")?;
                     let bridge = output.bridge.clone();
                     let output = call_output.clone();
                     let send = Function::new(ctx.clone(), move |ctx: Ctx<'_>, line: String| {
@@ -78,6 +80,11 @@ impl Realm {
                         Module::declare(ctx.clone(), BUNDLE, source.as_bytes())?.eval()?;
                     evaluated.into_future::<()>().await?;
                     let functions: Object = module.get("functions")?;
+                    let validators = if bridge.is_none() {
+                        Some(validators.call::<_, String>((functions.clone(),))?)
+                    } else {
+                        None
+                    };
                     let next_op = Func::from(move || {
                         bridge
                             .as_ref()
@@ -85,14 +92,19 @@ impl Realm {
                             as f64
                     });
                     let dispatch: Function = initialize.call((send, next_op, functions))?;
-                    Ok::<_, rquickjs::Error>(Persistent::save(&ctx, dispatch))
+                    Ok::<_, rquickjs::Error>((Persistent::save(&ctx, dispatch), validators))
                 }
                 .await;
                 run.map_err(|error| js_error(&ctx, error, &call_output))
             })
             .await?;
 
+        let validators = match validators {
+            Some(text) => serde_json::from_str(&text)?,
+            None => Value::Null,
+        };
         Ok(Self {
+            validators,
             dispatch,
             context,
             output,

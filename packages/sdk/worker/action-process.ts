@@ -1,6 +1,6 @@
 import { workerDispatch, type WorkerMessage } from "./dispatch";
 import { installConsole } from "./quickjs-console";
-import type { FunctionRegistry } from "../src/functions";
+import { functionMetadata, type FunctionRegistry } from "../src/functions";
 
 // Capture these before plugin module initialization can modify the realm.
 const { stringify, parse } = JSON;
@@ -8,6 +8,16 @@ const { setPrototypeOf } = Object;
 const string = String;
 function emit(send: (json: string) => void, message: object) {
   send(stringify(setPrototypeOf(message, null)));
+}
+
+export function validators(functions: FunctionRegistry): string {
+  return stringify(
+    Object.fromEntries(
+      functionMetadata(functions)
+        .filter(({ kind }) => kind === "action")
+        .map(({ name, args }) => [name, args]),
+    ),
+  );
 }
 
 export function logging(send: (json: string) => void) {

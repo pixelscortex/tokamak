@@ -5,12 +5,25 @@ import {
   query,
   createApi,
   v,
+  provide,
+  internalQuery,
+  type Id,
   type ApiFromModule,
   type FunctionReference,
 } from "@tokamak/sdk";
 
 const self = createApi<{ ops: ApiFromModule<typeof import("./ops")> }>("a");
-import { publicRead, callerQuery, callerMutation, callerAction } from "plugin:b/server";
+import {
+  publicRead,
+  callerQuery,
+  callerMutation,
+  callerAction,
+  loop,
+  noteViaAction,
+  noteQuery,
+  noteMutation,
+} from "plugin:b/server";
+import { callLoop } from "plugin:b/contracts";
 
 export const callerViaQuery = query({ handler: (ctx) => ctx.use({ callerQuery }).callerQuery({}) });
 export const callerViaMutation = mutation({
@@ -204,4 +217,39 @@ export const delayedSecret = action({
     await (await fetch(url)).text();
     throw new Error(secret + ":" + (await ctx.env("ACTION_TEST_SECRET")));
   },
+});
+
+export const callLoopProvider = provide(callLoop, {
+  next: internalQuery({ handler: (ctx): Promise<null> => ctx.use({ loop }).loop({}) }),
+});
+
+export const callNoteAction = action({
+  args: {
+    selection: v.optional(v.object({ id: v.id("threads") })),
+    threadId: v.string(),
+    pickLater: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { selection, pickLater }) => {
+    const { call } = ctx;
+    assertFrozen(call, call.user, call.device);
+    return {
+      call,
+      nested: await ctx.use({ noteViaAction }).noteViaAction({
+        ...((selection || pickLater) && { other: "chat/threads:other" as Id<"threads"> }),
+        call: { depth: 0, user: { id: "forged" }, threadId: "chat/threads:forged" },
+      }),
+    };
+  },
+});
+
+function assertFrozen(...values: unknown[]) {
+  if (!values.every(Object.isFrozen)) throw new Error("Call note must be frozen");
+}
+
+export const callNoteQuery = query({
+  handler: async (ctx) => [ctx.call, await ctx.use({ noteQuery }).noteQuery({})],
+});
+
+export const callNoteMutation = mutation({
+  handler: async (ctx) => [ctx.call, await ctx.use({ noteMutation }).noteMutation({})],
 });

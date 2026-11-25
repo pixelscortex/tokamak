@@ -46,6 +46,7 @@ pub(crate) struct Loaded {
 pub(crate) struct Target {
     pub owner: String,
     pub local_name: String,
+    pub args: Arc<Value>,
     pub mutation: bool,
     pub visibility: Visibility,
     pub kind: crate::service::FunctionKind,

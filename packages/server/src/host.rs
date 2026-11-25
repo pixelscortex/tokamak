@@ -3,6 +3,7 @@
 //! embedded engine's large debug futures off the QuickJS runtime's native stack.
 
 use crate::data::{self, DataSpace, Order, Table, Transaction, json_equal, json_object};
+use crate::identity::CallNote;
 use crate::protocol::failure_kind;
 use engine::{Bundle, Determinism, ModuleCall, OpRegistry, Pool};
 use serde_json::{Value as Json, json};
@@ -54,7 +55,7 @@ pub(crate) struct Invocation<'a> {
     pub space: &'a DataSpace,
     pub plugins: Option<Arc<crate::plugins::Loaded>>,
     pub determinism: Determinism,
-    pub auth: Option<crate::identity::AuthContext>,
+    pub note: CallNote,
 }
 
 pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocation<'_>) -> Call {
@@ -66,8 +67,12 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         space,
         plugins,
         determinism,
-        auth,
+        note,
     } = invocation;
+    let note = match plugins.as_ref().and_then(|loaded| loaded.targets.get(name)) {
+        Some(target) => note.with_args(&target.args, &args),
+        None => note,
+    };
     let (bundle, name, space, graph) = resolve_invocation(bundle, name, space, plugins);
     let tx = if mutation {
         Box::pin(db.begin()).await
@@ -101,7 +106,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         graph,
         CallContext {
             determinism: Some(determinism),
-            auth,
+            note,
             scope: CallScope::default(),
         },
     );
@@ -136,11 +141,11 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
     }
 }
 
-type Graph = Option<(Arc<crate::plugins::Loaded>, String, Vec<String>)>;
+type Graph = Option<(Arc<crate::plugins::Loaded>, String)>;
 
 struct CallContext {
     determinism: Option<Determinism>,
-    auth: Option<crate::identity::AuthContext>,
+    note: CallNote,
     scope: CallScope,
 }
 
@@ -215,12 +220,12 @@ fn operations(
     context: CallContext,
 ) -> Arc<OpRegistry> {
     let CallContext {
-        auth,
+        note,
         determinism,
         scope,
     } = context;
     let mut ops = OpRegistry::new();
-    crate::identity::register_caller(auth.as_ref(), &mut ops).expect("unique operation");
+    note.register(&mut ops).expect("unique operation");
 
     if let Some(inputs) = determinism {
         ops.set_determinism(inputs);
@@ -235,7 +240,7 @@ fn operations(
         writable,
     );
 
-    if let Some((plugins, owner, path)) = graph {
+    if let Some((plugins, owner)) = graph {
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
             .expect("unique operation");
         ops.register_module("plugin.call", move |payload| {
@@ -252,16 +257,14 @@ fn operations(
                     &owner,
                     name,
                     writable,
-                    &path,
                     payload.get("contract").and_then(Json::as_str),
                 )?;
                 target.kind.check_requested(&payload)?;
-                if auth.is_none() {
+                if note.auth.is_none() {
                     target.check_anonymous_scope(&owner)?;
                 }
 
-                let mut child_path = path.clone();
-                child_path.push(name.into());
+                let child_note = note.clone().nested(name)?.with_args(&target.args, &args);
 
                 let child_scope = CallScope::default();
                 let child_ops = operations(
@@ -270,10 +273,10 @@ fn operations(
                     failure.clone(),
                     target.space,
                     target.mutation,
-                    Some((plugins.clone(), target.owner, child_path)),
+                    Some((plugins.clone(), target.owner)),
                     CallContext {
                         determinism: None,
-                        auth: auth.clone(),
+                        note: child_note,
                         scope: child_scope.clone(),
                     },
                 );
@@ -361,7 +364,7 @@ fn resolve_invocation(
             target.bundle,
             target.local_name,
             target.space,
-            Some((plugins, target.owner, vec![name.to_owned()])),
+            Some((plugins, target.owner)),
         )
     } else {
         (

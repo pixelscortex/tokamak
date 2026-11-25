@@ -299,3 +299,15 @@ fn spawn_group(
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
 }
+
+/// The root call is at depth zero.
+pub const MAX_CALL_DEPTH: usize = 15;
+
+/// Advance the depth before admitting a nested invocation.
+pub fn next_call_depth(depth: usize, target: &str) -> Result<usize, String> {
+    if depth >= MAX_CALL_DEPTH {
+        return Err(format!("Plugin call cycle or depth limit at {target}"));
+    }
+
+    Ok(depth + 1)
+}

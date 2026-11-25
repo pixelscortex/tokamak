@@ -10,14 +10,12 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES};
+use tokamak_worker::{WORKER_CAPACITY, WORKER_FRAME_BYTES, next_call_depth};
 use tokio::{
     sync::{Semaphore, mpsc, oneshot, watch},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
-
-const MAX_DEPTH: usize = 16;
 
 #[derive(Clone)]
 struct Peer {
@@ -322,8 +320,11 @@ async fn invoke_root(
     bridge: &Bridge,
     root: u64,
     lease: &Arc<Lease>,
-    frame: Value,
+    mut frame: Value,
 ) -> Result<Value, String> {
+    if let Some(fields) = frame.as_object_mut() {
+        fields.remove("threadId");
+    }
     let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
@@ -395,6 +396,7 @@ async fn run(
     ancestors: &[String],
     invocation: Invocation<'_>,
 ) -> Result<Value, String> {
+    let thread_id = frame["threadId"].as_str().map(str::to_owned);
     let mut call = match host.begin(frame).await {
         Ok(call) => call,
         Err(error) => return Err(host.call_error(error).await),
@@ -410,6 +412,7 @@ async fn run(
         bridge,
         root,
         ancestors,
+        thread_id: thread_id.as_deref(),
     };
     let mut operations = FuturesUnordered::new();
     let mut pending = HashMap::<u64, CancellationToken>::new();
@@ -546,6 +549,7 @@ struct CallRoute<'a> {
     bridge: &'a Bridge,
     root: u64,
     ancestors: &'a [String],
+    thread_id: Option<&'a str>,
 }
 
 impl CallRoute<'_> {
@@ -560,6 +564,12 @@ impl CallRoute<'_> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
+        // This header comes from the host dispatcher, outside the plugin's operation payload.
+        let routed_thread = frame
+            .as_object_mut()
+            .and_then(|fields| fields.remove("threadId"));
+        let thread_id = self.thread_id.or_else(|| routed_thread.as_ref()?.as_str());
+        let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
         let reply = self
             .bridge
             .request(frame.clone(), self.root, &host.build)
@@ -569,9 +579,20 @@ impl CallRoute<'_> {
             // An admitted call can use its own build while that build drains.
             // Reuse the running host without starting or leasing it again.
             Reply::Here => None,
-            Reply::Result(value) => return Ok(value),
+            Reply::Result(mut value) => {
+                if wants_note && value["value"].is_object() {
+                    let note = value["value"].as_object_mut().expect("object checked");
+                    note.remove("threadId");
+                    if let Some(thread_id) = self.thread_id {
+                        note.insert("threadId".into(), json!(thread_id));
+                    }
+                    value["value"]["depth"] = json!(self.ancestors.len() - 1);
+                }
+                return Ok(value);
+            }
         };
-        self.invoke(lease.as_deref(), here, frame, opening).await
+        self.invoke(lease.as_deref(), here, frame, opening, thread_id)
+            .await
     }
 
     async fn invoke(
@@ -580,12 +601,14 @@ impl CallRoute<'_> {
         here: &Peer,
         mut frame: Value,
         opening: Option<OpenChannel<'_>>,
+        thread_id: Option<&str>,
     ) -> Result<Value, String> {
         let Self {
             pool,
             bridge,
             root,
             ancestors,
+            ..
         } = *self;
         let mut target = frame["payload"].take();
         let args = if frame["name"] == "local.contract.call" {
@@ -602,14 +625,19 @@ impl CallRoute<'_> {
         } else if let Some(target) = target.as_object_mut() {
             target.remove("channel");
         }
-        let frame = json!({"type":"invoke", "fn":"", "contract":target, "args":args});
         let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
-        if ancestors.len() == MAX_DEPTH || (lease.is_some() && ancestors.contains(&artifact.id)) {
+        let method = target["method"].as_str().unwrap_or("describe");
+        let name = format!("plugin {}/{method}", artifact.id);
+        next_call_depth(ancestors.len() - 1, &name)?;
+        if lease.is_some() && ancestors.contains(&artifact.id) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
                 artifact.id
             ));
         }
+        let frame = json!({
+            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id
+        });
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
         let other = match lease {

@@ -169,7 +169,7 @@ impl Coordinator {
                         space: &self.space,
                         plugins: self.plugins.clone(),
                         determinism: engine::Determinism::default(),
-                        auth: Some(auth),
+                        note: Some(auth).into(),
                     },
                 )
                 .await
