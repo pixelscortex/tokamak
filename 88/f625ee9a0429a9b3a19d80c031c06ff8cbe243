@@ -1,0 +1,38 @@
+e2e/browser/screens.spec.ts
+  s_b2ce2444f775e6::t_8fc1fb03ee9356 2-3,7,289-319,326-329,333-335,337-340,342-348,350-353,355-358,360-368,370-376
+  s_b2ce2444f775e6::t_8a4029d315afbf 320-325,330-332,336,341,349,354,359,369
+plugins/ai-profiles/src/client/ui/company-mark.tsx
+  s_b2ce2444f775e6::t_8a4029d315afbf 91
+design/shell.md
+  s_b2ce2444f775e6::t_67d411fae7255e 39,81-84
+plugins/ai-profiles/src/client/styles.css
+  s_b2ce2444f775e6::t_8759e6e965cb4a 6-9
+e2e/browser.ts
+  s_b2ce2444f775e6::t_0dd480783ef13a 2,16,59,61-62,64-70
+  s_b2ce2444f775e6::t_8a4029d315afbf 60,63
+design/README.md
+  s_b2ce2444f775e6::t_67d411fae7255e 18-27
+  s_b2ce2444f775e6::t_9a14b930470a4a 54-55
+design/agent-proxy.md
+  s_b2ce2444f775e6::t_5969951d784e42 1-18,27-48
+  s_b2ce2444f775e6::t_67d411fae7255e 19-26
+design/ai-profiles.md
+  s_b2ce2444f775e6::t_b24e902cf9df95 1-13,23-57,61-91
+  s_b2ce2444f775e6::t_67d411fae7255e 14-22,58-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "88f625ee9a0429a9b3a19d80c031c06ff8cbe243",
+  "prompts": {},
+  "sessions": {
+    "s_b2ce2444f775e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbee511c-645a-4eb2-b398-9e791117eb81",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
