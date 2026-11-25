@@ -18,6 +18,7 @@ impl From<CallDepthLimit> for engine::CallError {
             message: error.0,
             details: None,
             limit: Some(engine::CallLimit::Depth),
+            kind: None,
         }
     }
 }

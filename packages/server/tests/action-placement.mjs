@@ -209,9 +209,9 @@ async function assertProgramsReaped(pids, label) {
   );
 }
 
-async function assertReloadTimeout(client, reload) {
+async function assertReloadTimeout(client, reference, args, reload) {
   const previous = (await client.query(api.work.rows, {})).rows.length;
-  const action = client.action(api.work.waitHook, {});
+  const action = client.action(reference, args);
   void action.catch(() => {});
   const entered = (async () => {
     for (;;) {
@@ -224,7 +224,7 @@ async function assertReloadTimeout(client, reload) {
     Promise.race([
       entered,
       action.then(() => {
-        throw new Error("Retiring action finished before its hook started");
+        throw new Error("Retiring action finished before its process started");
       }),
     ]),
     "start action on retiring build",
@@ -513,12 +513,16 @@ try {
   };
   await assertRetirementCleanup(embedded, "embedded-retiring", () => reloadEmbedded(newAction));
   await reloadEmbedded(oldAction);
-  await assertReloadTimeout(embedded, () => reloadEmbedded(newAction));
+  await assertReloadTimeout(embedded, api.work.wait, { repeat: true }, () => reloadEmbedded(newAction));
+  await reloadEmbedded(oldAction);
+  await assertReloadTimeout(embedded, api.work.waitHook, {}, () => reloadEmbedded(newAction));
   await reloadEmbedded(oldAction);
 
   await assertRetirementCleanup(window, "window-retiring", () => reloadWindow(newAction));
   await reloadWindow(oldAction);
-  await assertReloadTimeout(window, () => reloadWindow(newAction));
+  await assertReloadTimeout(window, api.work.wait, { repeat: true }, () => reloadWindow(newAction));
+  await reloadWindow(oldAction);
+  await assertReloadTimeout(window, api.work.waitHook, {}, () => reloadWindow(newAction));
   await local.stop();
   const offlineWindow = await connect(address, { launch: local.launch, token: sharedToken, cleanup });
   assert.deepEqual(

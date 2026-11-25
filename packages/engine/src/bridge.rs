@@ -28,11 +28,17 @@ pub enum CallLimit {
     Modules,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallErrorKind {
+    RunnerArtifactUnavailable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallError {
     pub message: String,
     pub details: Option<Json>,
     pub limit: Option<CallLimit>,
+    pub kind: Option<CallErrorKind>,
 }
 
 impl From<&str> for CallError {
@@ -47,6 +53,7 @@ impl From<String> for CallError {
             message,
             details: None,
             limit: None,
+            kind: None,
         }
     }
 }
@@ -599,6 +606,7 @@ async fn invoke_module<'js>(
             message,
             details: None,
             limit: Some(limit),
+            kind: None,
         };
         call.finish(Some(error.clone()));
         return Err(error);

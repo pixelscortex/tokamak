@@ -553,6 +553,7 @@ async fn window_hook(
                     message: "delegated module count budget exceeded".into(),
                     details: None,
                     limit: Some(engine::CallLimit::Modules),
+                    kind: None,
                 });
             }
             _ => return Err("Runner hook scope unavailable".into()),
@@ -595,6 +596,7 @@ fn action_value(mut result: Value) -> Result<Value, engine::CallError> {
             message: error,
             details,
             limit: None,
+            kind: None,
         });
     }
     Ok(result["value"].take())

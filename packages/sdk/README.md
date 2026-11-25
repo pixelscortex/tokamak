@@ -914,6 +914,18 @@ A mutation hook can write its own tables as part of the target's save. A failure
 in the hook or handler rolls back all those writes, even if a caller catches a
 nested hook error. A write conflict retries the whole mutation and its hooks.
 
+Each write to a watched table outside a trigger starts a fresh budget of 256
+stages and delegated calls per trigger it dispatches. This applies to writes
+from the root handler, its delegated mutations, and mutation hooks. Nested
+hooks, triggers, and delegated calls in the same trigger chain share its budget,
+so endless fan-out fails with the hook or trigger named. In the worst case a
+top-level call can spend a fresh budget on every dispatch, so the total is
+bounded by the call deadline and depth, not by a global count.
+
+A plugin’s query hooks, mutation hooks, and triggers share a module instance
+within one call. A stage that is still running can share its `ctx` with another
+stage through module state; that `ctx` stops working when its own stage ends.
+
 An action hook runs with its own plugin's network grants and environment. It can
 use `ctx.runQuery`, `ctx.runMutation`, and `ctx.runAction`. The selected placement,
 including a per-call `on` override, applies to both stages. A caller action and its
@@ -968,20 +980,23 @@ schema resets, and startup index backfills do not run triggers.
 If a trigger throws, the whole transaction rolls back, even if the writing
 mutation catches the exception. The caller's error identifies `plugin`,
 `hook` (the trigger export name), `stage: "trigger"`, and `table`. Its message
-also lists the registered triggers for that table. Loops are stopped by the
-call note depth limit, and the mutation's call deadline also applies. Each
-trigger entered outside another trigger gets a budget of 256 delegated calls.
-Its nested triggers, hooks, and delegated calls share that budget. Every trigger run entered outside another
-trigger starts fresh, including a second trigger on the same row.
+also lists the registered triggers for that table.
 
-Triggers have no count limit per save, so the call deadline is what bounds a
-bulk write to a watched table. A trigger that writes one row and calls one
-query added about 2 ms per row on an Apple M4 Pro; with the default 1 s
-deadline such a save times out near 500 rows, and sooner on a slower host.
-Split larger writes across mutations.
+Each write to a watched table outside a trigger starts a fresh budget of 256
+stages and delegated calls per trigger it dispatches. This applies to writes
+from the root handler, its delegated mutations, and mutation hooks. Nested
+hooks, triggers, and delegated calls in the same trigger chain share its budget,
+so endless fan-out fails with the hook or trigger named. In the worst case a
+top-level call can spend a fresh budget on every dispatch, so the total is
+bounded by the call deadline and depth, not by a global count.
 
-Trigger and hook stages share their bundle's module state only within one
-invocation. Do not keep `ctx` there: it stops working when its stage ends.
+A trigger that writes one row and calls one query added about 2 ms per row
+on an Apple M4 Pro; with the default 1 s deadline such a save times out near
+500 rows, and sooner on a slower host. Split larger writes across mutations.
+
+A plugin’s query hooks, mutation hooks, and triggers share a module instance
+within one call. A stage that is still running can share its `ctx` with another
+stage through module state; that `ctx` stops working when its own stage ends.
 
 The server's plugin catalog lists active triggers under `triggers`, keyed by
 qualified table name. A trigger whose table is missing is skipped with a

@@ -224,6 +224,7 @@ impl Broker<'_> {
                         message: error.to_owned(),
                         details: Some(details.clone()),
                         limit: None,
+                        kind: None,
                     }));
                     return Ok(());
                 }

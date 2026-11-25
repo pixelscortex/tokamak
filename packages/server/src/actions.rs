@@ -359,12 +359,14 @@ impl ActionStageExecutor<'_> {
                 .invoke_typed(source, name, input, ops.ops)
                 .await
         };
-        result.map_err(|mut error| {
-            let limit = std::mem::take(&mut error.limit);
+        result.map_err(|error| {
+            let limit = error.limit.clone();
+            let kind = error.kind;
             let mut error = engine::CallError::from(
                 CallError::from(error).map_text(|text| environment.redact(text)),
             );
             error.limit = limit;
+            error.kind = kind;
             error
         })
     }
@@ -390,18 +392,10 @@ where
 }
 
 pub fn runner_action_artifact_unavailable() -> engine::CallError {
-    CallError::Structured(Box::new(crate::protocol::StructuredCallError {
-        message: "Runner action artifact unavailable".into(),
-        details: crate::protocol::CallErrorDetails {
-            plugin: String::new(),
-            hook: String::new(),
-            stage: "runner".into(),
-            kind: "hookRunnerUnavailable".into(),
-            table: None,
-            data: Json::Null,
-        },
-    }))
-    .into()
+    engine::CallError {
+        kind: Some(engine::CallErrorKind::RunnerArtifactUnavailable),
+        ..engine::CallError::from("Runner action artifact unavailable")
+    }
 }
 
 #[derive(Clone)]

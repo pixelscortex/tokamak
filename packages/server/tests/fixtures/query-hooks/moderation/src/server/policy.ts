@@ -157,7 +157,12 @@ export const logSave = hook(legacyTeam.users.guarded, {
     return { ...args, name: args.name.trim() };
   },
   async after(ctx, result, args) {
-    await ctx.db.insert("bans", { name: `after:${result}` });
+    try {
+      await ctx.db.insert("bans", { name: `after:${result}` });
+    } catch (error) {
+      if (result !== "trigger-fails" || !String(error).includes("audit trigger failed")) throw error;
+      return result;
+    }
     if (args.mode === "after-fails") throw new Error("after failed");
     return result.toUpperCase();
   },

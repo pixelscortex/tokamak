@@ -155,12 +155,10 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
         value = execute(hook.clone(), stage, note, input)
             .await
             .map_err(|error| {
-                if let Some(details) = &error.details {
-                    if details["stage"] == "runner" && details["kind"] == "hookRunnerUnavailable" {
-                        make_error("hookRunnerUnavailable", Json::Null)
-                    } else {
-                        error
-                    }
+                if error.kind == Some(engine::CallErrorKind::RunnerArtifactUnavailable) {
+                    make_error("hookRunnerUnavailable", Json::Null)
+                } else if error.details.is_some() {
+                    error
                 } else {
                     match error.limit {
                         Some(engine::CallLimit::Depth) => {
@@ -338,7 +336,7 @@ pub(super) async fn execute_stage(
         .retain(|entry| !Arc::ptr_eq(entry, &label));
     scope.close().await;
     let observed = tx.observations.lock().await;
-    if observed.conflict && writable {
+    if observed.conflict {
         parent.observations.lock().await.conflict = true;
     }
     let failure = tx.failure.lock().expect("failure lock");

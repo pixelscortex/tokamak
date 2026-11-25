@@ -59,6 +59,7 @@ impl CallError {
             message,
             details: Some(details),
             limit: None,
+            kind: None,
         }
     }
 
@@ -84,6 +85,7 @@ impl From<CallError> for engine::CallError {
                 message: error.message.clone(),
                 details: Some(serde_json::json!(error)),
                 limit: None,
+                kind: None,
             },
         }
     }

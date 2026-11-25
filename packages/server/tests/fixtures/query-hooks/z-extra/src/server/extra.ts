@@ -4,7 +4,10 @@ import { tables } from "plugin:moderation/tables";
 import schema from "./schema";
 
 export const watchBans = createTrigger(schema)(tables.bans, async (ctx, change) => {
-  if (change.operation === "insert") await ctx.db.insert("events", { name: change.newDoc.name });
+  if (change.operation !== "insert") return;
+
+  await ctx.db.insert("events", { name: change.newDoc.name });
+  if (change.newDoc.name === "after:trigger-fails") throw new Error("audit trigger failed");
 });
 
 export const events = createFunctions(schema).query({

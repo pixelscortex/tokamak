@@ -107,6 +107,7 @@ impl<'a> Change<'a> {
                             message: "delegated module count budget exceeded".into(),
                             details: None,
                             limit: Some(engine::CallLimit::Modules),
+                            kind: None,
                         })
                     }
                 }
@@ -114,6 +115,7 @@ impl<'a> Change<'a> {
                     message: error.to_string(),
                     details: None,
                     limit: Some(engine::CallLimit::Depth),
+                    kind: None,
                 }),
             };
 

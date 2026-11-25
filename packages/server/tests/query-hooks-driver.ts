@@ -225,6 +225,12 @@ async function mutation_hooks_transform_and_share_the_save() {
     stage: "after",
     kind: "hookException",
   });
+  await assert.rejects(client.mutation(team.users.guarded, { name: "trigger-fails" }), {
+    plugin: "z-extra",
+    hook: "extra:watchBans",
+    stage: "trigger",
+    kind: "triggerException",
+  });
   assert.deepEqual(await names(), saved);
   assert.deepEqual(await audit(), entries);
   assert.deepEqual(await client.query(extra.extra.events, {}), events);
