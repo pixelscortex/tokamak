@@ -3,7 +3,8 @@ import type { JSX } from "@solidjs/web";
 import { Region, useClient } from "@tokamak/sdk/client";
 import { Button, Chip } from "@tokamak/ui";
 import type { HeaderProps } from "plugin:chat/client";
-import { branchOf, followBranch, openReview, rememberClient, review } from "../lib/changes";
+import { branchOf, followBranch, openReview, review } from "../lib/changes";
+import { rememberClient } from "../lib/runner";
 import { branchIcon, singleLayoutIcon, splitLayoutIcon } from "../lib/icons";
 import { ReviewPanel } from "./review-panel";
 

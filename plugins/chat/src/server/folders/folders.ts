@@ -70,7 +70,7 @@ function home(): string {
 function appData(): string | undefined {
   const path = process.env.TOKAMAK_APP_DATA_DIR;
   if (path && isAbsolute(path)) return path;
-  // oxlint-disable-next-line no-console -- The local worker sends console output to the client's log.
+  // oxlint-disable-next-line no-console -- The Runner worker sends console output to the client's log.
   console.warn("chat: the client did not provide its data folder; using a temporary folder");
   return undefined;
 }

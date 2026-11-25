@@ -1,10 +1,10 @@
-import { fail, action, provide, type Id, type CallerActionContext } from "@tokamak/sdk";
+import { action, fail, provide, type CallerActionContext, type Id } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
+import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 import { findBeforeSnapshot, pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
-import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 
 export const snapshotHooks = provide(
   ai.turnHooks,
@@ -61,7 +61,7 @@ export const cleanup = provide(threadDeletedLocal, {
   }),
 });
 
-/** Recheck this device's recorded repositories when its local part opens. */
+/** Recheck this device's recorded repositories when its Runner becomes available. */
 export const prune = action({
   on: "caller",
   handler: async (ctx) => {

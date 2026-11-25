@@ -1,4 +1,4 @@
-import type { Id, CallerActionContext } from "@tokamak/sdk";
+import type { CallerActionContext, Id } from "@tokamak/sdk";
 import { readGit, readGitUntil, threadRefs, turnRefs, type Repository } from "./git";
 
 /** What one turn changed in the thread's folder: "after" minus "before". */

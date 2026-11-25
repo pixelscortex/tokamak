@@ -45,7 +45,7 @@ function FolderPicker(props: EmptyProps): JSX.Element {
   const [problem, setProblem] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const picked = (path: string) => props.folder.kind === "chosen" && props.folder.path === path;
   const valid = () => isFullPath(typed());
-  // On the desktop the local part expands `~` and checks the folder exists;
+  // On the Runner a caller action expands `~` and checks the folder exists;
   // a plain browser stores the path as typed.
   async function choose() {
     if (!valid()) return;

@@ -11,7 +11,7 @@ Opening the app lands on a new thread: an icon, "Start a conversation", the
 recent folders with "Choose a folder…" and "No folder", and the composer.
 Nothing is stored until the first Send, which creates the thread and its first
 message. "No folder" gives the thread an empty folder of its own under the
-app's data, `<app data>/no-project/threads/<thread>`, made by chat's local part.
+app's data, `<app data>/no-project/threads/<thread>`, made by a caller action on the Runner.
 The list has "New thread ⌘N" on top and one list of threads, newest first.
 The header shows the title (double-click renames), the folder, and `⋯` with
 Rename and Delete thread.
@@ -28,7 +28,7 @@ else's computer it returns null, so their Send stays plain chat. Without the
 client's data folder (`TOKAMAK_APP_DATA_DIR`), an own folder is a temporary one
 that is not stored.
 
-## Server and local functions
+## Server functions and caller actions
 
 - `threads:start({ text, folder })` creates a thread with its first message and
   returns `{ threadId, messageId }`.
@@ -105,6 +105,6 @@ onCleanup(chat.onSent((sent) => beginTurn(sent)));
   checks Send announcements).
 - End to end: `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test chat_threads`
   (real server, real chat build, a real reply plugin, two clients, chat's real
-  local part, and a shared server where a member is refused).
+  Runner, and a shared server where a member is refused).
 - Browser: `proto run bun -- run e2e:browser e2e/browser/chat.spec.ts`.
 - Types: `src/client/tsconfig.json` and `tests/tsconfig.json` (in `workspace:plugins-check`).

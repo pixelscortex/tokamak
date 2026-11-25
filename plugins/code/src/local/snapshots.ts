@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import type { Id, CallerActionContext } from "@tokamak/sdk";
+import type { CallerActionContext, Id } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import {
   beforeSnapshot,
@@ -41,7 +41,7 @@ export async function trackSnapshots(ctx: CallerActionContext, tracked: Tracked)
   try {
     await record(ctx, tracked);
   } catch (cause) {
-    // oxlint-disable-next-line no-console -- The local worker sends console output to the client's log.
+    // oxlint-disable-next-line no-console -- The Runner worker sends console output to the client's log.
     console.warn(`code: could not record this repository for later cleanup: ${String(cause)}`);
   }
 }

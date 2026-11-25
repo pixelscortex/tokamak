@@ -17,7 +17,7 @@ type Loaded =
   | { readonly state: "unsaved"; readonly number: number }
   | { readonly state: "ready"; readonly number: number; readonly diff: Diff };
 
-/** The most hunk lines the panel shows; the local part cuts the diff there (`DIFF_LINE_LIMIT`). */
+/** The most hunk lines the panel shows; the caller action cuts the diff there (`DIFF_LINE_LIMIT`). */
 const LINE_BUDGET = "3,000";
 
 /** The turn to show: the one asked for, or the latest turn that changed files. */
