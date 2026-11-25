@@ -1,0 +1,138 @@
+packages/server/src/service/session.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 23,80,88,90-94,96,102,113,120
+  s_6bd43a2c58496b::t_aa8ddd247db9d5 95,122
+packages/server/tests/fixtures/action-placement/plugin.ts
+  s_6bd43a2c58496b::t_849f6740657aed 4
+packages/server/src/plugins/manifest.rs
+  s_6bd43a2c58496b::t_7aedafc4f7a265 94
+packages/server/src/lib.rs
+  s_6bd43a2c58496b::t_7aedafc4f7a265 23
+packages/sdk/src/host.ts
+  s_6bd43a2c58496b::t_27f79e24f93b7d 156-163,174-183
+packages/server/tests/fixtures/action-placement/src/channel.ts
+  s_6bd43a2c58496b::t_849f6740657aed 1-34,36-57
+  s_6bd43a2c58496b::t_66f21d904fd2f1 35
+packages/server/tests/fixtures/action-placement/src/read-project.ts
+  s_6bd43a2c58496b::t_e07901a894c2e3 1-6
+packages/build/src/vite.ts
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 187
+  s_6bd43a2c58496b::t_e07901a894c2e3 12,90-94
+packages/sdk/tools/bundle.mjs
+  s_6bd43a2c58496b::t_e07901a894c2e3 16-22,24,30,175,190,227,291
+  s_6bd43a2c58496b::t_bcd538d4f229f3 23
+packages/server/src/service/requests.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 1,4,6-12,24-29,57,114-116,118,160
+  s_6bd43a2c58496b::t_8aa11ff0edd1dd 3,5,58-61,76-106,117
+packages/runner/src/local/quickjs/session.rs
+  s_6bd43a2c58496b::t_c48baec3beb257 114-117,120-121,787,793,804,809-864,889,903,929,937
+  s_6bd43a2c58496b::t_b4dad5a9978fdb 13-15,84-91,111-113,118-119,122,130-137,139,141-162,184,202,227,244,250,265,267,269-270,304,313,338,341-344,350-356,359,402-410,412-420,483-485,497-503,507-508,531,540,684,686-687,695,698,700-714,724-728,730,735-740,767-772,775-778,963,978,1022,1024,1026-1027,1035,1038,1073,1075,1077-1078,1084,1091-1092
+packages/server/tests/fixtures/action-placement/src/work.ts
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 1,4,52-68
+  s_6bd43a2c58496b::t_e07901a894c2e3 2,22,47-51
+packages/sdk/tools/server-builtins.mjs
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 17-19,22
+  s_6bd43a2c58496b::t_e07901a894c2e3 53-54,58-59,61-76
+  s_6bd43a2c58496b::t_953b40db9c9767 60
+packages/server/src/host/action_process/mod.rs
+  s_6bd43a2c58496b::t_c48baec3beb257 278,280-283,293,298-325
+packages/build/tests/local.test.mjs
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 275-291,293-295
+  s_6bd43a2c58496b::t_b5f1249c0ec814 236,292
+packages/server/tests/action-placement.mjs
+  s_6bd43a2c58496b::t_c504ca5b6c2d32 58
+  s_6bd43a2c58496b::t_849f6740657aed 20,42-45,47-53,100,104,152
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 26,54-57,59-68,70-76,95-99,148-151,157-160,162
+  s_6bd43a2c58496b::t_e07901a894c2e3 133-134
+  s_6bd43a2c58496b::t_ef4a4c785da583 46,69,131-132,161
+packages/server/src/identity/call.rs
+  s_6bd43a2c58496b::t_27be0cd645e518 10,41,74-75
+  s_6bd43a2c58496b::t_073c74a10ea33c 76,78-81
+  s_6bd43a2c58496b::t_4c85ec590727d6 77
+packages/server/tests/fixtures/action-placement/src/provider.ts
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 1-2,13-26
+  s_6bd43a2c58496b::t_849f6740657aed 12,27
+packages/server/src/plugins/mod.rs
+  s_6bd43a2c58496b::t_7aedafc4f7a265 76
+  s_6bd43a2c58496b::t_93a63a0ca2c506 28
+packages/runtime/js/local.ts
+  s_6bd43a2c58496b::t_27f79e24f93b7d 67-71,73-78,85-86,135-153,164-169,180,190,205-206,333,338,347-348,363-364,391-401,435-436,458,610-613
+  s_6bd43a2c58496b::t_332db26a0df8e7 66,484,500,519,536-537,614
+packages/sdk/tools/placement.mjs
+  s_6bd43a2c58496b::t_27f79e24f93b7d 211-226
+  s_6bd43a2c58496b::t_e07901a894c2e3 18-19,29,176-210,227-234
+packages/server/src/service/action_coordination.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 2-8,17,28-31,35,69-70,72,80-86,88-92,97-99
+  s_6bd43a2c58496b::t_5a90f9266e8d07 39-40,51-54,71
+packages/sdk/src/functions.ts
+  s_6bd43a2c58496b::t_27f79e24f93b7d 12,24-26,331-334,406-407
+packages/server/src/actions.rs
+  s_6bd43a2c58496b::t_7aedafc4f7a265 19-22,33,108,116-117,156,165,184,220-221,223,233,240,242,247-250,252,254-260,262
+  s_6bd43a2c58496b::t_27be0cd645e518 110
+  s_6bd43a2c58496b::t_c48baec3beb257 34,175-183,185-188
+  s_6bd43a2c58496b::t_073c74a10ea33c 39,50-62,64-86,92,96-106,109,111-115,118-120,126,130,135,147-148,169,189-190,192,198-200,383-387,389-391,401-402,404
+  s_6bd43a2c58496b::t_2e2185ed0e8161 45-49,63,121-125,134,136-146,149,191,261,388,403
+packages/sdk/src/transport.ts
+  s_6bd43a2c58496b::t_c504ca5b6c2d32 241-247
+  s_6bd43a2c58496b::t_95a36e10a5b3a0 1,74-104,114-115,117-129,217,219,222-240,288,293
+packages/server/src/actions/runner_upstream.rs
+  s_6bd43a2c58496b::t_7aedafc4f7a265 1-14,17-43,46-55,57-192
+  s_6bd43a2c58496b::t_c6f2122a1cd819 15-16,44-45,56
+packages/server/src/service/mod.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 227
+  s_6bd43a2c58496b::t_dccf0b14ebed8f 208,274
+packages/server/tests/fixtures/action-placement/src/contracts.ts
+  s_6bd43a2c58496b::t_849f6740657aed 1,7-11
+  s_6bd43a2c58496b::t_d57c12bcd2b51c 5-6,12-14
+packages/server/src/protocol.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 58-60,81-83
+  s_6bd43a2c58496b::t_8d2d72c13f4fc6 84-87,128
+packages/server/src/identity.rs
+  s_6bd43a2c58496b::t_073c74a10ea33c 85,87-89,91-92
+  s_6bd43a2c58496b::t_b6b92873a2b69e 61-63,74,86,90,105
+packages/runner/src/local.rs
+  s_6bd43a2c58496b::t_01320b44203568 111-113,115
+packages/runner/src/local/quickjs.rs
+  s_6bd43a2c58496b::t_6b7222de6e96be 52,78,88,109,154,165-167,243,258,273,283,287-288,464,491
+packages/runtime/tests/local.test.mjs
+  s_6bd43a2c58496b::t_3f3a068600a3ed 153-176
+packages/sdk/README.md
+  s_6bd43a2c58496b::t_4d02e1ae0ce614 148-152,180-193
+packages/sdk/src/client.ts
+  s_6bd43a2c58496b::t_16bb18dc9848ca 42,90
+packages/sdk/src/protocol.ts
+  s_6bd43a2c58496b::t_59169c3fc8c552 10,20,22
+packages/sdk/worker/dispatch.ts
+  s_6bd43a2c58496b::t_97bd81edac2c2d 1,18,120,232-236,284
+packages/server/src/environment.rs
+  s_6bd43a2c58496b::t_80c099c6319a2d 1-9,40-42,46,56-71
+packages/server/src/plugins/catalog.rs
+  s_6bd43a2c58496b::t_5a0b721e592ba2 103
+packages/server/src/service/command_loop.rs
+  s_6bd43a2c58496b::t_e886b702acc79c 45
+packages/server/src/service/startup.rs
+  s_6bd43a2c58496b::t_2871135b12400c 217
+packages/server/tests/actions.rs
+  s_6bd43a2c58496b::t_24cf0e04f400f2 363
+packages/server/tests/fixtures/action-placement/src/delegate.ts
+  s_6bd43a2c58496b::t_affaf2fe7aa1fd 16-24
+packages/server/tests/helpers/actions_dns.rs
+  s_6bd43a2c58496b::t_59dd7943bdfb61 195
+packages/server/tests/workers.rs
+  s_6bd43a2c58496b::t_29b91301710a11 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ff4e5cd67399aa97120d5225622bfb946b54543",
+  "prompts": {},
+  "sessions": {
+    "s_6bd43a2c58496b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-b624-7543-af8b-6d738e892f5a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
