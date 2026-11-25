@@ -294,6 +294,23 @@ function identityOf(idToken: string | undefined): Partial<Identity> {
   };
 }
 
+/** The error code of a refused token request, as Codex reads it (`oauth/error.rs`); none when unreadable. */
+async function errorCode(response: Response): Promise<string | undefined> {
+  try {
+    const body = (await response.json()) as { error?: unknown; code?: unknown };
+    const nested = (body.error as { code?: unknown } | undefined)?.code;
+    return (text(body.error) ?? text(nested) ?? text(body.code))?.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Codex's "sign in again": a 401, a 400 `invalid_grant`, or one of its refresh-token codes at any status. */
+const refuses = (status: number, code: string | undefined) =>
+  status === 401 ||
+  (status === 400 && code === "invalid_grant") ||
+  (code !== undefined && SIGN_IN_AGAIN.includes(code));
+
 export async function renew(addresses: Addresses, refresh: string): Promise<Renewal> {
   let response: Response;
   try {
@@ -312,21 +329,7 @@ export async function renew(addresses: Addresses, refresh: string): Promise<Rene
     return { kind: "later" };
   }
   if (!response.ok) {
-    let code: string | undefined;
-    try {
-      const body = (await response.json()) as { error?: unknown; code?: unknown };
-      code =
-        text(body.error) ?? text((body.error as { code?: unknown } | undefined)?.code) ?? text(body.code);
-    } catch {
-      // No readable code: the status alone decides.
-    }
-    const lower = code?.toLowerCase();
-    if (
-      response.status === 401 ||
-      (response.status === 400 && lower === "invalid_grant") ||
-      (lower !== undefined && SIGN_IN_AGAIN.includes(lower))
-    )
-      return { kind: "refused" };
+    if (refuses(response.status, await errorCode(response))) return { kind: "refused" };
     const afterMs = response.status === 429 ? retryAfter(response) : undefined;
     return afterMs === undefined ? { kind: "later" } : { kind: "later", afterMs };
   }
