@@ -63,14 +63,18 @@ impl SessionSender {
     }
 }
 
-#[expect(clippy::too_many_lines, reason = "exhaustive wire request mapping")]
-fn request_action(request: Request) -> Result<Action, Error> {
-    if request.id() > 9_007_199_254_740_991 {
+fn check_request_id(id: u64) -> Result<(), Error> {
+    if id > 9_007_199_254_740_991 {
         return Err(Error::Invalid(
             "request ID must be a JavaScript safe integer".into(),
         ));
     }
+    Ok(())
+}
 
+#[expect(clippy::too_many_lines, reason = "exhaustive wire request mapping")]
+fn request_action(request: Request) -> Result<Action, Error> {
+    check_request_id(request.id())?;
     Ok(match request {
         Request::Query { id, name, args } => Action::Call {
             id,
@@ -104,7 +108,6 @@ fn request_action(request: Request) -> Result<Action, Error> {
             local_parent: None,
             placement: crate::actions::Placement::new(on, window, hook_plans, point_plans),
         },
-        // TKM-286 will restrict LocalCall to authenticated Runner sessions.
         Request::LocalCall {
             id,
             name,
@@ -113,6 +116,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             depth,
             thread,
             hook_scope,
+            proof,
             on,
             window,
             hook_plans,
@@ -122,11 +126,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             name,
             args,
             kind: Some(kind),
-            local_parent: Some(LocalParent {
-                depth,
-                thread,
-                hook_scope,
-            }),
+            local_parent: Some(WindowParent::new(depth, thread, proof, hook_scope)),
             placement: crate::actions::Placement::new(on, window, hook_plans, point_plans),
         },
         Request::HookStage { id, scope, done } => Action::HookStage {

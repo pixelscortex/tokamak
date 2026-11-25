@@ -32,6 +32,7 @@ pub(crate) struct CallNote {
     hooks: HookBudget,
     hook_scope: Option<u64>,
     in_trigger: bool,
+    pub(crate) window_plugin: Option<String>,
 }
 
 impl From<Option<AuthContext>> for CallNote {
@@ -146,6 +147,16 @@ impl CallNote {
         self
     }
 
+    pub fn as_window_continuation(&self, auth: AuthContext, depth: usize) -> Self {
+        Self {
+            auth: Some(auth),
+            // Linked handlers can deepen the call, but a window cannot reset the admitted depth.
+            depth: self.depth.max(depth),
+            window_continuation: true,
+            ..self.clone()
+        }
+    }
+
     pub fn is_window_continuation(&self) -> bool {
         self.window_continuation
     }
@@ -156,10 +167,6 @@ impl CallNote {
             value["hookScope"] = json!(scope);
         }
         value
-    }
-
-    pub fn register(&self, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {
-        self.register_points(ops, Vec::new())
     }
 
     pub(crate) fn register_points(

@@ -1,4 +1,6 @@
-use super::{Artifact, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
+use super::{
+    Artifact, Host, Lease, Leases, Pool, StartError, TURN_CAPACITY, frame_id, lock, too_many_turns,
+};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -255,7 +257,7 @@ impl Drop for Operation<'_> {
     }
 }
 
-pub(in crate::local) async fn connection(
+pub(crate) async fn connection(
     socket: &mut WebSocket,
     pool: &Pool,
     build: Artifact,
@@ -341,28 +343,51 @@ pub(in crate::local) async fn connection(
     }
 }
 
-pub(in crate::local) async fn action(
+pub(crate) async fn action(
     pool: Pool,
     leases: Arc<Leases>,
     action: server::RunnerAction,
 ) -> Result<Value, engine::CallError> {
+    let hook = action.name.starts_with("@hook/");
+    let unavailable = |error: String| {
+        if hook {
+            server::runner_action_artifact_unavailable()
+        } else {
+            error.into()
+        }
+    };
     let _slot = pool
         .actions
         .try_acquire()
-        .map_err(|_| "Runner action capacity exceeded")?;
+        .map_err(|_| unavailable("Runner action capacity exceeded".into()))?;
     let artifact = Artifact {
         id: action.plugin,
         entry_hash: action.entry_hash,
         code_hash: action.code_hash,
     };
-    let lease = leases.get(&artifact)?;
+    let lease = leases.get(&artifact).map_err(unavailable)?;
+    let connected = action.upstream.is_connected();
     let bridge = Bridge {
         leases,
         retiring: lease.retiring.clone(),
         source_retiring: Some(action.retiring),
         upstream: Upstream::Embedded(action.upstream),
     };
-    let host = stage_host(&pool, &lease, action.name.starts_with("@hook/")).await?;
+    let host = if hook {
+        stage_host(&pool, &lease, true).await?
+    } else {
+        match pool.start_or_reuse(&lease.build, &lease.slot, false).await {
+            Ok(host) => host,
+            Err(StartError::Artifact(reason)) if connected => {
+                return Ok(json!({
+                    "failed":true,
+                    "kind":"runnerArtifactMismatch",
+                    "data":{"plugin":artifact.id, "message":reason},
+                }));
+            }
+            Err(error) => return Err(error.message(&artifact.id).into()),
+        }
+    };
     let frame = json!({
         "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
     });
@@ -446,6 +471,7 @@ async fn invoke_root(
                         bridge,
                         root,
                         owner: id,
+                        proof: continuation["proof"].as_str(),
                     },
                     artifact,
                     name,
@@ -484,6 +510,7 @@ fn root_action_frame(frame: &mut Value) -> (Value, Value) {
     if let Some(fields) = frame.as_object_mut() {
         fields.remove("hooks");
         fields.remove("hookScope");
+        fields.remove("windowProof");
         fields.remove("threadId");
         fields.remove("admittedAction");
         if fields.get("action") == Some(&Value::Bool(true))
@@ -491,6 +518,7 @@ fn root_action_frame(frame: &mut Value) -> (Value, Value) {
         {
             fields.insert("actionDepth".into(), note["depth"].clone());
             fields.insert("hookScope".into(), note["hookScope"].clone());
+            fields.insert("windowProof".into(), note["proof"].clone());
             fields.insert("threadId".into(), note["thread"].clone());
         } else {
             fields.remove("actionDepth");
@@ -504,6 +532,7 @@ struct WindowStage<'a> {
     bridge: &'a Bridge,
     root: u64,
     owner: &'a str,
+    proof: Option<&'a str>,
 }
 
 async fn stage_host(
@@ -519,14 +548,14 @@ async fn stage_host(
 }
 
 fn hook_artifact_error(pool: &Pool, artifact: &Artifact, error: &str) -> engine::CallError {
-    use crate::artifact::{ArtifactError, artifact_folder};
+    use crate::artifact::artifact_folder;
     match artifact_folder(
         &pool.plugins,
         &artifact.id,
         &artifact.entry_hash,
         &artifact.code_hash,
     ) {
-        Err(ArtifactError::Missing(_)) => server::runner_action_artifact_unavailable(),
+        Err(_) => server::runner_action_artifact_unavailable(),
         _ => error.into(),
     }
 }
@@ -543,6 +572,7 @@ async fn window_hook(
         bridge,
         root,
         owner,
+        proof,
     } = route;
     let artifact: Artifact = serde_json::from_value(artifact)
         .map_err(|_| server::runner_action_artifact_unavailable())?;
@@ -578,7 +608,7 @@ async fn window_hook(
     let ancestors = [owner.to_owned(), artifact.id];
     let frame = json!({
         "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
-        "threadId":note["thread"],"hookScope":note["hookScope"],"actionDepth":note["depth"].as_u64().unwrap_or(1).saturating_sub(1),
+        "threadId":note["thread"],"hookScope":note["hookScope"],"windowProof":proof,"actionDepth":note["depth"].as_u64().unwrap_or(1).saturating_sub(1),
     });
     action_value(
         run(
@@ -661,6 +691,7 @@ async fn in_operation(
                                     bridge: route.bridge,
                                     root: route.root,
                                     owner: &here.host.build.id,
+                                    proof: route.window_proof,
                                 },
                                 artifact,
                                 name,
@@ -901,6 +932,7 @@ struct CallRoute<'a> {
     thread: OnceLock<String>,
     action_depth: usize,
     hook_scope: Option<u64>,
+    window_proof: Option<&'a str>,
     args: &'a Value,
     upstream: CallUpstream<'a>,
 }
@@ -949,6 +981,7 @@ impl<'a> CallRoute<'a> {
                 .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned())),
             args: &frame["args"],
             hook_scope: frame["hookScope"].as_u64(),
+            window_proof: frame["windowProof"].as_str(),
             action_depth: frame["actionDepth"]
                 .as_u64()
                 .and_then(|depth| usize::try_from(depth).ok())
@@ -961,6 +994,11 @@ impl<'a> CallRoute<'a> {
     fn redact_result(&self, host: &Host, mut frame: Value) -> Value {
         if let Some(error) = frame["error"].as_str() {
             match self.upstream {
+                CallUpstream::Embedded(upstream) if upstream.is_connected() => {
+                    if let Some(Ok(ops)) = host.action_ops.get() {
+                        frame["error"] = json!(ops.env.redact(error.to_owned()));
+                    }
+                }
                 CallUpstream::Embedded(upstream) => {
                     frame["error"] = json!(upstream.redact(error.to_owned()))
                 }
@@ -993,28 +1031,15 @@ impl<'a> CallRoute<'a> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
-        let (window, action_ops) = match self.upstream {
-            CallUpstream::Embedded(upstream) => {
-                return self
-                    .embedded_operation(upstream, here, frame, opening)
-                    .await;
-            }
-            CallUpstream::Window {
-                connection,
-                action_ops,
-            } => (connection, action_ops),
-        };
         if let Some(name) = frame["name"].as_str()
             && (name == "action.env" || name.starts_with("crypto."))
+            && !matches!(self.upstream, CallUpstream::Embedded(upstream) if !upstream.is_connected())
         {
-            let ops = match action_ops {
-                Some(ops) => ops,
-                None => host
-                    .action_ops
-                    .get_or_init(|| WindowActionOps::new(self.pool, &host.build))
-                    .as_ref()
-                    .map_err(Clone::clone)?,
-            };
+            let ops = host
+                .action_ops
+                .get_or_init(|| WindowActionOps::new(self.pool, &host.build))
+                .as_ref()
+                .map_err(Clone::clone)?;
             return Ok(
                 match ops
                     .operations
@@ -1027,6 +1052,14 @@ impl<'a> CallRoute<'a> {
             );
         }
 
+        let window = match self.upstream {
+            CallUpstream::Embedded(upstream) => {
+                return self
+                    .embedded_operation(upstream, here, frame, opening)
+                    .await;
+            }
+            CallUpstream::Window { connection, .. } => connection,
+        };
         let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
         self.attach_continuation(&mut frame, wants_note);
         let reply = window
@@ -1111,11 +1144,7 @@ impl<'a> CallRoute<'a> {
                     name => name,
                 }
                 .to_owned();
-                match upstream
-                    .operations()
-                    .dispatch_call(&operation, frame["payload"].take())
-                    .await
-                {
+                match upstream.dispatch(&operation, frame["payload"].take()).await {
                     Ok(value) => value,
                     Err(error) => {
                         return Ok(
@@ -1147,7 +1176,13 @@ impl<'a> CallRoute<'a> {
 
         if matches!(
             fields.get("name").and_then(Value::as_str),
-            Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
+            Some(
+                "local.runQuery"
+                    | "local.runMutation"
+                    | "local.runAction"
+                    | "plugin.call"
+                    | "machines.list"
+            )
         ) {
             let mut continuation = json!({
                 "depth": self.action_depth + self.ancestors.len() - 1,
@@ -1155,6 +1190,9 @@ impl<'a> CallRoute<'a> {
             });
             if let Some(scope) = self.hook_scope {
                 continuation["hookScope"] = json!(scope);
+            }
+            if let Some(proof) = self.window_proof {
+                continuation["proof"] = json!(proof);
             }
             fields.insert("continuation".into(), continuation);
         }
@@ -1201,7 +1239,7 @@ impl<'a> CallRoute<'a> {
             ));
         }
         let frame = json!({
-            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "hookScope":self.hook_scope, "actionDepth":self.action_depth,
+            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "hookScope":self.hook_scope, "actionDepth":self.action_depth, "windowProof":self.window_proof,
         });
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
@@ -1301,6 +1339,7 @@ mod tests {
             thread: OnceLock::new(),
             action_depth: 0,
             hook_scope: None,
+            window_proof: None,
             args: &json!({"selection": "chat/threads:admitted"}),
             upstream: CallUpstream::Window {
                 connection: &window,

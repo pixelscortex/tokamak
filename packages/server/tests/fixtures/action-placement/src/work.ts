@@ -122,3 +122,14 @@ export const pointLoop = action({
     return result;
   },
 });
+
+export const connectedProgress = action({
+  on: "caller",
+  handler: async (ctx) => {
+    const process = ctx.proc(["/bin/sh", "-c", "echo $$; echo first; echo second; exec /bin/sleep 30"]);
+    for await (const text of process.stdout) {
+      await ctx.runMutation(api.work.store, { text });
+    }
+    return process.exited;
+  },
+});

@@ -11,6 +11,7 @@ export {
   callPrivate,
   wait,
   waitHook,
+  connectedProgress,
   marker,
   hookedQuery,
   failureValue,

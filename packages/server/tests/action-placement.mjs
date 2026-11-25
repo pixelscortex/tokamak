@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { cp, readFile, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { build, connect, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
+import { build, connect, startServer, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { authCaller, isLocalReloadTimeout } from "../../sdk/src/index.ts";
 import { LOCAL_RELOAD_GRACE_MS } from "../../sdk/src/protocol.ts";
@@ -165,22 +165,22 @@ async function assertLiveSignal(client) {
   );
 }
 
-async function assertDisconnectAndCapacity(address, token, observer) {
+async function assertDisconnectAndCapacity(address, token, observer, count = 40) {
   const closing = [];
   const client = await connect(address, { token, cleanup: closing });
   const previous = (await observer.query(api.work.rows, {})).rows.length;
-  const calls = Array.from({ length: 40 }, () => client.action(api.work.wait, {}));
+  const calls = Array.from({ length: count }, () => client.action(api.work.wait, {}));
   const results = Promise.allSettled(calls);
   try {
     const pids = await within(
       (async () => {
         for (;;) {
           const { rows } = await observer.query(api.work.rows, {});
-          if (rows.length >= previous + 40) return rows.slice(previous).map((row) => Number(row.text));
+          if (rows.length >= previous + count) return rows.slice(previous).map((row) => Number(row.text));
           await Bun.sleep(20);
         }
       })(),
-      "admit forty caller actions",
+      `admit ${count} caller actions`,
       10000,
     );
     assert.deepEqual(await observer.action(api.work.serverDefault, {}), { runner: false, depth: 0 });
@@ -214,17 +214,7 @@ async function assertProgramsReaped(pids, label) {
   );
 }
 
-async function assertReloadTimeout(client, reference, args, reload) {
-  const previous = (await client.query(api.work.rows, {})).rows.length;
-  const action = client.action(reference, args);
-  void action.catch(() => {});
-  const entered = (async () => {
-    for (;;) {
-      const { rows } = await client.query(api.work.rows, {});
-      if (rows.length > previous) return Number(rows[previous].text);
-      await Bun.sleep(20);
-    }
-  })();
+async function waitForProgram(client, previous) {
   const pid = await within(
     Promise.race([
       entered,
@@ -236,6 +226,14 @@ async function assertReloadTimeout(client, reference, args, reload) {
     5000,
   );
   assert.ok(Number.isInteger(pid) && pid > 0);
+  return pid;
+}
+
+async function assertReloadTimeout(client, reference, args, reload) {
+  const previous = (await client.query(api.work.rows, {})).rows.length;
+  const action = client.action(reference, args);
+  void action.catch(() => {});
+  const pid = await waitForProgram(client, previous);
   await reload();
   const ticks = async () =>
     (await client.query(api.work.rows, {})).rows.filter((row) => row.text === "tick").length;
@@ -577,6 +575,113 @@ try {
   await assertReloadTimeout(window, api.work.wait, { repeat: true }, () => reloadWindow(newAction));
   await reloadWindow(oldAction);
   await assertReloadTimeout(window, api.work.waitHook, {}, () => reloadWindow(newAction));
+  async function installConnectedProvider(artifact) {
+    await cp(artifact, join(plugins, "fixture-hooks"), { recursive: true });
+    if (mode === "--cloud") {
+      const staged = join(await mkdtemp(join(scratch, "connected-provider-cloud-")), "fixture-hooks");
+      await stageServerPlugin(artifact, staged);
+      await cp(staged, join(serverPlugins, "fixture-hooks"), { recursive: true });
+    }
+  }
+  await installConnectedProvider(oldProvider);
+  const servers = [];
+  const connectedAddress = await startServer({
+    binary: server,
+    dir: join(scratch, "connected-server"),
+    pluginsDir: serverPlugins,
+    shared: true,
+    ownerToken: sharedToken,
+    servers,
+    cleanup,
+    started: (child) =>
+      cleanup.push(async () => {
+        child.kill();
+        await child.exited;
+      }),
+  });
+  const connectedOrigin = connectedAddress.replace(/^ws:/, "http:").replace(/\/ws$/, "");
+  const issued = await fetch(new URL("/auth/owner", connectedOrigin), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sharedToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ deviceName: "Connected retirement Runner" }),
+  });
+  assert.equal(issued.status, 200);
+  const { key } = await issued.json();
+  const keyFile = join(scratch, "connected.key");
+  await writeFile(keyFile, key, { mode: 0o600 });
+  const connectedRunner = Bun.spawn(
+    [
+      runner,
+      "--server",
+      connectedOrigin,
+      "--key-file",
+      keyFile,
+      "--plugins",
+      plugins,
+      "--data",
+      join(scratch, "connected-data"),
+    ],
+    {
+      env: {
+        ...process.env,
+        FIXTURE_ACTION_PLACEMENT: "on this machine",
+        ...(process.env.TOKAMAK_TEST_RUNNER_HOST && {
+          TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST,
+        }),
+      },
+      stdout: "ignore",
+      stderr: "inherit",
+    },
+  );
+  cleanup.push(async () => {
+    connectedRunner.kill();
+    await connectedRunner.exited;
+  });
+  const connected = await connect(connectedAddress, { token: key, cleanup });
+  await within(
+    (async () => {
+      while ((await connected.action(api.work.callerDefault, {})).kind === "noMachine") {
+        await Bun.sleep(20);
+      }
+    })(),
+    "connect the retirement Runner",
+    5000,
+  );
+
+  await assertProviderRefresh(connected, "connected-refresh", async () => {
+    await installConnectedProvider(newProvider);
+    await reloadProvider(connectedAddress, sharedToken);
+  });
+
+  const reloadConnected = async (artifact) => {
+    await cp(artifact, join(plugins, "ai"), { recursive: true });
+    if (mode === "--cloud") {
+      const staged = join(await mkdtemp(join(scratch, "connected-action-cloud-")), "ai");
+      await stageServerPlugin(artifact, staged);
+      await cp(staged, join(serverPlugins, "ai"), { recursive: true });
+    }
+    await reloadProvider(connectedAddress, sharedToken, "ai");
+  };
+  await assertRetirementCleanup(connected, "connected-retiring", () => reloadConnected(newAction));
+  await reloadConnected(oldAction);
+  await assertReloadTimeout(connected, api.work.wait, { repeat: true }, () => reloadConnected(newAction));
+  await assertDisconnectAndCapacity(connectedAddress, key, connected, 1);
+  await assertLiveSignal(connected);
+
+  const beforeShutdown = (await connected.query(api.work.rows, {})).rows.length;
+  const interrupted = connected.action(api.work.wait, {});
+  void interrupted.catch(() => {});
+  const runningPid = await waitForProgram(connected, beforeShutdown);
+  connectedRunner.kill("SIGTERM");
+  assert.deepEqual(await within(interrupted, "stop connected Runner action", 5000), {
+    failed: true,
+    kind: "machineLost",
+    data: null,
+  });
+  assert.equal(await within(connectedRunner.exited, "stop connected Runner", 5000), 0);
+  await assertProgramsReaped([runningPid], "reap a program after connected Runner shutdown");
+  console.log("Reload regression passed on the embedded, window-routed, and connected Runners.");
+
   await local.stop();
   const offlineWindow = await connect(address, { launch: local.launch, token: sharedToken, cleanup });
   assert.deepEqual(

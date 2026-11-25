@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { definitionTypeInfo, runtimeExportNames } from "./plugin-compiler.mjs";
+import { declaredActionPlacement, definitionTypeInfo, runtimeExportNames } from "./plugin-compiler.mjs";
 
 import { contractName, MEMBER_HOOK_RUN } from "../src/internal/contracts.ts";
 const unalias = (checker, symbol) =>
@@ -191,11 +191,16 @@ export function discoverProviders(root, files, program, checker) {
           const value = ts.isShorthandPropertyAssignment(field) ? field.name : field.initializer;
           const actual = checker.getTypeAtLocation(value);
           const info = definitionTypeInfo(checker, actual, value);
+          const expression = ts.isShorthandPropertyAssignment(field)
+            ? checker.getShorthandAssignmentValueSymbol(field)?.valueDeclaration?.initializer
+            : value;
+          const on =
+            info?.on ?? (info?.kind === "action" ? declaredActionPlacement(checker, expression) : undefined);
           if (
             contract.place === "local" &&
             info?.kind &&
             info.kind !== "local" &&
-            (info.kind !== "action" || info.on !== "caller")
+            (info.kind !== "action" || on !== "caller")
           )
             throw new Error(
               `${path}: contract "${contract.name}" method "${field.name.text}" requires local() or action({ on: "caller" })`,
@@ -204,7 +209,7 @@ export function discoverProviders(root, files, program, checker) {
             throw new Error(
               `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
             );
-          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, on: info.on, field });
+          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, on, field });
         }
       }
       providers.push({

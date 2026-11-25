@@ -1,7 +1,7 @@
 //! The window answers host operations using its own workspace connection.
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-mod quickjs;
+pub(super) mod quickjs;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::artifact::client_env;
@@ -36,7 +36,7 @@ pub(super) struct Local {
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pool: quickjs::Pool,
+    pub(super) pool: quickjs::Pool,
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

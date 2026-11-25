@@ -5,6 +5,7 @@ import ts from "typescript";
 import { readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import {
+  actionPlacementLiteral,
   definitionInfo,
   definitionTypeInfo,
   pluginCompilerOptions,
@@ -27,7 +28,10 @@ export function runnerProvider(provider) {
 
 export function runnerActionFiles(modules, providers, on) {
   const action = (entry) =>
-    runnerFunction(entry.kind, true) && (entry.kind === "actionHook" || on === undefined || entry.on === on);
+    runnerFunction(entry.kind, true) &&
+    (entry.kind === "actionHook" ||
+      on === undefined ||
+      (on === "caller" ? entry.on && entry.on !== "server" : entry.on === on));
   return new Set([
     ...[...modules].filter(([, exports]) => [...exports.values()].some(action)).map(([path]) => path),
     ...providers
@@ -339,20 +343,10 @@ export function functionPlacement(root, selected, namespace) {
         const options = node.arguments[0];
         const type = options && checker.getTypeAtLocation(options);
         if (type?.getProperty("handler") && type.getProperty("on")) {
-          const properties = ts.isObjectLiteralExpression(options) ? [...options.properties].reverse() : [];
-          const field = properties.find((property) => {
-            if (ts.isSpreadAssignment(property))
-              return !!checker.getTypeAtLocation(property.expression).getProperty("on");
-            const name = property.name;
-            return name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === "on";
-          });
-          if (
-            !field ||
-            !ts.isPropertyAssignment(field) ||
-            !ts.isStringLiteral(field.initializer) ||
-            !["caller", "server"].includes(field.initializer.text)
-          )
-            throw new Error(`Action placement in ${path} must use on: "caller" or on: "server" as a literal`);
+          if (!actionPlacementLiteral(checker, options))
+            throw new Error(
+              `Action placement in ${path} must use a literal: "caller", "server", or a machine id`,
+            );
         }
       }
       ts.forEachChild(node, visit);

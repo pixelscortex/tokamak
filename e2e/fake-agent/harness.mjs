@@ -126,6 +126,8 @@ export async function startServer({
   cleanup,
   env = {},
   started = () => {},
+  stdoutLine,
+  stderr = "inherit",
 }) {
   await mkdir(dir);
   const args = ["--plugins", pluginsDir, "--data", join(dir, "store"), "--listen", "127.0.0.1:0"];
@@ -139,7 +141,7 @@ export async function startServer({
     env: { ...process.env, TOKAMAK_OWNER_NAME: "Sam", TOKAMAK_ACCESS_TOKEN: ownerToken, ...env },
     ...(localDir && { stdin: "pipe" }),
     stdout: "pipe",
-    stderr: "inherit",
+    stderr,
   });
   servers.push(child);
   started(child);
@@ -148,6 +150,7 @@ export async function startServer({
   return within(
     new Promise((resolve, reject) => {
       lines.on("line", (line) => {
+        stdoutLine?.(line);
         const match = line.match(/ws:\/\/127\.0\.0\.1:\d+\/ws/);
         if (match) resolve(match[0]);
       });

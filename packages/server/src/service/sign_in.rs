@@ -312,22 +312,8 @@ impl Coordinator {
         } else {
             None
         };
-        let mut ops = OpRegistry::new();
         let note = CallNote::default().with_root_args(&target.args, &call.arguments);
-        note.register(&mut ops)
-            .map_err(|_| SignInError::Unavailable)?;
-        engine::register_password_crypto(&mut ops).map_err(|_| SignInError::Unavailable)?;
-        crate::actions::register_nested_calls(
-            &mut ops,
-            self.commands.clone(),
-            Some(loaded.clone()),
-            Some(target.owner.clone()),
-            Arc::new(crate::environment::Snapshot::new(None, None)),
-            note,
-            None,
-        )
-        .map_err(|_| SignInError::Unavailable)?;
-        let pending = self.sign_in_action(&loaded, &target, call.arguments, ops)?;
+        let pending = self.sign_in_action(loaded, &target, call.arguments, note)?;
         Ok(Prepared {
             plugin: target.owner,
             method: call.method,
@@ -337,10 +323,10 @@ impl Coordinator {
     }
     fn sign_in_action(
         &mut self,
-        loaded: &crate::plugins::Loaded,
+        loaded: Arc<crate::plugins::Loaded>,
         target: &crate::plugins::Target,
         arguments: Json,
-        ops: engine::OpRegistry,
+        note: CallNote,
     ) -> Result<SignInFuture, SignInError> {
         let name = target.local_name.clone();
         let process = self.action_process().map(Arc::clone);
@@ -353,11 +339,26 @@ impl Coordinator {
             .get(&target.owner)
             .ok_or(SignInError::Unavailable)?
             .clone();
+        let ops = crate::actions::operations(
+            self.commands.clone(),
+            Some(loaded),
+            Some(target.owner.clone()),
+            Arc::new(crate::environment::Snapshot::new(None, None)),
+            process.clone(),
+            crate::actions::ActionContext {
+                note,
+                runner: self.runner.clone(),
+                lifetime: None,
+                qualified: None,
+                dispatch: None,
+            },
+        )
+        .map_err(|_| SignInError::Unavailable)?;
         let timeout = sign_in_limits(self.pool.limits().clone()).call_timeout;
         let options = process.try_sign_in(timeout).ok_or(SignInError::Busy)?;
         Ok(Box::pin(async move {
             process
-                .invoke_with(source, name, arguments, Arc::new(ops), options)
+                .invoke_with(source, name, arguments, ops.ops, options)
                 .await
         }))
     }

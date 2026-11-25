@@ -27,7 +27,8 @@ impl Coordinator {
         let destination = resolve(
             self.plugins.as_deref(),
             target,
-            placement,
+            &placement,
+            None,
             &self.runner,
             &note,
         );
@@ -37,8 +38,9 @@ impl Coordinator {
         }
         let owner = target.map(|target| (target.local_name.clone(), target.owner.clone()));
         if let Some(reply) =
-            self.window_action_reply(session, id, &name, &destination, &mut note, placement)
+            self.window_action_reply(session, id, &name, &destination, &mut note, &placement)
         {
+            let reply = reply.and_then(|reply| self.window_continuation(session, id, reply, note));
             self.respond_call(session, id, reply);
             return;
         }
@@ -100,42 +102,27 @@ impl Coordinator {
     > {
         let attached = matches!(
             destination,
-            crate::actions::Destination::AttachedRunner { .. }
+            crate::actions::Destination::AttachedRunner(_)
+                | crate::actions::Destination::ConnectedRunner(_)
         );
         let output = self.action_session(session, attached)?;
         Ok((output, self.action_process()?.clone()))
     }
 
-    fn missing_hook_capability(
-        &self,
-        name: &str,
-        allow_hooks: bool,
-        allow_points: bool,
-    ) -> Option<CallError> {
-        let loaded = self.plugins.as_ref()?;
-        let name = if !allow_hooks && loaded.hooks.contains_key(name) {
-            std::borrow::Cow::Borrowed(name)
-        } else if !allow_points {
-            std::borrow::Cow::Owned(crate::host::hooks::point_targets(loaded, name).next()?.1)
-        } else {
-            return None;
-        };
-        let hook = loaded.hooks.get(name.as_ref())?.first()?;
-        Some(
-            CallError::hook(
-                &hook.owner,
-                &hook.name,
-                if hook.before {
-                    "before"
-                } else {
-                    "after"
-                },
-                "hookRunnerUnavailable",
-                Json::Null,
-                &name,
-            )
-            .into(),
-        )
+    fn window_continuation(
+        &mut self,
+        session: u64,
+        id: u64,
+        mut reply: Json,
+        mut note: CallNote,
+    ) -> Result<Json, CallError> {
+        let client = self.sessions.get_mut(&session).ok_or("Session closed")?;
+        let proof = uuid::Uuid::new_v4().to_string();
+        note.window_plugin = reply["artifact"]["id"].as_str().map(str::to_owned);
+        client.window_notes.insert(proof.clone(), (id, note));
+        reply["requestId"] = serde_json::json!(id);
+        reply["note"]["proof"] = serde_json::json!(proof);
+        Ok(reply)
     }
 
     fn window_action_reply(
@@ -145,16 +132,16 @@ impl Coordinator {
         name: &str,
         destination: &crate::actions::Destination,
         note: &mut CallNote,
-        placement: Placement,
+        placement: &Placement,
     ) -> Option<Result<Json, CallError>> {
         if matches!(
             destination,
             crate::actions::Destination::CallerWindowRunner { .. }
-        ) && let Some(error) = self.missing_hook_capability(
-            name,
-            placement.hook_plans,
-            placement.hook_plans && placement.point_plans,
-        ) {
+        ) && let Some(loaded) = self.plugins.as_deref()
+            && let Some(error) = crate::actions::unavailable_hook(loaded, name, |_, point| {
+                placement.hook_plans && (!point || placement.point_plans)
+            })
+        {
             return Some(Err(error));
         }
         let scope = if placement.hook_plans {

@@ -88,9 +88,10 @@ export type LaunchLocalWorker = (
   retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
-type Continuation = { depth: number; thread: string | null; hookScope?: number };
+type Continuation = { depth: number; thread: string | null; hookScope?: number; proof?: string | null };
 type WindowInvocation = {
   destination: "callerWindowRunner";
+  requestId?: number;
   note: Continuation;
   artifact: LocalArtifact;
   ownsHookScope?: boolean;
@@ -111,6 +112,7 @@ type ServerConnection = ClientTransport & {
     on?: ActionTarget,
     signal?: ActionSignal,
   ): Promise<JsonValue>;
+  finishWindowAction?(id: number): void;
   continueLocalCall?(
     kind: "query" | "mutation" | "action",
     name: string,
@@ -188,7 +190,9 @@ export class LocalFunctions implements LocalTransport {
       if (error instanceof RunnerUnavailable) return fail("noMachine", null);
       throw error;
     } finally {
-      if (dispatch.ownsHookScope && dispatch.note.hookScope !== undefined)
+      if (dispatch.requestId !== undefined && this.server.finishWindowAction)
+        this.server.finishWindowAction(dispatch.requestId);
+      else if (dispatch.ownsHookScope && dispatch.note.hookScope !== undefined)
         void this.server.hookStage?.(dispatch.note.hookScope, true).catch(() => {});
     }
   }
@@ -411,6 +415,16 @@ export class LocalFunctions implements LocalTransport {
       return (this.authRead ??= this.server.query(authCaller[functionName], {}).finally(() => {
         this.authRead = undefined;
       }));
+    }
+    if (action && operation === "machines.list") {
+      if (!continuation || !this.server.continueLocalCall)
+        throw new Error("Server transport cannot continue a Runner call");
+      return this.server.continueLocalCall(
+        "query",
+        "tokamak:callerMachines",
+        { plugin: callerId },
+        continuation,
+      );
     }
     if (action && operation === "contract.list") unavailable("serverContracts");
     const {

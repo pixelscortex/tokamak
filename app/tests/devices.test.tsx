@@ -7,8 +7,12 @@ import { DevicesList } from "../src/shell/devices";
 test("devices update in place and Sign out targets only the selected device", async () => {
   let stream!: ReadableStreamDefaultController<Uint8Array>;
   const body = new ReadableStream<Uint8Array>({ start: (controller) => (stream = controller) });
-  const request = vi.fn(async (_url: URL, options: RequestInit) =>
-    options.method === "POST" ? new Response() : new Response(body),
+  const request = vi.fn(async (url: URL, options: RequestInit) =>
+    url.pathname === "/devices/machines/live"
+      ? new Response(null, { status: 403 })
+      : options.method === "POST"
+        ? new Response()
+        : new Response(body),
   );
   const publish = (devices: unknown[]) => {
     const frame = `data: ${JSON.stringify(devices)}\n\n`;
@@ -39,8 +43,10 @@ test("devices update in place and Sign out targets only the selected device", as
     await waitFor(() => expect(screen.queryByText("Online")).toBeNull());
     screen.getByRole("button", { name: "Sign out Laptop" }).focus();
     await userEvent.setup().keyboard("{Enter}");
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-    const [signOutUrl, signOutOptions] = request.mock.calls[1]!;
+    await waitFor(() =>
+      expect(request.mock.calls.some(([, options]) => options.method === "POST")).toBe(true),
+    );
+    const [signOutUrl, signOutOptions] = request.mock.calls.find(([, options]) => options.method === "POST")!;
     expect(signOutUrl.href).toBe("https://example.test/devices/laptop/revoke");
     expect(signOutOptions.method).toBe("POST");
     expect(new Headers(signOutOptions.headers).get("authorization")).toBe("Bearer saved-key");
@@ -54,5 +60,89 @@ test("devices update in place and Sign out targets only the selected device", as
     stream.close();
     vi.unstubAllGlobals();
     expect(signal?.aborted).toBe(true);
+  }
+});
+
+function sseStream() {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start: (c) => (controller = c) });
+  const publish = (value: unknown) =>
+    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
+  return { body, publish, close: () => controller.close() };
+}
+
+test("plugin machines show under their own heading with the owning plugin, presence and bound member", async () => {
+  const devices = sseStream();
+  const machines = sseStream();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async (url: URL) =>
+        new Response(url.pathname === "/devices/machines/live" ? machines.body : devices.body),
+    ),
+  );
+  const root = document.body.appendChild(document.createElement("div"));
+  const endpoint = { http: "https://example.test", ws: "wss://example.test/ws", token: "saved-key" };
+  const dispose = render(() => <DevicesList endpoint={endpoint} />, root);
+  try {
+    devices.publish([]);
+    await screen.findByText("No signed-in devices.");
+    machines.publish([]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("region", { name: "Plugin machines" })).toBeNull();
+
+    const owner = { kind: "plugin", plugin: "sandbox", name: "Sandbox" };
+    machines.publish([
+      {
+        id: "m1",
+        name: "sandbox-7f3a",
+        owner,
+        online: true,
+        lastSeen: 10_000,
+        member: { id: "bo", name: "Bo" },
+      },
+    ]);
+    const group = await screen.findByRole("region", { name: "Plugin machines" });
+    expect(group.textContent).toContain("sandbox-7f3a");
+    expect(group.textContent).toContain("Sandbox plugin");
+    expect(group.textContent).toContain("For Bo");
+    expect(group.textContent).toContain("Online");
+    expect(group.querySelector("button")).toBeNull();
+
+    machines.publish([]);
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Plugin machines" })).toBeNull());
+  } finally {
+    dispose();
+    devices.close();
+    machines.close();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("a member who may not manage devices sees no plugin machines group and no error", async () => {
+  const devices = sseStream();
+  const request = vi.fn(async (url: URL) =>
+    url.pathname === "/devices/machines/live"
+      ? new Response(null, { status: 403 })
+      : new Response(devices.body),
+  );
+  vi.stubGlobal("fetch", request);
+  const root = document.body.appendChild(document.createElement("div"));
+  const endpoint = { http: "https://example.test", ws: "wss://example.test/ws", token: "saved-key" };
+  const dispose = render(() => <DevicesList endpoint={endpoint} />, root);
+  try {
+    devices.publish([]);
+    await screen.findByText("No signed-in devices.");
+    await waitFor(() =>
+      expect(request.mock.calls.some(([url]) => url.pathname === "/devices/machines/live")).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole("region", { name: "Plugin machines" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  } finally {
+    dispose();
+    devices.close();
+    vi.unstubAllGlobals();
   }
 });

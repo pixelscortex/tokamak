@@ -14,11 +14,7 @@ use crate::{
 };
 use engine::OpRegistry;
 use serde_json::Value as Json;
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{Arc, OnceLock},
-};
+use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
@@ -30,8 +26,16 @@ pub use runner_upstream::RunnerActionUpstream;
 pub(crate) use runner_upstream::runner_hashes;
 
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, engine::CallError>> + Send>>;
-type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
-pub(crate) type RunnerSlot = OnceLock<RunnerDispatch>;
+pub(crate) type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
+mod machines;
+use machines::Selection;
+pub(crate) use machines::{Machines, Owner as MachineOwner};
+
+#[derive(Clone)]
+pub(crate) struct RunnerConnection {
+    pub dispatch: RunnerDispatch,
+    pub stage_plans: bool,
+}
 
 pub struct RunnerAction {
     pub plugin: String,
@@ -45,12 +49,8 @@ pub struct RunnerAction {
 
 pub(crate) enum Destination {
     Server,
-    AttachedRunner {
-        dispatch: RunnerDispatch,
-        plugin: String,
-        entry_hash: String,
-        code_hash: String,
-    },
+    AttachedRunner(RunnerDestination),
+    ConnectedRunner(RunnerDestination),
     CallerWindowRunner {
         plugin: String,
         entry_hash: String,
@@ -59,7 +59,15 @@ pub(crate) enum Destination {
     Failed(MachineFailure),
 }
 
-#[derive(Clone, Copy, Default)]
+pub(crate) struct RunnerDestination {
+    connection: RunnerConnection,
+    plugin_machine: bool,
+    plugin: String,
+    entry_hash: String,
+    code_hash: String,
+}
+
+#[derive(Default)]
 pub(crate) struct Placement {
     on: Option<ActionTarget>,
     window: bool,
@@ -82,7 +90,7 @@ impl Placement {
         }
     }
 
-    pub fn response(self, value: Json) -> Json {
+    pub fn response(&self, value: Json) -> Json {
         if self.window {
             serde_json::json!({"destination":"result","value":value})
         } else {
@@ -94,53 +102,95 @@ impl Placement {
 #[derive(Clone, Copy)]
 pub(crate) enum MachineFailure {
     NoMachine,
+    MachineLost,
+    Offline,
+    Forbidden,
+    Limit,
 }
 
 impl MachineFailure {
     pub fn value(self) -> Json {
-        match self {
-            Self::NoMachine => serde_json::json!({"failed":true,"kind":"noMachine","data":null}),
-        }
+        let kind = match self {
+            Self::NoMachine => "noMachine",
+            Self::MachineLost => "machineLost",
+            Self::Offline => "machineOffline",
+            Self::Forbidden => "machineForbidden",
+            Self::Limit => "machineLimit",
+        };
+        serde_json::json!({"failed":true,"kind":kind,"data":null})
     }
 }
 
 pub(crate) fn resolve(
     loaded: Option<&Loaded>,
     target: Option<&crate::plugins::Target>,
-    placement: Placement,
-    runner: &RunnerSlot,
+    placement: &Placement,
+    caller: Option<(&str, bool)>,
+    runner: &Machines,
     note: &CallNote,
 ) -> Destination {
     let selected = placement
         .on
-        .unwrap_or_else(|| target.map(|target| target.on).unwrap_or_default());
-    if selected == ActionTarget::Server {
+        .as_ref()
+        .or_else(|| target.map(|target| &target.on))
+        .unwrap_or(&ActionTarget::Server);
+    if *selected == ActionTarget::Server {
         return Destination::Server;
     }
 
-    let Some(auth) = note.auth.as_ref().filter(|auth| auth.is_person()) else {
-        return Destination::Failed(MachineFailure::NoMachine);
+    let named = if let ActionTarget::Machine(id) = selected {
+        let Some(plugin) = target.map(|target| target.owner.as_str()) else {
+            return Destination::Failed(MachineFailure::Forbidden);
+        };
+        if id.starts_with("machine:") && caller.is_some_and(|(caller, _)| caller != plugin) {
+            return Destination::Failed(MachineFailure::Forbidden);
+        }
+        match runner.named(id, plugin, note, caller.is_some_and(|(_, server)| server)) {
+            Ok(dispatch) => Some(dispatch),
+            Err(error) => return Destination::Failed(error),
+        }
+    } else {
+        None
     };
     if let (Some(loaded), Some(target)) = (loaded, target) {
         let manifest = &loaded.catalog.plugins[&target.owner].manifest;
         if let Some((entry_hash, code_hash)) = runner_hashes(manifest) {
-            if auth.is_on_this_machine()
-                && !note.is_window_continuation()
-                && let Some(dispatch) = runner.get()
-            {
-                return Destination::AttachedRunner {
-                    dispatch: dispatch.clone(),
-                    plugin: target.owner.clone(),
-                    entry_hash: entry_hash.to_owned(),
-                    code_hash: code_hash.to_owned(),
-                };
+            let placement_for = |connection, plugin_machine| RunnerDestination {
+                connection,
+                plugin_machine,
+                plugin: target.owner.clone(),
+                entry_hash: entry_hash.to_owned(),
+                code_hash: code_hash.to_owned(),
+            };
+            if let Some(connection) = named {
+                let plugin_machine =
+                    matches!(selected, ActionTarget::Machine(id) if id.starts_with("machine:"));
+                return Destination::ConnectedRunner(placement_for(connection, plugin_machine));
             }
-            if placement.window {
-                return Destination::CallerWindowRunner {
-                    plugin: target.owner.clone(),
-                    entry_hash: entry_hash.to_owned(),
-                    code_hash: code_hash.to_owned(),
-                };
+            let Some(auth) = note.auth.as_ref().filter(|auth| auth.is_person()) else {
+                return Destination::Failed(MachineFailure::NoMachine);
+            };
+            match runner.select(auth, note.is_window_continuation()) {
+                Selection::Attached(dispatch) => {
+                    return Destination::AttachedRunner(placement_for(
+                        RunnerConnection {
+                            dispatch,
+                            stage_plans: true,
+                        },
+                        false,
+                    ));
+                }
+                Selection::Connected(connection) => {
+                    return Destination::ConnectedRunner(placement_for(connection, false));
+                }
+                Selection::Absent if placement.window => {
+                    return Destination::CallerWindowRunner {
+                        plugin: target.owner.clone(),
+                        entry_hash: entry_hash.to_owned(),
+                        code_hash: code_hash.to_owned(),
+                    };
+                }
+                _ => {}
             }
         }
     }
@@ -149,13 +199,20 @@ pub(crate) fn resolve(
 }
 
 impl Destination {
+    fn runner_destination(&self) -> Option<&RunnerDestination> {
+        match self {
+            Self::AttachedRunner(route) | Self::ConnectedRunner(route) => Some(route),
+            _ => None,
+        }
+    }
+
     pub fn context(
         &self,
         note: CallNote,
-        runner: Arc<RunnerSlot>,
+        runner: Arc<Machines>,
         qualified: Option<String>,
     ) -> (ActionContext, Option<DropGuard>) {
-        let lifetime = matches!(self, Self::AttachedRunner { .. }).then(CancellationToken::new);
+        let lifetime = self.runner_destination().map(|_| CancellationToken::new());
         let guard = lifetime.clone().map(CancellationToken::drop_guard);
         (
             ActionContext {
@@ -163,10 +220,9 @@ impl Destination {
                 runner,
                 lifetime,
                 qualified,
-                dispatch: match self {
-                    Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
-                    _ => None,
-                },
+                dispatch: self
+                    .runner_destination()
+                    .map(|route| route.connection.dispatch.clone()),
             },
             guard,
         )
@@ -209,8 +265,16 @@ impl Destination {
                 .await
                 .map_err(Into::into);
         };
-        let Some(target) = HookTarget::load(&scope.generation, &format!("{}/{name}", scope.owner))
-        else {
+        let qualified = format!("{}/{name}", scope.owner);
+        // Reject before running the owner or sending any foreign stage to its machine.
+        if let Some(route) = self.runner_destination()
+            && let Some(error) = unavailable_hook(&scope.generation, &qualified, |owner, _| {
+                route.connection.stage_plans && (!route.plugin_machine || owner == route.plugin)
+            })
+        {
+            return Err(error);
+        }
+        let Some(target) = HookTarget::load(&scope.generation, &qualified) else {
             return self
                 .invoke_owner(process, source, name, args, upstream, None)
                 .await
@@ -222,10 +286,8 @@ impl Destination {
             &scope.commands,
             &scope.process,
             &scope.runner,
-            match &self {
-                Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
-                _ => None,
-            },
+            self.runner_destination()
+                .map(|route| route.connection.dispatch.clone()),
             scope.lifetime.clone(),
         );
         let retirement = if stages.dispatch.is_some() {
@@ -277,12 +339,15 @@ impl Destination {
                     )
                     .await
             }
-            Self::AttachedRunner {
-                dispatch,
-                plugin,
-                entry_hash,
-                code_hash,
-            } => {
+            Self::AttachedRunner(route) | Self::ConnectedRunner(route) => {
+                let RunnerDestination {
+                    connection,
+                    plugin,
+                    entry_hash,
+                    code_hash,
+                    ..
+                } = route;
+                let dispatch = connection.dispatch;
                 let run = |retiring| {
                     dispatch(RunnerAction {
                         plugin,
@@ -290,7 +355,7 @@ impl Destination {
                         code_hash,
                         name,
                         args,
-                        upstream: RunnerActionUpstream(upstream),
+                        upstream: RunnerActionUpstream::embedded(upstream),
                         retiring,
                     })
                 };
@@ -314,7 +379,7 @@ struct ActionStageExecutor<'a> {
     generation: &'a Arc<Loaded>,
     commands: &'a mpsc::WeakSender<Command>,
     process: &'a Arc<Supervisor>,
-    runner: &'a Arc<RunnerSlot>,
+    runner: &'a Arc<Machines>,
     dispatch: Option<RunnerDispatch>,
     lifetime: Option<CancellationToken>,
 }
@@ -324,7 +389,7 @@ impl<'a> ActionStageExecutor<'a> {
         generation: &'a Arc<Loaded>,
         commands: &'a mpsc::WeakSender<Command>,
         process: &'a Arc<Supervisor>,
-        runner: &'a Arc<RunnerSlot>,
+        runner: &'a Arc<Machines>,
         dispatch: Option<RunnerDispatch>,
         lifetime: Option<CancellationToken>,
     ) -> Self {
@@ -382,7 +447,7 @@ impl<'a> ActionStageExecutor<'a> {
                         code_hash: code_hash.to_owned(),
                         name,
                         args: input,
-                        upstream: RunnerActionUpstream(ops),
+                        upstream: RunnerActionUpstream::embedded(ops),
                         retiring,
                     })
                 })
@@ -392,17 +457,60 @@ impl<'a> ActionStageExecutor<'a> {
                 .invoke_typed(source, name, input, ops.ops)
                 .await
         };
-        result.map_err(|error| {
-            let limit = error.limit.clone();
-            let kind = error.kind;
-            let mut error = engine::CallError::from(
-                CallError::from(error).map_text(|text| environment.redact(text)),
-            );
-            error.limit = limit;
-            error.kind = kind;
-            error
-        })
+        result
+            .and_then(|value| {
+                if self.dispatch.is_some()
+                    && matches!(
+                        crate::protocol::failure_kind(&value),
+                        Some("machineLost" | "runnerArtifactMismatch")
+                    )
+                {
+                    return Err(runner_action_artifact_unavailable());
+                }
+                Ok(value)
+            })
+            .map_err(|error| {
+                let limit = error.limit.clone();
+                let kind = error.kind;
+                let mut error = engine::CallError::from(
+                    CallError::from(error).map_text(|text| environment.redact(text)),
+                );
+                error.limit = limit;
+                error.kind = kind;
+                error
+            })
     }
+}
+
+pub(crate) fn unavailable_hook(
+    loaded: &Loaded,
+    name: &str,
+    supports: impl Fn(&str, bool) -> bool,
+) -> Option<CallError> {
+    std::iter::once((name.to_owned(), false))
+        .chain(point_targets(loaded, name).map(|(_, point)| (point, true)))
+        .find_map(|(target, point)| {
+            let hook = loaded
+                .hooks
+                .get(&target)?
+                .iter()
+                .find(|hook| !supports(&hook.owner, point))?;
+            Some(
+                CallError::hook(
+                    &hook.owner,
+                    &hook.name,
+                    if hook.before {
+                        "before"
+                    } else {
+                        "after"
+                    },
+                    "hookRunnerUnavailable",
+                    Json::Null,
+                    &target,
+                )
+                .into(),
+            )
+        })
 }
 
 async fn run_action<S, O>(
@@ -434,7 +542,7 @@ pub fn runner_action_artifact_unavailable() -> engine::CallError {
 #[derive(Clone)]
 pub(crate) struct ActionContext {
     pub note: CallNote,
-    pub runner: Arc<RunnerSlot>,
+    pub runner: Arc<Machines>,
     pub lifetime: Option<CancellationToken>,
     pub qualified: Option<String>,
     pub dispatch: Option<RunnerDispatch>,
@@ -474,6 +582,16 @@ pub(crate) fn operations(
         );
     }
     environment.register(&mut ops)?;
+    if let (Some(_), Some(owner)) = (&generation, &owner) {
+        context
+            .runner
+            .register_list(&mut ops, owner.clone(), &context.note)?;
+        if context.lifetime.is_none() {
+            context
+                .runner
+                .register_management(&mut ops, owner.clone(), context.note.clone())?;
+        }
+    }
     register_nested_calls(
         &mut ops,
         commands.clone(),
@@ -728,7 +846,7 @@ fn register_plugin_call(
                     dispatch: None,
                 },
                 args,
-                on,
+                (owner, on),
             )
             .await
         }
@@ -744,12 +862,13 @@ async fn run_nested_action(
     process: Arc<Supervisor>,
     parent: ActionContext,
     args: Json,
-    on: Option<ActionTarget>,
+    (caller, on): (String, Option<ActionTarget>),
 ) -> Result<Json, engine::CallError> {
     let destination = resolve(
         Some(&loaded),
         Some(&target),
-        Placement::new(on, None, None, None),
+        &Placement::new(on, None, None, None),
+        Some((&caller, parent.lifetime.is_none())),
         &parent.runner,
         &parent.note,
     );

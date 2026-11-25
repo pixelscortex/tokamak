@@ -8,17 +8,40 @@ Paper page: `App 1:1 · Shell`.
 
 ## Screens
 
-| Screen                                                          | Source                                                               | Paper artboard         |
-| --------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------- |
-| The frame with every region filled (sidebar, header, panel)     | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`        |
-| Welcome: "This Mac is ready", open Chat, join a friend's server | `welcome.tsx`                                                        | `Shell · welcome`      |
-| Add a server, step 1 of 4: the address                          | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server` |
-| Sign-in dialog over the "needs you to sign in" band             | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`      |
-| Members on a shared server                                      | `members.tsx`                                                        | `Shell · members`      |
+| Screen                                                             | Source                                                               | Paper artboard         |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------- |
+| The frame with every region filled (sidebar, header, panel)        | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`        |
+| Welcome: "This Mac is ready", open Chat, join a friend's server    | `welcome.tsx`                                                        | `Shell · welcome`      |
+| Add a server, step 1 of 4: the address                             | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server` |
+| Sign-in dialog over the "needs you to sign in" band                | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`      |
+| Members on a shared server                                         | `members.tsx`                                                        | `Shell · members`      |
+| Devices on a shared server: people's devices, then plugin machines | `devices.tsx`                                                        | `Shell · devices`      |
 
-Not drawn yet: devices on a shared server (`devices.tsx`), members on This Mac ("Members are managed on a shared server."), the server menu, the settings menu, the search palette, connecting, can't reach a server (without the dialog), no
+Not drawn yet: devices on This Mac ("Devices are managed on a shared server."), devices loading or reconnecting, members on This Mac ("Members are managed on a shared server."), the server menu, the settings menu, the search palette, connecting, can't reach a server (without the dialog), no
 plugins, nothing here, the quit dialog, the add-member and rename dialogs,
 connect steps 2 to 4, the frame without the rail or with the sidebar hidden.
+
+### Devices
+
+`devices.tsx` follows two live lists, each a server-sent-events stream read with
+`readSnapshots` (`app/src/host/snapshots.ts`); every event is the whole list.
+
+- **People's devices** (`/devices/live`): one row per signed-in device, a
+  computer icon, the device name (with "This device" for this window), then a
+  label line: the member, "Online" when connected, "Last seen <date, time>" or
+  "Never connected". Each row has a ghost "Sign out" button. States:
+  "Loading devices…", "No signed-in devices.", "Reconnecting to the device
+  list…", and a red line when a sign-out fails.
+- **Plugin machines** (`/devices/machines/live`, owner and admins only): a
+  sandbox or VPS a plugin created. Below people's devices under a "Plugin
+  machines" label (`text-label text-ink-3`, as the add-a-server "Recent"
+  label), in the same row: a plug icon, the machine name, then the label line
+  "<plugin name> plugin", "For <member>" when bound to a member, "Online",
+  and the same "Last seen" text. No buttons: the owning plugin manages its
+  machines. The group is not drawn at all while loading, when the list is
+  empty, or when the server answers 403 (a member who may not manage
+  devices); no error shows. A failed stream retries quietly every second.
+- Can't reach the server: the page's `Unreachable` band covers both lists.
 
 ## Parts it offers
 
@@ -55,6 +78,12 @@ edges (4 px when the panel is open).
 - Footer (`h-8`, connection, unsaved line): every page's bottom spacing,
   including chat's composer (`pb-4`).
 - `Unreachable` (a band, not a wall): Members and Devices reuse it.
+- Device rows in `devices.tsx` (icon, name, label line, `LastSeen`): the plugin
+  machines group uses the same row and the same `LastSeen`, so change both
+  together.
+- `/devices/machines/live` (its auth or its shape `{ id, name, owner: { plugin,
+  name }, online, lastSeen, member? }`): the plugin machines group in
+  `devices.tsx` and its tests in `app/tests/devices.test.tsx`.
 
 ## Primitives used
 
@@ -66,6 +95,14 @@ button with a tooltip and keys) and `Notice`.
 
 ## Open questions
 
+- `Shell · devices` was not taken from the screens run (that needs a Rust
+  build); it is `Shell · members` copied and edited to match `devices.tsx`,
+  with sample names. Replace it with a screens-run copy when one is next made.
+  Its tab keeps the "New thread" title that `Shell · members` shows, with the
+  computer icon.
+- A plugin machine reads "<plugin name> plugin" on its label line. If plugin
+  ownership gets a shared mark elsewhere (a chip, the plugin's own icon), use
+  it here too.
 - In the browser test run the sign-in dialog sits at the window's top-left
   corner, not in the middle (`Dialog.Content` centres itself with `m-auto`);
   `Shell · sign-in` copies it as the app draws it. Check whether the desktop

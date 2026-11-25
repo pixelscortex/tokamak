@@ -22,6 +22,10 @@ impl Coordinator {
 
         match action {
             Action::Cancel(id) => {
+                if let Some(client) = self.sessions.get_mut(&session) {
+                    client.window_notes.retain(|_, (request, _)| *request != id);
+                    client.hook_scopes.remove(&id);
+                }
                 if let Some((cancel, _)) = self.action_cancellations.get(&(session, id)) {
                     cancel.cancel();
                 }
@@ -92,7 +96,7 @@ impl Coordinator {
         session: SessionAuth,
         name: &str,
         args: &Json,
-        local_parent: Option<LocalParent>,
+        local_parent: Option<WindowParent>,
         placement: Placement,
     ) -> Result<RequestCaller, String> {
         // A socket may already have admitted a write when its member
@@ -101,29 +105,43 @@ impl Coordinator {
             return Err("Session has been revoked".into());
         }
         let auth = session.caller.read().expect("auth lock").clone();
-        let note = if let Some(LocalParent {
+        let note = if let Some(WindowParent {
             depth,
             thread,
+            proof,
             hook_scope,
         }) = local_parent
+            && (session.local_continuations || proof.is_some())
         {
             let validator = self
                 .plugins
                 .as_ref()
                 .and_then(|loaded| loaded.targets.get(name))
                 .map(|target| target.args.as_ref());
-            let mut note = CallNote::from_local_parent(&auth, depth, thread)?;
-            if let Some(scope) = hook_scope {
-                let budget = self
-                    .sessions
-                    .get(&session_id)
-                    .and_then(|client| client.hook_scopes.get(&scope))
-                    .ok_or("Runner hook scope is no longer active")?;
-                note.scope_hooks(scope, budget.clone());
-            }
-            note.enter(name, validator, args)
+            let client = self.sessions.get(&session_id).ok_or("Session closed")?;
+            let parent = if let Some(proof) = proof {
+                let (_, note) = client
+                    .window_notes
+                    .get(&proof)
+                    .ok_or("Unknown window action continuation")?;
+                note.as_window_continuation(auth.clone(), depth)
+            } else {
+                let mut note = CallNote::from_local_parent(&auth, depth, thread)?;
+                if let Some(scope) = hook_scope {
+                    let budget = client
+                        .hook_scopes
+                        .get(&scope)
+                        .ok_or("Runner hook scope is no longer active")?;
+                    note.scope_hooks(scope, budget.clone());
+                }
+                note
+            };
+            parent
+                .enter(name, validator, args)
                 .map_err(|error| error.to_string())?
         } else {
+            // Legacy local functions can make public calls from hosted windows
+            // without letting the socket supply inherited context.
             Some(auth.clone()).into()
         };
         Ok(RequestCaller {
@@ -146,6 +164,20 @@ impl Coordinator {
             placement,
         }: RequestCaller,
     ) {
+        if name == "tokamak:callerMachines" {
+            let result = match (
+                expected,
+                note.window_plugin.as_deref(),
+                args["plugin"].as_str(),
+            ) {
+                (Some(FunctionKind::Query), Some(owner), Some(plugin)) if owner == plugin => {
+                    Ok(self.runner.list(owner, Some(&auth.user.id), false))
+                }
+                _ => Err("A matching window action continuation is required".into()),
+            };
+            self.respond(session, id, result);
+            return;
+        }
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
                 query.map(|read| read(&auth)).map_err(str::to_owned)

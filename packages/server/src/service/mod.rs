@@ -126,7 +126,7 @@ pub struct Server {
     // Shutdown must never compete for space with application calls.
     closing: mpsc::Sender<oneshot::Sender<Result<(), Error>>>,
     descriptor: Json,
-    runner: Arc<crate::actions::RunnerSlot>,
+    runner: Arc<crate::actions::Machines>,
     cleanup: Arc<Notify>,
     closed: watch::Receiver<Option<Result<(), Error>>>,
 }
@@ -170,9 +170,33 @@ type Connection = (
 pub(crate) struct SessionIdentity {
     caller: std::sync::RwLock<crate::identity::AuthContext>,
     revoked: tokio_util::sync::CancellationToken,
+    local_continuations: bool,
 }
 
 type SessionAuth = Arc<SessionIdentity>;
+
+pub(crate) struct WindowParent {
+    depth: usize,
+    thread: Option<String>,
+    proof: Option<String>,
+    hook_scope: Option<u64>,
+}
+
+impl WindowParent {
+    fn new(
+        depth: usize,
+        thread: Option<String>,
+        proof: Option<String>,
+        hook_scope: Option<u64>,
+    ) -> Self {
+        Self {
+            depth,
+            thread,
+            proof,
+            hook_scope,
+        }
+    }
+}
 
 pub(crate) enum Command {
     Connect(SessionAuth, oneshot::Sender<Result<Connection, Error>>),
@@ -229,7 +253,7 @@ pub(crate) enum Action {
         name: String,
         args: Json,
         kind: Option<FunctionKind>,
-        local_parent: Option<LocalParent>,
+        local_parent: Option<WindowParent>,
         placement: crate::actions::Placement,
     },
     Subscribe {
@@ -238,12 +262,6 @@ pub(crate) enum Action {
         args: Json,
     },
     Unsubscribe(u64),
-}
-
-pub(crate) struct LocalParent {
-    depth: usize,
-    thread: Option<String>,
-    hook_scope: Option<u64>,
 }
 
 struct Subscription {
@@ -268,6 +286,7 @@ struct Client {
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
     hook_scopes: BTreeMap<u64, crate::identity::HookBudget>,
+    window_notes: std::collections::HashMap<String, (u64, crate::identity::CallNote)>,
 }
 
 struct Coordinator {
@@ -281,7 +300,7 @@ struct Coordinator {
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
-    runner: Arc<crate::actions::RunnerSlot>,
+    runner: Arc<crate::actions::Machines>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, CallError>)>,
     action_cancellations: BTreeMap<(u64, u64), (tokio_util::sync::CancellationToken, bool)>,

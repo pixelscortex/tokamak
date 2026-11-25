@@ -34,6 +34,7 @@ impl Coordinator {
                 &self.database,
                 &self.pool,
                 host::Invocation {
+                    machines: self.runner.clone(),
                     bundle: self.bundle.clone(),
                     name,
                     args: args.clone(),

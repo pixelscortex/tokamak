@@ -179,20 +179,112 @@ action receives the original identity and call note.
 
 The workspace server chooses the destination. A direct client authenticated
 as a person on an embedded Runner's machine uses that Runner, including for
-nested actions. For a shared workspace, the window forwards caller actions
-and their nested caller actions to its own Runner.
+nested actions. A [Runner connected to a shared server](../runner/README.md#connect-a-headless-runner-to-a-shared-server)
+receives `"caller"` actions for the exact device in the original call note,
+including nested actions from that device. A desktop without a connected Runner for
+its device can still forward work to its own local Runner. A browser without
+a Runner for its device gets `noMachine`.
+
+Install the full Runner build of each served plugin in the remote Runner's
+`--plugins` directory after every update. Missing or mismatched builds return
+`runnerArtifactMismatch`; automatic delivery is separate work. In a caller
+action on a connected Runner, `ctx.env` comes from the Runner's environment.
+
+#### Run actions on a sandbox machine
+
+A server action can create a machine for its plugin. Pass the returned key to
+your sandbox provider as a secret. The provider starts a Runner with
+`--server` set to the workspace URL and `--key-file` pointing to the key in a
+private file. Install the full plugin build in the Runner's `--plugins`
+directory. The Runner identifies itself with the key; it does not need the id.
+
+```ts
+import { action, fail, isFailure } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const newSandbox = action({
+  handler: async (ctx) => {
+    const server = await ctx.server.url();
+    if (!server) return fail("sandboxServerUrlMissing");
+
+    const machine = await ctx.machines.create({
+      name: "Thread sandbox",
+      member: ctx.auth.user.id,
+    });
+    if (isFailure(machine)) return machine;
+    const { id, key } = machine;
+    await startSandbox({ server, runnerKey: key }); // Your provider code.
+    const ready = await ctx.machines.waitOnline(id);
+    if (isFailure(ready)) return ready;
+    await ctx.runMutation(api.threads.saveMachine, { threadId: ctx.call.threadId, machineId: id });
+    return id; // Save only the id, never the key.
+  },
+});
+
+// Inside a server action:
+await ctx.runAction(api.jobs.collect, { cwd }, { on: machineId });
+// From the owning plugin's window:
+await client.action(api.jobs.collect, { cwd }, { on: machineId });
+```
+
+Set `TOKAMAK_PUBLIC_URL` on the server to its reachable HTTP(S) origin, for
+example `https://workspace.example.com`. `ctx.server.url()` returns `null` if
+it is unset. Use HTTPS for a Runner outside loopback.
+
+`MachineId` is a branded string. Keep ids returned by `create` or `list` and
+supply them in per-call options for dynamic placement. For a fixed default in
+an action declaration, use a literal such as `on: "device:example" as MachineId`
+with an actual issued id. The action has the Runner capabilities described
+above. The original caller and call note reach the action, including the
+thread, and queries and mutations still execute on the server.
+
+Only actions owned by a machine's plugin may run on it. A machine bound to
+a member accepts only calls whose original call note identifies that member.
+For thread turns, read the saved machine id and pass it as `{ on: id }`.
+Omitting `member` makes a machine server-only: only the owning plugin's server
+code can dispatch its own actions to it with `ctx.runAction`. A signed-in
+creator does not implicitly bind the machine. Binding is fixed at creation.
+A person's device is available only to calls started by that person.
+
+An unbound machine is only reachable through the owning plugin's server code,
+so if a server action accepts a machine id from a window, check `ctx.auth` and
+the plugin's own records before passing the id through.
+Bind a machine with `member` when a window should target it directly.
+`create({ member })` returns `machineForbidden` if the id is not an active member.
+
+Unknown, removed and unauthorized ids all return `machineForbidden`.
+An authorized machine without a Runner returns `machineOffline` immediately.
+If its Runner disconnects or its key is removed during an action, that action
+returns `machineLost`. Calls are never queued or replayed.
+
+`ctx.machines.list()` returns the plugin's machines bound to the caller and
+that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
+milliseconds or `null`). Bound plugin entries also carry the member id in
+`member`. Without a person, the ordinary list is empty. Server actions
+can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
+Lists are snapshots; presence does not refresh query subscriptions.
+
+`create`, `waitOnline`, and `remove` run only in server actions. The credential
+store is separate from plugin transactions. `create` returns the key once
+and returns `machineLimit` when the plugin already has 100 active machines.
+`waitOnline` returns `null` when connected and `machineOffline` when it times
+out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
+sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
+container with your provider. Uninstalling a plugin revokes its machine keys.
+
+A per-call override can move a server action to a Runner, where machine
+management methods and `ctx.server.url()` fail with the typed `serverOnly` error.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`
 or `local()`. Methods run inside the Runner with live input, including
 callbacks, signals, and channels. Existing `place: "local"` contracts still work.
 
-Both Runner routes support local contracts and their channels. On a shared
-workspace the window connects with the public client API, so private function
+All Runner routes support local contracts and their channels. When the
+window forwards work, it uses the public client API, so private function
 calls and server contract discovery return `runnerCapabilityUnavailable`
 with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
-are available on the embedded Runner path. A Runner connected directly to
-its workspace server can make these calls; a shared-server window currently
+are available to embedded and connected Runners; a shared-server window currently
 has the same limits as `local()`.
 
 Runner actions use the Runner's program scope and lifetime rules, including
@@ -938,11 +1030,14 @@ stage through module state; that `ctx` stops working when its own stage ends.
 
 An action hook runs with its own plugin's network grants and environment. It can
 use `ctx.runQuery`, `ctx.runMutation`, and `ctx.runAction`. The selected placement,
-including a per-call `on` override, applies to both stages. A caller action and its
-hooks run on the same Runner. On the shared-server window route, stages can only
-call public functions; attempts to call private functions fail with
-`runnerCapabilityUnavailable`. If the Runner lacks the hook's build, the call
-fails with `hookRunnerUnavailable` and names the plugin.
+including a per-call `on` override, applies to both stages. On an attached or
+personal connected Runner, the server runs both stages on that Runner with the
+same budget as nested calls and point hooks. On the shared-server window route,
+stages can only call public functions; attempts to call private functions fail
+with `runnerCapabilityUnavailable`. If the Runner cannot execute a stage, the
+call fails with `hookRunnerUnavailable` and names the hook plugin. A plugin-owned
+machine only receives code owned by its plugin. The server rejects any action
+with a foreign hook or point on that machine before running it.
 
 Removing the hooking plugin removes its hooks. When a target is renamed or
 removed, the owner's build warns and names the hooking plugin. The hooking

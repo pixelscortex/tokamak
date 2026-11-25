@@ -63,6 +63,21 @@ export interface HostOperations {
   "db.replace": { args: { id: string; value: JsonObject }; result: null };
   "db.delete": { args: { id: string }; result: null };
   "db.query": { args: QueryRequest; result: StoredDocument[] };
+  "machines.list": { args: {}; result: import("./functions").MachineEntry[] };
+  "machines.listAll": { args: {}; result: import("./functions").MachineEntry[] };
+  "machines.create": {
+    args: { name: string; member?: string };
+    result: import("./functions").MachineCreation;
+  };
+  "machines.remove": {
+    args: { id: import("./functions").MachineId };
+    result: null | import("./functions").Failure<"machineForbidden", null>;
+  };
+  "machines.waitOnline": {
+    args: { id: import("./functions").MachineId; timeoutMs?: number };
+    result: null | import("./functions").Failure<"machineForbidden" | "machineOffline", null>;
+  };
+  "server.url": { args: {}; result: string | null };
   "action.env": { args: { name: string }; result: string | null };
   "action.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };

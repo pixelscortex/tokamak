@@ -289,7 +289,7 @@ test("caller action placement must be literal in the definition", async () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr + result.stdout,
-      /Action placement.*must use on: "caller" or on: "server" as a literal/,
+      /Action placement.*must use a literal: "caller", "server", or a machine id/,
     );
   });
 }, 30_000);

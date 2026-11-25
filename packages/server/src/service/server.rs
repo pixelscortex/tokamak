@@ -6,9 +6,15 @@ impl Server {
         &self,
         dispatch: impl Fn(crate::RunnerAction) -> crate::RunnerFuture + Send + Sync + 'static,
     ) -> Result<(), Error> {
-        self.runner
-            .set(Arc::new(dispatch))
-            .map_err(|_| Error::Invalid("Runner already attached".into()))
+        if self.runner.attach(Arc::new(dispatch)) {
+            Ok(())
+        } else {
+            Err(Error::Invalid("Runner already attached".into()))
+        }
+    }
+
+    pub(crate) fn machines(&self) -> &crate::actions::Machines {
+        &self.runner
     }
 
     pub fn descriptor(&self) -> &Json {
@@ -63,8 +69,12 @@ impl Server {
     }
 
     pub async fn connect(&self) -> Result<Session, Error> {
-        self.connect_authenticated(crate::identity::AuthContext::local(), Default::default())
-            .await
+        self.connect_authenticated(
+            crate::identity::AuthContext::local(),
+            Default::default(),
+            true,
+        )
+        .await
     }
 
     pub(crate) async fn update_user(
@@ -89,6 +99,7 @@ impl Server {
         self.connect_authenticated(
             crate::identity::AuthContext::in_process(user),
             Default::default(),
+            true,
         )
         .await
     }
@@ -97,10 +108,12 @@ impl Server {
         &self,
         auth: crate::identity::AuthContext,
         revoked: tokio_util::sync::CancellationToken,
+        local_continuations: bool,
     ) -> Result<Session, Error> {
         let auth = Arc::new(SessionIdentity {
             caller: std::sync::RwLock::new(auth),
             revoked,
+            local_continuations,
         });
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Connect(auth.clone(), reply))?;

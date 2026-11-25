@@ -16,6 +16,7 @@ mod call;
 mod cli;
 pub(crate) use call::{CallNote, HookBudget};
 mod devices;
+mod plugin_machines;
 pub(crate) use accounts::AccountBinding;
 pub use cli::command;
 pub(crate) use devices::{DeviceSocket, RevokeError};
@@ -59,7 +60,7 @@ pub struct AuthContext {
 }
 
 const SERVER_USER_ID: &str = "server";
-const LOCAL_DEVICE_ID: &str = "device:local";
+pub(crate) const LOCAL_DEVICE_ID: &str = "device:local";
 
 impl AuthContext {
     pub fn local() -> Self {
@@ -172,10 +173,11 @@ pub struct Member {
 
 pub struct Identities {
     path: Option<PathBuf>,
+    plugin_machines: plugin_machines::Store,
     members: Mutex<Vec<Member>>,
     writer: Mutex<()>,
     anonymous: bool,
-    device_changes: watch::Sender<()>,
+    pub(crate) device_changes: watch::Sender<()>,
 }
 
 fn hash(token: &str) -> String {
@@ -213,12 +215,18 @@ impl Identities {
                 &std::env::var("TOKAMAK_OWNER_NAME").unwrap_or_else(|_| "Owner".into()),
             )
         } else {
-            Ok(Self::local(token))
+            Ok(Self {
+                plugin_machines: plugin_machines::Store::open(
+                    data.with_file_name(plugin_machines::FILE_NAME),
+                )?,
+                ..Self::local(token)
+            })
         }
     }
     pub fn bootstrap(token: &str) -> Self {
         Self {
             path: None,
+            plugin_machines: Default::default(),
             members: Mutex::new(vec![Self::owner(
                 token,
                 std::env::var("TOKAMAK_OWNER_NAME").unwrap_or_else(|_| "Owner".into()),
@@ -231,6 +239,7 @@ impl Identities {
     pub fn local(token: Option<&str>) -> Self {
         Self {
             path: None,
+            plugin_machines: Default::default(),
             members: Mutex::new(vec![Member {
                 user: User::local(),
                 token_hash: None,
@@ -267,6 +276,9 @@ impl Identities {
             ));
         }
         let identities = Self {
+            plugin_machines: plugin_machines::Store::open(
+                path.with_file_name(plugin_machines::FILE_NAME),
+            )?,
             path: Some(path),
             members: Mutex::new(members),
             anonymous: false,
@@ -363,6 +375,15 @@ impl Identities {
             token.cancel();
         }
         Ok(user)
+    }
+
+    pub(crate) fn member_name(&self, id: &str) -> Option<String> {
+        self.members
+            .lock()
+            .expect("members lock")
+            .iter()
+            .find(|member| member.user.id == id)
+            .map(|member| member.user.name.clone())
     }
 
     pub(crate) fn active_member(&self, id: &str) -> Option<User> {

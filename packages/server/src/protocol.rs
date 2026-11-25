@@ -139,12 +139,33 @@ impl std::fmt::Display for CallError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(from = "String", into = "String")]
 pub enum ActionTarget {
     #[default]
     Server,
     Caller,
+    Machine(String),
+}
+
+impl From<String> for ActionTarget {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "server" => Self::Server,
+            "caller" => Self::Caller,
+            _ => Self::Machine(value),
+        }
+    }
+}
+
+impl From<ActionTarget> for String {
+    fn from(value: ActionTarget) -> Self {
+        match value {
+            ActionTarget::Server => "server".into(),
+            ActionTarget::Caller => "caller".into(),
+            ActionTarget::Machine(id) => id,
+        }
+    }
 }
 
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
@@ -176,10 +197,7 @@ pub enum Request {
         name: String,
         args: Json,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(
-            feature = "protocol-codegen",
-            ts(optional, type = "\"server\" | \"caller\"")
-        )]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "ActionTarget"))]
         on: Option<ActionTarget>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
@@ -221,10 +239,10 @@ pub enum Request {
         )]
         hook_scope: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(
-            feature = "protocol-codegen",
-            ts(optional, type = "\"server\" | \"caller\"")
-        )]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        proof: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "ActionTarget"))]
         on: Option<ActionTarget>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]

@@ -146,3 +146,61 @@ executables on PATH. It opens the agent row so the two provider processes
 each describe their provider and answer `info`. The script waits
 400 ms after the row returns and reports each host's PSS separately. Neither
 measurement includes the Runner or the agent executables.
+
+## Connect a headless Runner to a shared server
+
+On macOS or Linux, start the Runner with a server origin and a private file
+containing a device key:
+
+```sh
+tokamak-runner --server https://workspace.example.com \
+  --key-file /path/to/device.key --plugins /path/to/plugins --data /path/to/runner-data
+```
+
+Use the server's HTTPS address (plain HTTP is accepted only for loopback
+development). The Runner opens the connection itself and does not listen on a
+port. Put the key on one line in a regular file with mode `600`. The command
+line contains only its path. Do not use the server's recovery key as the Runner
+key.
+
+Use the workspace's existing sign-in method to issue a dedicated device key:
+submit the same fields as the sign-in form to `POST /auth/sign-in`, with the
+provider's `method`, its `fields`, and a `deviceName` for the Runner. For an
+owner, `POST /auth/owner` with the owner recovery credential and
+`{"deviceName":"Headless Runner"}` issues the same kind of device key. Save
+only the response's `key` in the private file; the response returns it once.
+Do not print the response or put either credential in shell arguments. Use
+one device key per Runner. Signing that device out revokes the key and stops
+the Runner from reconnecting.
+
+For a plugin-managed machine, use the key returned by
+[`ctx.machines.create`](../sdk/README.md#run-actions-on-a-sandbox-machine) in
+the same private key file. No sign-in or machine id is needed on the Runner.
+The owning plugin can revoke that key with `ctx.machines.remove`.
+
+Install the full Runner build of every plugin this machine serves in
+`--plugins`, including `manifest.json`, `local-entry.js`, and `local.js`.
+Reinstall the build after every plugin update. The cloud package omits Runner
+bundles and automatic delivery is separate work. A missing or mismatched build
+returns `runnerArtifactMismatch`. In a caller action, `ctx.env` comes from the
+Runner's own environment.
+
+For a connected Runner, the server drives the action's hooks and named points
+using the same call budget as its nested calls. It runs each stage with the
+hook plugin's artifact and grants. A Runner that cannot execute the stages
+returns `hookRunnerUnavailable`; the error names the hook plugin. A plugin-owned
+machine never receives another plugin's hook code. The server rejects that
+placement with the same typed error before invoking the action.
+
+For `on: "caller"`, the server uses the connected Runner for the exact device
+in the caller's call note. A desktop without a connection for its device can still use the
+window route. A browser without a Runner for its device gets `noMachine`.
+The newest connection using a device key takes over; the old Runner exits
+if it receives the takeover notice. Connection loss fails active calls with
+`machineLost`; the Runner retries with backoff and does not replay calls.
+
+Plain HTTP is available only for loopback IP addresses and `localhost`,
+which the Runner resolves directly to loopback addresses. Other origins
+require TLS. Set `TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS` (default 5000) and
+`TOKAMAK_MACHINE_HEARTBEAT_LIMIT_MS` (default 15000) on the Runner and server
+to tune heartbeat timing. Use positive values with the interval below the limit.

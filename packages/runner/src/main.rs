@@ -1,6 +1,8 @@
 mod artifact;
 mod local;
 mod ownership;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod remote;
 
 use engine::PoolConfig;
 use server::{Backend, data::Storage, websocket};
@@ -12,6 +14,12 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+enum Mode {
+    Embedded(Config),
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    Connected(remote::Config),
+}
+
 struct Config {
     data: PathBuf,
     plugins: PathBuf,
@@ -21,13 +29,15 @@ struct Config {
 }
 
 impl Config {
-    fn read() -> anyhow::Result<Option<Self>> {
+    fn read() -> anyhow::Result<Option<Mode>> {
         let mut args = std::env::args_os().skip(1);
         let mut data = None;
         let mut plugins = None;
         let mut listen = None;
         let mut token_file = None;
         let mut desktop = false;
+        let mut server = None;
+        let mut key_file = None;
         while let Some(flag) = args.next() {
             let value = |args: &mut dyn Iterator<Item = OsString>| {
                 args.next()
@@ -36,10 +46,12 @@ impl Config {
             match flag.to_str() {
                 Some("--help") => {
                     println!(
-                        "tokamak-runner --plugins <directory> --data <path> --token-file <private file> [--listen <127.0.0.1:3000>]"
+                        "tokamak-runner --plugins <directory> --data <path> --token-file <private file> [--listen <127.0.0.1:3000>]\ntokamak-runner --server <address> --key-file <private file> --plugins <directory> --data <directory>"
                     );
                     return Ok(None);
                 }
+                Some("--server") => server = Some(value(&mut args)?),
+                Some("--key-file") => key_file = Some(PathBuf::from(value(&mut args)?)),
                 Some("--desktop") => desktop = true,
                 Some("--plugins") => plugins = Some(PathBuf::from(value(&mut args)?)),
                 Some("--data") => data = Some(PathBuf::from(value(&mut args)?)),
@@ -49,6 +61,23 @@ impl Config {
                 Some("--token-file") => token_file = Some(PathBuf::from(value(&mut args)?)),
                 _ => anyhow::bail!("Unknown option {}", flag.to_string_lossy()),
             }
+        }
+        if server.is_some() || key_file.is_some() {
+            anyhow::ensure!(
+                !desktop && token_file.is_none() && listen.is_none(),
+                "--server cannot be combined with embedded Runner options"
+            );
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            anyhow::bail!("Connected Runner is unsupported on this platform");
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            return Ok(Some(Mode::Connected(remote::Config::new(
+                server
+                    .and_then(|value| value.into_string().ok())
+                    .ok_or_else(|| anyhow::anyhow!("Missing or invalid --server"))?,
+                key_file.ok_or_else(|| anyhow::anyhow!("Missing --key-file"))?,
+                plugins.ok_or_else(|| anyhow::anyhow!("Missing --plugins"))?,
+                data.ok_or_else(|| anyhow::anyhow!("Missing --data"))?,
+            )?)));
         }
         anyhow::ensure!(
             desktop == token_file.is_none(),
@@ -69,13 +98,13 @@ impl Config {
             ))
         });
         anyhow::ensure!(listen.ip().is_loopback(), "Runner must bind to loopback");
-        Ok(Some(Self {
+        Ok(Some(Mode::Embedded(Self {
             data: data.ok_or_else(|| anyhow::anyhow!("Missing --data"))?,
             plugins: plugins.ok_or_else(|| anyhow::anyhow!("Missing --plugins"))?,
             desktop,
             token_file,
             listen,
-        }))
+        })))
     }
 }
 
@@ -99,27 +128,36 @@ fn access(config: &Config, stop: CancellationToken) -> anyhow::Result<String> {
             .token_file
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Missing token file"))?;
-        let metadata = std::fs::symlink_metadata(path)?;
-        anyhow::ensure!(metadata.is_file(), "Token must be a regular file");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            anyhow::ensure!(
-                metadata.permissions().mode() & 0o077 == 0,
-                "Token file must be private (chmod 600)"
-            );
-        }
-        let mut token = String::new();
-        std::fs::File::open(path)?
-            .take(67)
-            .read_to_string(&mut token)?;
-        token.trim_end_matches(['\r', '\n']).to_owned()
+        read_secret(path)?
     };
     anyhow::ensure!(
         token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit()),
         "Expected a 64-digit hex secret"
     );
     Ok(token)
+}
+
+fn read_secret(path: &Path) -> anyhow::Result<String> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    anyhow::ensure!(metadata.is_file(), "Token must be a regular file");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        anyhow::ensure!(
+            metadata.permissions().mode() & 0o077 == 0,
+            "Token file must be private (chmod 600)"
+        );
+    }
+    let mut token = String::new();
+    std::fs::File::open(path)?
+        .take(67)
+        .read_to_string(&mut token)?;
+    let token = token.trim_end_matches(['\r', '\n']);
+    anyhow::ensure!(
+        token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "Expected a 64-digit hex secret"
+    );
+    Ok(token.to_owned())
 }
 
 async fn signals(stop: CancellationToken) -> std::io::Result<()> {
@@ -150,10 +188,18 @@ async fn check_plugin_host() -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let Some(config) = Config::read()? else {
+    let Some(mode) = Config::read()? else {
         return Ok(());
     };
     let stop = CancellationToken::new();
+    match mode {
+        Mode::Embedded(config) => run_embedded(config, stop).await,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Mode::Connected(config) => remote::run(config, stop).await,
+    }
+}
+
+async fn run_embedded(config: Config, stop: CancellationToken) -> anyhow::Result<()> {
     let token = access(&config, stop.clone())?;
     check_plugin_host().await?;
     signals(stop.clone()).await?;
