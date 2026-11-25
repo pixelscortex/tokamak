@@ -1,0 +1,91 @@
+packages/sdk/src/protocol.ts
+  s_040e9b5fc04cd5::t_f45977f12eda66 25
+packages/sdk/README.md
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 824-827
+packages/server/src/plugins/loading.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 407-413
+  s_040e9b5fc04cd5::t_caa6ab5546716f 414-415
+packages/sdk/src/transport.ts
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 102,127
+packages/sdk/tools/bundle.mjs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 221
+  s_040e9b5fc04cd5::t_f45977f12eda66 236-244
+packages/sdk/tools/worker.mjs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 58
+packages/server/src/protocol.rs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 171,176,206,211
+  s_040e9b5fc04cd5::t_f45977f12eda66 172-175,207-210
+packages/server/tests/actions.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 364
+packages/server/tests/helpers/actions_dns.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 196
+packages/server/tests/workers.rs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 77
+packages/server/src/lib.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 24-25
+packages/server/src/service/session.rs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 97,104,117,128
+packages/server/src/host/hooks.rs
+  s_040e9b5fc04cd5::t_caa6ab5546716f 181,287
+  s_040e9b5fc04cd5::t_f45977f12eda66 158-163
+packages/sdk/src/index.ts
+  s_040e9b5fc04cd5::t_caa6ab5546716f 95
+packages/sdk/src/hooks.ts
+  s_040e9b5fc04cd5::t_caa6ab5546716f 1,21,24,26,30,46,51,72,81,83,98,102,109,136
+  s_040e9b5fc04cd5::t_f45977f12eda66 103-108
+packages/sdk/src/api.ts
+  s_040e9b5fc04cd5::t_f45977f12eda66 38-44
+  s_040e9b5fc04cd5::t_caa6ab5546716f 6-7,21,45-48,65,67
+packages/server/src/host.rs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 28,139
+packages/server/src/identity/call.rs
+  s_040e9b5fc04cd5::t_caa6ab5546716f 35,97-98
+  s_040e9b5fc04cd5::t_3aee7489a92152 99-100
+packages/sdk/tools/placement.mjs
+  s_040e9b5fc04cd5::t_f45977f12eda66 440-447,450
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 390,448-449
+  s_040e9b5fc04cd5::t_caa6ab5546716f 117,454,470
+packages/server/src/service/action_coordination.rs
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 38,43-47,116-117,133-134,142,144-149,167,181
+  s_040e9b5fc04cd5::t_f45977f12eda66 39-42,49-56,118-132
+packages/server/src/actions.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 322,371-383
+  s_040e9b5fc04cd5::t_73e4b1d3912f84 65,69,73,570
+packages/sdk/tools/plugin-boundary.mjs
+  s_040e9b5fc04cd5::t_caa6ab5546716f 227-228,233
+packages/runner/src/artifact.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 20-21,41-57,63,71-73,99-102,104-106
+  s_040e9b5fc04cd5::t_c39e1c3f305157 40
+packages/runner/src/local/quickjs/session.rs
+  s_040e9b5fc04cd5::t_f45977f12eda66 350,357,451-462,486-488,490-519,525-533,556,560,658-659
+packages/build/tests/boundary.test.mjs
+  s_040e9b5fc04cd5::t_d9245191a2fb13 338-372
+packages/server/tests/action-placement.mjs
+  s_040e9b5fc04cd5::t_0cfabe343be59b 55-61,277-310,400
+packages/server/tests/fixtures/query-hooks/moderation/src/server/policy.ts
+  s_040e9b5fc04cd5::t_95c157b7eabf33 152-153
+packages/server/tests/fixtures/query-hooks/team/src/server/api.ts
+  s_040e9b5fc04cd5::t_105a09d74751bf 12
+packages/server/tests/fixtures/query-hooks/team/src/server/users.ts
+  s_040e9b5fc04cd5::t_3e1460bb292c84 87-97
+packages/server/tests/query-hooks-driver.ts
+  s_040e9b5fc04cd5::t_d6e04012d52e74 191,197
+packages/server/tests/query_hooks.rs
+  s_040e9b5fc04cd5::t_65c08d2b5cf2aa 76-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df260d44b61162fe49ae94f530e152c7cbc4f295",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
