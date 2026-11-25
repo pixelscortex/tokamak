@@ -7,7 +7,7 @@ import * as chat from "plugin:chat/client";
  * still adds to the same footer.
  */
 export const Replayed = append(
-  chat.Message.footer,
+  chat.parts.Message.article.footer,
   () => <p class="text-label text-ink-3">Replayed by the fake agent</p>,
   {
     when: (m) => m.message.author?.id === "agent:fake-agent" && m.message.status !== "streaming",

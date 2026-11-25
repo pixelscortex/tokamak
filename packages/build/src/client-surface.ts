@@ -21,6 +21,7 @@ export function clientSurface(
   root: () => string,
   pluginId: () => string,
   placement: (id: string) => SourceEdit[] = () => [],
+  catalog?: string,
 ): Plugin {
   let directory: string;
   let program: ts.Program;
@@ -32,7 +33,7 @@ export function clientSurface(
     generateBundle: {
       order: "post",
       handler() {
-        parts?.publish((message) => this.warn(message));
+        parts?.publish((message) => this.warn(message), catalog);
       },
     },
     transform(code, id) {
@@ -52,6 +53,7 @@ export function clientSurface(
             module: ts.ModuleKind.ESNext,
             moduleResolution: ts.ModuleResolutionKind.Bundler,
             jsx: ts.JsxEmit.Preserve,
+            jsxImportSource: "@solidjs/web",
             ...parsed.options,
           }),
         );
@@ -60,12 +62,7 @@ export function clientSurface(
         windowState = windowStateTransform(directory, entry, program, (file) =>
           erasedNodes(file, placement(normalizePath(file.fileName))),
         );
-        parts = componentParts(
-          program.getSourceFile(entry)!,
-          program.getTypeChecker(),
-          pluginId(),
-          directory,
-        );
+        parts = componentParts(program.getSourceFile(entry)!, program, pluginId(), directory);
       }
       const source =
         program.getSourceFile(id) ??
@@ -82,7 +79,11 @@ export function clientSurface(
       // Both transforms use the original offsets. A part mounts its original
       // tag lazily, so attach the state site to that tag inside its render callback.
       const state = windowState(source, output, parts.has);
-      if (parts.transform(source, output, state?.partMounts) || state || cuts.length)
+      if (
+        parts.transform(source, output, state?.partMounts, erasedNodes(source, cuts)) ||
+        state ||
+        cuts.length
+      )
         return {
           code: output.toString(),
           map: output.generateMap({ source: id, includeContent: cuts.length === 0, hires: true }),

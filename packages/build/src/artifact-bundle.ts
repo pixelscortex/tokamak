@@ -1,13 +1,13 @@
 import ts from "typescript";
 import { definePlugin, type PluginDefinition } from "@tokamak/sdk";
-import { uiContributions } from "./contributions.ts";
+import type { uiContributions } from "./contributions.ts";
 import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
 
 type GenerateBundle = Extract<NonNullable<Plugin["generateBundle"]>, (...args: never[]) => unknown>;
 
 export function artifactBundle(
-  root: string,
+  contributes: ReturnType<typeof uiContributions>["contributes"],
   plugin: Readonly<PluginDefinition>,
   options: { ui?: false; stripClientSources?: boolean },
 ): GenerateBundle {
@@ -51,7 +51,7 @@ export function artifactBundle(
         ...plugin,
         depends,
         optional,
-        contributes: uiContributions(root, plugin.id).contributes,
+        contributes,
       });
       metadata.entries.ui = {
         code: "ui.js",

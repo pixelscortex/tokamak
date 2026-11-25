@@ -9,7 +9,7 @@ import { clientEntry } from "./descriptor.ts";
 import { resolve } from "node:path";
 import ts from "typescript";
 
-export function uiContributions(root: string, plugin: string) {
+export function uiContributions(root: string, plugin: string, warn: (message: string) => void) {
   const entry = clientEntry(root);
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
@@ -18,7 +18,12 @@ export function uiContributions(root: string, plugin: string) {
   const config = configResult.config;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram([entry], {
-    ...pluginCompilerOptions(root, parsed.options),
+    ...pluginCompilerOptions(root, {
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      jsx: ts.JsxEmit.Preserve,
+      jsxImportSource: "@solidjs/web",
+      ...parsed.options,
+    }),
     noEmit: false,
     noEmitOnError: false,
     declaration: false,
@@ -35,15 +40,16 @@ export function uiContributions(root: string, plugin: string) {
   const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
   const replacements = new Map<string, string>();
   const owners = new Map<string, ReturnType<typeof componentParts>>();
-  function lookup(owner: string, exported: string, part: string) {
+  const edits = new Map<string, [number, number, string][]>();
+  function lookup(owner: string, names: string[]) {
     let parts = owners.get(owner);
     if (!parts) {
       const folder = resolve(root, "..", owner);
       const file = program.getSourceFile(clientEntry(folder));
       if (!file) return;
-      owners.set(owner, (parts = componentParts(file, checker, owner, folder)));
+      owners.set(owner, (parts = componentParts(file, program, owner, folder)));
     }
-    return parts.part(exported, part);
+    return parts.part(names);
   }
   const checked = new Map<ts.SourceFile, readonly ts.Diagnostic[]>();
   function checkAction(call: ts.CallExpression) {
@@ -69,7 +75,22 @@ export function uiContributions(root: string, plugin: string) {
     if (action) {
       const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
       if (!kind.isStringLiteral()) throw problem(declaration, "Declare a single component action");
-      const values = componentActionOptions(declaration, kind.value, checker, plugin, lookup, checkAction);
+      const values = componentActionOptions(
+        declaration,
+        kind.value,
+        checker,
+        plugin,
+        lookup,
+        checkAction,
+        (node, replacement) => {
+          const file = node.getSourceFile().fileName;
+          const cuts = edits.get(file) ?? [];
+          cuts.push([node.getStart(), node.end, replacement]);
+          edits.set(file, cuts);
+        },
+        warn,
+      );
+      if (!values) continue;
       if (kind.value === "replace") {
         const target = String(values.target);
         const first = replacements.get(target);
@@ -80,7 +101,7 @@ export function uiContributions(root: string, plugin: string) {
       continue;
     }
   }
-  return { contributes };
+  return { contributes, edits };
 }
 
 function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
@@ -227,26 +248,38 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  lookup: (owner: string, exported: string, part: string) => { target: string; locked: boolean } | undefined,
+  lookup: (
+    owner: string,
+    names: string[],
+  ) => { fingerprint?: string; ambiguous?: boolean } | false | undefined,
   checkAction: (call: ts.CallExpression) => void,
-): Record<string, string | number> {
+  edit: (node: ts.Node, replacement: string) => void,
+  warn: (message: string) => void,
+): Record<string, string | number> | undefined {
   const init = exportedInitializer(declaration);
   if (!init || !ts.isCallExpression(init) || !init.arguments[0])
     throw problem(declaration, "Export a component action declared with an action helper");
   const path = init.arguments[0];
   const type = checker.getTypeAtLocation(path);
   const reference = importedPart(path, checker);
-  const current = reference && lookup(reference.owner, reference.component, reference.part);
-  if (!current || !brand(type, "componentPartBrand"))
-    throw problem(path, `Component element does not exist or is not a typed path: ${path.getText()}`);
-  if (current.locked) throw problem(path, `Cannot change locked element ${current.target}`);
-  const targetSymbol = type.getProperty("target");
-  const target = targetSymbol && checker.getTypeOfSymbolAtLocation(targetSymbol, path);
-  if (!target?.isStringLiteral() || target.value !== current.target)
-    throw problem(path, `Component path has changed; rebuild the owner of ${path.getText()}`);
-  if (reference.owner === plugin) throw problem(path, "Component actions target another plugin's elements");
+  if (!reference || reference.owner === plugin)
+    throw problem(path, "Use a screen part from another plugin's client import");
+  const target = [reference.owner, ...reference.names].join(".");
+  const exists = lookup(reference.owner, reference.names);
+  if (exists === false) {
+    warn(`Plugin "${plugin}" targets missing screen part ${target}; skipping this addition`);
+    edit(init, "undefined");
+    return;
+  }
+  if (!exists || !brand(type, "componentPartBrand"))
+    throw problem(path, `Screen element is not a typed path: ${path.getText()}; build its owner first`);
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
-  const values: Record<string, string | number> = { action, target: current.target };
+  const values: Record<string, string | number> = { action, target };
+  if (exists.fingerprint) values.fingerprint = exists.fingerprint;
+  if (exists.ambiguous)
+    warn(
+      `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
+    );
   if (options) {
     if (!ts.isObjectLiteralExpression(options))
       throw problem(options, "Use literal component action options");
@@ -261,29 +294,33 @@ function componentActionOptions(
     }
   }
   checkAction(init);
+  // Existing artifacts keep loading when an owner removes the runtime path.
+  edit(path, JSON.stringify({ target }));
   return values;
 }
 
-/** A path must be written against the public plugin import. In particular a
- * type assertion cannot invent an address, and a stale generated file cannot
- * keep publishing a renamed element. */
+/** Only paths rooted in public client imports can contribute placements. */
 function importedPart(path: ts.Expression, checker: ts.TypeChecker) {
   while (ts.isParenthesizedExpression(path)) path = path.expression;
-  if (!ts.isPropertyAccessExpression(path) || path.questionDotToken) return;
-  const part = path.name.text;
-  const component = path.expression;
-  let binding: ts.Declaration | undefined;
-  let name: string;
-  if (ts.isIdentifier(component)) {
-    const imported = checker.getSymbolAtLocation(component)?.declarations?.find(ts.isImportSpecifier);
-    if (!imported) return;
-    binding = imported;
-    name = (imported.propertyName ?? imported.name).text;
-  } else if (ts.isPropertyAccessExpression(component) && ts.isIdentifier(component.expression)) {
-    binding = checker.getSymbolAtLocation(component.expression)?.declarations?.find(ts.isNamespaceImport);
-    name = component.name.text;
-  } else return;
+  const names: string[] = [];
+  while (true) {
+    if (ts.isPropertyAccessExpression(path) && !path.questionDotToken) names.unshift(path.name.text);
+    else if (
+      ts.isElementAccessExpression(path) &&
+      !path.questionDotToken &&
+      ts.isStringLiteralLike(path.argumentExpression)
+    )
+      names.unshift(path.argumentExpression.text);
+    else break;
+    path = path.expression;
+  }
+  if (!ts.isIdentifier(path)) return;
+  const binding = checker
+    .getSymbolAtLocation(path)
+    ?.declarations?.find((node) => ts.isImportSpecifier(node) || ts.isNamespaceImport(node));
+  if (binding && ts.isImportSpecifier(binding)) names.unshift((binding.propertyName ?? binding.name).text);
+  if (names.shift() !== "parts" || !names.length) return;
   const specifier = importModule(binding);
   const reference = specifier && parsePluginSpecifier(specifier);
-  if (reference && reference.side === "client") return { owner: reference.id, component: name, part };
+  if (reference && reference.side === "client") return { owner: reference.id, names };
 }

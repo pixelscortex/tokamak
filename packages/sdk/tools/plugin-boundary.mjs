@@ -96,6 +96,14 @@ export function assertPluginResolution(root, importer, id, target, packageImport
   throw diagnostic(importer, id, target);
 }
 
+export function clientEntry(root) {
+  for (const entry of ["src/client/api.ts", "src/client/api.tsx", "src/client/main.tsx", "src/main.tsx"]) {
+    const file = resolve(root, entry);
+    if (existsSync(file)) return file;
+  }
+  return resolve(root, existsSync(resolve(root, "src/client")) ? "src/client/main.tsx" : "src/main.tsx");
+}
+
 function provider(root, id) {
   const reference = parsePluginSpecifier(id);
   if (!reference) throw new Error(`Invalid plugin specifier ${id}`);
@@ -109,10 +117,7 @@ function provider(root, id) {
         ? existsSync(backendEntry)
           ? backendEntry
           : resolve(folder, "api.ts")
-        : resolve(
-            folder,
-            existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
-          );
+        : clientEntry(folder);
   if (side === "tables")
     return { folder, entry: resolve(serverDirectory(folder), "schema.ts"), side, id: reference.id };
   if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);

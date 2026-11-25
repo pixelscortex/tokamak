@@ -1,10 +1,8 @@
 /** Client extension points share the shell's owner and plugin generations. */
-import { createEffect, createContext, createMemo, createSignal, onCleanup, useContext } from "solid-js";
+import { createEffect, createContext, createSignal, onCleanup, useContext } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { componentActionKind, isComponentAction, type ComponentAction } from "./component-actions";
 export {
-  component,
-  defineComponent as __defineComponent,
   before,
   after,
   prepend,
@@ -13,12 +11,9 @@ export {
   wrapPart as wrap,
   replacePart as replace,
   type ComponentPart,
-  type ComponentOptions,
   type ComponentActionOptions,
-  type ComponentParts,
-  type ComponentSelf,
 } from "./component-actions";
-import { PartActions, type LoadedPartAction } from "./component-parts";
+import { PartActions, type LoadedPartAction, type PartObserver, type PartRegistry } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
 export { state, derived, type StateOptions, type WindowDerived, type WindowState } from "./window-state";
@@ -35,9 +30,12 @@ export interface ExtensionHost {
   contributions(kind: "component-action"): ExtensionContribution[];
   version(id: string): number;
   load(id: string): Promise<Record<string, unknown>>;
+  partOwner?(id: string): Promise<Record<string, unknown> | undefined>;
   onError(id: string, listener: (cause: unknown) => void): () => void;
 }
-type CatalogExtension = ExtensionContribution & { version: number };
+type CatalogExtension = ExtensionContribution & { version: number; ownerVersion: number };
+
+const partOwner = (target: unknown) => String(target).split(".")[0]!;
 
 /** Catalog discovery loads only extension contributors. Removing a plugin clears
  * its layers synchronously; late loads cannot publish into a retired owner. */
@@ -46,11 +44,88 @@ export function ExtensionProvider(props: {
   onAlerts?: (messages: readonly string[]) => void;
   children?: JSX.Element;
 }) {
-  const [partActions, setPartActions] = createSignal<LoadedPartAction[]>([], { ownedWrite: true });
-  const plugins = new Map<string, { signature: string; stop(): void }>();
+  const slots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
+  const current = new Map<string, readonly LoadedPartAction[]>();
+  const observers = new Map<string, Set<PartObserver>>();
+  function slot(target: string) {
+    let signal = slots.get(target);
+    if (!signal)
+      slots.set(target, (signal = createSignal<readonly LoadedPartAction[]>([], { ownedWrite: true })));
+    return signal;
+  }
+
   let reported = new Set<string>();
+  const stale = new Map<string, string>();
+  function alerts() {
+    props.onAlerts?.([...reported, ...stale.values()]);
+  }
+
+  function warnStale(plugin: string, target: string, reason: string) {
+    const key = JSON.stringify([plugin, target]);
+    if (stale.has(key)) return;
+    const message = `Plugin "${plugin}": ${reason} ${target}; skipping this addition`;
+    stale.set(key, message);
+    console.warn(message);
+    alerts();
+  }
+
+  const registry: PartRegistry = {
+    mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
+    read: (target) => slot(target)[0],
+    observe(target, observer) {
+      let listeners = observers.get(target);
+      if (!listeners) observers.set(target, (listeners = new Set()));
+      listeners.add(observer);
+      if (current.size) {
+        const actions = current.get(target);
+        if (actions) observer.update(actions);
+      }
+    },
+    unobserve(target, observer) {
+      const listeners = observers.get(target);
+      listeners?.delete(observer);
+      if (!listeners?.size) observers.delete(target);
+    },
+  };
+  function update(
+    target: string,
+    change: (items: readonly LoadedPartAction[]) => readonly LoadedPartAction[],
+  ) {
+    const next = change(current.get(target) ?? []);
+    if (next.length) current.set(target, next);
+    else current.delete(target);
+    slot(target)[1](next);
+    for (const observer of observers.get(target) ?? []) observer.update(next);
+  }
+
+  const plugins = new Map<string, { signature: string; stop(): void }>();
+  const targets = new Map<string, Set<string>>();
   function clear(id: string) {
-    setPartActions((previous) => previous.filter((c) => c.plugin !== id));
+    for (const target of targets.get(id) ?? [])
+      update(target, (items) => items.filter((c) => c.plugin !== id));
+    targets.delete(id);
+
+    // A reloaded add-on reports its stale targets again; a removed one has none.
+    let forgotten = false;
+    for (const key of stale.keys()) if (JSON.parse(key)[0] === id) forgotten = stale.delete(key) || forgotten;
+    if (forgotten) alerts();
+  }
+
+  function publish(id: string, parts: LoadedPartAction[]) {
+    const group = new Map<string, LoadedPartAction[]>();
+    for (const part of parts) {
+      const target = part.action.target;
+      let items = group.get(target);
+      if (!items) group.set(target, (items = []));
+      items.push(part);
+    }
+    targets.set(id, new Set(group.keys()));
+    for (const [target, added] of group)
+      update(target, (items) =>
+        [...items, ...added].sort(
+          (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
+        ),
+      );
   }
   onCleanup(() => {
     for (const plugin of plugins.values()) plugin.stop();
@@ -61,14 +136,15 @@ export function ExtensionProvider(props: {
       props.host.contributions("component-action").map((contribution) => ({
         ...contribution,
         version: props.host.version(contribution.plugin),
+        ownerVersion: props.host.version(partOwner(contribution.options.target)),
       })),
     (contributions) => {
       const { accepted, refused } = resolveReplacements(contributions);
       for (const message of refused) if (!reported.has(message)) console.warn(message);
-      if (refused.size !== reported.size || [...refused].some((message) => !reported.has(message))) {
-        props.onAlerts?.([...refused]);
-      }
+      const changed =
+        refused.size !== reported.size || [...refused].some((message) => !reported.has(message));
       reported = refused;
+      if (changed) alerts();
 
       const groups = new Map<string, CatalogExtension[]>();
       for (const c of accepted) {
@@ -99,7 +175,7 @@ export function ExtensionProvider(props: {
         };
         plugins.set(id, plugin);
         void props.host.load(id).then(
-          (exports) => {
+          async (exports) => {
             if (plugins.get(id) !== plugin || failed) return;
             const parts: LoadedPartAction[] = [];
             for (const c of group) {
@@ -116,28 +192,50 @@ export function ExtensionProvider(props: {
                 );
               }
             }
-            if (parts.length) setPartActions((previous) => [...previous, ...parts]);
+            let valid = parts;
+            if (props.host.partOwner) {
+              const owners = new Map(
+                await Promise.all(
+                  [...new Set(parts.map(({ action }) => partOwner(action.target)))].map(async (owner) => {
+                    try {
+                      return [owner, (await props.host.partOwner!(owner))?.parts] as const;
+                    } catch {
+                      // A retired generation will be checked again by the next catalog update.
+                      return [owner, undefined] as const;
+                    }
+                  }),
+                ),
+              );
+              if (plugins.get(id) !== plugin || failed) return;
+              valid = parts.filter(({ action, fingerprint }) => {
+                let node: unknown = owners.get(partOwner(action.target));
+                // An unavailable owner has no authoritative list to check yet.
+                if (!node || typeof node !== "object" || Array.isArray(node)) return true;
+                for (const key of action.target.split(".").slice(1))
+                  node =
+                    node && typeof node === "object" && Object.hasOwn(node, key)
+                      ? (node as Record<string, unknown>)[key]
+                      : undefined;
+                const part = node as { target?: string; fingerprint?: string } | undefined;
+                if (part?.target !== action.target) {
+                  warnStale(id, action.target, "targets missing screen part");
+                  return false;
+                }
+                if (fingerprint && part.fingerprint && fingerprint !== part.fingerprint) {
+                  registry.mismatch(id, action.target);
+                  return false;
+                }
+                return true;
+              });
+            }
+            if (valid.length) publish(id, valid);
           },
           (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
         );
       }
     },
   );
-  const byTarget = createMemo(() => {
-    const result = new Map<string, LoadedPartAction[]>();
-    for (const action of partActions()) {
-      const values = result.get(action.action.target) ?? [];
-      values.push(action);
-      result.set(action.action.target, values);
-    }
-    for (const values of result.values()) {
-      values.sort(
-        (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
-      );
-    }
-    return result;
-  });
-  return <PartActions value={(target) => byTarget().get(target) ?? []}>{props.children}</PartActions>;
+  return <PartActions value={registry}>{props.children}</PartActions>;
 }
 
 function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPartAction {
@@ -146,6 +244,7 @@ function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPa
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
     action,
+    fingerprint: typeof c.options.fingerprint === "string" ? c.options.fingerprint : undefined,
     enabled(props) {
       try {
         return action.when?.(props) ?? true;
@@ -208,4 +307,24 @@ export {
   type RegionName,
 } from "./regions";
 
-export { renderPart as __renderPart, type PartAdditions } from "./component-parts";
+export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";
+
+type ScreenShape = { "": string | null } | { [name: string]: ScreenShape | string | null };
+
+/** Materialize the public tree once without repeating complete paths in the bundle. */
+export function __defineScreenParts(prefix: string, shape: ScreenShape) {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(shape)) {
+    if (key === "") {
+      result.target = prefix;
+      if (value) result.fingerprint = value;
+    } else if (value && typeof value === "object") {
+      result[key] = __defineScreenParts(`${prefix}.${key}`, value);
+    }
+  }
+  return result;
+}
+
+export function __partPaths(prefix: string, suffixes: readonly string[]) {
+  return suffixes.map((suffix) => (suffix ? `${prefix}.${suffix}` : prefix));
+}
