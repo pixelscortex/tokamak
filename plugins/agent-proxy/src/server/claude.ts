@@ -226,6 +226,27 @@ const PLANS: Record<string, string> = {
   claude_enterprise: "Enterprise",
 };
 
+/**
+ * The plan in a profile answer. Known only when the answer carried a plan
+ * field (`organization_type` or a `has_claude_*` flag): a 200 without them
+ * says nothing about the plan, and "Free" would be a guess.
+ */
+function planOf(
+  answer:
+    | {
+        account?: { has_claude_max?: unknown; has_claude_pro?: unknown };
+        organization?: { organization_type?: unknown };
+      }
+    | undefined,
+): { plan: string; planKnown: boolean } {
+  const type = text(answer?.organization?.organization_type);
+  const max = answer?.account?.has_claude_max;
+  const pro = answer?.account?.has_claude_pro;
+  const planKnown = type !== undefined || typeof max === "boolean" || typeof pro === "boolean";
+  if (!planKnown) return { plan: "", planKnown };
+  return { plan: (type && PLANS[type]) ?? (max === true ? "Max" : pro === true ? "Pro" : "Free"), planKnown };
+}
+
 /** The plan, email and organisation Claude reports for the login (`/api/oauth/profile`). */
 export async function accountDetails(
   addresses: Addresses,
@@ -237,17 +258,8 @@ export async function accountDetails(
         organization?: { name?: unknown; organization_type?: unknown };
       }
     | undefined;
-  const type = text(answer?.organization?.organization_type);
-  const max = answer?.account?.has_claude_max;
-  const pro = answer?.account?.has_claude_pro;
-  // Known only when the answer carried a plan field: a 200 without them says nothing about the plan.
-  const planKnown = type !== undefined || typeof max === "boolean" || typeof pro === "boolean";
-  const plan = !planKnown
-    ? ""
-    : ((type && PLANS[type]) ?? (max === true ? "Max" : pro === true ? "Pro" : "Free"));
   return {
-    plan,
-    planKnown,
+    ...planOf(answer),
     identity: {
       accountId: text(answer?.account?.uuid),
       email: text(answer?.account?.email),

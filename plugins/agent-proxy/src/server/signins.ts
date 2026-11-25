@@ -44,6 +44,25 @@ const FINISH_CLAIM_MS = 90_000;
 const EXPIRED = "This sign-in expired after 15 minutes. Start again.";
 
 type Failed = { failed: true; kind: string; data: { message: string } };
+/**
+ * The state first, as Codex checks it before a code or an error: another
+ * sign-in's return is said to be that, and an error return of this one says
+ * what the company refused; either way this sign-in keeps waiting untouched.
+ * An expired one goes on to the claim, which says it expired.
+ */
+function beforeClaim(
+  waiting: { state: string; expired: boolean },
+  read: { state?: string | undefined } & ({ code: string } | { refused: string }),
+) {
+  if (waiting.expired) return undefined;
+  if (read.state !== undefined && read.state !== waiting.state) return wrongSignIn();
+  return "refused" in read ? fail("Refused", { message: read.refused }) : undefined;
+}
+
+/** "You signed in as you@acme.test in Acme": a person in two workspaces has one email in both. */
+const signedInAs = (found: { email?: string; organization?: string }) =>
+  [found.email ?? "another account", found.organization].filter(Boolean).join(" in ");
+
 const wrongSignIn = () =>
   fail("WrongSignIn", {
     message: "That address belongs to another sign-in. Paste the one from the page this dialog opened.",
@@ -238,13 +257,10 @@ export const connect = internalMutation({
       const subscription = await ctx.db.get(signIn.repair);
       if (!subscription || subscription.owner !== owner)
         return fail("Gone", { message: "That subscription was removed meanwhile. Nothing was added." });
-      if (!same || same.subscription !== subscription._id) {
-        // A person in two workspaces has one email in both: name the workspace too.
-        const who = [found.email ?? "another account", found.organization].filter(Boolean).join(" in ");
+      if (!same || same.subscription !== subscription._id)
         return fail("OtherAccount", {
-          message: `You signed in as ${who}, not the account of this subscription. Sign in with that account.`,
+          message: `You signed in as ${signedInAs(found)}, not the account of this subscription. Sign in with that account.`,
         });
-      }
       subscriptionId = subscription._id;
       accountId = same._id;
       await ctx.db.patch(same._id, { ...identity, status: "ok" });
@@ -317,13 +333,8 @@ export const finishSignIn = pluginOnly(
         return waiting.expired
           ? fail("Cancelled", { message: "This sign-in is no longer waiting. Start again." })
           : fail("Unreadable", { message: read.error });
-      // The state first, as Codex checks it before a code or an error: another sign-in's
-      // return is said to be that, and this one keeps waiting untouched. (An expired one
-      // goes on to the claim, which says it expired.)
-      if (!waiting.expired) {
-        if (read.state !== undefined && read.state !== waiting.state) return wrongSignIn();
-        if ("refused" in read) return fail("Refused", { message: read.refused });
-      }
+      const early = beforeClaim(waiting, read);
+      if (early) return early;
       const claimed = await ctx.runMutation(internal.signins.claimFinish, args);
       if (isFailure(claimed)) return claimed;
       if (claimed.expired) return fail("Expired", { message: EXPIRED });
