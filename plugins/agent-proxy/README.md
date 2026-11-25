@@ -14,45 +14,69 @@ changes someone else's subscriptions. Every id is checked to be of the right
 table; a malformed id, an id of another table, or another member's gets
 `fail("NotFound")` and changes nothing.
 
-| Function            | Kind     | Arguments                                                   | Result                                                         |
-| ------------------- | -------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| `listSubscriptions` | query    | none                                                        | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
-| `startSignIn`       | action   | `{ company: "anthropic", method: "subscription", repair? }` | `SignInView` (the link to open), or `fail("NotFound")`         |
-| `finishSignIn`      | action   | `{ id, pasted }`: the address the browser ended on, or code | `SubscriptionView`, or a failure with `data.message`           |
-| `cancelSignIn`      | mutation | `{ id }`                                                    | `null`, or `fail("NotFound")`                                  |
-| `setLabel`          | mutation | `{ id, label }`                                             | `null`, or `fail("NotFound" \| "TooLong")`                     |
-| `setEnabled`        | mutation | `{ id, enabled }`                                           | `null`, or `fail("NotFound")`                                  |
-| `renewLogins`       | action   | none                                                        | `{ renewed, signedOut, waiting }`                              |
+| Function            | Kind     | Arguments                                                               | Result                                                                                           |
+| ------------------- | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `listSubscriptions` | query    | none                                                                    | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }`                                   |
+| `startSignIn`       | action   | `{ company: "anthropic" \| "openai", method: "subscription", repair? }` | `SignInView` (the link to open), or `fail("NotFound")` (also when `repair` is another company's) |
+| `finishSignIn`      | action   | `{ id, pasted }`: the address the browser ended on, or code             | `SubscriptionView`, or a failure with `data.message`                                             |
+| `cancelSignIn`      | mutation | `{ id }`                                                                | `null`, or `fail("NotFound")`                                                                    |
+| `setLabel`          | mutation | `{ id, label }`                                                         | `null`, or `fail("NotFound" \| "TooLong")`                                                       |
+| `setEnabled`        | mutation | `{ id, enabled }`                                                       | `null`, or `fail("NotFound")`                                                                    |
+| `renewLogins`       | action   | none                                                                    | `{ renewed, signedOut, waiting }`                                                                |
 
 `finishSignIn` failures that keep the sign-in waiting: `Unreadable`,
-`WrongSignIn`, `Refused` (Claude did not accept the code; paste again or open
-the page again for a new code), `Unreachable`, `OtherAccount` (a repair signed
+`WrongSignIn`, `Refused` (the company did not accept the code; paste again or
+open the page again for a new code), `Unreachable`, `OtherAccount` (a repair signed
 in as another account) and `Busy` (another finish of it is running). Ones that
 end it: `AlreadyAdded`, `Gone`, `Expired`, `Cancelled`, `NotFound`.
 
 ## Sign-in
 
-The server does the whole sign-in over the network, as CLIProxyAPI does
-(`internal/auth/claude/anthropic_auth.go`): `startSignIn` makes a PKCE
-verifier and `state`, keeps both in the `signIns` table and returns only the
-link (Claude Code's client id, scopes and `http://localhost:54545/callback`
-redirect, `code=true`).
+One flow for every company. Each company is one module with the same small
+interface, `SignInCompany` in `src/server/company.ts`: `link` (the sign-in
+page), `readPasted` (what the person pasted, as a code and its state),
+`exchange` (code to login), `renew` (a new login for a refresh token, and
+which answers mean "sign in again") and `details` (plan, account, models).
+`companies.ts` maps `anthropic` to `claude.ts` and `openai` to `openai.ts`;
+`signins.ts` and `logins.ts` name no company.
 
-Nothing listens on that redirect: the Claude Code CLI does, on its own
-computer, and the server cannot. So after signing in, the browser ends on a
-`localhost:54545` page that fails to load, and the person copies the whole
-address from the address bar and pastes it. The page that shows `code#state`
-belongs to Claude's hosted manual-code redirect, which this sign-in does not
-use; which redirect to use is open for the owner. `finishSignIn` still reads
-an address (state as a parameter, after the code, or in the fragment), a
-`code#state`, or a bare code.
+The server does the whole sign-in over the network: `startSignIn` makes a
+PKCE verifier and `state`, keeps both in the `signIns` table and returns only
+the link.
+
+- **Claude** (`claude.ts`), as CLIProxyAPI does
+  (`internal/auth/claude/anthropic_auth.go`): Claude Code's client id, scopes
+  and `http://localhost:54545/callback` redirect, `code=true`; a JSON exchange
+  that carries `state`; plan, email and organisation from `/api/oauth/profile`
+  and models from `/v1/models`. The paste may be the address (state as a
+  parameter, after the code, or in the fragment), a `code#state`, or a bare
+  code.
+- **ChatGPT** (`openai.ts`), from Codex 0.170.0's login crate: Codex's client
+  id, scopes, `id_token_add_organizations`, `codex_cli_simplified_flow` and
+  `originator=codex_cli_rs`, returning to `http://localhost:1455/auth/callback`;
+  a form exchange without `state`. The login keeps the ID token, whose claims
+  give the email, the plan (`chatgpt_plan_type`, shown with Codex's names) and
+  the workspace (`chatgpt_account_id`); an account is the person within the
+  workspace (`chatgpt_user_id/chatgpt_account_id`), so two people of one
+  Business workspace are two accounts. Models come from
+  `<ChatGPT backend>/codex/models?client_version=0.170.0` and the workspace's
+  name from `/wham/accounts/check`, both with `chatgpt-account-id`. The paste
+  is read as CLIProxyAPI reads a callback (with or without `http://`, or only
+  its query); a bare code is refused, since ChatGPT's page never shows one and
+  its state could not be checked.
+
+Nothing listens on either return address: each CLI does, on its own computer,
+and the server cannot open a port. So after signing in, the browser ends on a
+page that fails to load, and the person copies the whole address from the
+address bar and pastes it. CLIProxyAPI avoids the paste on its own computer
+with a forwarder on those ports; Tokamak would need the same in the Runner
+(`design/agent-proxy.md`, "Known limits").
 
 `finishSignIn` claims the sign-in row first, so a second paste while one is
-being exchanged gets `Busy` and changes nothing. It exchanges the code (JSON
-with `state`), reads the plan, email and organisation from
-`/api/oauth/profile` and the models from `/v1/models`, and stores the login in
-`logins` in the same transaction that ends the sign-in. A cancel that lands
-while Claude answers wins, and nothing is stored. A sign-in nobody finishes
+being exchanged gets `Busy` and changes nothing. It exchanges the code, reads
+the company's details, and stores the login in `logins` in the same
+transaction that ends the sign-in. A cancel that lands while the company
+answers wins, and nothing is stored. A sign-in nobody finishes
 within 15 minutes is listed as `expired`, cannot finish, and is deleted by the
 next start, cancel or finish. Server actions have no `crypto.subtle`, so
 `pkce.ts` computes the S256 challenge itself.
@@ -62,10 +86,15 @@ next start, cancel or finish. Server actions have no `crypto.subtle`, so
 `logins:fresh` (internal) is the one way to a usable login: it renews the
 login when it runs out within five minutes, and the proxy will call it before
 every request. Renewal is claimed on the login row, so one call at a time
-sends a refresh token to Claude; a caller that loses the claim uses the stored
-login while it still works, or waits a few seconds for the new one. A
-renewal Claude refuses (HTTP 400 or 401 from the token endpoint) deletes the
-login and turns the account "Signed out"; `startSignIn` with `repair` then
+sends a refresh token to the company; a caller that loses the claim uses the
+stored login while it still works, or waits a few seconds for the new one.
+Only a definite refusal signs out: for Claude HTTP 400 or 401 from the token
+endpoint; for ChatGPT, as Codex decides it, a 401, a 400 `invalid_grant`, or
+the codes `refresh_token_expired`, `refresh_token_reused` or
+`refresh_token_invalidated` (a ChatGPT renewal is JSON with
+`refresh_reason: "proactive_expiry"`, and keeps the old refresh and ID token
+when none comes back). A refusal deletes the login and turns the account
+"Signed out"; `startSignIn` with `repair` then
 signs the same subscription in again in place. A 429 waits for its
 `Retry-After`; 403, 5xx, network errors and unreadable answers wait one
 minute, doubling up to 30 minutes, and the account stays signed in. A plugin's
@@ -77,7 +106,8 @@ is open. The internal functions the proxy will call take the member as
 ## Tables
 
 `subscriptions`, `accounts` (one login at the company, by its account id),
-`logins` (access and refresh token, expiry, renewal claim and next try) and
+`logins` (access and refresh token, ChatGPT's ID token, expiry, renewal claim
+and next try) and
 `signIns` (verifier, `state`, link, an optional subscription to repair, a
 finish claim). Every row has the `owner` member
 id. Logins sit in ordinary tables: there is no secret store yet (TKM-292), so
@@ -101,7 +131,8 @@ server action reaches the fake using its installation `.env.local`. The
 shipped artifact has neither the action nor the loopback grant. The sign-in
 test (`tests/sign-in.test.ts`) installs chat, ai, basic-auth, agent-proxy and
 ai-profiles on a real shared server the same way and drives the Profiles
-screen's functions against the fake, once for each server build it finds
+screen's functions against the fake (`tests/chatgpt-sign-in.test.ts` does the
+same for ChatGPT), once for each server build it finds
 (`target/debug` and the cloud build in `target/cloud/debug`). Build the native
 harness once to exercise these tests:
 
@@ -148,7 +179,10 @@ try {
 - `address` is a loopback origin on an OS assigned port; `addresses` has separate
   Anthropic and OpenAI routes. Both also accept an optional
   `/plugins/agent-proxy/<set>` prefix.
-- `addAccount(company, id, { signIn, strict })` registers synthetic credentials.
+- `addAccount(company, id, { signIn, strict, plan, workspace })` registers
+  synthetic credentials. For OpenAI, `plan` is the ID token's
+  `chatgpt_plan_type` (default `plus`) and `workspace` the name
+  `/wham/accounts/check` gives (none for a personal account).
   Choose the next authorize account with `fake.nextSignIn(id)`. Set the
   account's `signIn` to `success`, `reject-code`, `expired`, `refuse-renewal`,
   `unavailable` (HTTP 503 from the token endpoint) or `limited` (HTTP 429,
