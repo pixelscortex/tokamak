@@ -1,0 +1,27 @@
+e2e/browser/desktop.ts
+  s_503e9e7253d05e::t_bfe107c6225aa4 56-57,83-84,88-95,97
+e2e/browser/screens.spec.ts
+  s_503e9e7253d05e::t_bfe107c6225aa4 356
+plugins/ai-profiles/src/client/ui/add-dialog.tsx
+  s_503e9e7253d05e::t_5eed6a9dee6a59 3,343-351,360-365,371
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_503e9e7253d05e::t_92124d7b319908 160-166
+plugins/ai-profiles/tests/desktop-sign-in.test.tsx
+  s_503e9e7253d05e::t_92124d7b319908 133-141,163-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da27e0acaf82b6836ca4d7e9da847d334c77ca75",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
