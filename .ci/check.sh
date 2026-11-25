@@ -89,6 +89,7 @@ case "$1" in
   ts)
     proto run bun -- run typecheck
     moon run sdk:test build:test runtime:test ui:test chat:test ai:test app:test app:web-build
+    proto run bun -- run --cwd plugins/code test
     proto run bun -- test ./.ci/*.test.ts
     ;;
   rust)
