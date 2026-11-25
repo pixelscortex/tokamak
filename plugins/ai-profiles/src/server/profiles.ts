@@ -266,6 +266,24 @@ export const forgetSubscription = internalMutation({
 });
 
 /**
+ * The caller's profiles that hold `subscription` (an agent-proxy id, in either
+ * spelling; compared by `subscriptionKey`), for the subscription details'
+ * "Used by" and the remove confirmation. Hidden entries count: the profile
+ * still holds it. Threads are not counted yet (TKM-266 records which thread
+ * uses which profile), so `threads` is 0.
+ */
+export const using = internalQuery({
+  args: { subscription: v.string() },
+  handler: async (ctx, args) => {
+    const key = subscriptionKey(args.subscription);
+    return (await rowsOf(ctx, ownerOf(ctx.auth)))
+      .filter((row) => keysOf(row).includes(key))
+      .sort((a, b) => a._creationTime - b._creationTime)
+      .map((row) => ({ id: row._id as string, code: row.code, name: row.name, threads: 0 }));
+  },
+});
+
+/**
  * What a turn on this profile may use when it starts (TKM-266): the
  * caller's profile with its subscriptions in use order, only the enabled ones
  * that `agent-proxy` lists now. The picker lists profiles with `list`. The first is used first. Signed-out and limited accounts are

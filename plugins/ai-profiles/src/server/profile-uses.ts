@@ -1,12 +1,13 @@
+import type { MutationContext, QueryContext } from "@tokamak/sdk";
+import { internal } from "./_generated/internal";
+
 /**
- * The one place this plugin's subscription screens learn about profiles.
- *
- * Profiles (TKM-264) are built in parallel and are not in this checkout yet.
- * The subscription details ("Used by") and the remove confirmation ("taken
- * out of …") read `profilesUsing`, and removing a subscription calls
- * `subscriptionRemoved` in the same transaction. Wiring profiles in is a
- * change to these two bodies only: read the profiles whose ordered
- * subscriptions hold `subscription`, and take it out of each.
+ * The one place this plugin's subscription screens learn about profiles. The
+ * subscription details ("Used by") and the remove confirmation ("taken out of
+ * …") read `profilesUsing`, and removing a subscription calls
+ * `subscriptionRemoved` in the same transaction. Both go to `profiles.ts`,
+ * which owns the profiles table and its one spelling of subscription ids
+ * (`subscriptionKey`).
  *
  * `agent-proxy` never learns the word "profile": it removes the subscription,
  * and this plugin updates its own profiles.
@@ -18,29 +19,26 @@ export interface ProfileUse {
   /** The 4-character code, such as "ACME". */
   readonly code: string;
   readonly name: string;
-  /** How many threads use the profile. */
+  /** How many threads use the profile: 0 until threads record a profile (TKM-266). */
   readonly threads: number;
 }
 
+type Reader = Pick<QueryContext<never>, "runQuery">;
+type Writer = Pick<MutationContext<never>, "runMutation">;
+
 /**
  * The caller's profiles that hold `subscription` (an agent-proxy subscription
- * id). None yet. It must filter by the calling member (`ctx.auth.user.id`):
- * profiles belong to one person, and another member's must never show.
+ * id). Only the calling member's: `profiles:using` reads by `ctx.auth`.
  */
-export async function profilesUsing<C extends { db: unknown }>(
-  _ctx: C,
-  _subscription: string,
-): Promise<ProfileUse[]> {
-  return [];
+export async function profilesUsing(ctx: Reader, subscription: string): Promise<ProfileUse[]> {
+  return ctx.runQuery(internal.profiles.using, { subscription });
 }
 
 /**
- * Takes a removed subscription out of the caller's profiles. Nothing to do yet.
- * It runs inside `manage:remove`'s transaction and must throw when it fails:
- * a throw rolls back the removal in agent-proxy as well, a returned failure
- * would not.
+ * Takes a removed subscription out of the caller's profiles, inside
+ * `manage:remove`'s transaction. `profiles:forgetSubscription` throws when it
+ * cannot finish, and the throw rolls back the removal in agent-proxy as well.
  */
-export async function subscriptionRemoved<C extends { db: unknown }>(
-  _ctx: C,
-  _subscription: string,
-): Promise<void> {}
+export async function subscriptionRemoved(ctx: Writer, subscription: string): Promise<void> {
+  await ctx.runMutation(internal.profiles.forgetSubscription, { subscription });
+}

@@ -4,9 +4,11 @@ type References = {
   readonly "profiles": {
     readonly "forgetSubscription": ReferenceFromDefinition<typeof import("../profiles")["forgetSubscription"]>;
     readonly "inUseOrder": ReferenceFromDefinition<typeof import("../profiles")["inUseOrder"]>;
+    readonly "using": ReferenceFromDefinition<typeof import("../profiles")["using"]>;
   };
 };
 export const internal: References = createApi("ai-profiles", [
   "profiles:forgetSubscription",
   "profiles:inUseOrder",
+  "profiles:using",
 ]);

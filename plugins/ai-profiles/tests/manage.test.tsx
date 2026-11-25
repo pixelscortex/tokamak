@@ -320,3 +320,16 @@ test("a subscription whose plan is unknown is titled by its product and says so 
   const check = within(card).getByRole("button", { name: "Check Claude again" });
   expect(check.parentElement?.parentElement?.textContent).toMatch(/plan unknown/);
 });
+
+test("the Profiles section goes with the cards while a subscription's details are open", async () => {
+  const user = userEvent.setup({ document });
+  mount();
+  const card = await screen.findByRole("article", { name: "Claude Team, Acme" });
+  expect(await screen.findByRole("region", { name: "Profiles" })).toBeTruthy();
+  await user.click(within(card).getByRole("button", { name: "Claude Team details" }));
+  await screen.findByRole("region", { name: "Claude Team details" });
+  expect(screen.queryByRole("region", { name: "Profiles" })).toBeNull();
+  const header = screen.getByRole("banner", { name: "Page header" });
+  await user.click(within(header).getByRole("button", { name: "Profiles" }));
+  expect(await screen.findByRole("region", { name: "Profiles" })).toBeTruthy();
+});

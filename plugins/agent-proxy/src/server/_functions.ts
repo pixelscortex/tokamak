@@ -42,7 +42,10 @@ type Table = "subscriptions" | "accounts" | "signIns";
  * subscription id must never cancel a sign-in, nor a sign-in id get a label.
  */
 export function idIn<T extends Table>(table: T, value: string): Id<T> | null {
-  return new RegExp(`^(?:agent-proxy/)?${table}:[A-Za-z0-9_-]+$`).test(value) ? (value as Id<T>) : null;
+  if (!new RegExp(`^(?:agent-proxy/)?${table}:[A-Za-z0-9_-]+$`).test(value)) return null;
+  // Either spelling is accepted; rows carry the plugin-qualified one, and `db.get` checks the id it
+  // answers for against the one asked, so the short spelling is qualified here.
+  return (value.startsWith("agent-proxy/") ? value : `agent-proxy/${value}`) as Id<T>;
 }
 
 /** The plain answer for an id that is malformed, of another table, gone, or another member's. */

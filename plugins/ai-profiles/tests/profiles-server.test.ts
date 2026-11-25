@@ -10,15 +10,22 @@ import { api } from "../src/server/_generated/api";
 // sign-in. Each test checks what a person can see: the tables stay out of it.
 // Runs once per server build that is built (see agent-proxy's sign-in tests).
 //
-// agent-proxy cannot remove a subscription yet (TKM-265), so the installed copy
-// here stops listing one labelled "Removed": to ai-profiles that is the same as
-// the subscription being hidden. And the installed copy of ai-profiles makes
-// `forgetSubscription` public, so a window can stand in for the removal flow
-// that will call it.
+// A subscription is removed for real, with the subscription screens' Remove
+// (`manage:remove`, TKM-265), which takes it out of every profile in the same
+// transaction. Only the "hidden, then back" rule still needs a stand-in: there
+// is no other way to make agent-proxy stop listing a subscription and list it
+// again, so the installed copy here stops listing one labelled "Removed".
 
-const removal = createApi<{
-  profiles: { forgetSubscription: FunctionReference<"mutation", { subscription: string }, number> };
-}>("ai-profiles", ["profiles:forgetSubscription"]);
+const manage = createApi<{
+  manage: {
+    remove: FunctionReference<"mutation", { id: string }, null | { failed: true; kind: string }>;
+    usedBy: FunctionReference<
+      "query",
+      { id: string },
+      { id: string; code: string; name: string; threads: number }[]
+    >;
+  };
+}>("ai-profiles", ["manage:remove", "manage:usedBy"]);
 
 /** The other spelling agent-proxy accepts for the same subscription id. */
 const otherForm = (id: string) =>
@@ -75,11 +82,6 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
         {
           find: "subscriptions: subscriptions.sort(",
           replace: 'subscriptions: subscriptions.filter((row) => row.label !== "Removed").sort(',
-        },
-        {
-          plugin: "ai-profiles",
-          find: "var forgetSubscription = internalMutation2(",
-          replace: "var forgetSubscription = mutation2(",
         },
       ],
     });
@@ -168,23 +170,30 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     expect(await shown()).toEqual([[b, a, hidden, c], [hidden]]);
   });
 
-  test("forgetSubscription deletes it from every profile of the calling member, and no one else's", async () => {
+  test("removing a subscription takes it out of every profile of its owner, and another member cannot", async () => {
     const gone = subs[2]!;
     const holding = async () =>
       (await list(owner)).filter((p) => p.subscriptions.includes(gone)).map((p) => p.code);
     await owner.mutation(api.profiles.add, { profile: (await list(owner))[0]!.id, subscription: gone });
     const before = await holding();
     expect(before.length).toBeGreaterThan(1);
-    // Another member's call reaches none of the owner's profiles.
-    expect(await (await member()).mutation(removal.profiles.forgetSubscription, { subscription: gone })).toBe(
-      0,
+    // "Used by" in the details and the remove dialog name these profiles.
+    expect((await owner.query(manage.manage.usedBy, { id: gone })).map((use) => use.code).sort()).toEqual(
+      [...before].sort(),
     );
+    // Another member's Remove reaches neither the subscription nor the owner's profiles.
+    expect(await (await member()).mutation(manage.manage.remove, { id: gone })).toMatchObject(
+      plain("NotFound"),
+    );
+    expect(await (await member()).query(manage.manage.usedBy, { id: gone })).toEqual([]);
     expect(await holding()).toEqual(before);
-    // The owner's, in the other spelling of the id, reaches all of them.
-    expect(await owner.mutation(removal.profiles.forgetSubscription, { subscription: otherForm(gone) })).toBe(
-      before.length,
-    );
+    // The owner's, in the other spelling of the id, removes it from Tokamak and from all of them.
+    expect(await owner.mutation(manage.manage.remove, { id: otherForm(gone) })).toBeNull();
     expect(await holding()).toEqual([]);
+    expect(
+      (await owner.query(api.subscriptions.list, {})).subscriptions.map((item) => item.id),
+    ).not.toContain(gone);
+    subs.pop();
   });
 
   test("either spelling of a subscription id is the same subscription", async () => {

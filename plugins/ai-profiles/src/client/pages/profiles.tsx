@@ -267,7 +267,10 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           </p>
         </Show>
       </section>
-      <ProfilesSection builder={builder} subscriptions={subscriptions()} />
+      {/* The details take the page: the Profiles section goes with the cards while they are open. */}
+      <Show when={openSubscription() === undefined}>
+        <ProfilesSection builder={builder} subscriptions={subscriptions()} />
+      </Show>
       <RemoveDialog subscriptions={subscriptions()} />
       <AddDialog
         step={step()}
