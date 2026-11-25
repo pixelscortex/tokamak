@@ -1,3 +1,4 @@
+import { fail } from "./functions";
 import type { ActionSignal } from "./host";
 import type { ActionTarget } from "./functions";
 // Correlation and subscription lifecycle are shared by both transports. Hosts
@@ -85,28 +86,34 @@ export class InProcessTransport implements ClientTransport {
     return this.sendAction(name, args, on, signal, true);
   }
 
-  private sendAction(
+  private async sendAction(
     name: string,
     args: JsonValue,
     on?: ActionTarget,
     signal?: ActionSignal,
     window?: true,
   ): Promise<JsonValue> {
-    return this.control(
-      (id) => ({
-        type: "action",
-        id,
-        name,
-        args,
-        ...(window && { window }),
-        ...(on === undefined ? {} : { on }),
-      }),
-      signal,
-    );
+    try {
+      return await this.control(
+        (id) => ({
+          type: "action",
+          id,
+          name,
+          args,
+          ...(window && { window }),
+          ...(on === undefined ? {} : { on }),
+        }),
+        signal,
+      );
+    } catch (error) {
+      if (!(error instanceof RemoteFunctionError) || error.kind !== "noMachine") throw error;
+      const value = fail("noMachine", null);
+      return window ? { destination: "result", value } : value;
+    }
   }
 
   /** Forward the continuation supplied by the Runner on its private socket. */
-  continueLocalCall(
+  async continueLocalCall(
     kind: "query" | "mutation" | "action",
     name: string,
     args: JsonValue,
@@ -115,19 +122,26 @@ export class InProcessTransport implements ClientTransport {
     window?: boolean,
     signal?: ActionSignal,
   ): Promise<JsonValue> {
-    return this.control(
-      (id) => ({
-        type: "localcall",
-        id,
-        name,
-        args,
-        kind,
-        ...parent,
-        ...(window ? { window } : {}),
-        ...(on === undefined ? {} : { on }),
-      }),
-      signal,
-    );
+    try {
+      return await this.control(
+        (id) => ({
+          type: "localcall",
+          id,
+          name,
+          args,
+          kind,
+          ...parent,
+          ...(window ? { window } : {}),
+          ...(on === undefined ? {} : { on }),
+        }),
+        signal,
+      );
+    } catch (error) {
+      if (kind !== "action" || !(error instanceof RemoteFunctionError) || error.kind !== "noMachine")
+        throw error;
+      const value = fail("noMachine", null);
+      return window ? { destination: "result", value } : value;
+    }
   }
 
   async plugins(): Promise<JsonValue> {

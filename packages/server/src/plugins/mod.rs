@@ -86,6 +86,7 @@ fn invalid(message: impl Into<String>) -> Error {
 mod artifact;
 mod assets;
 mod catalog;
+pub(crate) use catalog::runner_provider_routes;
 mod contracts;
 pub(crate) use contracts::LocalDataMethods;
 pub(crate) use contracts::MemberEvent;

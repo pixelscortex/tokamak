@@ -142,7 +142,7 @@ export function contract<T extends object>(
 ): Contract<T, "server">;
 export function contract<T extends object>(
   name: string,
-  options?: { place: ContractPlace; dataMethods?: true },
+  options?: { place?: ContractPlace; on?: "caller"; dataMethods?: true },
 ): Contract<T, "local"> | Contract<T, "server"> {
   return options?.place === "local" || options?.on === "caller"
     ? contractReference<T, "local">(

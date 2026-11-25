@@ -146,6 +146,19 @@ impl Catalog {
         Ok(())
     }
 
+    pub(crate) fn runner_contract_providers(
+        &self,
+        owner: &str,
+        declaration: &ContractDeclaration,
+    ) -> Vec<Value> {
+        self.order
+            .iter()
+            .flat_map(|plugin| {
+                runner_provider_routes(&self.plugins[plugin].manifest, owner, declaration)
+            })
+            .collect()
+    }
+
     pub fn metadata(&self) -> Value {
         let install_indexes = self
             .install_order
@@ -163,6 +176,12 @@ impl Catalog {
                 if let Some(Value::Array(providers)) = object.get_mut("contractProviders") {
                     providers.retain(|provider| provider["place"] == "local");
                 }
+            }
+            let routes = manifest.contracts.iter().filter(|key| key.place == ContractPlace::Local)
+                .map(|key| (key.name.clone(), json!(self.runner_contract_providers(id, key))))
+                .collect::<serde_json::Map<_, _>>();
+            if !routes.is_empty() {
+                value["runnerContractRoutes"] = Value::Object(routes);
             }
             value["revision"] = json!(self.revision);
             value["installOrder"] = json!(install_indexes[id]);
@@ -215,4 +234,49 @@ fn artifact_directory(root: &Path) -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+pub(crate) fn runner_provider_routes(
+    manifest: &Manifest,
+    owner: &str,
+    declaration: &ContractDeclaration,
+) -> Vec<Value> {
+    let plugin = &manifest.plugin.id;
+    if !manifest.plugin.declares_access_to(owner) {
+        return Vec::new();
+    }
+    let registrations: Vec<_> = manifest
+        .contract_providers
+        .iter()
+        .filter(|entry| {
+            entry.owner == owner
+                && entry.name == declaration.name
+                && entry.place == ContractPlace::Local
+        })
+        .collect();
+    if registrations
+        .iter()
+        .any(|entry| entry.declaration_hash != declaration.declaration_hash)
+    {
+        return vec![json!({"plugin":plugin, "incompatible":true})];
+    }
+    let Some((entry_hash, code_hash)) = crate::actions::runner_hashes(manifest) else {
+        return Vec::new();
+    };
+    registrations
+        .into_iter()
+        .map(|registration| {
+            let mut route = json!({
+                "plugin":plugin,
+                "owner":owner,
+                "own":plugin == owner,
+                "registration":registration.registration,
+                "build":format!("{entry_hash}:{code_hash}"),
+            });
+            if let Some(reason) = &registration.unavailable {
+                route["unavailable"] = json!(reason);
+            }
+            route
+        })
+        .collect()
 }

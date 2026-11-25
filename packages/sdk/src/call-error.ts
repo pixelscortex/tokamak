@@ -3,7 +3,14 @@ import type { CallErrorDetails } from "./protocol";
 export type CallError = string | ({ message: string } & CallErrorDetails);
 import type { JsonValue } from "./values";
 
+const remoteFunctionError = Symbol.for("tokamak.remoteFunctionError");
+
+export function isRemoteFunctionError(value: unknown): value is RemoteFunctionError {
+  return value instanceof Error && remoteFunctionError in value;
+}
+
 export class RemoteFunctionError extends Error {
+  readonly [remoteFunctionError] = true;
   declare readonly plugin?: string;
   declare readonly hook?: string;
   declare readonly stage?: string;

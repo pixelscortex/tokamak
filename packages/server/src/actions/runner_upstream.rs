@@ -2,19 +2,21 @@ use super::{ActionContext, Loaded, OpRegistry, RunnerSlot, Supervisor, operation
 use crate::{
     identity::CallNote,
     plugins::{
-        ContractDeclaration, ContractPlace, ContractRegistration, LocalDataMethods, Manifest,
+        ContractDeclaration, ContractPlace, LocalDataMethods, Manifest, runner_provider_routes,
     },
     service::Command,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-pub struct RunnerActionUpstream {
+pub(crate) struct ActionOperations {
     pub ops: Arc<OpRegistry>,
     scope: Option<Box<Scope>>,
     environment: Arc<crate::ActionEnvironment>,
 }
+
+pub struct RunnerActionUpstream(pub(super) ActionOperations);
 
 pub struct RunnerContractRoute {
     pub entry_hash: String,
@@ -31,7 +33,7 @@ struct Scope {
     runner: Arc<RunnerSlot>,
 }
 
-impl RunnerActionUpstream {
+impl ActionOperations {
     pub(super) fn new(
         ops: Arc<OpRegistry>,
         generation: Option<Arc<Loaded>>,
@@ -57,69 +59,64 @@ impl RunnerActionUpstream {
             environment,
         }
     }
-
-    pub fn redact(&self, error: String) -> String {
-        self.environment.redact(error)
+}
+impl RunnerActionUpstream {
+    pub fn operations(&self) -> &OpRegistry {
+        &self.0.ops
     }
 
-    pub fn local_contracts(&self, payload: &Value) -> Result<Value, String> {
-        let scope = self.scope.as_ref().ok_or("Missing plugin scope")?;
+    pub fn redact(&self, error: String) -> String {
+        self.0.environment.redact(error)
+    }
+
+    pub async fn local_contracts(&self, payload: &Value) -> Result<Value, String> {
+        let scope = self.0.scope.as_ref().ok_or("Missing plugin scope")?;
         let declaration = scope.declaration(payload)?;
-        let catalog = &scope.generation.catalog;
-        let mut providers = Vec::new();
-        for plugin in &catalog.order {
-            let manifest = &catalog.plugins[plugin].manifest;
-            let registrations: Vec<_> = scope.registrations(manifest, &declaration.name).collect();
-            if !registrations
-                .iter()
-                .all(|entry| entry.declaration_hash == declaration.declaration_hash)
-            {
-                providers.push(json!({"plugin":plugin, "incompatible":true}));
-                continue;
-            }
-            let Some((entry, code)) = runner_hashes(manifest) else {
-                continue;
-            };
-            for registration in registrations {
-                let mut provider = json!({
-                    "plugin":plugin,
-                    "owner":scope.owner,
-                    "own":plugin == &scope.owner,
-                    "registration":registration.registration,
-                    "build":format!("{entry}:{code}"),
-                });
-                if let Some(reason) = &registration.unavailable {
-                    provider["unavailable"] = json!(reason);
-                }
-                providers.push(provider);
-            }
-        }
+        let current = scope.current().await?;
+        let mut providers = if scope.compatible_declaration(&current, declaration) {
+            current
+                .catalog
+                .runner_contract_providers(&scope.owner, declaration)
+        } else {
+            Vec::new()
+        };
+        let own = runner_provider_routes(
+            &scope.generation.catalog.plugins[&scope.owner].manifest,
+            &scope.owner,
+            declaration,
+        );
+        let index = providers
+            .iter()
+            .position(|route| route["plugin"] == scope.owner);
+        providers.retain(|route| route["plugin"] != scope.owner);
+        providers.splice(index.unwrap_or(0)..index.unwrap_or(0), own);
         Ok(Value::Array(providers))
     }
 
-    pub fn local_contract(
+    pub async fn local_contract(
         &self,
         label: &str,
         payload: &Value,
     ) -> Result<RunnerContractRoute, String> {
-        let scope = self.scope.as_ref().ok_or("Missing plugin scope")?;
+        let scope = self.0.scope.as_ref().ok_or("Missing plugin scope")?;
         let invalid = || "Invalid local contract route".to_owned();
         let declaration = scope.declaration(payload)?;
         let plugin = payload["plugin"].as_str().ok_or_else(invalid)?;
-        let manifest = &scope
-            .generation
-            .catalog
-            .plugins
-            .get(plugin)
-            .ok_or_else(invalid)?
-            .manifest;
+        let current = scope.current().await?;
+        let generation = if plugin == scope.owner {
+            &scope.generation
+        } else if scope.compatible_declaration(&current, declaration) {
+            &current
+        } else {
+            return Err(invalid());
+        };
+        let manifest = scope
+            .provider_manifest(&current, plugin)
+            .ok_or_else(invalid)?;
         let registration = payload["registration"].as_str().ok_or_else(invalid)?;
-        let mut providers = scope.registrations(manifest, &declaration.name);
-        if !providers
-            .clone()
-            .any(|candidate| candidate.registration == registration)
-            || !providers
-                .all(|candidate| candidate.declaration_hash == declaration.declaration_hash)
+        if !runner_provider_routes(manifest, &scope.owner, declaration)
+            .iter()
+            .any(|route| route["registration"] == registration)
         {
             return Err(invalid());
         }
@@ -129,12 +126,12 @@ impl RunnerActionUpstream {
             .enter(label, None, &payload["args"])
             .map_err(|error| error.to_string())?;
         let environment = Arc::new(crate::environment::Snapshot::new(
-            Some(&scope.generation),
+            Some(generation),
             Some(plugin),
         ));
         let upstream = operations(
             scope.commands.clone(),
-            Some(scope.generation.clone()),
+            Some(generation.clone()),
             Some(plugin.to_owned()),
             environment,
             scope.process.clone(),
@@ -147,12 +144,47 @@ impl RunnerActionUpstream {
         Ok(RunnerContractRoute {
             entry_hash: entry_hash.to_owned(),
             code_hash: code_hash.to_owned(),
-            upstream,
+            upstream: RunnerActionUpstream(upstream),
         })
     }
 }
 
 impl Scope {
+    async fn current(&self) -> Result<Arc<Loaded>, String> {
+        let (reply, wait) = tokio::sync::oneshot::channel();
+        self.commands
+            .upgrade()
+            .ok_or("Server closed")?
+            .try_send(Command::CurrentPlugins(reply))
+            .map_err(|error| error.to_string())?;
+        wait.await
+            .map_err(|_| "Server closed")?
+            .ok_or_else(|| "Plugin catalog unavailable".into())
+    }
+
+    fn compatible_declaration(&self, current: &Loaded, declaration: &ContractDeclaration) -> bool {
+        current
+            .catalog
+            .plugins
+            .get(&self.owner)
+            .is_some_and(|plugin| {
+                plugin.manifest.contracts.iter().any(|key| {
+                    key.place == ContractPlace::Local
+                        && key.name == declaration.name
+                        && key.declaration_hash == declaration.declaration_hash
+                })
+            })
+    }
+
+    fn provider_manifest<'a>(&'a self, current: &'a Loaded, plugin: &str) -> Option<&'a Manifest> {
+        let loaded = if plugin == self.owner {
+            &self.generation
+        } else {
+            current
+        };
+        Some(&loaded.catalog.plugins.get(plugin)?.manifest)
+    }
+
     fn declaration(&self, payload: &Value) -> Result<&ContractDeclaration, String> {
         if payload
             .get("owner")
@@ -172,22 +204,9 @@ impl Scope {
         }
         Ok(declaration)
     }
-
-    fn registrations<'a>(
-        &'a self,
-        manifest: &'a Manifest,
-        name: &'a str,
-    ) -> impl Iterator<Item = &'a ContractRegistration> + Clone {
-        manifest.contract_providers.iter().filter(move |entry| {
-            manifest.plugin.declares_access_to(&self.owner)
-                && entry.owner == self.owner
-                && entry.name == name
-                && entry.place == ContractPlace::Local
-        })
-    }
 }
 
-pub(super) fn runner_hashes(manifest: &Manifest) -> Option<(&str, &str)> {
+pub(crate) fn runner_hashes(manifest: &Manifest) -> Option<(&str, &str)> {
     let local = manifest.entries.local.as_ref()?;
     Some((
         manifest.hashes.get(&local.entry)?,

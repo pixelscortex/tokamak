@@ -303,7 +303,6 @@ impl Supervisor {
         source: &Source,
         run: impl FnOnce(CancellationToken) -> crate::RunnerFuture,
     ) -> Result<Value, String> {
-        let _permits = self.admit(source, false)?;
         if source.retired.is_cancelled() {
             return Err("Plugin action cancelled by reload".into());
         }

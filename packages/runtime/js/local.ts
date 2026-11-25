@@ -1,3 +1,4 @@
+import { RemoteFunctionError } from "../../sdk/src/call-error";
 import {
   authCaller,
   fail,
@@ -19,11 +20,33 @@ const RECHECK_CAPACITY = 64;
 /** Connecting to the local Runner failed before any call was admitted. */
 export class RunnerUnavailable extends Error {}
 
+function unavailable(capability: "serverContracts" | "privateFunctions"): never {
+  throw new RemoteFunctionError({
+    message: `The window Runner cannot use ${capability} through a public workspace session`,
+    plugin: "",
+    hook: "",
+    stage: "runner",
+    kind: "runnerCapabilityUnavailable",
+    data: capability,
+  });
+}
+
 export interface LocalArtifact {
   id: string;
   entryHash: string;
   codeHash: string;
 }
+
+type RunnerContractRoute =
+  | { plugin: string; incompatible: true }
+  | {
+      plugin: string;
+      owner: string;
+      own: boolean;
+      registration: string;
+      build: string;
+      unavailable?: string;
+    };
 
 type Manifest = {
   plugin: {
@@ -40,6 +63,7 @@ type Manifest = {
     declarationHash: string;
     dataMethods?: unknown;
   }[];
+  runnerContractRoutes?: Readonly<Record<string, readonly RunnerContractRoute[]>>;
   contractProviders?: readonly {
     name: string;
     place: "local" | "server";
@@ -204,7 +228,10 @@ export class LocalFunctions implements LocalTransport {
         () => this.catalog,
         (catalog, caller, operation, payload, context) =>
           this.serverCall(catalog, caller ?? id, operation, payload, context),
-        (catalog, caller, key, allow) => this.contractProviders(catalog, caller ?? id, id, key, allow),
+        async (catalog, caller, key, allow, action) => {
+          if (action) await this.ensureCatalog();
+          return this.contractProviders(catalog, caller ?? id, id, key, allow, action);
+        },
         () => {
           if (this.workers.get(id) === current) this.workers.delete(id);
           this.draining.delete(current);
@@ -271,6 +298,7 @@ export class LocalFunctions implements LocalTransport {
     worker: string,
     payload: JsonValue,
     allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
+    action: boolean,
   ): JsonValue {
     const { name, owner } = payload as { name: string; owner?: string };
     if (owner !== undefined && owner !== caller)
@@ -282,6 +310,26 @@ export class LocalFunctions implements LocalTransport {
       throw new Error(
         `Local contract ${caller}/${name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
       );
+    if (action) {
+      const current = this.catalog.plugins.find(({ plugin }) => plugin.id === caller);
+      const compatible = current?.contracts?.some(
+        (key) =>
+          key.name === name && key.place === "local" && key.declarationHash === declaration.declarationHash,
+      );
+      const routes = compatible ? (current?.runnerContractRoutes?.[name] ?? []) : [];
+      const own = (definingPlugin?.runnerContractRoutes?.[name] ?? []).filter(
+        (route) => route.plugin === caller,
+      );
+      const providers = routes.filter((route) => route.plugin !== caller);
+      const index = routes.findIndex((route) => route.plugin === caller);
+      providers.splice(Math.max(0, index), 0, ...own);
+      return providers.map((route) => {
+        if ("incompatible" in route) return route;
+        const [entryHash, codeHash] = route.build.split(":");
+        allow(route.owner, name, route.registration, { id: route.plugin, entryHash, codeHash });
+        return { ...route, own: route.plugin === worker };
+      });
+    }
     const providers = [];
     for (const manifest of catalog.plugins) {
       const plugin = manifest.plugin.id;
@@ -344,8 +392,7 @@ export class LocalFunctions implements LocalTransport {
         this.authRead = undefined;
       }));
     }
-    if (action && operation === "contract.list")
-      return fail("runnerCapabilityUnavailable", "serverContracts");
+    if (action && operation === "contract.list") unavailable("serverContracts");
     const {
       name,
       args,
@@ -361,7 +408,7 @@ export class LocalFunctions implements LocalTransport {
     if (slash < 1) throw new Error("Expected a plugin-qualified server function");
     const id = name.slice(0, slash);
     if (action && operation === "plugin.call" && !catalog.functions?.some((fn) => fn.name === name))
-      return fail("runnerCapabilityUnavailable", "privateFunctions");
+      unavailable("privateFunctions");
     if (id !== callerId) {
       // The session can call more functions than a plugin declares. Preserve
       // the plugin's dependency and public export boundary on this bridge.
@@ -462,7 +509,8 @@ class LocalWorker {
       caller: string | undefined,
       key: JsonValue,
       allow: (owner: string, name: string, registration: string, artifact: LocalArtifact) => void,
-    ) => JsonValue,
+      action: boolean,
+    ) => Promise<JsonValue>,
     private readonly retire: () => void,
   ) {
     this.endpoint = launch(
@@ -599,13 +647,14 @@ class LocalWorker {
         }
         const value =
           frame.name === "local.contracts"
-            ? this.contractProviders(
+            ? await this.contractProviders(
                 call.catalog,
                 frame.plugin,
                 frame.payload,
                 (owner, name, registration, artifact) => {
                   call.routes.set(routeKey(artifact.id, owner, name, registration), artifact);
                 },
+                call.action,
               )
             : await this.serverCall(call.catalog, frame.plugin, frame.name, frame.payload, {
                 continuation: frame.continuation,
@@ -620,7 +669,21 @@ class LocalWorker {
         if (new TextEncoder().encode(JSON.stringify(response)).length >= WORKER_FRAME_BYTES)
           throw new Error("Server result exceeds the plugin process's 1 MiB limit");
       } catch (error) {
-        response = { type: "opResult", id: frame.id, error: String(error).slice(0, 8192) };
+        response = {
+          type: "opResult",
+          id: frame.id,
+          error:
+            error instanceof RemoteFunctionError && error.kind
+              ? {
+                  message: error.message,
+                  plugin: error.plugin ?? "",
+                  hook: error.hook ?? "",
+                  stage: error.stage ?? "",
+                  kind: error.kind,
+                  data: error.data ?? null,
+                }
+              : String(error).slice(0, 8192),
+        };
       }
       if (this.calls.get(frame.call) === call && !call.cancelled) await (await this.endpoint).send(response);
     } else if (frame.type !== "log") {

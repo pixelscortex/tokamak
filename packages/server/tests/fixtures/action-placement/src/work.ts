@@ -61,8 +61,17 @@ export const callPrivate = action({
 export const wait = action({
   on: "caller",
   handler: async (ctx) => {
-    const process = ctx.proc(["/bin/sleep", "30"]);
-    await ctx.runMutation(api.work.store, { text: "waiting to be cancelled" });
+    const process = ctx.proc(["/bin/sh", "-c", "echo $$; exec /bin/sleep 30"]);
+    for await (const pid of process.stdout) {
+      await ctx.runMutation(api.work.store, { text: pid });
+    }
     return process.exited;
   },
+});
+
+export const marker = query({ handler: (): string => "unhooked" });
+
+export const hookedQuery = action({
+  on: "caller",
+  handler: (ctx) => ctx.runQuery(api.work.marker, {}),
 });

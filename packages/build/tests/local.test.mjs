@@ -293,3 +293,51 @@ test("caller action placement must be literal in the definition", async () => {
     );
   });
 }, 30_000);
+
+test("caller-only Node bindings cannot be used while loading an action module", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import { homedir as getHome } from "node:os";
+      export function Window() {}
+      const home = getHome();
+      export const run = action({ on: "caller", handler: () => home });
+      `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/mixed\.ts uses getHome at module load\. Move it inside the handler/,
+    );
+  });
+}, 30_000);
+
+test("caller contracts reject server definitions as methods", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/contracts.ts"),
+      `import { contract } from "@tokamak/sdk";
+      export const runner = contract<{ run(): string }>("runner", { on: "caller" });`,
+    );
+    for (const definition of ["action", "query", "mutation"]) {
+      await writeFile(
+        join(folder, "src/mixed.ts"),
+        `
+        import { ${definition}, provide } from "@tokamak/sdk";
+        import { runner } from "./contracts";
+        export function Window() {}
+        export const provider = provide(runner, { run: ${definition}({ handler: () => "server" }) });
+        `,
+      );
+      const result = build(folder);
+      assert.notEqual(result.status, 0, definition);
+      assert.match(
+        result.stderr + result.stdout,
+        /contract "runner" method "run" requires local\(\) or action/,
+      );
+    }
+  });
+}, 30_000);

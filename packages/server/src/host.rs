@@ -300,13 +300,7 @@ fn operations(
                     target.check_anonymous_scope(&owner)?;
                 }
 
-                let child_note = note
-                    .enter(name, Some(&target.args), &args)
-                    .map_err(|error| engine::CallError {
-                        message: error.to_string(),
-                        details: None,
-                        limit: Some(engine::CallLimit::Depth),
-                    })?;
+                let child_note = note.enter(name, Some(&target.args), &args)?;
 
                 let child_scope = CallScope::default();
                 let ops = operations(

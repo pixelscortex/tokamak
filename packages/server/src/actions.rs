@@ -17,8 +17,9 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 
 mod runner_upstream;
+use runner_upstream::ActionOperations;
 pub use runner_upstream::RunnerActionUpstream;
-use runner_upstream::runner_hashes;
+pub(crate) use runner_upstream::runner_hashes;
 
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
 type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
@@ -79,6 +80,22 @@ pub(crate) enum MachineFailure {
 }
 
 impl MachineFailure {
+    pub fn wire_error(self) -> crate::protocol::CallError {
+        use crate::protocol::{CallError, CallErrorDetails, StructuredCallError};
+        match self {
+            Self::NoMachine => CallError::Structured(Box::new(StructuredCallError {
+                message: "This needs a machine".into(),
+                details: CallErrorDetails {
+                    plugin: String::new(),
+                    hook: String::new(),
+                    stage: "runner".into(),
+                    kind: "noMachine".into(),
+                    data: Json::Null,
+                },
+            })),
+        }
+    }
+
     pub fn value(self) -> Json {
         match self {
             Self::NoMachine => serde_json::json!({"failed":true,"kind":"noMachine","data":null}),
@@ -131,9 +148,8 @@ pub(crate) fn resolve(
 }
 
 impl Destination {
-    pub fn immediate_reply(&self, placement: Placement, note: &CallNote) -> Option<Json> {
+    pub fn immediate_reply(&self, note: &CallNote) -> Option<Json> {
         match self {
-            Self::Failed(error) => Some(placement.response(error.value())),
             Self::CallerWindowRunner {
                 plugin,
                 entry_hash,
@@ -153,7 +169,7 @@ impl Destination {
         source: Option<Arc<crate::host::action_process::Source>>,
         name: String,
         args: Json,
-        upstream: RunnerActionUpstream,
+        upstream: ActionOperations,
     ) -> Result<Json, String> {
         match self {
             Self::Server => {
@@ -181,7 +197,7 @@ impl Destination {
                             code_hash,
                             name,
                             args,
-                            upstream,
+                            upstream: RunnerActionUpstream(upstream),
                             retiring,
                         })
                     })
@@ -218,7 +234,7 @@ pub(crate) fn operations(
     environment: Arc<crate::environment::Snapshot>,
     process: Arc<Supervisor>,
     context: ActionContext,
-) -> Result<RunnerActionUpstream, engine::Error> {
+) -> Result<ActionOperations, engine::Error> {
     let mut ops = OpRegistry::new();
     context.note.register(&mut ops)?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
@@ -251,7 +267,7 @@ pub(crate) fn operations(
         )?;
         crate::plugins::register_contract_list(&mut ops, loaded.clone(), owner.clone())?;
     }
-    Ok(RunnerActionUpstream::new(
+    Ok(ActionOperations::new(
         Arc::new(ops),
         generation,
         owner,
@@ -371,18 +387,12 @@ fn register_plugin_call(
                     .map_err(|_| "server closed before plugin call completed")?
                     .map_err(Into::into);
             }
-            let note = note
-                .enter(name, Some(&target.args), &args)
-                .map_err(|error| error.to_string())?;
+            let note = note.enter(name, Some(&target.args), &args)?;
             let environment = Arc::new(crate::environment::Snapshot::new(
                 Some(&loaded),
                 Some(&target.owner),
             ));
-            let on = payload
-                .get("on")
-                .map(|on| serde_json::from_value(on.clone()))
-                .transpose()
-                .map_err(|_| "Invalid action target")?;
+            let on = requested_placement(&payload)?;
             let destination = resolve(
                 Some(&loaded),
                 Some(&target),
@@ -416,4 +426,12 @@ fn register_plugin_call(
     })?;
 
     Ok(())
+}
+
+fn requested_placement(payload: &Json) -> Result<Option<ActionTarget>, &'static str> {
+    payload
+        .get("on")
+        .map(|on| serde_json::from_value(on.clone()))
+        .transpose()
+        .map_err(|_| "Invalid action target")
 }

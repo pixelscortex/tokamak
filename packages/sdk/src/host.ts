@@ -155,12 +155,6 @@ export interface LocalChannel {
 
 export type RunnerCapability = "serverContracts" | "privateFunctions";
 
-export class RunnerCapabilityError extends Error {
-  constructor(readonly capability: RunnerCapability) {
-    super(`The window Runner cannot use ${capability} through a public workspace session`);
-  }
-}
-
 /** Keep operation call sites tied to the contract even though the bridge is erased. */
 export async function callHost<K extends HostOperation>(
   host: HostBridge,
@@ -171,15 +165,5 @@ export async function callHost<K extends HostOperation>(
   assertJson(payload, `${name} payload`);
   const result = await host.op(name, payload, signal);
   assertJson(result, `${name} result`);
-  if (
-    (name === "contract.list" || name === "plugin.call") &&
-    result &&
-    typeof result === "object" &&
-    !Array.isArray(result) &&
-    result.failed === true &&
-    result.kind === "runnerCapabilityUnavailable" &&
-    (result.data === "serverContracts" || result.data === "privateFunctions")
-  )
-    throw new RunnerCapabilityError(result.data);
   return result as HostOperations[K]["result"];
 }

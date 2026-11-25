@@ -83,6 +83,7 @@ impl Coordinator {
                 let _ = reply.send(result);
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::CurrentPlugins(reply) => drop(reply.send(self.plugins.clone())),
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }

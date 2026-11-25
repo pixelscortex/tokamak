@@ -11,13 +11,27 @@ import {
   runtimeExportNames,
 } from "./plugin-compiler.mjs";
 
+import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
 import { resultValidator } from "./result-validator.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
 const serverFunction = (kind) => kind !== "local";
-export const runnerFunction = (kind) => kind === "local" || kind === "action";
-export const runnerProvider = (provider) =>
-  localProvider(provider) || provider.methods.some((m) => action(m.kind));
+export function runnerFunction(kind, actionsOnly = false) {
+  return kind === "action" || (!actionsOnly && kind === "local");
+}
+export function runnerProvider(provider) {
+  return localProvider(provider) || provider.methods.some((method) => runnerFunction(method.kind, true));
+}
+
+export function runnerActionFiles(modules, providers, on) {
+  const action = (entry) => runnerFunction(entry.kind, true) && (on === undefined || entry.on === on);
+  return new Set([
+    ...[...modules].filter(([, exports]) => [...exports.values()].some(action)).map(([path]) => path),
+    ...providers
+      .filter((provider) => runnerProvider(provider) && provider.methods.some(action))
+      .map((p) => p.path),
+  ]);
+}
 const serverProvider = (provider) => provider.place === "server";
 const localProvider = (provider) => provider.place === "local";
 const action = (kind) => kind === "action";
@@ -201,15 +215,39 @@ export function functionPlacement(root, selected, namespace) {
       ),
     );
   }
-  const callerFiles = new Set([
-    ...[...modules]
-      .filter(([, exports]) => [...exports.values()].some((d) => d.on === "caller"))
-      .map(([path]) => path),
-    ...providers.filter((p) => p.methods.some((m) => m.on === "caller")).map((p) => p.path),
-  ]);
+  const callerFiles = runnerActionFiles(modules, providers, "caller");
   for (const path of callerFiles) {
     const file = program.getSourceFile(path);
     if (!file) continue;
+    const stubbed = new Set();
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+      if (!suppliedNodeModules.local.includes(nodeModule(statement.moduleSpecifier.text))) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly) continue;
+      const add = (binding) => {
+        if (binding) stubbed.add(checker.getSymbolAtLocation(binding));
+      };
+      add(clause.name);
+      const bindings = clause.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings)) add(bindings.name);
+      else for (const binding of bindings?.elements ?? []) if (!binding.isTypeOnly) add(binding.name);
+    }
+    function checkModuleLoad(node) {
+      if (ts.isImportDeclaration(node) || ts.isFunctionLike(node)) return;
+      if (
+        ts.isIdentifier(node) &&
+        !isDeclarationName(node) &&
+        stubbed.has(checker.getSymbolAtLocation(node))
+      ) {
+        throw new Error(
+          `Plugin import boundary: ${relative(root, path)} uses ${node.text} at module load. Move it inside the handler.`,
+        );
+      }
+      ts.forEachChild(node, checkModuleLoad);
+    }
+    if (stubbed.size) checkModuleLoad(file);
+
     function visit(node) {
       const specifier =
         (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) ||

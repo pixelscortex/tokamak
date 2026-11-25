@@ -182,17 +182,26 @@ as a person on an embedded Runner's machine uses that Runner, including for
 nested actions. For a shared workspace, the window forwards caller actions
 and their nested caller actions to its own Runner.
 
+Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
+Providers can implement its methods with `action({ on: "caller", handler })`
+or `local()`. Methods run inside the Runner with live input, including
+callbacks, signals, and channels. Existing `place: "local"` contracts still work.
+
 Both Runner routes support local contracts and their channels. On a shared
 workspace the window connects with the public client API, so private function
 calls and server contract discovery return `runnerCapabilityUnavailable`
 with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
-are available on the embedded Runner path.
+are available on the embedded Runner path. A Runner connected directly to
+its workspace server can make these calls; a shared-server window currently
+has the same limits as `local()`.
 
 Runner actions use the Runner's program scope and lifetime rules, including
 no fixed deadline. A Runner action resolves `ctx.env` grants from its
 installation on that machine. A call returns the typed failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
 and has none, or when it requests a file or program from the server action
-process.
+process. This includes calls to stubbed modules such as `node:path`,
+`node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their
+bindings inside the handler so the server bundle can load independently.
 
 ## Internal functions and expected failures
 

@@ -1,15 +1,48 @@
 import { action, provide } from "@tokamak/sdk";
-import { AGENT_TURN_PROTOCOL, openLocalChannel, type AgentTurnReport } from "@tokamak/sdk/agent-turn";
+import {
+  AGENT_TURN_PROTOCOL,
+  openLocalChannel,
+  type AgentTurnReport,
+  type Run,
+  type TurnResult,
+} from "@tokamak/sdk/agent-turn";
 import { agent } from "./contracts";
+import { api } from "./_generated/api";
+
+let observedAborts = 0;
 
 export const provider = provide(agent, {
   id: "fixture",
-  start: (run) =>
-    new Promise((resolve) => {
-      run.text("started");
-      run.onSteer((text) => run.text(text));
-      run.onStop(() => resolve({ sessionId: "fixture", stopped: true }));
-    }),
+  start: action({
+    on: "caller",
+    handler: async (ctx, run: Run) => {
+      if ((await ctx.env("FIXTURE_ACTION_PLACEMENT")) !== "on this machine")
+        throw new Error("Missing caller action environment in the provider");
+      return new Promise<TurnResult>((resolve) => {
+        run.text("started");
+        run.onSteer((text) => run.text(text));
+        run.onStop(() => resolve({ sessionId: "fixture", stopped: true }));
+      });
+    },
+  }),
+  wait: action({
+    on: "caller",
+    handler: async (ctx, { signal }: { signal: AbortSignal }) => {
+      const aborted = new Promise<void>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            observedAborts++;
+            resolve();
+          },
+          { once: true },
+        );
+      });
+      await ctx.runMutation(api.work.store, { text: "provider waiting on live signal" });
+      await aborted;
+    },
+  }),
+  signalCount: action({ on: "caller", handler: () => observedAborts }),
 });
 
 export const stream = action({
@@ -54,4 +87,19 @@ export const stream = action({
       await channel.close();
     }
   },
+});
+
+export const liveSignal = action({
+  on: "caller",
+  handler: async (ctx) => {
+    const input = new AbortController();
+    const provider = await agent.get("fixture", ctx, { signal: ctx.signal, inputSignal: input.signal });
+    if (!provider) throw new Error("Fixture provider missing");
+    return provider.wait({ signal: input.signal });
+  },
+});
+
+export const signalCount = action({
+  on: "caller",
+  handler: (ctx) => agent.get("fixture", ctx).signalCount(),
 });

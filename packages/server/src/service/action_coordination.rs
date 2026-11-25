@@ -16,11 +16,6 @@ impl Coordinator {
         args: Json,
         ActionCall { note, placement }: ActionCall,
     ) {
-        if self.action_jobs.len() >= ACTIONS {
-            self.respond(session, id, Err("action capacity exceeded".into()));
-            return;
-        }
-
         let target = self
             .plugins
             .as_ref()
@@ -36,11 +31,26 @@ impl Coordinator {
             &self.runner,
             &note,
         );
-        if let Some(reply) = destination.immediate_reply(placement, &note) {
+        if let crate::actions::Destination::Failed(error) = destination {
+            self.respond_call(session, id, Err(error.wire_error()));
+            return;
+        }
+        if let Some(reply) = destination.immediate_reply(&note) {
             self.respond(session, id, Ok(reply));
             return;
         }
 
+        let attached = matches!(
+            destination,
+            crate::actions::Destination::AttachedRunner { .. }
+        );
+        let output = match self.action_session(session, attached) {
+            Ok(output) => output,
+            Err(error) => {
+                self.respond(session, id, Err(error.into()));
+                return;
+            }
+        };
         let process = match self.action_process() {
             Ok(process) => process.clone(),
             Err(error) => {
@@ -77,28 +87,56 @@ impl Coordinator {
                 return;
             }
         };
+        let invocation = async move {
+            destination
+                .invoke(&process, source, local_name, args, ops)
+                .await
+                .map(|value| placement.response(value))
+                .map_err(|error| environment.redact(error))
+        };
+        self.spawn_action_job(session, id, output, invocation);
+    }
+
+    fn spawn_action_job(
+        &mut self,
+        session: u64,
+        id: u64,
+        output: Option<mpsc::Sender<Event>>,
+        invocation: impl std::future::Future<Output = Result<Json, String>> + Send + 'static,
+    ) {
         if self.action_cancellations.contains_key(&(session, id)) {
             self.respond(session, id, Err("Duplicate action request ID".into()));
             return;
         }
         let cancel = tokio_util::sync::CancellationToken::new();
         self.action_cancellations
-            .insert((session, id), cancel.clone());
-        self.action_jobs.spawn(async move {
-            let result = tokio::select! {
-                biased;
-                () = cancel.cancelled() => Err("Action cancelled".into()),
-                result = destination.invoke(&process, source, local_name, args, ops) => result,
-            };
+            .insert((session, id), (cancel.clone(), output.is_some()));
+        self.action_jobs
+            .spawn(async move { (session, id, action_job(cancel, output, invocation).await) });
+    }
 
-            (
-                session,
-                id,
-                result
-                    .map(|value| placement.response(value))
-                    .map_err(|error| environment.redact(error)),
-            )
-        });
+    fn action_session(
+        &self,
+        session: u64,
+        attached: bool,
+    ) -> Result<Option<mpsc::Sender<Event>>, &'static str> {
+        if attached {
+            return self
+                .sessions
+                .get(&session)
+                .map(|client| Some(client.output.clone()))
+                .ok_or("Action cancelled");
+        }
+        if self
+            .action_cancellations
+            .values()
+            .filter(|(_, attached)| !attached)
+            .count()
+            >= ACTIONS
+        {
+            return Err("action capacity exceeded");
+        }
+        Ok(None)
     }
 
     pub(super) fn action_process(
@@ -180,5 +218,23 @@ impl Coordinator {
         call.note
             .enter(&call.name, validator.as_deref(), &call.args)
             .map_err(|error| error.to_string())
+    }
+}
+
+async fn action_job(
+    cancel: tokio_util::sync::CancellationToken,
+    output: Option<mpsc::Sender<Event>>,
+    invocation: impl std::future::Future<Output = Result<Json, String>>,
+) -> Result<Json, String> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err("Action cancelled".into()),
+        () = async {
+            match &output {
+                Some(output) => output.closed().await,
+                None => std::future::pending().await,
+            }
+        } => Err("Action cancelled".into()),
+        result = invocation => result,
     }
 }

@@ -7,7 +7,7 @@ const action = ["node:path", "node:os", "node:crypto", "node:url"];
 // The QuickJS host must supply exactly this list.
 export const suppliedNodeModules = { action, local: [...action, "node:fs/promises"] };
 
-function nodeModule(path) {
+export function nodeModule(path) {
   if (path.startsWith("node:") || path === "bun" || path.startsWith("bun:")) return path;
   if (isBuiltin(path)) return `node:${path}`;
 }
@@ -64,10 +64,11 @@ export function serverBuiltins(name, pluginRoot, lane, { callerFiles } = {}) {
         );
         return {
           contents: `import { requireActionMachine } from ${JSON.stringify(fileURLToPath(new URL("../src/functions.ts", import.meta.url)))};
+            const fail = () => requireActionMachine(${JSON.stringify(`This needs a machine: ${path} is not available on the server`)});
             const unavailable = new Proxy(function () {}, {
-              apply: requireActionMachine,
-              construct: requireActionMachine,
-              get: requireActionMachine,
+              apply: fail,
+              construct: fail,
+              get: fail,
             });
             ${bindings.join("\n")}
             export default unavailable;`,

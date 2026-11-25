@@ -22,7 +22,7 @@ impl Coordinator {
 
         match action {
             Action::Cancel(id) => {
-                if let Some(cancel) = self.action_cancellations.get(&(session, id)) {
+                if let Some((cancel, _)) = self.action_cancellations.get(&(session, id)) {
                     cancel.cancel();
                 }
             }
@@ -57,7 +57,7 @@ impl Coordinator {
                 placement,
             } => match self.request_caller(auth, &name, &args, local_parent, placement) {
                 Ok(caller) => self.call(session, id, name, args, expected, caller).await,
-                Err(error) => self.respond(session, id, Err(error.into())),
+                Err(error) => self.respond(session, id, Err(error)),
             },
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;

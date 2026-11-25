@@ -1,3 +1,4 @@
+import { isRemoteFunctionError } from "./call-error";
 // Definitions close over handlers instead of exposing an unvalidated handler
 // entry point. The registry and host always invoke the same validation path.
 import { createDatabase } from "./database";
@@ -9,7 +10,7 @@ import { v, validate } from "./validators";
 import type { Id, JsonObject, JsonValue } from "./values";
 import { jsonSnapshot } from "./values";
 import { functionName, type FunctionReference } from "./api";
-import { callHost, RunnerCapabilityError, type RunnerCapability } from "./host";
+import { callHost, type RunnerCapability } from "./host";
 import type { LocalProcess, WithPrograms } from "./local";
 import {
   contractScope,
@@ -203,10 +204,12 @@ export interface CallerActionContext extends ActionContext {
   ) => Promise<T>;
 }
 
-const missingMachine = Symbol("noMachine");
+class NoMachineError extends Error {
+  readonly kind = "noMachine";
+}
 
-export function requireActionMachine(): never {
-  throw missingMachine;
+export function requireActionMachine(message = "This needs a machine"): never {
+  throw new NoMachineError(message);
 }
 
 export interface LocalContext extends ContractContext {
@@ -428,9 +431,14 @@ function builder<
           if (returns) validate(returns, snapshot, "result");
           return snapshot;
         } catch (error) {
-          if (error === missingMachine) return fail("noMachine", null);
-          if (kind === "action" && error instanceof RunnerCapabilityError)
-            return fail("runnerCapabilityUnavailable", error.capability);
+          if (error instanceof NoMachineError) return fail("noMachine", null);
+          if (
+            kind === "action" &&
+            isRemoteFunctionError(error) &&
+            error.kind === "runnerCapabilityUnavailable" &&
+            (error.data === "privateFunctions" || error.data === "serverContracts")
+          )
+            return fail("runnerCapabilityUnavailable", error.data);
           throw error;
         }
       },

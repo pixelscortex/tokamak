@@ -502,11 +502,6 @@ impl WindowActionOps {
             .map_err(|error| error.to_string())?;
         Ok(Self { env, operations })
     }
-
-    async fn dispatch(&self, name: &str, payload: Value) -> Option<Result<Value, String>> {
-        (name == "action.env" || name.starts_with("crypto.")).then_some(())?;
-        Some(self.operations.dispatch(name, payload).await)
-    }
 }
 
 async fn run(
@@ -544,7 +539,7 @@ async fn run(
             frame = call.next() => {
                 let frame = frame?;
                 if frame["type"] == "result" {
-                    return Ok(route.redact_result(frame));
+                    return Ok(route.redact_result(host, frame));
                 }
                 // A crashed or cancelled caller drops its nested work.
                 let id = frame_id(&frame["id"])?;
@@ -675,6 +670,14 @@ fn contract_target_name(plugin: &str, target: &Value) -> String {
     }
 }
 
+enum CallUpstream<'a> {
+    Window {
+        connection: &'a WindowUpstream,
+        action_ops: Option<&'a WindowActionOps>,
+    },
+    Embedded(&'a server::RunnerActionUpstream),
+}
+
 struct CallRoute<'a> {
     pool: &'a Pool,
     bridge: &'a Bridge,
@@ -683,8 +686,7 @@ struct CallRoute<'a> {
     thread: OnceLock<String>,
     action_depth: usize,
     args: &'a Value,
-    local_ops: Option<&'a WindowActionOps>,
-    embedded: Option<&'a server::RunnerActionUpstream>,
+    upstream: CallUpstream<'a>,
 }
 
 impl<'a> CallRoute<'a> {
@@ -697,20 +699,26 @@ impl<'a> CallRoute<'a> {
         frame: &'a Value,
         invocation: &Invocation<'a>,
     ) -> Result<Self, String> {
-        let local_ops = (frame["action"] == true && matches!(bridge.upstream, Upstream::Window(_)))
-            .then(|| {
-                host.action_ops
-                    .get_or_init(|| WindowActionOps::new(pool, &host.build))
-                    .as_ref()
-            })
-            .transpose()
-            .map_err(Clone::clone)?;
-        let embedded = match invocation {
-            Invocation::Root => match &bridge.upstream {
-                Upstream::Window(_) => None,
-                Upstream::Embedded(upstream) => Some(upstream),
-            },
-            Invocation::Ordinary { upstream } | Invocation::Linked { upstream, .. } => *upstream,
+        let upstream = match (&bridge.upstream, invocation) {
+            (Upstream::Embedded(upstream), Invocation::Root) => CallUpstream::Embedded(upstream),
+            (
+                Upstream::Embedded(_),
+                Invocation::Ordinary { upstream } | Invocation::Linked { upstream, .. },
+            ) => CallUpstream::Embedded(upstream.ok_or("Missing embedded Runner operation scope")?),
+            (Upstream::Window(connection), _) => {
+                let action_ops = (frame["action"] == true)
+                    .then(|| {
+                        host.action_ops
+                            .get_or_init(|| WindowActionOps::new(pool, &host.build))
+                            .as_ref()
+                    })
+                    .transpose()
+                    .map_err(Clone::clone)?;
+                CallUpstream::Window {
+                    connection,
+                    action_ops,
+                }
+            }
         };
         Ok(Self {
             pool,
@@ -726,17 +734,27 @@ impl<'a> CallRoute<'a> {
                 .and_then(|depth| usize::try_from(depth).ok())
                 .filter(|&depth| depth <= MAX_CALL_DEPTH)
                 .unwrap_or_default(),
-            local_ops,
-            embedded,
+            upstream,
         })
     }
 
-    fn redact_result(&self, mut frame: Value) -> Value {
+    fn redact_result(&self, host: &Host, mut frame: Value) -> Value {
         if let Some(error) = frame["error"].as_str() {
-            if let Some(upstream) = self.embedded {
-                frame["error"] = json!(upstream.redact(error.to_owned()));
-            } else if let Some(ops) = self.local_ops {
-                frame["error"] = json!(ops.env.redact(error.to_owned()));
+            match self.upstream {
+                CallUpstream::Embedded(upstream) => {
+                    frame["error"] = json!(upstream.redact(error.to_owned()))
+                }
+                CallUpstream::Window {
+                    action_ops: Some(ops),
+                    ..
+                } => frame["error"] = json!(ops.env.redact(error.to_owned())),
+                CallUpstream::Window {
+                    action_ops: None, ..
+                } => {
+                    if let Some(Ok(ops)) = host.action_ops.get() {
+                        frame["error"] = json!(ops.env.redact(error.to_owned()));
+                    }
+                }
             }
         }
 
@@ -754,27 +772,42 @@ impl<'a> CallRoute<'a> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
-        if let Some(ops) = &self.local_ops
-            && let Some(name) = frame["name"].as_str()
-            && let Some(result) = ops.dispatch(name, frame["payload"].clone()).await
+        let (window, action_ops) = match self.upstream {
+            CallUpstream::Embedded(upstream) => {
+                return self
+                    .embedded_operation(upstream, here, frame, opening)
+                    .await;
+            }
+            CallUpstream::Window {
+                connection,
+                action_ops,
+            } => (connection, action_ops),
+        };
+        if let Some(name) = frame["name"].as_str()
+            && (name == "action.env" || name.starts_with("crypto."))
         {
-            return Ok(match result {
-                Ok(value) => json!({"value":value}),
-                Err(error) => json!({"error":error}),
-            });
-        }
-
-        if let Some(upstream) = self.embedded {
-            return self
-                .embedded_operation(upstream, here, frame, opening)
-                .await;
+            let ops = match action_ops {
+                Some(ops) => ops,
+                None => host
+                    .action_ops
+                    .get_or_init(|| WindowActionOps::new(self.pool, &host.build))
+                    .as_ref()
+                    .map_err(Clone::clone)?,
+            };
+            return Ok(
+                match ops
+                    .operations
+                    .dispatch(name, frame["payload"].clone())
+                    .await
+                {
+                    Ok(value) => json!({"value":value}),
+                    Err(error) => json!({"error":ops.env.redact(error)}),
+                },
+            );
         }
 
         let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
         self.attach_continuation(&mut frame, wants_note);
-        let Upstream::Window(window) = &self.bridge.upstream else {
-            return Err("Missing embedded Runner operation scope".into());
-        };
         let reply = window
             .request(frame.clone(), self.root, &host.build)
             .await?;
@@ -816,13 +849,13 @@ impl<'a> CallRoute<'a> {
         let name = frame["name"].as_str().ok_or("Missing host operation")?;
         let payload = &frame["payload"];
         let value = match name {
-            "local.contracts" => upstream.local_contracts(payload)?,
+            "local.contracts" => upstream.local_contracts(payload).await?,
             "local.contract.call" | "local.contract.describe" => {
                 let plugin = payload["plugin"]
                     .as_str()
                     .ok_or("Missing provider plugin")?;
                 let label = contract_target_name(plugin, payload);
-                let route = upstream.local_contract(&label, payload)?;
+                let route = upstream.local_contract(&label, payload).await?;
                 let artifact = Artifact {
                     id: plugin.to_owned(),
                     entry_hash: route.entry_hash,
@@ -853,10 +886,18 @@ impl<'a> CallRoute<'a> {
                     name => name,
                 }
                 .to_owned();
-                upstream
-                    .ops
-                    .dispatch(&operation, frame["payload"].take())
-                    .await?
+                match upstream
+                    .operations()
+                    .dispatch_call(&operation, frame["payload"].take())
+                    .await
+                {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return Ok(
+                            json!({"error": error.details.unwrap_or_else(|| json!(error.message))}),
+                        );
+                    }
+                }
             }
         };
         Ok(json!({"value":value}))
@@ -1034,8 +1075,10 @@ mod tests {
             thread: OnceLock::new(),
             action_depth: 0,
             args: &json!({"selection": "chat/threads:admitted"}),
-            local_ops: None,
-            embedded: None,
+            upstream: CallUpstream::Window {
+                connection: &window,
+                action_ops: None,
+            },
         };
         let mut auth = json!({
             "name": "auth.current",

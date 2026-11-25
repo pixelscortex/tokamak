@@ -11,6 +11,16 @@ impl std::fmt::Display for CallDepthLimit {
     }
 }
 
+impl From<CallDepthLimit> for engine::CallError {
+    fn from(error: CallDepthLimit) -> Self {
+        Self {
+            message: error.0,
+            details: None,
+            limit: Some(engine::CallLimit::Depth),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct CallNote {
     pub auth: Option<AuthContext>,

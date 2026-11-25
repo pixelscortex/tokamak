@@ -20,6 +20,7 @@ import {
   placementTransform,
   registrySource,
   runnerFunction,
+  runnerActionFiles,
   runnerProvider,
 } from "./placement.mjs";
 import { contractEntry, contractManifest } from "./contracts.mjs";
@@ -233,12 +234,7 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
         pluginRoot,
         source: registrySource({ root, modules: local, providers, lane: lanes.local, worker: true, header }),
         plugins: [placementTransform(placement, lanes.local)],
-        actionModules: new Set([
-          ...[...placement.modules]
-            .filter(([, exports]) => [...exports.values()].some((d) => d.kind === "action"))
-            .map(([path]) => path),
-          ...providers.filter((p) => p.methods.some((m) => m.kind === "action")).map((p) => p.path),
-        ]),
+        actionModules: runnerActionFiles(placement.modules, providers),
       });
       // Preserve the installed-artifact and socket entryHash contract. No
       // executable entry is needed: the plugin process loads local.js.
