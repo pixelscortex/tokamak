@@ -121,6 +121,14 @@ impl std::fmt::Display for CallError {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ActionTarget {
+    #[default]
+    Server,
+    Caller,
+}
+
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
 /// clients must not reuse them while a call or subscription is outstanding.
 // ts-rs 12 cannot parse serde's enum deny_unknown_fields; describe the wire shape explicitly.
@@ -149,6 +157,12 @@ pub enum Request {
         id: u64,
         name: String,
         args: Json,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(optional, type = "\"server\" | \"caller\"")
+        )]
+        on: Option<ActionTarget>,
     },
     LocalCall {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -163,6 +177,12 @@ pub enum Request {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         depth: usize,
         thread: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(optional, type = "\"server\" | \"caller\"")
+        )]
+        on: Option<ActionTarget>,
     },
     Subscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]

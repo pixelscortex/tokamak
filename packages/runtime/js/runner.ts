@@ -1,6 +1,6 @@
 import type { JsonValue } from "@tokamak/sdk";
 import { WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits";
-import type { LaunchLocalWorker, LocalArtifact } from "./local";
+import { RunnerUnavailable, type LaunchLocalWorker, type LocalArtifact } from "./local";
 
 type WorkerEvent =
   | { type: "started"; routed?: boolean }
@@ -25,8 +25,10 @@ export function runnerLauncher(
   onClosedFrame?: (event: Extract<WorkerEvent, { type: "closed" }>) => void,
 ): LaunchLocalWorker {
   return async (artifact, receive, closed, workspace) => {
-    const { ws, token } = await endpoint();
-    if (!token) throw new Error("Missing Runner secret");
+    const { ws, token } = await endpoint().catch((error) => {
+      throw new RunnerUnavailable(String(error), { cause: error });
+    });
+    if (!token) throw new RunnerUnavailable("Missing Runner secret");
     const socket = new WebSocket(new URL("/local-worker", ws), ["tokamak", `tokamak.bearer.${token}`]);
     const origin = new URL(ws);
     const worker = new RunnerWorker(
@@ -68,7 +70,9 @@ class RunnerWorker {
         this.finish(String(error));
       }
     });
-    socket.addEventListener("error", () => this.finish("Could not connect to the Runner's plugin process"));
+    socket.addEventListener("error", () =>
+      this.finish("Could not connect to the Runner's plugin process", !this.started),
+    );
     socket.addEventListener("close", () => this.finish("The Runner closed the plugin process connection"));
     socket.addEventListener("message", ({ data }) => {
       try {
@@ -106,11 +110,11 @@ class RunnerWorker {
     }
   }
 
-  private finish(reason: string) {
+  private finish(reason: string, unavailable = false) {
     if (this.ended) return;
     this.ended = true;
     clearTimeout(this.deadline);
-    const error = new Error(reason);
+    const error = unavailable ? new RunnerUnavailable(reason) : new Error(reason);
     this.startup.reject(error);
     this.socket.close();
     this.exited.resolve();

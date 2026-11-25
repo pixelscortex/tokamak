@@ -20,6 +20,7 @@ impl SessionSender {
             args,
             kind: None,
             local_parent: None,
+            on: None,
         })
     }
 
@@ -76,6 +77,7 @@ fn request_action(request: Request) -> Result<Action, Error> {
             args,
             kind: Some(FunctionKind::Query),
             local_parent: None,
+            on: None,
         },
         Request::Mutation { id, name, args } => Action::Call {
             id,
@@ -83,13 +85,15 @@ fn request_action(request: Request) -> Result<Action, Error> {
             args,
             kind: Some(FunctionKind::Mutation),
             local_parent: None,
+            on: None,
         },
-        Request::Action { id, name, args } => Action::Call {
+        Request::Action { id, name, args, on } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
             local_parent: None,
+            on,
         },
         // TKM-286 will restrict LocalCall to authenticated Runner sessions.
         Request::LocalCall {
@@ -99,12 +103,14 @@ fn request_action(request: Request) -> Result<Action, Error> {
             kind,
             depth,
             thread,
+            on,
         } => Action::Call {
             id,
             name,
             args,
             kind: Some(kind),
             local_parent: Some((depth, thread)),
+            on,
         },
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),

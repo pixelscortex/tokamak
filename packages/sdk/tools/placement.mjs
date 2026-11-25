@@ -15,7 +15,7 @@ import { resultValidator } from "./result-validator.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
 const serverFunction = (kind) => kind !== "local";
-const localFunction = (kind) => kind === "local";
+export const runnerFunction = (kind) => kind === "local" || kind === "action";
 const serverProvider = (provider) => provider.place === "server";
 const localProvider = (provider) => provider.place === "local";
 const action = (kind) => kind === "action";
@@ -23,7 +23,11 @@ const noFunctions = () => false;
 
 export const lanes = {
   window: { keep: noFunctions, provider: noFunctions, method: noFunctions },
-  local: { keep: localFunction, provider: localProvider, method: localFunction },
+  local: {
+    keep: runnerFunction,
+    provider: (provider) => localProvider(provider) || provider.methods.some((m) => action(m.kind)),
+    method: runnerFunction,
+  },
   server: { keep: serverFunction, provider: serverProvider, method: serverFunction },
   descriptor: {
     keep: (kind) => serverFunction(kind) && !action(kind),
@@ -288,7 +292,9 @@ export function registrySource({
     return `import ${name} from ${JSON.stringify(p.path.replace(/\.tsx?$/, ""))};`;
   });
   imports.push(...contractImports);
-  const localProviders = registrations.map((p, i) => `${JSON.stringify(p.registration)}: provider${i}`);
+  const localProviders = registrations.flatMap((p, i) =>
+    localProvider(p) ? [`${JSON.stringify(p.registration)}: provider${i}`] : [],
+  );
   const serverData = registrations.map(
     (p, i) =>
       `${JSON.stringify(p.registration)}: contractData(provider${i}.implementation, ${JSON.stringify(p.methods.map((m) => m.member))})`,

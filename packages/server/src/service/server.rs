@@ -1,6 +1,16 @@
 use super::*;
 
 impl Server {
+    /// Attach the Runner that embeds this server before accepting workspace calls.
+    pub fn attach_runner(
+        &self,
+        dispatch: impl Fn(crate::RunnerAction) -> crate::RunnerFuture + Send + Sync + 'static,
+    ) -> Result<(), Error> {
+        self.runner
+            .set(Arc::new(dispatch))
+            .map_err(|_| Error::Invalid("Runner already attached".into()))
+    }
+
     pub fn descriptor(&self) -> &Json {
         &self.descriptor
     }

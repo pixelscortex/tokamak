@@ -1,3 +1,4 @@
+import type { ActionTarget } from "./functions";
 // Correlation and subscription lifecycle are shared by both transports. Hosts
 // provide an ordered native message connection or an already-open WebSocket;
 // this module installs no browser/Node globals. Only immutable catalog transfers
@@ -70,8 +71,8 @@ export class InProcessTransport implements ClientTransport {
     return this.call("mutation", name, args);
   }
 
-  action(name: string, args: JsonValue): Promise<JsonValue> {
-    return this.call("action", name, args);
+  action(name: string, args: JsonValue, on?: ActionTarget): Promise<JsonValue> {
+    return this.call("action", name, args, on);
   }
 
   /** Forward the continuation supplied by the Runner on its private socket. */
@@ -80,8 +81,17 @@ export class InProcessTransport implements ClientTransport {
     name: string,
     args: JsonValue,
     parent: { depth: number; thread: string | null },
+    on?: ActionTarget,
   ): Promise<JsonValue> {
-    return this.control((id) => ({ type: "localcall", id, name, args, kind, ...parent }));
+    return this.control((id) => ({
+      type: "localcall",
+      id,
+      name,
+      args,
+      kind,
+      ...parent,
+      ...(on === undefined ? {} : { on }),
+    }));
   }
 
   async plugins(): Promise<JsonValue> {
@@ -215,12 +225,17 @@ export class InProcessTransport implements ClientTransport {
     }
   }
 
-  private call(type: "query" | "mutation" | "action", name: string, args: JsonValue): Promise<JsonValue> {
+  private call(
+    type: "query" | "mutation" | "action",
+    name: string,
+    args: JsonValue,
+    on?: ActionTarget,
+  ): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
       this.pending.set(id, { resolve, reject });
-      this.send({ type, id, name, args });
+      this.send({ type, id, name, args, ...(on === undefined ? {} : { on }) });
     });
   }
 

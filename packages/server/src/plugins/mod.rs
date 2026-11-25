@@ -54,6 +54,7 @@ pub(crate) struct Target {
     pub mutation: bool,
     pub visibility: Visibility,
     pub kind: crate::service::FunctionKind,
+    pub on: crate::protocol::ActionTarget,
     pub bundle: Arc<Bundle>,
     pub space: DataSpace,
 }

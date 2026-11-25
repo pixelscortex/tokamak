@@ -2,7 +2,7 @@
 //! workspace; its lifetime does not determine the lifetime of the process.
 mod session;
 
-pub(super) use session::connection;
+pub(super) use session::{action, connection};
 
 use super::{Artifact, TIMEOUT, client_env, quickjs_bundle, stderr_tail, write};
 use futures_util::StreamExt;

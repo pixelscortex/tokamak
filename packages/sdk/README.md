@@ -141,6 +141,49 @@ Both bundled transports implement the `action` wire request. The optional
 `ClientTransport.action` preserves existing custom transports; `client.action`
 throws clearly when a custom transport has not implemented it.
 
+### Choose where an action runs
+
+An action without an `on` setting runs beside the server in its action process.
+Set `on: "caller"` to run it in the caller's desktop Runner. It can use
+`ctx.proc`, `node:fs/promises`, and the same program and cancellation controls
+as a local function. The desktop Runner needs the matching plugin build
+installed. Queries and mutations still run on the workspace server.
+
+```ts
+import { action, isFailure, v } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const collect = action({
+  on: "caller",
+  args: { cwd: v.string() },
+  handler: async (ctx, { cwd }) => {
+    const git = ctx.proc(["git", "status", "--short"], { cwd });
+    for await (const text of git.stdout) await ctx.runMutation(api.records.save, { text });
+    return await git.exited;
+  },
+});
+
+// From a window connected to a Runner:
+const result = await client.action(api.jobs.collect, { cwd });
+if (isFailure(result) && result.kind === "noMachine") {
+  // Show "Connect a machine to run this".
+}
+```
+
+Pass `{ on: "server" }` or `{ on: "caller" }` to `client.action` or
+`ctx.runAction` to choose the destination for that call. Pass `{ signal }` to
+`client.action` to cancel an action running on the desktop Runner. The
+action receives the original identity and call note.
+
+A call from server code can use the caller's Runner when that Runner embeds
+the server. A shared server cannot yet send an action to a desktop Runner;
+the desktop window routes its own calls there and uses the same public
+workspace functions as `local()`. A Runner action resolves `ctx.env` grants
+from its installation on that machine. A call returns the typed
+failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
+and has none, or when it requests a file or program from the server action
+process.
+
 ## Internal functions and expected failures
 
 Use `internalQuery`, `internalMutation` or `internalAction` for a function only
@@ -176,6 +219,8 @@ transactional: returning `fail` from an action does not undo mutations it
 already called. Throw for unexpected errors.
 
 ## Local functions
+
+`local()` is being phased out. Use an [action with `on: "caller"`](#choose-where-an-action-runs) for new work.
 
 `local({ args, handler })` runs in the client's local part. Put it
 under the plugin's `src/`; it can share a module with server functions.
@@ -405,13 +450,15 @@ SurrealDB integration remains for the host issues and their tests.
 
 ## Plugin process and action process
 
-On macOS and Linux, a plugin process runs local functions and the action
-process runs server actions in `tokamak-plugin-host`. Queries and mutations run
+On macOS and Linux, a plugin process runs local functions and caller actions.
+The action process runs server actions in `tokamak-plugin-host`. Queries and mutations run
 in the server's engine. On Windows, local functions and server actions report
 “Plugin code is not supported on Windows yet.”
 
-Local functions can import `node:path`, `node:os`, `node:crypto`,
-`node:url`, and `node:fs/promises`. The server part cannot import Node modules. The build checks imports,
+A local function can import `node:path`, `node:os`, `node:crypto`,
+`node:url`, and `node:fs/promises`. Caller actions can also import
+`node:fs/promises`; an action sent to the server returns `noMachine` if it
+uses that module. The build checks imports,
 including bare names such as `path`. Unsupported imports such as `node:timers`,
 `events`, or `node:path/posix` fail the build. Built-ins reached indirectly,
 such as `process.getBuiltinModule`, `import.meta.require`, `process.binding`,
@@ -433,7 +480,7 @@ receive this signal.
 
 ### Server actions
 
-All plugins’ actions run in one action process. Every action call has its own
+All plugins’ server actions run in one action process. Every action call has its own
 QuickJS runtime and starts with fresh module state. Use `ctx.runQuery`,
 `ctx.runMutation`, and `ctx.use` for host-mediated data and plugin calls;
 `ctx.signal` observes cancellation. There is no `process` or `process.env`;

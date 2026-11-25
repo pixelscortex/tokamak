@@ -4,7 +4,7 @@ import { Visibility } from "../src/visibility.ts";
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
 import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
-import { join, resolve, relative, dirname, sep } from "node:path";
+import { basename, join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildLocalBundle, transactionSources } from "./worker.mjs";
@@ -164,7 +164,8 @@ async function generateReferences(root, pluginRoot, files, modules, namespace) {
 export async function bundleFeature(folder, namespace, splitActions = namespace !== undefined) {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Feature root is not a directory: ${root}`);
-  const pluginRoot = featurePluginRoot(root);
+  const pluginRoot =
+    namespace !== undefined && basename(root) === "src" ? dirname(root) : featurePluginRoot(root);
   checkPluginImports(pluginRoot);
   // An explicit empty plugin server part is valid; a missing root still fails.
   const organized = isServerRoot(root);
@@ -172,7 +173,14 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
   const pluginSource = organized || flat;
   const placement = pluginSource ? functionPlacement(pluginRoot, undefined, namespace) : undefined;
   const providers = placement?.providers ?? [];
-  const local = placement ? placedModules(placement, root, organized, (kind) => kind === "local") : [];
+  const local = placement
+    ? placedModules(
+        placement,
+        root,
+        organized,
+        (kind) => kind === "local" || (namespace !== undefined && kind === "action"),
+      )
+    : [];
   const split =
     !!placement &&
     (local.length > 0 ||
@@ -206,7 +214,11 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
     });
     await Bun.write(entry, source);
 
-    const hasLocal = local.length > 0 || providers.some((p) => p.place === "local");
+    const hasLocal =
+      local.length > 0 ||
+      providers.some(
+        (p) => p.place === "local" || (namespace !== undefined && p.methods.some((m) => m.kind === "action")),
+      );
     if (hasLocal) {
       await buildLocalBundle({
         root,
@@ -214,6 +226,12 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
         pluginRoot,
         source: registrySource({ root, modules: local, providers, lane: lanes.local, worker: true, header }),
         plugins: [placementTransform(placement, lanes.local)],
+        actionModules: new Set([
+          ...[...placement.modules]
+            .filter(([, exports]) => [...exports.values()].some((d) => d.kind === "action"))
+            .map(([path]) => path),
+          ...providers.filter((p) => p.methods.some((m) => m.kind === "action")).map((p) => p.path),
+        ]),
       });
       // Preserve the installed-artifact and socket entryHash contract. No
       // executable entry is needed: the plugin process loads local.js.
@@ -263,7 +281,14 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
     }
     const built = await buildServer("bundle.js", source, [
       ...(placement ? [placementTransform(placement, lanes.server)] : []),
-      serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions"),
+      serverBuiltins("server-local-boundary", pluginRoot, "queries, mutations and server actions", {
+        callerFiles: new Set([
+          ...[...(placement?.modules ?? [])]
+            .filter(([, exports]) => [...exports.values()].some((d) => d.on === "caller"))
+            .map(([path]) => path),
+          ...providers.filter((p) => p.methods.some((m) => m.on === "caller")).map((p) => p.path),
+        ]),
+      }),
     ]);
     if (splitActions) {
       const descriptor = transactionSources({

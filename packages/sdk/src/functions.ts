@@ -20,6 +20,11 @@ import {
 import { Visibility } from "./visibility";
 
 export type ServerFunctionKind = "query" | "mutation" | "action";
+export type ActionTarget = "server" | "caller";
+export type MachineFailure = Failure<"noMachine", null>;
+export interface ActionOptions {
+  on?: ActionTarget;
+}
 export type FunctionKind = ServerFunctionKind | "local";
 
 /** Authenticated caller, preserved across subscriptions and plugin calls. */
@@ -175,7 +180,31 @@ export interface ActionContext extends ContractContext {
   env(name: string): Promise<string | null>;
   runQuery: RunFunction<"query">;
   runMutation: RunFunction<"mutation">;
-  runAction: RunFunction<"action">;
+  runAction: RunAction;
+}
+
+interface RunAction {
+  <A, R>(reference: FunctionReference<"action", A, R>, args: NoInfer<A>): Promise<R>;
+  <A, R>(
+    reference: FunctionReference<"action", A, R>,
+    args: NoInfer<A>,
+    options: ActionOptions,
+  ): Promise<R | MachineFailure>;
+}
+
+export interface CallerActionContext extends ActionContext {
+  readonly signal: LocalContext["signal"];
+  readonly retiring?: LocalContext["retiring"];
+  readonly proc: LocalProcess;
+  readonly withPrograms: <T>(
+    run: (forceStop: () => Promise<void>, context: CallerActionContext) => Promise<T>,
+  ) => Promise<T>;
+}
+
+const missingMachine = Symbol("noMachine");
+
+export function requireActionMachine(): never {
+  throw missingMachine;
 }
 
 export interface LocalContext extends ContractContext {
@@ -205,6 +234,7 @@ export interface FunctionDefinition<
   readonly visibility: V;
   readonly args: ValidatorDescription;
   readonly returns?: ValidatorDescription;
+  readonly on?: ActionTarget;
   readonly _types?: { args: A; result: R };
   invoke(args: unknown, host: HostBridge): Promise<JsonValue>;
   invokeLocal?(args: unknown, host: HostBridge, auth: AuthContext, call: CallContext): unknown;
@@ -215,6 +245,7 @@ type ReturnValidator = Validator<unknown> | undefined;
 type FunctionOptions<K extends FunctionKind, M extends DataModel, F extends Fields, R, S> = {
   args?: F;
   returns?: K extends "query" ? S : never;
+  on?: K extends "action" ? ActionTarget : never;
   handler: (
     ctx: K extends "query"
       ? QueryContext<M>
@@ -258,6 +289,7 @@ function builder<
       visibility,
       args: description,
       ...(returns ? { returns } : {}),
+      ...(definition.on === undefined ? {} : { on: definition.on }),
       ...(kind === "local"
         ? {
             // Contract members are called in the same worker and can receive
@@ -288,47 +320,83 @@ function builder<
         const call = callContext(
           auth,
           host.call,
-          kind === "local" && !host.call?.threadId ? threadArgument(description, args) : undefined,
+          (kind === "local" || host.proc) && !host.call?.threadId
+            ? threadArgument(description, args)
+            : undefined,
         );
         const caller = () => {
           if (!auth) throw new Error("There is no caller before sign-in");
           return auth;
         };
 
+        const actionContext = (bridge: HostBridge): CallerActionContext => {
+          const machine = requireActionMachine;
+          const run =
+            (expected: ServerFunctionKind) =>
+            (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
+              callHost(bridge, "plugin.call", {
+                name: reference[functionName],
+                args: jsonSnapshot(input, "nested call args"),
+                kind: expected,
+                ...(options?.on === undefined ? {} : { on: options.on }),
+              });
+          return Object.freeze({
+            call,
+            get auth() {
+              return caller();
+            },
+            [contractScope]: {
+              list: (key, id, options) =>
+                (key.place === "local" && bridge.contracts ? bridge.contracts : serverContracts(bridge)).list(
+                  key,
+                  id,
+                  options,
+                ),
+            },
+            use: <T>(api: T) => bindCalls(api, bridge),
+            signal: bridge.signal!,
+            retiring: bridge.retiring,
+            proc: bridge.proc ?? machine,
+            withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
+              bridge.withPrograms?.((stop, scoped) => work(stop, actionContext(scoped))) ?? machine(),
+            crypto: Object.freeze({
+              hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
+              verifyPassword: (password: string, hash: string) =>
+                callHost(bridge, "crypto.verifyPassword", { password, hash }),
+              verifyAndRehashPassword: (password: string, hash: string) =>
+                callHost(bridge, "crypto.verifyAndRehashPassword", { password, hash }),
+            }),
+            env: (name: string) => callHost(bridge, "action.env", { name }),
+            runQuery: (reference, args) =>
+              bridge.proc
+                ? run("query")(reference, args)
+                : callHost(bridge, "action.runQuery", {
+                    name: reference[functionName],
+                    args: jsonSnapshot(args, "nested call args"),
+                  }),
+            runMutation: (reference, args) =>
+              bridge.proc
+                ? run("mutation")(reference, args)
+                : callHost(bridge, "action.runMutation", {
+                    name: reference[functionName],
+                    args: jsonSnapshot(args, "nested call args"),
+                  }),
+            runAction: run("action"),
+          } as CallerActionContext);
+        };
         const run =
           (expected: ServerFunctionKind) => (reference: { [functionName]: string }, input: unknown) => {
             const payload = {
               name: reference[functionName],
               args: jsonSnapshot(input, "nested call args"),
             };
-            return kind === "action" && expected !== "action"
-              ? callHost(host, expected === "query" ? "action.runQuery" : "action.runMutation", payload)
-              : callHost(host, "plugin.call", { ...payload, kind: expected });
+            return callHost(host, "plugin.call", { ...payload, kind: expected });
           };
         const ctx = Object.freeze(
           kind === "local"
             ? localContext(host, caller(), call)
             : kind === "action"
-              ? {
-                  call,
-                  get auth() {
-                    return caller();
-                  },
-                  [contractScope]: serverContracts(host),
-                  use: <T>(api: T) => bindCalls(api, host),
-                  signal: host.signal,
-                  crypto: Object.freeze({
-                    hashPassword: (password: string) => callHost(host, "crypto.hashPassword", { password }),
-                    verifyPassword: (password: string, hash: string) =>
-                      callHost(host, "crypto.verifyPassword", { password, hash }),
-                    verifyAndRehashPassword: (password: string, hash: string) =>
-                      callHost(host, "crypto.verifyAndRehashPassword", { password, hash }),
-                  }),
-                  env: (name: string) => callHost(host, "action.env", { name }),
-                  runQuery: run("query"),
-                  runMutation: run("mutation"),
-                  runAction: run("action"),
-                }
+              ? actionContext(host)
               : {
                   call,
                   get auth() {
@@ -347,14 +415,18 @@ function builder<
         // The generic kind determines the context; the branch above enforces it
         // at runtime as well. Plugin reference kinds are erased, so the kernel
         // also enforces query-only calls. This cast never widens author types.
-        const result = await handler(
-          ctx as unknown as Parameters<typeof handler>[0],
-          args as Parameters<typeof handler>[1],
-        );
-        const wire = result === undefined ? null : result;
-        const snapshot = jsonSnapshot(wire, "function result");
-        if (returns) validate(returns, snapshot, "result");
-        return snapshot;
+        try {
+          const result = await handler(
+            ctx as unknown as Parameters<typeof handler>[0],
+            args as Parameters<typeof handler>[1],
+          );
+          const snapshot = jsonSnapshot(result === undefined ? null : result, "function result");
+          if (returns) validate(returns, snapshot, "result");
+          return snapshot;
+        } catch (error) {
+          if (error === missingMachine) return fail("noMachine", null);
+          throw error;
+        }
       },
     }) as BuiltFunction<K, ObjectValue<F>, R, V, S>;
   };
@@ -452,7 +524,26 @@ function bindCalls<T>(api: T, host: HostBridge): PluginCalls<T, ServerFunctionKi
 type LooseModel = Record<string, JsonObject>;
 export const query = builder<"query", LooseModel>("query", Visibility.Public);
 export const mutation = builder<"mutation", LooseModel>("mutation", Visibility.Public);
-export const action = builder<"action", LooseModel>("action", Visibility.Public);
+type ActionBuilder<V extends Visibility> = {
+  <F extends Fields = Record<never, never>, R = unknown>(definition: {
+    on: "caller";
+    args?: F;
+    handler: (ctx: CallerActionContext, args: ObjectValue<F>) => R;
+  }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R | MachineFailure>, V> & {
+    readonly on: "caller";
+  };
+  <F extends Fields = Record<never, never>, R = unknown>(definition: {
+    on?: "server";
+    args?: F;
+    handler: (ctx: ActionContext, args: ObjectValue<F>) => R;
+  }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R>, V>;
+};
+
+function actionBuilder<V extends Visibility>(visibility: V): ActionBuilder<V> {
+  return builder<"action", LooseModel, V>("action", visibility) as ActionBuilder<V>;
+}
+
+export const action = actionBuilder(Visibility.Public);
 const localFunction = builder<"local", LooseModel>("local", Visibility.Public);
 
 export function local<F extends Fields, R = unknown>(definition: {
@@ -480,10 +571,7 @@ export const internalMutation = builder<"mutation", LooseModel, typeof Visibilit
   "mutation",
   Visibility.Internal,
 );
-export const internalAction = builder<"action", LooseModel, typeof Visibility.Internal>(
-  "action",
-  Visibility.Internal,
-);
+export const internalAction = actionBuilder(Visibility.Internal);
 /** Export a server function to dependencies without admitting window requests. */
 export function pluginOnly<
   D extends FunctionDefinition<ServerFunctionKind, unknown, unknown, typeof Visibility.Public>,
@@ -498,24 +586,20 @@ export function createFunctions<S extends SchemaDefinition>(
 ): {
   query: FunctionBuilder<"query", ModelFromSchema<S>>;
   mutation: FunctionBuilder<"mutation", ModelFromSchema<S>>;
-  action: FunctionBuilder<"action", ModelFromSchema<S>>;
+  action: typeof action;
   local: typeof local;
   internalQuery: FunctionBuilder<"query", ModelFromSchema<S>, typeof Visibility.Internal>;
   internalMutation: FunctionBuilder<"mutation", ModelFromSchema<S>, typeof Visibility.Internal>;
-  internalAction: FunctionBuilder<"action", ModelFromSchema<S>, typeof Visibility.Internal>;
+  internalAction: typeof internalAction;
 } {
   return {
     query: builder("query", Visibility.Public, schema),
     mutation: builder("mutation", Visibility.Public, schema),
-    action: builder<"action", ModelFromSchema<S>>("action", Visibility.Public, schema),
+    action,
     local,
     internalQuery: builder("query", Visibility.Internal, schema),
     internalMutation: builder("mutation", Visibility.Internal, schema),
-    internalAction: builder<"action", ModelFromSchema<S>, typeof Visibility.Internal>(
-      "action",
-      Visibility.Internal,
-      schema,
-    ),
+    internalAction,
   };
 }
 
@@ -553,6 +637,7 @@ export function functionMetadata(registry: FunctionRegistry): {
   args: ValidatorDescription;
   returns?: ValidatorDescription;
   visibility: Visibility;
+  on?: ActionTarget;
 }[] {
   return Object.entries(registry).map(([name, definition]) => ({
     name,
@@ -560,6 +645,7 @@ export function functionMetadata(registry: FunctionRegistry): {
     args: definition.args,
     ...(definition.returns ? { returns: definition.returns } : {}),
     visibility: definition.visibility,
+    ...(definition.on === undefined ? {} : { on: definition.on }),
   }));
 }
 

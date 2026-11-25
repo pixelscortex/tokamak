@@ -199,6 +199,7 @@ impl Server {
 
         let (closed_sender, closed) = watch::channel(None);
 
+        let runner = Arc::new(crate::actions::RunnerSlot::new());
         let actor = Coordinator {
             database,
             pool,
@@ -211,6 +212,7 @@ impl Server {
             changes,
             action_process,
             legacy_action_source,
+            runner: runner.clone(),
             action_jobs: tokio::task::JoinSet::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
@@ -227,6 +229,7 @@ impl Server {
             commands,
             closing,
             descriptor,
+            runner,
             cleanup,
             closed,
         })
@@ -269,6 +272,13 @@ pub(crate) async fn inspect(pool: &Pool, bundle: Arc<Bundle>) -> Result<Inspecte
         let kind = FunctionKind::from_wire(&function["kind"]).ok_or_else(|| {
             Error::Invalid("function kind must be query, mutation or action".into())
         })?;
+
+        if let Some(on) = function.get("on")
+            && (kind != FunctionKind::Action
+                || serde_json::from_value::<ActionTarget>(on.clone()).is_err())
+        {
+            return Err(Error::Invalid("Invalid action target".into()));
+        }
 
         if kinds.insert(name.to_owned(), kind).is_some() {
             return Err(Error::Invalid("duplicate function name".into()));

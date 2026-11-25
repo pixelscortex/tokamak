@@ -2,15 +2,129 @@
 //! A nested call rejoins the ordered coordinator and gets its own normal world.
 
 use crate::host::action_process::Supervisor;
-use crate::identity::CallNote;
+use crate::{identity::CallNote, protocol::ActionTarget};
 use crate::{
     plugins::Loaded,
     service::{Command, FunctionKind},
 };
 use engine::OpRegistry;
 use serde_json::Value as Json;
-use std::sync::Arc;
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, OnceLock},
+};
 use tokio::sync::{mpsc, oneshot};
+
+pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
+type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
+pub(crate) type RunnerSlot = OnceLock<RunnerDispatch>;
+
+pub struct RunnerAction {
+    pub plugin: String,
+    pub entry_hash: String,
+    pub code_hash: String,
+    pub name: String,
+    pub args: Json,
+    pub ops: Arc<OpRegistry>,
+}
+
+pub(crate) enum Destination {
+    Server,
+    Runner {
+        dispatch: RunnerDispatch,
+        plugin: String,
+        entry_hash: String,
+        code_hash: String,
+    },
+    Missing,
+}
+
+pub(crate) fn resolve(
+    loaded: Option<&Loaded>,
+    target: Option<&crate::plugins::Target>,
+    on: Option<ActionTarget>,
+    runner: &RunnerSlot,
+    note: &CallNote,
+    from_server: bool,
+) -> Destination {
+    let selected = on.unwrap_or_else(|| target.map(|target| target.on).unwrap_or_default());
+    let personal = note
+        .auth
+        .as_ref()
+        .is_some_and(|auth| auth.device.id != "device:server");
+    if personal
+        && selected == ActionTarget::Caller
+        && from_server
+        && let Some(dispatch) = runner.get()
+        && let (Some(loaded), Some(target)) = (loaded, target)
+    {
+        let manifest = &loaded.catalog.plugins[&target.owner].manifest;
+        if let Some(local) = &manifest.entries.local
+            && let (Some(entry_hash), Some(code_hash)) = (
+                manifest.hashes.get(&local.entry),
+                manifest.hashes.get(&local.code),
+            )
+        {
+            return Destination::Runner {
+                dispatch: dispatch.clone(),
+                plugin: target.owner.clone(),
+                entry_hash: entry_hash.clone(),
+                code_hash: code_hash.clone(),
+            };
+        }
+    }
+
+    match selected {
+        ActionTarget::Server => Destination::Server,
+        ActionTarget::Caller => Destination::Missing,
+    }
+}
+
+impl Destination {
+    pub async fn invoke(
+        self,
+        process: &Supervisor,
+        source: Option<Arc<crate::host::action_process::Source>>,
+        name: String,
+        args: Json,
+        ops: Arc<OpRegistry>,
+    ) -> Result<Json, String> {
+        match self {
+            Self::Server => {
+                process
+                    .invoke(
+                        source.ok_or("Plugin action has no action process bundle")?,
+                        name,
+                        args,
+                        ops,
+                    )
+                    .await
+            }
+            Self::Runner {
+                dispatch,
+                plugin,
+                entry_hash,
+                code_hash,
+            } => {
+                dispatch(RunnerAction {
+                    plugin,
+                    entry_hash,
+                    code_hash,
+                    name,
+                    args,
+                    ops,
+                })
+                .await
+            }
+            Self::Missing => Ok(no_machine()),
+        }
+    }
+}
+
+pub(crate) fn no_machine() -> Json {
+    serde_json::json!({"failed":true,"kind":"noMachine","data":null})
+}
 
 pub(crate) struct NestedCall {
     pub note: CallNote,
@@ -29,7 +143,7 @@ pub(crate) fn operations(
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
     process: Arc<Supervisor>,
-    note: CallNote,
+    (note, runner): (CallNote, Arc<RunnerSlot>),
 ) -> Result<Arc<OpRegistry>, engine::Error> {
     let mut ops = OpRegistry::new();
     note.register(&mut ops)?;
@@ -66,6 +180,7 @@ pub(crate) fn operations(
             commands,
             process,
             note,
+            runner,
         )?;
         crate::plugins::register_contract_list(&mut ops, loaded, owner)?;
     }
@@ -138,6 +253,7 @@ fn register_plugin_call(
     commands: mpsc::WeakSender<Command>,
     process: Arc<Supervisor>,
     note: CallNote,
+    runner: Arc<RunnerSlot>,
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
     let caller = owner.clone();
@@ -146,6 +262,7 @@ fn register_plugin_call(
         let owner = caller.clone();
         let commands = commands.clone();
         let process = process.clone();
+        let runner = runner.clone();
         let note = note.clone();
         async move {
             let name = payload["name"]
@@ -186,24 +303,31 @@ fn register_plugin_call(
                 Some(&loaded),
                 Some(&target.owner),
             ));
-            let source = loaded
-                .action_sources
-                .get(&target.owner)
-                .cloned()
-                .ok_or("Plugin action has no action process bundle")?;
+            let on = payload
+                .get("on")
+                .map(|on| serde_json::from_value(on.clone()))
+                .transpose()
+                .map_err(|_| "Invalid action target")?;
+            let destination = resolve(Some(&loaded), Some(&target), on, &runner, &note, true);
+            if matches!(destination, Destination::Missing) {
+                return Ok(no_machine());
+            }
+
+            let source = loaded.action_sources.get(&target.owner).cloned();
             let ops = operations(
                 commands,
                 Some(loaded),
-                Some(target.owner),
+                Some(target.owner.clone()),
                 environment.clone(),
                 process.clone(),
-                note,
+                (note, runner.clone()),
             )
             .map_err(|e| e.to_string())?;
-            process
-                .invoke(source, target.local_name, args, ops)
-                .await
-                .map_err(|error| environment.redact(error).into())
+            let result = destination
+                .invoke(&process, source, target.local_name, args, ops)
+                .await;
+
+            result.map_err(|error| environment.redact(error).into())
         }
     })?;
 

@@ -67,6 +67,7 @@ export function definitionTypeInfo(checker, type, source) {
   const visibility = property && checker.getTypeOfSymbolAtLocation(property, source).value;
   return {
     kind: kind && checker.getTypeOfSymbolAtLocation(kind, source).value,
+    on: type.getProperty("on") && checker.getTypeOfSymbolAtLocation(type.getProperty("on"), source).value,
     visibility: Object.values(Visibility).includes(visibility) ? visibility : undefined,
   };
 }

@@ -4,13 +4,32 @@ impl Coordinator {
     pub(super) fn start_action(
         &mut self,
         session: u64,
-        note: crate::identity::CallNote,
         id: u64,
         name: String,
         args: Json,
+        (note, on): (crate::identity::CallNote, Option<ActionTarget>),
     ) {
         if self.action_jobs.len() >= ACTIONS {
             self.respond(session, id, Err("action capacity exceeded".into()));
+            return;
+        }
+
+        use crate::actions::{Destination, no_machine, resolve};
+
+        let target = self
+            .plugins
+            .as_ref()
+            .and_then(|loaded| loaded.targets.get(&name));
+        let destination = resolve(
+            self.plugins.as_deref(),
+            target,
+            on,
+            &self.runner,
+            &note,
+            false,
+        );
+        if matches!(destination, Destination::Missing) {
+            self.respond(session, id, Ok(no_machine()));
             return;
         }
 
@@ -35,15 +54,6 @@ impl Coordinator {
             (Some(loaded), Some(owner)) => loaded.action_sources.get(owner).cloned(),
             _ => self.legacy_action_source.clone(),
         };
-        let Some(source) = source else {
-            self.respond(
-                session,
-                id,
-                Err("Plugin action has no action process bundle".into()),
-            );
-            return;
-        };
-
         let environment = Arc::new(crate::environment::Snapshot::new(
             self.plugins.as_deref(),
             owner.as_deref(),
@@ -54,7 +64,7 @@ impl Coordinator {
             owner.clone(),
             environment.clone(),
             process.clone(),
-            note,
+            (note, self.runner.clone()),
         ) {
             Ok(ops) => ops,
             Err(error) => {
@@ -63,13 +73,14 @@ impl Coordinator {
             }
         };
         self.action_jobs.spawn(async move {
+            let result = destination
+                .invoke(&process, source, local_name, args, ops)
+                .await;
+
             (
                 session,
                 id,
-                process
-                    .invoke(source, local_name, args, ops)
-                    .await
-                    .map_err(|error| environment.redact(error)),
+                result.map_err(|error| environment.redact(error)),
             )
         });
     }

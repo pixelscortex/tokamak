@@ -9,7 +9,7 @@ export type CallErrorDetails = { plugin: string; hook: string; stage: string; ki
 export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }
   | { type: "mutation"; id: number; name: string; args: JsonValue }
-  | { type: "action"; id: number; name: string; args: JsonValue }
+  | { type: "action"; id: number; name: string; args: JsonValue; on?: "server" | "caller" }
   | {
       type: "localcall";
       id: number;
@@ -18,6 +18,7 @@ export type Request =
       kind: "query" | "mutation" | "action";
       depth: number;
       thread: string | null;
+      on?: "server" | "caller";
     }
   | { type: "subscribe"; id: number; name: string; args: JsonValue }
   | { type: "plugins"; id: number }

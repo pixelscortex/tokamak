@@ -37,6 +37,7 @@ impl Coordinator {
                 args,
                 kind: expected,
                 local_parent,
+                on,
             } => {
                 // A socket may already have admitted a write when its member
                 // was revoked. It must not recreate rows after cleanup.
@@ -67,7 +68,7 @@ impl Coordinator {
                     }
                     None => Some(auth.clone()).into(),
                 };
-                self.call(session, id, name, args, expected, (auth, note))
+                self.call(session, id, name, args, expected, (auth, note, on))
                     .await;
             }
             Action::Subscribe { id, name, args } => {
@@ -91,7 +92,11 @@ impl Coordinator {
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
-        (auth, note): (crate::identity::AuthContext, crate::identity::CallNote),
+        (auth, note, on): (
+            crate::identity::AuthContext,
+            crate::identity::CallNote,
+            Option<ActionTarget>,
+        ),
     ) {
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
@@ -133,7 +138,7 @@ impl Coordinator {
                 Err("function kind does not match request".into())
             }
             Some(FunctionKind::Action) => {
-                self.start_action(session, note, id, name, args);
+                self.start_action(session, id, name, args, (note, on));
                 return;
             }
             Some(kind) => {

@@ -89,9 +89,16 @@ export function tokamak(
         hasLocal =
           (!!placement &&
             [...placement.modules.values()].some((exports) =>
-              [...exports.values()].some((definition) => definition.kind === "local"),
+              [...exports.values()].some(
+                (definition) => definition.kind === "local" || definition.kind === "action",
+              ),
             )) ||
-          Boolean(placement?.providers.some((p) => p.place === "local"));
+          Boolean(
+            placement?.providers.some(
+              (p) =>
+                p.place === "local" || p.methods.some((method: { kind: string }) => method.kind === "action"),
+            ),
+          );
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
           options.plugin ??

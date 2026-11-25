@@ -359,6 +359,7 @@ async fn reload_replaces_only_the_reloaded_plugins_action_runtime() {
     .unwrap();
     let mut session = server.connect().await.unwrap();
     let action = |id, name: &str, args| server::protocol::Request::Action {
+        on: None,
         id,
         name: name.into(),
         args,

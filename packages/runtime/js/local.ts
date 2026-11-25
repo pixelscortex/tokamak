@@ -1,5 +1,8 @@
 import {
   authCaller,
+  fail,
+  type ActionOptions,
+  type ActionTarget,
   functionName,
   LocalReloadTimeout,
   type ActionSignal,
@@ -12,6 +15,9 @@ import { WORKER_CAPACITY, WORKER_FRAME_BYTES } from "../../sdk/src/worker-limits
 
 /** How many not-found plugin ids are remembered before the memory is cleared. */
 const RECHECK_CAPACITY = 64;
+
+/** Connecting to the local Runner failed before any call was admitted. */
+export class RunnerUnavailable extends Error {}
 
 export interface LocalArtifact {
   id: string;
@@ -63,6 +69,7 @@ type ServerConnection = ClientTransport & {
     name: string,
     args: JsonValue,
     parent: Continuation,
+    on?: ActionTarget,
   ): Promise<JsonValue>;
   plugins(): Promise<JsonValue>;
   onPluginsChanged(callback: () => void): () => void;
@@ -70,6 +77,7 @@ type ServerConnection = ClientTransport & {
 type Worker = Awaited<ReturnType<LaunchLocalWorker>>;
 type Catalog = {
   plugins: Manifest[];
+  functions?: { name: string; kind: string; on?: ActionTarget }[];
 };
 
 export class LocalFunctions implements LocalTransport {
@@ -105,7 +113,36 @@ export class LocalFunctions implements LocalTransport {
     });
   }
 
-  async invoke(name: string, args: JsonValue, signal?: ActionSignal): Promise<JsonValue> {
+  async action(
+    name: string,
+    args: JsonValue,
+    options?: ActionOptions & { signal?: ActionSignal },
+  ): Promise<JsonValue> {
+    await this.ensureCatalog();
+    const definition = this.catalog.functions?.find((fn) => fn.name === name && fn.kind === "action");
+    const on = options?.on ?? definition?.on;
+    if (on === "caller" && definition) {
+      const manifest = this.catalog.plugins.find(({ plugin }) => plugin.id === name.split("/")[0]);
+      if (!manifest || !this.artifact(manifest)) return fail("noMachine", null);
+      try {
+        return await this.invoke(name, args, options?.signal, true);
+      } catch (error) {
+        if (error instanceof RunnerUnavailable) return fail("noMachine", null);
+        throw error;
+      }
+    }
+    if (!this.server.action) throw new Error("Transport does not support actions");
+    return this.server.action(name, args, on);
+  }
+
+  private async ensureCatalog() {
+    while (!this.closed && this.loaded !== this.generation) {
+      await this.loadCatalog(this.generation);
+    }
+    if (this.closed) throw new Error("Local functions closed");
+  }
+
+  async invoke(name: string, args: JsonValue, signal?: ActionSignal, action = false): Promise<JsonValue> {
     const slash = name.indexOf("/");
     if (slash < 1) throw new Error("Expected a plugin-qualified local function");
     if (signal?.aborted) throw new Error("Local function cancelled");
@@ -113,12 +150,7 @@ export class LocalFunctions implements LocalTransport {
     // Read the catalog once per plugin generation, not once per call: a window
     // making many local calls at once (one per message of a long thread) would
     // otherwise flood its connection with catalog pages and be disconnected.
-    while (!this.closed && this.loaded !== this.generation) {
-      // A reload overtook the catalog read. Retry without discarding workers
-      // that still match their installed artifacts.
-      await this.loadCatalog(this.generation);
-    }
-    if (this.closed) throw new Error("Local functions closed");
+    await this.ensureCatalog();
     const manifest = this.catalog.plugins.find((entry) => entry.plugin.id === id);
     const artifact = manifest && this.artifact(manifest);
     if (!artifact) {
@@ -129,7 +161,7 @@ export class LocalFunctions implements LocalTransport {
       if (this.rechecked.get(id) !== this.generation) {
         if (this.rechecked.size >= RECHECK_CAPACITY) this.rechecked.clear();
         this.rechecked.set(id, ++this.generation);
-        return this.invoke(name, args, signal);
+        return this.invoke(name, args, signal, action);
       }
       throw new Error(`Plugin ${id} has no local functions`);
     }
@@ -156,7 +188,7 @@ export class LocalFunctions implements LocalTransport {
       this.workers.set(id, current);
       worker = current;
     }
-    return worker.invoke(name.slice(slash + 1), args, signal);
+    return worker.invoke(name.slice(slash + 1), args, signal, action);
   }
 
   private artifact(manifest: Manifest): LocalArtifact | undefined {
@@ -178,13 +210,14 @@ export class LocalFunctions implements LocalTransport {
   }
 
   private async refresh(generation: number) {
-    const { plugins } = (await this.server.plugins()) as unknown as { plugins: Manifest[] };
+    const catalog = (await this.server.plugins()) as unknown as Catalog;
+    const { plugins } = catalog;
     const workers = [...this.workers.values()];
     // Retire only after the process connection is ready to receive the frame.
     await Promise.allSettled(workers.map((worker) => worker.ready));
     if (this.closed || generation !== this.generation) return;
     const previous = this.catalog;
-    this.catalog = { plugins };
+    this.catalog = catalog;
     const artifacts = new Map(plugins.map((manifest) => [manifest.plugin.id, this.artifact(manifest)]));
     for (const worker of workers) {
       const id = worker.artifact.id;
@@ -286,7 +319,17 @@ export class LocalFunctions implements LocalTransport {
         this.authRead = undefined;
       }));
     }
-    const { name, args } = payload as { name: string; args: JsonValue };
+    const {
+      name,
+      args,
+      on,
+      kind: requested,
+    } = payload as {
+      name: string;
+      args: JsonValue;
+      on?: ActionTarget;
+      kind?: "query" | "mutation" | "action";
+    };
     const slash = typeof name === "string" ? name.indexOf("/") : -1;
     if (slash < 1) throw new Error("Expected a plugin-qualified server function");
     const id = name.slice(0, slash);
@@ -311,10 +354,12 @@ export class LocalFunctions implements LocalTransport {
           ? "mutation"
           : operation === "local.runAction"
             ? "action"
-            : undefined;
-    if (kind && continuation) {
+            : operation === "plugin.call"
+              ? (requested ?? this.catalog.functions?.find((fn) => fn.name === name)?.kind)
+              : undefined;
+    if ((kind === "query" || kind === "mutation" || kind === "action") && continuation) {
       if (!this.server.continueLocalCall) throw new Error("Server transport cannot continue a Runner call");
-      return this.server.continueLocalCall(kind, name, args, continuation);
+      return this.server.continueLocalCall(kind, name, args, continuation, on);
     }
     if (operation === "local.runQuery") return this.server.query(name, args);
     if (operation === "local.runMutation") return this.server.mutation(name, args);
@@ -395,18 +440,24 @@ class LocalWorker {
     return this.endpoint;
   }
 
-  async invoke(name: string, args: JsonValue, signal?: ActionSignal) {
+  async invoke(name: string, args: JsonValue, signal?: ActionSignal, action = false) {
     const catalog = this.catalog();
     this.invoking++;
     try {
-      return await this.call(name, args, catalog, signal);
+      return await this.call(name, args, catalog, signal, action);
     } finally {
       this.invoking--;
       this.finishDraining();
     }
   }
 
-  private async call(name: string, args: JsonValue, catalog: Catalog, signal?: ActionSignal) {
+  private async call(
+    name: string,
+    args: JsonValue,
+    catalog: Catalog,
+    signal: ActionSignal | undefined,
+    action: boolean,
+  ) {
     let endpoint: Worker;
     try {
       endpoint = await this.endpoint;
@@ -419,7 +470,13 @@ class LocalWorker {
     if (signal?.aborted) throw new Error("Local function cancelled");
     if (this.calls.size >= WORKER_CAPACITY) throw new Error("Plugin process invocation limit reached");
     const id = ++this.next;
-    const invocation = { type: "invoke", id, fn: name, args };
+    const invocation = {
+      type: "invoke",
+      id,
+      fn: name,
+      args,
+      ...(action ? { action } : {}),
+    };
     if (new TextEncoder().encode(JSON.stringify(invocation)).length >= WORKER_FRAME_BYTES)
       throw new Error("Local function arguments exceed 1 MiB");
     return new Promise<JsonValue>((resolve, reject) => {

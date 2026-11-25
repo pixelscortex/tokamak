@@ -72,6 +72,7 @@ impl Fixture {
         self.session
             .sender()
             .request(Request::Action {
+                on: None,
                 id: self.next,
                 name: format!("worker-test/actions:{name}"),
                 args,

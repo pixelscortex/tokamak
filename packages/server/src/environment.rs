@@ -22,26 +22,30 @@ pub(crate) fn get(name: &str, path: &Path) -> Result<Option<String>, String> {
 
 /// Values and read failures are frozen before an action is admitted.
 #[derive(Default)]
-pub(crate) struct Snapshot(std::collections::BTreeMap<String, Result<Option<String>, String>>);
+pub struct Snapshot(std::collections::BTreeMap<String, Result<Option<String>, String>>);
 
 impl Snapshot {
     pub(crate) fn new(loaded: Option<&crate::plugins::Loaded>, owner: Option<&str>) -> Self {
         let (Some(loaded), Some(owner)) = (loaded, owner) else {
             return Self::default();
         };
+        Self::for_installation(
+            &loaded.catalog.plugins[owner].manifest.plugin.permissions,
+            &loaded.catalog.environment,
+        )
+    }
+
+    pub fn for_installation(permissions: &[String], environment: &Path) -> Self {
         Self(
-            loaded.catalog.plugins[owner]
-                .manifest
-                .plugin
-                .permissions
+            permissions
                 .iter()
                 .filter_map(|permission| permission.strip_prefix("env:"))
-                .map(|name| (name.to_owned(), get(name, &loaded.catalog.environment)))
+                .map(|name| (name.to_owned(), get(name, environment)))
                 .collect(),
         )
     }
 
-    pub(crate) fn get(&self, name: &str) -> Result<Option<String>, String> {
+    pub fn get(&self, name: &str) -> Result<Option<String>, String> {
         self.0.get(name).cloned().unwrap_or_else(|| {
             Err(format!(
                 "environment permission denied: requires env:{name}"
@@ -49,7 +53,7 @@ impl Snapshot {
         })
     }
 
-    pub(crate) fn redact(&self, mut error: String) -> String {
+    pub fn redact(&self, mut error: String) -> String {
         let mut values: Vec<_> = self
             .0
             .values()

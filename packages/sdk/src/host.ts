@@ -106,6 +106,7 @@ export interface HostOperations {
       args: JsonValue;
       kind?: import("./functions").ServerFunctionKind;
       contract?: string;
+      on?: import("./functions").ActionTarget;
     };
     result: JsonValue;
   };

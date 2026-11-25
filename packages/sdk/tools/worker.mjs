@@ -35,6 +35,7 @@ export function transactionSources({
       kind: "action",
       args: { kind: "any" },
       visibility: placement.modules.get(path).get(name).visibility,
+      on: placement.modules.get(path).get(name).on,
     })),
   );
   const providers = placement?.providers ?? [];
@@ -46,6 +47,7 @@ export function transactionSources({
           kind: "action",
           args: { kind: "any" },
           visibility: Visibility.Internal,
+          on: method.on,
         });
   return {
     source: registrySource({
@@ -65,7 +67,7 @@ export function transactionSources({
   };
 }
 
-export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plugins }) {
+export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plugins, actionModules }) {
   const result = await Bun.build({
     entrypoints: ["tokamak-worker:entry"],
     target: "node",
@@ -77,7 +79,7 @@ export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plug
     env: "disable",
     plugins: [
       workerBuiltins(pluginRoot),
-      bunPluginBoundary(pluginRoot, { publicOnly: true }),
+      bunPluginBoundary(pluginRoot, { publicOnly: (path) => !actionModules.has(path) }),
       ...plugins,
       {
         name: "worker-sdk",

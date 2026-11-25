@@ -281,6 +281,7 @@ impl Loaded {
                         mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
                         kind,
+                        on: serde_json::from_value(function["on"].clone()).unwrap_or_default(),
                         bundle: bundle.clone(),
                         space: space.clone(),
                     },

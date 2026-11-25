@@ -14,6 +14,7 @@ export type WorkerMessage =
       args: JsonValue;
       contract?: ContractInvocation;
       routed?: boolean;
+      action?: boolean;
     }
   | {
       type: "opResult";
@@ -114,6 +115,7 @@ export function workerDispatch(
     args: JsonValue,
     target?: ContractInvocation,
     routed?: boolean,
+    action?: boolean,
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Plugin process invocation capacity exceeded");
@@ -223,7 +225,10 @@ export function workerDispatch(
       void invocation.close().catch(() => {});
     }
     try {
-      if (!(target && options.contract) && functions[name]?.kind !== kind)
+      if (
+        !(target && options.contract) &&
+        functions[name]?.kind !== (action && kind === "local" ? "action" : kind)
+      )
         throw new Error(`Unknown local ${kind} function: ${name}`);
       const value =
         target && options.contract
@@ -263,7 +268,14 @@ export function workerDispatch(
   }
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
-      const invocation = invoke(message.id, message.fn, message.args, message.contract, message.routed);
+      const invocation = invoke(
+        message.id,
+        message.fn,
+        message.args,
+        message.contract,
+        message.routed,
+        message.action,
+      );
       if (options.observeInvocation) return invocation;
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);

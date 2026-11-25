@@ -107,6 +107,11 @@ impl Local {
     ) -> Result<(), server::Error> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
+            let pool = self.pool.clone();
+            let address: Arc<str> = workspace.into();
+            server.attach_runner(move |action| {
+                Box::pin(quickjs::action(pool.clone(), address.clone(), action))
+            })?;
             self.pool
                 .observe(server, server.connect().await?, workspace.into());
         }

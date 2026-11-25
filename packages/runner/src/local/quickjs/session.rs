@@ -106,10 +106,29 @@ struct Bridge {
     pending: Mutex<HashMap<u64, Pending>>,
     leases: Leases,
     retiring: CancellationToken,
+    action_ops: Option<Arc<engine::OpRegistry>>,
 }
 
 impl Bridge {
     async fn request(&self, mut frame: Value, root: u64, here: &Artifact) -> Result<Reply, String> {
+        // Server dispatch owns the CallNote in these operations. Only the
+        // window route uses the Runner's continuation.
+        if let Some(ops) = &self.action_ops {
+            let payload = frame["payload"].take();
+            let name = frame["name"].as_str().ok_or("Missing host operation")?;
+            let name = match name {
+                "local.runQuery" => "action.runQuery",
+                "local.runMutation" => "action.runMutation",
+                "local.runAction" => "plugin.call",
+                other => other,
+            };
+            let result = ops.dispatch(name, payload).await;
+            return Ok(Reply::Result(match result {
+                Ok(value) => json!({"value":value}),
+                Err(error) => json!({"error":error}),
+            }));
+        }
+
         let (answer, receive) = oneshot::channel();
         let target = match frame["name"].as_str() {
             Some("local.contract.call" | "local.contract.describe") => {
@@ -229,6 +248,7 @@ pub(in crate::local) async fn connection(
         pending: Mutex::default(),
         leases: Leases::new(pool, workspace),
         retiring: CancellationToken::new(),
+        action_ops: None,
     });
     let mut active = HashMap::<u64, CancellationToken>::new();
     let mut calls = JoinSet::new();
@@ -291,6 +311,42 @@ pub(in crate::local) async fn connection(
                 send(socket, frame).await?;
             }
         }
+    }
+}
+
+pub(in crate::local) async fn action(
+    pool: Pool,
+    workspace: Arc<str>,
+    action: server::RunnerAction,
+) -> Result<Value, String> {
+    let (output, _outgoing) = mpsc::channel(1);
+    let bridge = Bridge {
+        output,
+        next: AtomicU64::new(0),
+        slots: Semaphore::new(WORKER_CAPACITY),
+        pending: Mutex::default(),
+        leases: Leases::new(&pool, workspace),
+        retiring: CancellationToken::new(),
+        action_ops: Some(action.ops),
+    };
+    let artifact = Artifact {
+        id: action.plugin,
+        entry_hash: action.entry_hash,
+        code_hash: action.code_hash,
+    };
+    let lease = bridge.leases.get(&artifact)?;
+    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let frame = json!({
+        "type":"invoke", "fn":action.name, "args":action.args, "action":true,
+    });
+    let result = tokio::select! {
+        () = pool.stopping.cancelled() => return Err("Runner stopped".into()),
+        result = run(&pool, &bridge, 1, &host, frame, std::slice::from_ref(&artifact.id), Invocation::Root) => result?,
+    };
+    if let Some(error) = result["error"].as_str() {
+        Err(error.to_owned())
+    } else {
+        Ok(result["value"].clone())
     }
 }
 
@@ -387,6 +443,51 @@ async fn in_operation(
     }
 }
 
+struct WindowActionOps {
+    crypto: engine::OpRegistry,
+    env: server::ActionEnvironment,
+}
+
+impl WindowActionOps {
+    fn new(pool: &Pool, artifact: &Artifact) -> Result<Self, String> {
+        let root = &pool.plugins;
+        let (_, manifest) = crate::artifact::artifact_folder(
+            root,
+            &artifact.id,
+            &artifact.entry_hash,
+            &artifact.code_hash,
+        )?;
+        let permissions: Vec<String> = manifest["plugin"]["permissions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect();
+        let env = server::ActionEnvironment::for_installation(
+            &permissions,
+            &root.parent().unwrap_or(root).join(".env.local"),
+        );
+        let mut crypto = engine::OpRegistry::new();
+        engine::register_password_crypto(&mut crypto).map_err(|error| error.to_string())?;
+        Ok(Self { env, crypto })
+    }
+
+    async fn dispatch(&self, name: &str, payload: Value) -> Option<Result<Value, String>> {
+        match name {
+            "action.env" => Some(
+                payload["name"]
+                    .as_str()
+                    .ok_or_else(|| "env requires a name".to_owned())
+                    .and_then(|name| self.env.get(name))
+                    .map(|value| json!(value)),
+            ),
+            name if name.starts_with("crypto.") => Some(self.crypto.dispatch(name, payload).await),
+            _ => None,
+        }
+    }
+}
+
 async fn run(
     pool: &Pool,
     bridge: &Bridge,
@@ -406,17 +507,7 @@ async fn run(
         channel: None,
     };
     let channels = Channels::default();
-    let thread = frame["threadId"]
-        .as_str()
-        .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned()));
-    let route = CallRoute {
-        pool,
-        bridge,
-        root,
-        ancestors,
-        thread,
-        args: &frame["args"],
-    };
+    let route = CallRoute::new(pool, bridge, root, &host.build, ancestors, &frame)?;
     let mut operations = FuturesUnordered::new();
     let mut pending = HashMap::<u64, CancellationToken>::new();
     let mut notify_retirement = matches!(invocation, Invocation::Root);
@@ -432,7 +523,7 @@ async fn run(
             frame = call.next() => {
                 let frame = frame?;
                 if frame["type"] == "result" {
-                    return Ok(frame);
+                    return Ok(route.redact_result(frame));
                 }
                 // A crashed or cancelled caller drops its nested work.
                 let id = frame_id(&frame["id"])?;
@@ -570,9 +661,44 @@ struct CallRoute<'a> {
     ancestors: &'a [String],
     thread: OnceLock<String>,
     args: &'a Value,
+    local_ops: Option<WindowActionOps>,
 }
 
-impl CallRoute<'_> {
+impl<'a> CallRoute<'a> {
+    fn new(
+        pool: &'a Pool,
+        bridge: &'a Bridge,
+        root: u64,
+        build: &Artifact,
+        ancestors: &'a [String],
+        frame: &'a Value,
+    ) -> Result<Self, String> {
+        let local_ops = (frame["action"] == true && bridge.action_ops.is_none())
+            .then(|| WindowActionOps::new(pool, build))
+            .transpose()?;
+        Ok(Self {
+            pool,
+            bridge,
+            root,
+            ancestors,
+            thread: frame["threadId"]
+                .as_str()
+                .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned())),
+            args: &frame["args"],
+            local_ops,
+        })
+    }
+
+    fn redact_result(&self, mut frame: Value) -> Value {
+        if let Some(ops) = &self.local_ops
+            && let Some(error) = frame["error"].as_str()
+        {
+            frame["error"] = json!(ops.env.redact(error.to_owned()));
+        }
+
+        frame
+    }
+
     async fn operation(
         &self,
         here: &Peer,
@@ -584,6 +710,16 @@ impl CallRoute<'_> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
+        if let Some(ops) = &self.local_ops
+            && let Some(name) = frame["name"].as_str()
+            && let Some(result) = ops.dispatch(name, frame["payload"].clone()).await
+        {
+            return Ok(match result {
+                Ok(value) => json!({"value":value}),
+                Err(error) => json!({"error":error}),
+            });
+        }
+
         let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
         self.attach_continuation(&mut frame, wants_note);
         let reply = self
@@ -596,7 +732,7 @@ impl CallRoute<'_> {
             // Reuse the running host without starting or leasing it again.
             Reply::Here => None,
             Reply::Result(mut value) => {
-                if wants_note && value["value"].is_object() {
+                if self.bridge.action_ops.is_none() && wants_note && value["value"].is_object() {
                     let note = value["value"].as_object_mut().expect("object checked");
                     note.remove("threadId");
                     if let Some(thread_id) = self.thread.get() {
@@ -636,7 +772,7 @@ impl CallRoute<'_> {
 
         if matches!(
             fields.get("name").and_then(Value::as_str),
-            Some("local.runQuery" | "local.runMutation" | "local.runAction")
+            Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
         ) {
             fields.insert(
                 "continuation".into(),
@@ -680,7 +816,7 @@ impl CallRoute<'_> {
         }
         let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
         let name = contract_target_name(&artifact.id, &target);
-        next_call_depth(ancestors.len() - 1, &name)?;
+        next_call_depth(self.ancestors.len() - 1, &name)?;
         if lease.is_some() && ancestors.contains(&artifact.id) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
@@ -688,7 +824,7 @@ impl CallRoute<'_> {
             ));
         }
         let frame = json!({
-            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id
+            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id,
         });
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
@@ -779,6 +915,7 @@ mod tests {
             pending: Mutex::default(),
             leases: Leases::new(&pool, "".into()),
             retiring: CancellationToken::new(),
+            action_ops: None,
         };
         let route = CallRoute {
             pool: &pool,
@@ -787,6 +924,7 @@ mod tests {
             ancestors: &["first".into(), "second".into()],
             thread: OnceLock::new(),
             args: &json!({"selection": "chat/threads:admitted"}),
+            local_ops: None,
         };
         let mut auth = json!({
             "name": "auth.current",
@@ -828,6 +966,7 @@ mod tests {
             pending: Mutex::default(),
             leases: Leases::new(&pool, "".into()),
             retiring: CancellationToken::new(),
+            action_ops: None,
         };
         for index in 0..WORKER_CAPACITY {
             bridge.leases.get(&build(format!("busy-{index}"))).unwrap();

@@ -4,7 +4,7 @@
 //! A session has ONE ordered output stream; transports must preserve its order.
 
 pub use crate::protocol::Event;
-use crate::protocol::{CallError, Request};
+use crate::protocol::{ActionTarget, CallError, Request};
 use crate::{
     data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
@@ -126,6 +126,7 @@ pub struct Server {
     // Shutdown must never compete for space with application calls.
     closing: mpsc::Sender<oneshot::Sender<Result<(), Error>>>,
     descriptor: Json,
+    runner: Arc<crate::actions::RunnerSlot>,
     cleanup: Arc<Notify>,
     closed: watch::Receiver<Option<Result<(), Error>>>,
 }
@@ -222,6 +223,7 @@ pub(crate) enum Action {
         args: Json,
         kind: Option<FunctionKind>,
         local_parent: Option<(usize, Option<String>)>,
+        on: Option<ActionTarget>,
     },
     Subscribe {
         id: u64,
@@ -265,6 +267,7 @@ struct Coordinator {
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
+    runner: Arc<crate::actions::RunnerSlot>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
     commands: mpsc::WeakSender<Command>,

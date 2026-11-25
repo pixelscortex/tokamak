@@ -329,12 +329,19 @@ export function bunPluginReferences(root, options) {
       build.onResolve({ filter: /^@tokamak\/sdk$/ }, ({ importer }) => {
         if (importer.startsWith("plugin:")) return { path: Bun.resolveSync("@tokamak/sdk", root) };
       });
-      build.onResolve({ filter: /^plugin:/ }, ({ path }) => ({ path, namespace: "plugin-reference" }));
-      build.onLoad({ filter: /.*/, namespace: "plugin-reference" }, ({ path }) => ({
-        contents: pluginReferenceSource(root, path, options),
-        loader: "js",
-        resolveDir: root,
-      }));
+      build.onResolve({ filter: /^plugin:/ }, ({ path, importer }) => {
+        const restricted =
+          typeof options?.publicOnly === "function" ? options.publicOnly(importer) : options?.publicOnly;
+        return { path, namespace: restricted ? "public-plugin-reference" : "plugin-reference" };
+      });
+      for (const namespace of ["plugin-reference", "public-plugin-reference"])
+        build.onLoad({ filter: /.*/, namespace }, ({ path }) => ({
+          contents: pluginReferenceSource(root, path, {
+            publicOnly: namespace === "public-plugin-reference",
+          }),
+          loader: "js",
+          resolveDir: root,
+        }));
     },
   };
 }
@@ -348,7 +355,10 @@ export function bunPluginBoundary(root, { publicOnly = false } = {}) {
         if (!importer || !isAbsolute(importer) || path.startsWith("node:") || isBuiltin(path)) return;
         assertWindowSide(importer, path);
         const target = Bun.resolveSync(path, dirname(importer));
-        if (publicOnly && isInternalReferenceModule(canonical(target)))
+        if (
+          (typeof publicOnly === "function" ? publicOnly(importer) : publicOnly) &&
+          isInternalReferenceModule(canonical(target))
+        )
           throw new Error(
             `Local code cannot import internal references: ${path}. Import the generated public api instead.`,
           );

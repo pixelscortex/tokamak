@@ -192,7 +192,7 @@ export function discoverProviders(root, files, program, checker) {
             throw new Error(
               `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
             );
-          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, field });
+          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, on: info.on, field });
         }
       }
       providers.push({

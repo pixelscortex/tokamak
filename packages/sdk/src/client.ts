@@ -5,6 +5,7 @@ import { functionName } from "./api";
 import type { FunctionReference } from "./api";
 import type { JsonValue } from "./values";
 import { assertJson, jsonSnapshot } from "./values";
+import type { ActionOptions, ActionTarget, MachineFailure } from "./functions";
 import type { ActionSignal } from "./host";
 import { isWindowStateFunction } from "./window-state-protocol";
 
@@ -22,6 +23,11 @@ export function isLocalReloadTimeout(error: unknown): boolean {
 }
 
 export interface LocalTransport {
+  action?(
+    name: string,
+    args: JsonValue,
+    options?: ActionOptions & { signal?: ActionSignal },
+  ): Promise<JsonValue>;
   invoke(name: string, args: JsonValue, signal?: ActionSignal): Promise<JsonValue>;
 }
 
@@ -33,7 +39,7 @@ export interface ClientTransport {
   query(name: string, args: JsonValue): Promise<JsonValue>;
   mutation(name: string, args: JsonValue): Promise<JsonValue>;
   /** Optional for existing custom transports; current native/WebSocket transports implement it. */
-  action?(name: string, args: JsonValue): Promise<JsonValue>;
+  action?(name: string, args: JsonValue, on?: ActionTarget): Promise<JsonValue>;
   /**
    * Transport owns initial delivery, update ordering and error delivery. If
    * registration itself throws, it must clean up resources before throwing.
@@ -66,9 +72,23 @@ export class TokamakClient {
     return value as R;
   }
 
-  async action<A, R>(reference: FunctionReference<"action", A, R>, args: NoInfer<A>): Promise<R> {
-    if (!this.#transport.action) throw new Error("Transport does not support actions");
-    const value = await this.#transport.action(publicName(reference), jsonSnapshot(args, "args"));
+  action<A, R>(reference: FunctionReference<"action", A, R>, args: NoInfer<A>): Promise<R>;
+  action<A, R>(
+    reference: FunctionReference<"action", A, R>,
+    args: NoInfer<A>,
+    options: ActionOptions & { signal?: ActionSignal },
+  ): Promise<R | MachineFailure>;
+  async action<A, R>(
+    reference: FunctionReference<"action", A, R>,
+    args: NoInfer<A>,
+    options?: ActionOptions & { signal?: ActionSignal },
+  ): Promise<R | MachineFailure> {
+    const name = publicName(reference);
+    const input = jsonSnapshot(args, "args");
+    const value = this.#localTransport?.action
+      ? await this.#localTransport.action(name, input, options)
+      : await this.#transport.action?.(name, input, options?.on);
+    if (value === undefined) throw new Error("Transport does not support actions");
     assertJson(value, "action result");
     return value as R;
   }
