@@ -1,0 +1,48 @@
+packages/server/tests/README.md
+  s_9982f8c50f6e65::t_69004d1f878750 297-299
+  s_9982f8c50f6e65::t_f2a4cb2d281a72 300
+packages/build/tests/trigger-fixtures.mjs
+  s_9982f8c50f6e65::t_3a3d2ee0ef1699 5-6,8-9,25,29,39,44,49-58,66-68,80,82,104,126-131,144-148,161-162,166,179-191,194-195,197-203,206-207
+  s_9982f8c50f6e65::t_3cf33c941579ab 17,77,157-159
+  s_9982f8c50f6e65::t_c01a61eff1eaa8 7,71-73,160,192-193,196,204-205
+packages/engine/tests/acceptance.rs
+  s_9982f8c50f6e65::t_69004d1f878750 806-821,823-865
+  s_9982f8c50f6e65::t_09e5ec03f3e52e 822
+packages/server/tests/triggers-driver.mjs
+  s_9982f8c50f6e65::t_3cf33c941579ab 9-16,23,25,29-50,56,94-106,187,205,210
+  s_9982f8c50f6e65::t_6f862d03ce9309 120-122,127,129-132,165-166,172,185-186,188-189,201-204,206-209,211-223
+packages/engine/src/bridge.rs
+  s_9982f8c50f6e65::t_69004d1f878750 394-396,400,404,407-417,429,433,462-467,486,512,514,526,556-557,566,593-610,617,636-664
+  s_9982f8c50f6e65::t_8a9dba827904f3 11-12,15,70-71,244-247,354,364,378,386-393,665-671,722
+packages/sdk/README.md
+  s_9982f8c50f6e65::t_69004d1f878750 885
+  s_9982f8c50f6e65::t_a96a4f64d7f685 874-875,882-884,886
+packages/engine/src/engine.rs
+  s_9982f8c50f6e65::t_ab9beff7565094 153
+packages/server/src/data/transaction/records.rs
+  s_9982f8c50f6e65::t_22567cc4149d2f 8,244-245
+packages/server/src/host.rs
+  s_9982f8c50f6e65::t_11218c95d888fa 16,25,68
+packages/server/src/host/hooks.rs
+  s_9982f8c50f6e65::t_e2b8b333174820 209-212,214-223,254,263-265,282,290
+packages/server/src/host/triggers.rs
+  s_9982f8c50f6e65::t_45ada841de7035 13,38,44,75-84,87,134-137,142,144,146,149,153-157,180-190,195-196
+packages/server/src/plugins/loading.rs
+  s_9982f8c50f6e65::t_4af4bb9deb0915 441,500-503
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71a3a38eef88ab5e7f404043d0563967bb1e573a",
+  "prompts": {},
+  "sessions": {
+    "s_9982f8c50f6e65": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21399-c620-7161-abf7-af78155d4bbc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
