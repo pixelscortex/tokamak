@@ -200,7 +200,7 @@ function PickerSettings(props: { current: Resolved; change: (next: Change) => vo
   const me = auth.me();
   const labelled = (ids: readonly string[]) => ids.map((id) => ({ id, label: label(id) }));
   return (
-    <div class="flex h-10 shrink-0 items-center gap-2 rounded-sm bg-tray px-1">
+    <div class="flex h-10 shrink-0 items-center gap-4 rounded-sm bg-tray px-1">
       <Show when={props.current.speed}>
         {(speed) => (
           <Choice
@@ -257,9 +257,12 @@ function Choice(props: {
       <Show when={props.title}>
         {(title) => <span class="px-2 text-label font-normal text-ink-3 select-none">{title()}</span>}
       </Show>
-      <For each={props.options}>
-        {(option) => <Menu.RadioItem value={option.id}>{option.label}</Menu.RadioItem>}
-      </For>
+      {/* Apart, so each check reads as its own option's. */}
+      <div class="flex items-center gap-1">
+        <For each={props.options}>
+          {(option) => <Menu.RadioItem value={option.id}>{option.label}</Menu.RadioItem>}
+        </For>
+      </div>
     </Menu.RadioGroup>
   );
 }
