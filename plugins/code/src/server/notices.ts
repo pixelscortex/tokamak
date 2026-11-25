@@ -1,9 +1,10 @@
-import { local, v } from "@tokamak/sdk";
+import { action, v } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import { repository, snapshotNotice } from "../local/git";
 
-/** The names and warning are read from Git, in the local part. */
-export const forTurn = local({
+/** The names and warning are read from Git by a caller action on the Runner. */
+export const forTurn = action({
+  on: "caller",
   args: { threadId: v.id("threads"), turnId: v.string() },
   handler: async (ctx, { threadId, turnId }) => {
     const thread = await ctx.runQuery(chat.getThread, { threadId });

@@ -4,6 +4,10 @@ Threads, messages, the composer and the folder a thread works in. Chat knows
 nothing about agents or code; `ai` and `code` add to its parts.
 Paper page: `App 1:1 · Chat plugin`.
 
+Folder checking and resolution, and deletion with machine cleanup, use caller
+actions. Without a Runner, Chat stores the chosen path as typed and deletes
+threads through the server mutation.
+
 ## Screens
 
 | Screen                                                             | Source                                                                    | Paper artboard               |

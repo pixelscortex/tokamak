@@ -63,7 +63,7 @@ try {
   await snapshotReviewCases({
     ...fixture,
     gate: h.gate,
-    removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+    removeThread: (threadId) => desk.action(chat.threads.removeLocal, { threadId }),
     stopIsolation: () => stopIsolation(fixture),
   });
   await gitAppearsMidTurn(desk);
@@ -300,7 +300,7 @@ async function preservesWorktree(desk, code) {
   for (const phase of ["before", "after"]) {
     assert.equal(git("ls-tree", "-r", "--name-only", `${prefix}/${phase}`), tracked);
   }
-  assert.deepEqual(await desk.local(code.notices.forTurn, { threadId, turnId }), {
+  assert.deepEqual(await desk.action(code.notices.forTurn, { threadId, turnId }), {
     omitted: [large],
     warning: null,
   });
@@ -319,7 +319,7 @@ async function preservesWorktree(desk, code) {
   const other = await start(desk, folder, "Keep this thread");
   await other.run(other.messageId, "edit");
   assert.equal(refs(git, threadRef(other.threadId)).length, 2);
-  await desk.local(chat.threads.removeLocal, { threadId });
+  await desk.action(chat.threads.removeLocal, { threadId });
   assert.equal(await desk.query(chat.threads.get, { threadId }), null);
   assert.deepEqual(
     refs(git),
@@ -355,7 +355,7 @@ async function snapshotFailures(desk, code) {
   });
   assert.equal((await thread.reply(current._id)).state, "done");
   assert.deepEqual(refs(git, prefix), [`${prefix}/before`]);
-  assert.deepEqual(await desk.local(code.notices.forTurn, { threadId, turnId: current._id }), {
+  assert.deepEqual(await desk.action(code.notices.forTurn, { threadId, turnId: current._id }), {
     omitted: [],
     warning: "Couldn't save this turn's code",
   });
@@ -427,11 +427,11 @@ async function withoutAi(code) {
     text: "Plain chat",
     folder: { kind: "chosen", path: folder },
   });
-  assert.equal(await desk.local(code.notices.forTurn, { threadId, turnId: "older" }), null);
+  assert.equal(await desk.action(code.notices.forTurn, { threadId, turnId: "older" }), null);
   const fromEarlier = `${threadRef(threadId)}/turns/older/after`;
   git("update-ref", fromEarlier, "HEAD");
   assert.deepEqual(refs(git), [fromEarlier]);
-  await desk.local(chat.threads.removeLocal, { threadId });
+  await desk.action(chat.threads.removeLocal, { threadId });
   assert.deepEqual(refs(git), [], "code cleans up older snapshots even while ai is uninstalled");
 }
 
@@ -449,7 +449,7 @@ async function prunesWhenReopened(address, desk, code) {
   assert.equal(refs(git, threadRef(deleted.threadId)).length, 2);
 
   const reopened = await h.connect(address, { local: true });
-  await reopened.local(code.hooks.prune, {});
+  await reopened.action(code.hooks.prune, {});
   assert.deepEqual(refs(git), refs(git, threadRef(kept.threadId)));
   assert.equal(refs(git).length, 2);
   assert.equal(git("rev-parse", branch), branchHead);
@@ -477,7 +477,7 @@ async function withoutDataFolder() {
   assert.deepEqual(refs(git, prefix), [`${prefix}/after`, `${prefix}/before`]);
 
   const loose = await desk.mutation(chat.threads.start, { text: "No folder", folder: { kind: "own" } });
-  const own = await desk.local(chat.folders.resolve, { threadId: loose.threadId });
+  const own = await desk.action(chat.folders.resolve, { threadId: loose.threadId });
   assert.ok((await stat(own)).isDirectory(), "the thread still gets a folder of its own");
   await rm(own, { recursive: true, force: true });
   assert.equal((await desk.query(chat.threads.get, { threadId: loose.threadId })).folder.path, undefined);

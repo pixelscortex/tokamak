@@ -115,8 +115,8 @@ try {
   // A typed folder is checked and expanded on this computer before it is stored.
   const project = join(home, "invoices-app");
   await mkdir(project);
-  assert.equal(await a.local(api.folders.check, { path: "~/invoices-app" }), project);
-  assert.deepEqual(await a.local(api.folders.check, { path: "~/missing" }), {
+  assert.equal(await a.action(api.folders.check, { path: "~/invoices-app" }), project);
+  assert.deepEqual(await a.action(api.folders.check, { path: "~/missing" }), {
     failed: true,
     kind: "NotAFolder",
     data: { path: join(home, "missing") },
@@ -132,7 +132,7 @@ try {
   assert.equal(row.title, "Add a CSV export");
   assert.deepEqual(row.folder, { kind: "chosen", path: project });
   assert.equal(row.createdBy, "local");
-  assert.equal(await a.local(api.folders.resolve, { threadId: started.threadId }), project);
+  assert.equal(await a.action(api.folders.resolve, { threadId: started.threadId }), project);
   const messages = watch(b, api.messages.list, { threadId: started.threadId });
   const [opening] = await messages.until("first message", (list) => list.length === 1);
   assert.equal(opening._id, started.messageId);
@@ -191,7 +191,7 @@ try {
     (t) => t._id === loose.threadId,
   );
   assert.deepEqual(unmade.folder, { kind: "own" });
-  const own = await a.local(api.folders.resolve, { threadId: loose.threadId });
+  const own = await a.action(api.folders.resolve, { threadId: loose.threadId });
   assert.ok(own.startsWith(home + sep), `own folder ${own} is under the person's app data`);
   assert.ok(own.includes(join("no-project", "threads")), own);
   assert.ok((await stat(own)).isDirectory());
@@ -200,7 +200,7 @@ try {
     "own folder stored",
     (list) => list.find((t) => t._id === loose.threadId)?.folder?.path === own,
   );
-  assert.equal(await a.local(api.folders.resolve, { threadId: loose.threadId }), own);
+  assert.equal(await a.action(api.folders.resolve, { threadId: loose.threadId }), own);
   await assert.rejects(
     a.mutation(api.threads.setFolder, { threadId: loose.threadId, path: "/elsewhere" }),
     /already has a folder/,
@@ -230,7 +230,11 @@ try {
   assert.deepEqual(await a.query(api.threads.recentFolders, {}), [other]);
 
   // A window without a local part cannot make folders.
-  await assert.rejects(b.local(api.folders.resolve, { threadId: loose.threadId }), /desktop client/);
+  assert.deepEqual(await b.action(api.folders.resolve, { threadId: loose.threadId }), {
+    failed: true,
+    kind: "noMachine",
+    data: null,
+  });
   await checkTranscriptLimits(a, api);
 
   // ---- A shared server: a member cannot point the owner's thread at a folder.
@@ -246,7 +250,7 @@ try {
   for (const attempt of [
     () => member.mutation(api.threads.rename, { threadId: mine.threadId, title: "Not mine" }),
     () => member.mutation(api.threads.remove, { threadId: mine.threadId }),
-    () => member.local(api.threads.removeLocal, { threadId: mine.threadId }),
+    () => member.action(api.threads.removeLocal, { threadId: mine.threadId }),
   ])
     await assert.rejects(attempt(), /Only the person who started this thread/);
   assert.equal((await owner.query(api.threads.get, { threadId: mine.threadId })).title, "Owner's thread");
@@ -256,7 +260,7 @@ try {
   });
   await member.mutation(api.threads.rename, { threadId: theirs.threadId, title: "My thread" });
   assert.equal((await owner.query(api.threads.get, { threadId: theirs.threadId })).title, "My thread");
-  await member.local(api.threads.removeLocal, { threadId: theirs.threadId });
+  await member.action(api.threads.removeLocal, { threadId: theirs.threadId });
   assert.equal(await owner.query(api.threads.get, { threadId: theirs.threadId }), null);
   await owner.mutation(api.threads.setFolder, { threadId: mine.threadId, path: "/home/owner/own" });
   console.log(

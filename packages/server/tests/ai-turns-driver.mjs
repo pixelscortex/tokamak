@@ -747,7 +747,7 @@ async function sharedServer() {
   const desktop = await h.connect(address, { token: await h.ownerDevice(address, "Desktop") });
   const member = await h.connect(address, { token: (await h.signInMember(address, "Noor")).key });
   const sent = await laptop.mutation(chat.threads.start, { text: "Plan the week", folder: { kind: "own" } });
-  const folder = await laptop.local(chat.folders.resolve, { threadId: sent.threadId });
+  const folder = await laptop.action(chat.folders.resolve, { threadId: sent.threadId });
   const running = laptop.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
@@ -826,7 +826,7 @@ async function sharedServer() {
   const asking = laptop.action(ai.run.turn, {
     threadId: pushing.threadId,
     messageId: pushing.messageId,
-    folder: await laptop.local(chat.folders.resolve, { threadId: pushing.threadId }),
+    folder: await laptop.action(chat.folders.resolve, { threadId: pushing.threadId }),
     agentId: AGENT.id,
     model: "ask-once",
     access: "ask",
@@ -952,7 +952,7 @@ async function memberSignsInAndRuns(address) {
   await assert.rejects(reader.mutation(chat.threads.remove, { threadId }), /Only the person who started/);
   // Another member's window learns who runs the agent; their Send gets no folder, so no turn.
   assert.deepEqual(await reader.query(ai.choices.creator, { threadId }), { id: user.id, name: "Morgan" });
-  assert.equal(await reader.local(chat.folders.resolve, { threadId }), null);
+  assert.equal(await reader.action(chat.folders.resolve, { threadId }), null);
   // A valid key on the original account, issued after the first password change.
   const creatorKey = await fetch(new URL("/auth/sign-in", address.replace(/^ws:/, "http:")), {
     method: "POST",

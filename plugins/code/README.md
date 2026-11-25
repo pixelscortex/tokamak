@@ -30,7 +30,7 @@ gets no snapshots, even if the agent runs `git init` during that turn.
   repositories recorded for that signed-in device and removes snapshot refs
   for threads deleted elsewhere. A plain browser cannot change local refs.
 
-In the window (desktop only; a plain browser has no local part, so none of this shows):
+In a window connected to a Runner:
 
 - A change card under the last reply of a turn that changed files: "4 files +86 −21 · open in
   review". The first turn after a turn that ran without Git says "Started tracking · 12 files".
@@ -43,10 +43,10 @@ In the window (desktop only; a plain browser has no local part, so none of this 
   folder path may not exist or may point at an unrelated repository with no snapshot refs, so
   nothing shows there. How code travels between computers is milestone 2.
 
-These read Git through the local functions `changes:forTurn`, `changes:diff` and `changes:branch`
+These read Git through the caller actions `changes:forTurn`, `changes:diff` and `changes:branch`
 (`src/server/changes.ts`, helpers in `src/local/changes.ts`). Nothing about code is stored on the server.
 
-The local `notices:forTurn({ threadId, turnId })` reads omissions and the warning
+The caller action `notices:forTurn({ threadId, turnId })` reads omissions and the warning
 from Git. `src/local/git.ts` has the matching `turnRefs(threadId, turnId)` helper.
 The after hook also reads the before ref for that turn. It can recover the
 pair even if the Code process restarted while the agent was running.

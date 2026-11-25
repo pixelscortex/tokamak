@@ -1,16 +1,17 @@
-import { fail, local, provide, type Id, type LocalContext } from "@tokamak/sdk";
+import { action, fail, provide, type CallerActionContext, type Id } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { threadDeletedLocal, type DeletedThread } from "plugin:chat/contracts";
 import { api as chat } from "plugin:chat/server";
+import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 import { findBeforeSnapshot, pruneSnapshots, trackSnapshots } from "../local/snapshots";
 import { BEFORE_NOT_SAVED } from "../shared/text";
-import { AFTER_SNAPSHOT_WARNING, deleteSnapshots, repository, snapshot } from "../local/git";
 
 export const snapshotHooks = provide(
   ai.turnHooks,
   {
     afterTimeoutNotice: AFTER_SNAPSHOT_WARNING,
-    before: local({
+    before: action({
+      on: "caller",
       handler: async (ctx, turn: ai.TurnInfo) => {
         try {
           const repo = await repository(ctx, turn.folder, turn.signal);
@@ -29,7 +30,8 @@ export const snapshotHooks = provide(
         }
       },
     }),
-    after: local({
+    after: action({
+      on: "caller",
       handler: async (ctx, turn: ai.TurnInfo) => {
         try {
           // Git added during an agent run takes effect on the next turn.
@@ -49,7 +51,8 @@ export const snapshotHooks = provide(
 );
 
 export const cleanup = provide(threadDeletedLocal, {
-  after: local({
+  after: action({
+    on: "caller",
     handler: async (ctx, { threadId, folder }: DeletedThread) => {
       if (!folder) return;
       const repo = await repository(ctx, folder);
@@ -58,8 +61,9 @@ export const cleanup = provide(threadDeletedLocal, {
   }),
 });
 
-/** Recheck this device's recorded repositories when its local part opens. */
-export const prune = local({
+/** Recheck this device's recorded repositories when its Runner becomes available. */
+export const prune = action({
+  on: "caller",
   handler: async (ctx) => {
     await pruneSnapshots(ctx);
     return null;
@@ -69,8 +73,8 @@ export const prune = local({
 // A running turn can publish a ref after the delete hook lists the refs.
 // Check the committed deletion after publishing so the last writer cleans up.
 async function cleanedIfDeleted(
-  ctx: LocalContext,
-  target: { root: string; threadId: Id<"threads">; signal: LocalContext["signal"] },
+  ctx: CallerActionContext,
+  target: { root: string; threadId: Id<"threads">; signal: CallerActionContext["signal"] },
 ): Promise<boolean> {
   if (await ctx.runQuery(chat.getThread, { threadId: target.threadId })) return false;
   await deleteSnapshots(ctx, target, target.signal);

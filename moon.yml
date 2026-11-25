@@ -51,6 +51,7 @@ tasks:
       proto run bun -- check --no-script --project plugins/ai/src/client/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/code/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/code/src/client/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/code/tests/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/ai/tests/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/claude/src/server/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/codex/src/server/tsconfig.json &&

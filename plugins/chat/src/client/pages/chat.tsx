@@ -1,6 +1,6 @@
 import { For, Show, createEffect, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import type { Id, TokamakClient } from "@tokamak/sdk";
+import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
 import { Region, useClient, usePageTitle, useQuery, useShortcuts, view } from "@tokamak/sdk/client";
 import { Button, ScrollArea, StatusIcon, icons } from "@tokamak/ui";
 import { api, type Folder } from "../lib/api";
@@ -79,11 +79,13 @@ export const Chat = view({ route: "/", icon: chatIcon }, () => {
               }
               onDelete={async () => {
                 const args = { threadId: thread()._id };
-                const deletion = client.hasLocal
-                  ? await client.local(api.threads.removeLocal, args)
-                  : await client.mutation(api.threads.remove, args).then(() => null);
+                const deletion = await client.action(api.threads.removeLocal, args);
+                if (isFailure(deletion)) {
+                  if (deletion.kind !== "noMachine") throw new Error("The Runner cannot delete this thread.");
+                  await client.mutation(api.threads.remove, args);
+                }
                 if (openThread() === args.threadId) openThread.set(undefined);
-                if (deletion?.warning) error.set(deletion.warning);
+                if (!isFailure(deletion) && deletion?.warning) error.set(deletion.warning);
               }}
             />
           )}

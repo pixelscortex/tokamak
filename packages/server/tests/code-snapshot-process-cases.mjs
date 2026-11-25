@@ -46,7 +46,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
   process.kill(originalCode, "SIGKILL");
   await until("code's process exited", () => !alive(originalCode));
   // The replacement process must find the before ref without any in-memory state.
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   await h.gate(crash.folder, "go");
   const done = await interrupted;
   assert.deepEqual(done, { turnId: done.turnId, state: "done" });
@@ -62,7 +62,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
   const oldCode = host("code");
   await editBundle(join(h.plugins, "code"), "/* replacement local artifact */");
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   assert.ok(hosts().some(({ id, pid }) => id === "code" && pid !== oldCode));
   await h.gate(updated.folder, "go");
   const finished = await duringReload;
@@ -81,7 +81,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
     [originalAi],
     "a new turn reuses the only ai process after changing Code",
   );
-  await desk.local(chat.threads.removeLocal, { threadId: reloadedTurn.threadId });
+  await desk.action(chat.threads.removeLocal, { threadId: reloadedTurn.threadId });
   assert.deepEqual(refs(updated.git), [], "the deletion hook routes to the replacement code process");
   console.log(
     "code snapshots: overlapping turns, separate provider PID, code crash, code reload and routed deletion",
@@ -402,14 +402,14 @@ ${code}`,
 ${code}`,
   );
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  assert.deepEqual(await desk.local(chat.threads.removeLocal, { threadId: doomed.threadId }), {
+  assert.deepEqual(await desk.action(chat.threads.removeLocal, { threadId: doomed.threadId }), {
     warning: "The thread was deleted, but some of its local data couldn't be removed.",
   });
   assert.equal(await desk.query(chat.threads.get, { threadId: doomed.threadId }), null);
   assert.equal(refs(cleanup.git).length, 2);
   await editBundle(installed, "/* recovered from deletion outage */", () => original);
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   assert.deepEqual(refs(cleanup.git), []);
   console.log(
     "code snapshots: crashed cached hook, failed first lookup and deletion outage with prune retry",
@@ -461,7 +461,7 @@ cat >/dev/null
       () => false,
     );
   const controller = new AbortController();
-  const removing = desk.local(
+  const removing = desk.action(
     chat.threads.removeLocal,
     { threadId: thread.threadId },
     { signal: controller.signal },
@@ -521,7 +521,7 @@ export async function managerCrash({ h, runner, desk, code: codeApi, project, st
     25_000,
   );
   const notice = () =>
-    desk.local(codeApi.notices.forTurn, {
+    desk.action(codeApi.notices.forTurn, {
       threadId: agentThread.threadId,
       turnId: running._id,
     });

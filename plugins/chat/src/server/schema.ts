@@ -20,7 +20,7 @@ export default defineSchema({
     title: v.string(),
     // Where work for this thread happens on its creator's computer: a folder they
     // chose, or ("No folder") an empty folder of its own under the app's data.
-    // An own folder's path is known once the creator's local part has made it.
+    // An own folder's path is known once the creator's Runner has made it.
     folder: v.optional(folder),
     createdAt: v.number(),
     updatedAt: v.number(),

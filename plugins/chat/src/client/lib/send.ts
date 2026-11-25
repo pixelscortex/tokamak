@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import type { Id, TokamakClient } from "@tokamak/sdk";
+import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
 import { api } from "./api";
 import { announceSent, submitDraft, type DraftIntent } from "./sent";
 import { draftOf, error, errorText, setDraft } from "./state";
@@ -50,8 +50,8 @@ export function createSend(
   return { send, sending };
 }
 
-export function resolveFolder(client: TokamakClient, threadId: Id<"threads">) {
-  return client.hasLocal
-    ? client.local(api.folders.resolve, { threadId }).then((path) => path ?? undefined)
-    : Promise.resolve(undefined);
+export async function resolveFolder(client: TokamakClient, threadId: Id<"threads">) {
+  const path = await client.action(api.folders.resolve, { threadId });
+  if (!isFailure(path)) return path ?? undefined;
+  if (path.kind !== "noMachine") throw new Error("The Runner cannot resolve this thread's folder.");
 }
