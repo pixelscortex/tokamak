@@ -73,6 +73,16 @@ export class InProcessTransport implements ClientTransport {
     return this.call("action", name, args);
   }
 
+  /** Forward the continuation supplied by the Runner on its private socket. */
+  continueLocalCall(
+    kind: "query" | "mutation" | "action",
+    name: string,
+    args: JsonValue,
+    parent: { depth: number; thread: string | null },
+  ): Promise<JsonValue> {
+    return this.control((id) => ({ type: "localcall", id, name, args, kind, ...parent }));
+  }
+
   async plugins(): Promise<JsonValue> {
     // A reload may retire any page already in flight. Discard the whole partial
     // transfer and pin a fresh first page, with bounded retries under churn.

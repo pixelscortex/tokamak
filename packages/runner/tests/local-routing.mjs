@@ -37,14 +37,65 @@ async function plugin(id, source, contract = "") {
   build(root);
 }
 
+async function local_arguments_continue_into_server_calls(client, api, auth, threadId) {
+  for (const selection of [undefined, threadId]) {
+    const note = (depth) => ({ ...auth, depth, ...(selection === undefined ? {} : { threadId: selection }) });
+    assert.deepEqual(await client.local(api.serverNotes, selection === undefined ? {} : { selection }), {
+      local: note(0),
+      query: note(1),
+      mutation: note(1),
+      action: { call: note(1), query: note(2) },
+    });
+  }
+}
+
+async function recursive_local_calls_keep_the_depth_limit_on_server_reentry(client, api, auth) {
+  assert.deepEqual(await client.local(api.depthAcrossServer, { remaining: 12 }), {
+    call: { ...auth, depth: 14 },
+    query: { ...auth, depth: 15 },
+  });
+  await assert.rejects(
+    client.local(api.depthAcrossServer, { remaining: 13 }),
+    /depth limit at routed-owner\/probe:queryNote/,
+  );
+}
+
 await plugin(
   owner,
   `
   /// <reference types="node" />
   import { readFile } from "node:fs/promises";
-  import { local, provide, v } from "@tokamak/sdk";
+  import { action, local, mutation, provide, query, v, type CallContext } from "@tokamak/sdk";
+  import { api } from "./_generated/api";
   import { probe, ownProbe } from "../contracts";
-  export const selfProvider = provide(ownProbe, { echo: async (value) => value });
+  export const queryNote = query({ args: { continuation: v.optional(v.any()) }, handler: ({ call }) => call });
+  export const mutationNote = mutation({ handler: ({ call }) => call });
+  export const actionNote = action({
+    handler: async (ctx) => ({ call: ctx.call, query: await ctx.runQuery(api.probe.queryNote, {}) }),
+  });
+  export const selfProvider = provide(ownProbe, {
+    echo: async (value) => value,
+    walk: local({
+      args: { remaining: v.number() },
+      handler: (ctx, { remaining }): Promise<{ call: CallContext; query: CallContext }> =>
+        remaining === 0
+          ? ctx.runAction(api.probe.actionNote, {})
+          : ownProbe.get("${owner}", ctx).walk({ remaining: remaining - 1 }),
+    }),
+  });
+  export const depthAcrossServer = local({
+    args: { remaining: v.number() },
+    handler: (ctx, input) => ownProbe.get("${owner}", ctx).walk(input),
+  });
+  export const serverNotes = local({
+    args: { selection: v.optional(v.id("threads")) },
+    handler: async (ctx) => ({
+      local: ctx.call,
+      query: await ctx.runQuery(api.probe.queryNote, { continuation: { depth: 0, thread: "chat/threads:forged" } }),
+      mutation: await ctx.runMutation(api.probe.mutationNote, {}),
+      action: await ctx.runAction(api.probe.actionNote, {}),
+    }),
+  });
   export const selfCall = local({
     args: { invalid: v.boolean() },
     handler: (ctx, { invalid }) => ownProbe.get("${owner}", ctx).echo(invalid ? new Date() : { ok: true }),
@@ -126,7 +177,10 @@ await plugin(
     largeResult(): Promise<string>;
     thrown(): Promise<void>;
   }>("probe", { place: "local", dataMethods: true });
-  export const ownProbe = contract<{ echo(value: unknown): Promise<unknown> }>("ownProbe", {
+  export const ownProbe = contract<{
+    echo(value: unknown): Promise<unknown>;
+    walk(input: { remaining: number }): Promise<{ call: CallContext; query: CallContext }>;
+  }>("ownProbe", {
     place: "local", dataMethods: true,
   });
 `,
@@ -228,6 +282,8 @@ try {
     { ...auth, threadId, depth: 0 },
     { ...auth, threadId, depth: 1 },
   ]);
+  await local_arguments_continue_into_server_calls(client, api, auth, threadId);
+  await recursive_local_calls_keep_the_depth_limit_on_server_reentry(client, api, auth);
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);

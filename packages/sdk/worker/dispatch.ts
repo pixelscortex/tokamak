@@ -193,7 +193,7 @@ export function workerDispatch(
               ...(signal && { cancellable: true }),
               ...(plugin === undefined ? {} : { plugin }),
               ...metadata,
-              ...(name === "local.contract.call" && threadId !== undefined && { threadId }),
+              ...(name === "auth.current" && threadId !== undefined && { threadId }),
             };
             sending = transmit(message);
             if (sending) void sending.catch(failed);

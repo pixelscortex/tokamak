@@ -18,6 +18,31 @@ impl From<Option<AuthContext>> for CallNote {
 }
 
 impl CallNote {
+    pub fn from_local_parent(
+        auth: AuthContext,
+        name: &str,
+        depth: usize,
+        thread_id: Option<String>,
+    ) -> Result<Self, String> {
+        if let Some(thread_id) = &thread_id
+            && !thread_id.strip_prefix("chat/threads:").is_some_and(|key| {
+                !key.is_empty()
+                    && key
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+            })
+        {
+            return Err("Invalid local call thread ID".into());
+        }
+
+        Self {
+            auth: Some(auth),
+            thread_id,
+            depth,
+        }
+        .nested(name)
+    }
+
     pub fn nested(mut self, name: &str) -> Result<Self, String> {
         self.depth = tokamak_worker::next_call_depth(self.depth, name)?;
         Ok(self)

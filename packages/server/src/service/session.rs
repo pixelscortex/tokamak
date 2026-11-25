@@ -19,6 +19,7 @@ impl SessionSender {
             name: name.into(),
             args,
             kind: None,
+            local_parent: None,
         })
     }
 
@@ -74,18 +75,35 @@ fn request_action(request: Request) -> Result<Action, Error> {
             name,
             args,
             kind: Some(FunctionKind::Query),
+            local_parent: None,
         },
         Request::Mutation { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Mutation),
+            local_parent: None,
         },
         Request::Action { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
+            local_parent: None,
+        },
+        Request::LocalCall {
+            id,
+            name,
+            args,
+            kind,
+            depth,
+            thread,
+        } => Action::Call {
+            id,
+            name,
+            args,
+            kind: Some(kind),
+            local_parent: Some((depth, thread)),
         },
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),

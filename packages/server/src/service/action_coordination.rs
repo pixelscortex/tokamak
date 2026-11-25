@@ -4,7 +4,7 @@ impl Coordinator {
     pub(super) fn start_action(
         &mut self,
         session: u64,
-        auth: crate::identity::AuthContext,
+        note: crate::identity::CallNote,
         id: u64,
         name: String,
         args: Json,
@@ -44,7 +44,6 @@ impl Coordinator {
             self.plugins.as_deref(),
             owner.as_deref(),
         ));
-        let note = crate::identity::CallNote::from(Some(auth));
         let note = match &self.plugins {
             Some(loaded) => {
                 let target = &loaded.targets[&name];

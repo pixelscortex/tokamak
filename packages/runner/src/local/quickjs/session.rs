@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -396,7 +396,7 @@ async fn run(
     ancestors: &[String],
     invocation: Invocation<'_>,
 ) -> Result<Value, String> {
-    let thread_id = frame["threadId"].as_str().map(str::to_owned);
+    let (thread, args) = call_input(&frame);
     let mut call = match host.begin(frame).await {
         Ok(call) => call,
         Err(error) => return Err(host.call_error(error).await),
@@ -412,7 +412,7 @@ async fn run(
         bridge,
         root,
         ancestors,
-        thread_id: thread_id.as_deref(),
+        input: (thread, args),
     };
     let mut operations = FuturesUnordered::new();
     let mut pending = HashMap::<u64, CancellationToken>::new();
@@ -544,12 +544,32 @@ async fn peer_operation(
     }
 }
 
+fn call_input(frame: &Value) -> (OnceLock<String>, Value) {
+    let inherited = frame["threadId"].as_str().map(str::to_owned);
+    let args = if inherited.is_none() {
+        frame["args"].clone()
+    } else {
+        Value::Null
+    };
+    let thread = inherited.map_or_else(OnceLock::new, OnceLock::from);
+    (thread, args)
+}
+
+fn contains_string(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::String(value) => value == needle,
+        Value::Array(values) => values.iter().any(|value| contains_string(value, needle)),
+        Value::Object(fields) => fields.values().any(|value| contains_string(value, needle)),
+        _ => false,
+    }
+}
+
 struct CallRoute<'a> {
     pool: &'a Pool,
     bridge: &'a Bridge,
     root: u64,
     ancestors: &'a [String],
-    thread_id: Option<&'a str>,
+    input: (OnceLock<String>, Value),
 }
 
 impl CallRoute<'_> {
@@ -564,12 +584,8 @@ impl CallRoute<'_> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
-        // This header comes from the host dispatcher, outside the plugin's operation payload.
-        let routed_thread = frame
-            .as_object_mut()
-            .and_then(|fields| fields.remove("threadId"));
-        let thread_id = self.thread_id.or_else(|| routed_thread.as_ref()?.as_str());
         let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
+        self.attach_continuation(&mut frame, wants_note);
         let reply = self
             .bridge
             .request(frame.clone(), self.root, &host.build)
@@ -583,7 +599,7 @@ impl CallRoute<'_> {
                 if wants_note && value["value"].is_object() {
                     let note = value["value"].as_object_mut().expect("object checked");
                     note.remove("threadId");
-                    if let Some(thread_id) = self.thread_id {
+                    if let Some(thread_id) = self.input.0.get() {
                         note.insert("threadId".into(), json!(thread_id));
                     }
                     value["value"]["depth"] = json!(self.ancestors.len() - 1);
@@ -591,8 +607,45 @@ impl CallRoute<'_> {
                 return Ok(value);
             }
         };
-        self.invoke(lease.as_deref(), here, frame, opening, thread_id)
-            .await
+        self.invoke(
+            lease.as_deref(),
+            here,
+            frame,
+            opening,
+            self.input.0.get().map(String::as_str),
+        )
+        .await
+    }
+
+    fn attach_continuation(&self, frame: &mut Value, wants_note: bool) {
+        let Some(fields) = frame.as_object_mut() else {
+            return;
+        };
+        fields.remove("continuation");
+        // The host dispatcher identifies a typed ID before running the handler.
+        // Check it against the admitted arguments and retain the first thread in Rust.
+        let candidate = fields.remove("threadId");
+        if wants_note
+            && self.input.0.get().is_none()
+            && let Some(thread) = candidate.as_ref().and_then(Value::as_str)
+            && thread.starts_with("chat/threads:")
+            && contains_string(&self.input.1, thread)
+        {
+            let _ = self.input.0.set(thread.to_owned());
+        }
+
+        if matches!(
+            fields.get("name").and_then(Value::as_str),
+            Some("local.runQuery" | "local.runMutation" | "local.runAction")
+        ) {
+            fields.insert(
+                "continuation".into(),
+                json!({
+                    "depth": self.ancestors.len() - 1,
+                    "thread": self.input.0.get(),
+                }),
+            );
+        }
     }
 
     async fn invoke(

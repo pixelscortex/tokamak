@@ -21,8 +21,9 @@ use std::{
 };
 use tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FunctionKind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FunctionKind {
     Query,
     Mutation,
     Action,
@@ -220,6 +221,7 @@ pub(crate) enum Action {
         name: String,
         args: Json,
         kind: Option<FunctionKind>,
+        local_parent: Option<(usize, Option<String>)>,
     },
     Subscribe {
         id: u64,

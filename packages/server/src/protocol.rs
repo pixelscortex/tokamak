@@ -42,6 +42,20 @@ pub enum Request {
         name: String,
         args: Json,
     },
+    LocalCall {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        name: String,
+        args: Json,
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(type = "\"query\" | \"mutation\" | \"action\"")
+        )]
+        kind: crate::service::FunctionKind,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        depth: usize,
+        thread: Option<String>,
+    },
     Subscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
@@ -80,6 +94,7 @@ impl Request {
             Self::Query { id, .. }
             | Self::Mutation { id, .. }
             | Self::Action { id, .. }
+            | Self::LocalCall { id, .. }
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id }
             | Self::Plugins { id }

@@ -36,6 +36,7 @@ impl Coordinator {
                 name,
                 args,
                 kind: expected,
+                local_parent,
             } => {
                 // A socket may already have admitted a write when its member
                 // was revoked. It must not recreate rows after cleanup.
@@ -44,7 +45,19 @@ impl Coordinator {
                     return;
                 }
                 let auth = auth.caller.read().expect("auth lock").clone();
-                self.call(session, auth, id, name, args, expected).await;
+                let note = match local_parent {
+                    Some((depth, thread)) => match crate::identity::CallNote::from_local_parent(
+                        auth, &name, depth, thread,
+                    ) {
+                        Ok(note) => note,
+                        Err(error) => {
+                            self.respond(session, id, Err(error));
+                            return;
+                        }
+                    },
+                    None => Some(auth).into(),
+                };
+                self.call(session, id, name, args, expected, note).await;
             }
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
@@ -63,15 +76,19 @@ impl Coordinator {
     async fn call(
         &mut self,
         session: u64,
-        auth: crate::identity::AuthContext,
         id: u64,
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
+        note: crate::identity::CallNote,
     ) {
+        let Some(auth) = note.auth.as_ref() else {
+            self.respond(session, id, Err("Session has no caller".into()));
+            return;
+        };
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
-                query.map(|read| read(&auth)).map_err(str::to_owned)
+                query.map(|read| read(auth)).map_err(str::to_owned)
             } else {
                 Err("auth caller identity requires a query".into())
             };
@@ -109,12 +126,18 @@ impl Coordinator {
                 Err("function kind does not match request".into())
             }
             Some(FunctionKind::Action) => {
-                self.start_action(session, auth, id, name, args);
+                self.start_action(session, note, id, name, args);
                 return;
             }
             Some(kind) => {
-                self.invoke_function(&name, args, kind == FunctionKind::Mutation, Some(auth))
-                    .await
+                self.invoke_function_in(
+                    self.plugins.clone(),
+                    &name,
+                    args,
+                    kind == FunctionKind::Mutation,
+                    note,
+                )
+                .await
             }
         };
         self.drain_changes();

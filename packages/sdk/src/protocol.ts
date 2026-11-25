@@ -8,6 +8,15 @@ export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }
   | { type: "mutation"; id: number; name: string; args: JsonValue }
   | { type: "action"; id: number; name: string; args: JsonValue }
+  | {
+      type: "localcall";
+      id: number;
+      name: string;
+      args: JsonValue;
+      kind: "query" | "mutation" | "action";
+      depth: number;
+      thread: string | null;
+    }
   | { type: "subscribe"; id: number; name: string; args: JsonValue }
   | { type: "plugins"; id: number }
   | { type: "pluginspage"; id: number; revision: string; offset: number }

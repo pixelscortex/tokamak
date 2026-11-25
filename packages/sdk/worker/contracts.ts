@@ -105,13 +105,13 @@ export function dataContracts(root: ProviderModule) {
     if (!Array.isArray(args)) throw new Error(`${label} arguments must be an array`);
     const value = definition[method];
     const local = localMethod(value);
+    const thread = localThread(value, args[0] ?? {});
+    if (thread) recordThread(thread);
     const note = await callHost(bridge, "auth.current", { call: true });
     if (!note || note.user === null || note.device === null)
       throw new Error("Local contracts require a signed-in caller");
     const auth = { user: note.user, device: note.device };
-    const threadId = note.threadId ?? localThread(value, args[0] ?? {});
-    if (threadId) recordThread(threadId);
-    const call = callContext(auth, note, threadId);
+    const call = callContext(auth, note, thread);
     if (local && args.length > 1) throw new Error(`${label} expects at most one argument`);
     // Agent plugins keep providing start(ctx, Run). Only the QuickJS
     // provider dispatcher constructs that object, inside its own scope.

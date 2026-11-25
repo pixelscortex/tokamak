@@ -56,7 +56,14 @@ export type LaunchLocalWorker = (
   retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
+type Continuation = { depth: number; thread: string | null };
 type ServerConnection = ClientTransport & {
+  continueLocalCall?(
+    kind: "query" | "mutation" | "action",
+    name: string,
+    args: JsonValue,
+    parent: Continuation,
+  ): Promise<JsonValue>;
   plugins(): Promise<JsonValue>;
   onPluginsChanged(callback: () => void): () => void;
 };
@@ -138,7 +145,8 @@ export class LocalFunctions implements LocalTransport {
         artifact,
         this.workspace,
         () => this.catalog,
-        (catalog, caller, operation, payload) => this.serverCall(catalog, caller ?? id, operation, payload),
+        (catalog, caller, operation, payload, continuation) =>
+          this.serverCall(catalog, caller ?? id, operation, payload, continuation),
         (catalog, caller, key, allow) => this.contractProviders(catalog, caller ?? id, id, key, allow),
         () => {
           if (this.workers.get(id) === current) this.workers.delete(id);
@@ -264,7 +272,13 @@ export class LocalFunctions implements LocalTransport {
     return providers;
   }
 
-  private serverCall(catalog: Catalog, callerId: string, operation: string, payload: JsonValue) {
+  private serverCall(
+    catalog: Catalog,
+    callerId: string,
+    operation: string,
+    payload: JsonValue,
+    continuation?: Continuation,
+  ) {
     if (operation === "auth.current") {
       // A burst of routed calls need the same caller. Share only the read in
       // flight so the workspace queue is not filled with duplicate replies.
@@ -290,6 +304,18 @@ export class LocalFunctions implements LocalTransport {
     }
     // Use client dispatch even for the same plugin: the server checks the
     // requested kind and keeps internal functions out of this session's API.
+    const kind =
+      operation === "local.runQuery"
+        ? "query"
+        : operation === "local.runMutation"
+          ? "mutation"
+          : operation === "local.runAction"
+            ? "action"
+            : undefined;
+    if (kind && continuation) {
+      if (!this.server.continueLocalCall) throw new Error("Server transport cannot continue a Runner call");
+      return this.server.continueLocalCall(kind, name, args, continuation);
+    }
     if (operation === "local.runQuery") return this.server.query(name, args);
     if (operation === "local.runMutation") return this.server.mutation(name, args);
     if (operation === "local.runAction" && this.server.action) return this.server.action(name, args);
@@ -343,6 +369,7 @@ class LocalWorker {
       caller: string | undefined,
       op: string,
       payload: JsonValue,
+      continuation?: Continuation,
     ) => Promise<JsonValue>,
     private readonly contractProviders: (
       catalog: Catalog,
@@ -435,6 +462,7 @@ class LocalWorker {
       name: string;
       plugin?: string;
       payload: JsonValue;
+      continuation?: Continuation;
       error?: string;
       value: JsonValue;
     };
@@ -479,7 +507,13 @@ class LocalWorker {
                   call.routes.set(routeKey(artifact.id, owner, name, registration), artifact);
                 },
               )
-            : await this.serverCall(call.catalog, frame.plugin, frame.name, frame.payload);
+            : await this.serverCall(
+                call.catalog,
+                frame.plugin,
+                frame.name,
+                frame.payload,
+                frame.continuation,
+              );
         response = {
           type: "opResult",
           id: frame.id,

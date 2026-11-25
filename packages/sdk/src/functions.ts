@@ -542,11 +542,12 @@ export async function invokeFunction(
   const args = jsonSnapshot(request.args, "args");
   const definition = registry[request.name];
   validate(definition.args, args);
+  const thread = recordThread && threadArgument(definition.args, args);
+  if (thread) recordThread(thread);
   const note = await callHost(host, "auth.current", { call: true });
   const auth =
     note && note.user !== null && note.device !== null ? { user: note.user, device: note.device } : null;
-  const threadId = note?.threadId ?? (recordThread && threadArgument(definition.args, args));
-  if (threadId) recordThread?.(threadId);
+  const threadId = note?.threadId ?? thread;
   const invoke = () =>
     definition.invoke(args, {
       auth,
