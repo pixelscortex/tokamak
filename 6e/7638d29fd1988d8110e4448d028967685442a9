@@ -1,0 +1,19 @@
+packages/sdk/tools/plugin-descriptor.ts
+  s_ba25387409099f::t_b7e18383895f5d 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e7638d29fd1988d8110e4448d028967685442a9",
+  "prompts": {},
+  "sessions": {
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
