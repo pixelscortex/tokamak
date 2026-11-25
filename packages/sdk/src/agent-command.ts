@@ -1,10 +1,10 @@
-import type { LocalContext } from "./functions";
+import type { CallerActionContext } from "./functions";
 import type { RunningProcess } from "./local";
 import { TIMED_OUT, within } from "./within";
 
 /** A short CLI probe. Missing, a real exit, and no answer are distinct. */
 export async function agentCommand(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   [name, ...args]: ["claude" | "codex", ...string[]],
   timeout: number,
 ): Promise<{ stdout: string; code: number } | "missing" | undefined> {

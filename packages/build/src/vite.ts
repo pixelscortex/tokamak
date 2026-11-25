@@ -133,7 +133,7 @@ export function tokamak(
           }
         }
         if (options.backend === false && hasLocal)
-          throw new Error("Local functions require the function build");
+          throw new Error("Caller actions require the function build");
         if (options.backend === false && plugin.exports !== undefined)
           throw new Error("Plugin exports require a backend");
         if (options.backend !== false) {
@@ -184,12 +184,15 @@ export function tokamak(
           this.emitFile({ type: "asset", fileName: "api.ts", source: api });
           entries.server = { code: "bundle.js", map: "bundle.js.map", api: "api.ts" };
           if (existsSync(transactions)) {
-            for (const name of ["transactions.js", "transactions.js.map"])
-              this.emitFile({
-                type: "asset",
-                fileName: name,
-                source: await readFile(resolve(server, "dist", name), "utf8"),
-              });
+            for (const name of ["transactions.js", "transactions.js.map"]) {
+              let source = await readFile(resolve(server, "dist", name), "utf8");
+              if (hasLocal && name.endsWith(".map")) {
+                const map = JSON.parse(source);
+                stripSourcesContent(map);
+                source = JSON.stringify(map);
+              }
+              this.emitFile({ type: "asset", fileName: name, source });
+            }
           }
           if (hasLocal) {
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {

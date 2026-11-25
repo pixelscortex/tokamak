@@ -119,14 +119,11 @@ export interface HostOperations {
   };
   "local.contract.close": { args: { channel: number }; result: null };
   "local.contract.stopPrograms": { args: { channel: number }; result: null };
-  "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "local.runAction": { args: { name: string; args: JsonValue }; result: JsonValue };
   "plugin.call": {
     args: {
       name: string;
       args: JsonValue;
-      kind?: import("./functions").ServerFunctionKind;
+      kind?: import("./functions").FunctionKind;
       contract?: string;
       on?: import("./functions").ActionTarget;
     };

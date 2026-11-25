@@ -50,6 +50,13 @@ await writeFile(
   import { localPlace } from "plugin:ai/contracts";
   import { audited, callerPoint, marker, pointLoop, rows, store, waitHook } from "plugin:ai/server";
   export const policy = hook(marker, { after: () => "hooked" });
+  export const verifyStore = hook(store, {
+    before: (_ctx, { text }) => ({ text: text.startsWith("pipeline:") ? text + ":mutation-hook" : text }),
+  });
+  export const verifyAction = hook(callerPoint, {
+    after: (_ctx, result, args) =>
+      args.verifyPipeline && typeof result === "string" ? result + ":action-hook" : result,
+  });
   export const load = hook(callerPoint.points.load, {
     before: (ctx, { search }) => ({ search: search + ":" + ctx.call.depth }),
     after: (_ctx, result) => result.toUpperCase(),
@@ -388,7 +395,15 @@ async function action_hooks_run_with_network_and_database(client, reference, exp
 }
 
 async function caller_point_runs_with_local_stages(client) {
-  assert.equal(await client.action(api.work.callerPoint, {}), "LOADED:OWNER:1");
+  const before = (await client.query(api.work.rows, {})).rows.length;
+  assert.equal(
+    await client.action(api.work.callerPoint, { verifyPipeline: true }),
+    "LOADED:OWNER:1:action-hook",
+  );
+  assert.deepEqual(
+    (await client.query(api.work.rows, {})).rows.slice(before).map(({ text }) => text),
+    ["pipeline:hooked:mutation-hook"],
+  );
 }
 
 async function point_stages_share_the_window_budget(client) {

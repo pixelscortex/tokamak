@@ -1,5 +1,5 @@
 export const FORCE_STOP_MS = 10_000;
-/** How often the sender's local part tells the server that a turn it runs is still alive. */
+/** How often the sender’s Runner tells the server that a turn it runs is still alive. */
 export const BEAT_MS = 10_000;
 /**
  * After this long without a sign of life the server ends the turn as

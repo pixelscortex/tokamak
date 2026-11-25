@@ -6,7 +6,7 @@ import { Menu } from "@tokamak/ui";
 import { holdSend, type ComposerProps } from "plugin:chat/client";
 import type { Picked } from "../../shared/offered";
 import { errorText, isSendersDevice } from "../../shared/turn-shared";
-import { agents, api, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
+import { agents, api, machineNotice, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
 import {
   ACCESS_LABEL,
   creatorOnlyLine,
@@ -52,7 +52,7 @@ export function AgentRow(props: ComposerProps): JSX.Element {
   createEffect(
     () => {
       const turn = active.data();
-      return turn && client.hasLocal && isSendersDevice(turn, { user: me, device: me.device }) ? turn : null;
+      return turn && isSendersDevice(turn, { user: me, device: me.device }) ? turn : null;
     },
     (turn) => {
       localActiveTurn.set(turn);
@@ -173,7 +173,7 @@ function Row(props: {
             <Choosers current={current()} refresh={refresh} change={change} />
           </Show>
           <span class="flex-1" />
-          <Show when={notice() ?? props.turnLine() ?? missing()}>
+          <Show when={machineNotice() ?? notice() ?? props.turnLine() ?? missing()}>
             {(line) => (
               <span role="status" class="text-label text-ink-3">
                 {line()}

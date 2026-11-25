@@ -18,7 +18,7 @@ target/cloud/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/
 ```
 
 The Server runs queries, mutations and actions. Use the [Runner](../runner/README.md)
-for local functions. The Server's `/local-worker` endpoint returns 401 without
+for caller actions. The Server's `/local-worker` endpoint returns 401 without
 credentials. An authenticated plain HTTP request returns 501 with “This server
 has no local runtime”; an authenticated WebSocket caller receives that reason in
 the startup refusal. Keep the matching

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { Id, CallerActionContext } from "@tokamak/sdk";
 import { keepAlive } from "../src/server/keep-alive";
 import { BEAT_MS, SILENCE_MS } from "../src/shared/turn-timing";
 
@@ -10,7 +10,11 @@ test("an active turn survives sleep and keeps sending beats", async () => {
   const started = Date.now();
   const runMutation = vi.fn(async () => true);
   const ended = vi.fn();
-  const alive = keepAlive({ runMutation } as unknown as LocalContext, "turns:test" as Id<"turns">, ended);
+  const alive = keepAlive(
+    { runMutation } as unknown as CallerActionContext,
+    "turns:test" as Id<"turns">,
+    ended,
+  );
   try {
     await vi.advanceTimersByTimeAsync(BEAT_MS);
     vi.setSystemTime(started + 3 * SILENCE_MS);
@@ -27,7 +31,11 @@ test("after sleep an unreachable server gets a new silence window, but a server 
   const started = Date.now();
   const runMutation = vi.fn(async () => true);
   const ended = vi.fn();
-  const alive = keepAlive({ runMutation } as unknown as LocalContext, "turns:test" as Id<"turns">, ended);
+  const alive = keepAlive(
+    { runMutation } as unknown as CallerActionContext,
+    "turns:test" as Id<"turns">,
+    ended,
+  );
   try {
     await vi.advanceTimersByTimeAsync(BEAT_MS);
     runMutation.mockRejectedValue(new Error("offline"));

@@ -64,7 +64,7 @@ try {
       })
     : replayClient;
   const info = async (client) => {
-    const codex = (await client.local(ai.agents.list, {})).find((agent) => agent.id === "codex");
+    const codex = (await client.action(ai.agents.list, {})).find((agent) => agent.id === "codex");
     assert.equal(codex?.name, "Codex");
     assert.match(codex.info.install, /@openai\/codex/);
     assert.equal(codex.info.signIn, "codex login");

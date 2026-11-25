@@ -1,6 +1,18 @@
+import { fail } from "../../sdk/src/functions.ts";
 import { expect, test } from "bun:test";
 import { createApi, TokamakClient } from "../../sdk/src/index.ts";
 import { LocalFunctions } from "../js/local.ts";
+
+function routeAction(artifactCode) {
+  return async (name) => {
+    const id = name.split("/")[0];
+    return {
+      destination: "callerWindowRunner",
+      note: { depth: 0, thread: null },
+      artifact: { id, entryHash: "entry", codeHash: artifactCode(id) },
+    };
+  };
+}
 
 test("only a changed or removed local artifact retires its running worker", async () => {
   const artifact = (id, code) => ({
@@ -13,6 +25,7 @@ test("only a changed or removed local artifact retires its running worker", asyn
   let catalog = { plugins: [alpha, beta] };
   let notify;
   const server = {
+    dispatchWindowAction: routeAction((id) => catalog.plugins.find((p) => p.plugin.id === id)?.hashes.code),
     plugins: async () => catalog,
     onPluginsChanged(listener) {
       notify = listener;
@@ -46,8 +59,8 @@ test("only a changed or removed local artifact retires its running worker", asyn
   const a = createApi("alpha");
   const b = createApi("beta");
   try {
-    const runningA = client.local(a.jobs.run, {});
-    const runningB = client.local(b.jobs.run, {});
+    const runningA = client.action(a.jobs.run, {});
+    const runningB = client.action(b.jobs.run, {});
     void runningA.catch(() => {});
     void runningB.catch(() => {});
     await sent.promise;
@@ -61,7 +74,7 @@ test("only a changed or removed local artifact retires its running worker", asyn
 
     catalog = { plugins: [] };
     notify({ type: "pluginchanged", plugins: ["alpha"], catalog: { paged: true } });
-    await expect(client.local(a.jobs.run, {})).rejects.toThrow("no local functions");
+    await expect(client.action(a.jobs.run, {})).resolves.toEqual(fail("noMachine", null));
     expect(stillRunning.closed).toBe(true);
   } finally {
     await functions.close();
@@ -77,6 +90,7 @@ test("many local calls at once read the plugin catalog once, and again only afte
   let reads = 0;
   let notify;
   const server = {
+    dispatchWindowAction: routeAction(() => "alpha-v1"),
     plugins: async () => {
       reads += 1;
       return { plugins: [alpha] };
@@ -96,13 +110,13 @@ test("many local calls at once read the plugin catalog once, and again only afte
   const client = new TokamakClient(server, functions);
   const a = createApi("alpha");
   try {
-    const results = await Promise.all(Array.from({ length: 40 }, () => client.local(a.jobs.run, {})));
+    const results = await Promise.all(Array.from({ length: 40 }, () => client.action(a.jobs.run, {})));
     expect(results.every((value) => value === "done")).toBe(true);
     expect(reads).toBe(1);
-    await client.local(a.jobs.run, {});
+    await client.action(a.jobs.run, {});
     expect(reads).toBe(1);
     notify({ type: "pluginchanged", plugins: ["alpha"], catalog: { paged: true } });
-    await client.local(a.jobs.run, {});
+    await client.action(a.jobs.run, {});
     expect(reads).toBeGreaterThan(1);
   } finally {
     await functions.close();
@@ -118,6 +132,7 @@ test("a plugin installed before its notice arrives is found, and a missing one c
   let catalog = { plugins: [] };
   let reads = 0;
   const server = {
+    dispatchWindowAction: routeAction(() => "alpha-v1"),
     plugins: async () => {
       reads++;
       return catalog;
@@ -136,15 +151,15 @@ test("a plugin installed before its notice arrives is found, and a missing one c
   const missing = createApi("missing");
   try {
     // The catalog is read while alpha is not installed yet.
-    await expect(client.local(missing.jobs.run, {})).rejects.toThrow("no local functions");
+    await expect(client.action(missing.jobs.run, {})).resolves.toEqual(fail("noMachine", null));
     const afterFirstMiss = reads;
     // Asking again for a plugin that is not there reads nothing more.
-    await expect(client.local(missing.jobs.run, {})).rejects.toThrow("no local functions");
+    await expect(client.action(missing.jobs.run, {})).resolves.toEqual(fail("noMachine", null));
     expect(reads).toBe(afterFirstMiss);
 
     // alpha is installed; no "plugins changed" notice has reached this connection.
     catalog = { plugins: [alpha] };
-    await expect(client.local(a.jobs.run, {})).resolves.toBe("alpha");
+    await expect(client.action(a.jobs.run, {})).resolves.toBe("alpha");
     expect(reads).toBe(afterFirstMiss + 1);
   } finally {
     await functions.close();
@@ -172,5 +187,18 @@ test("window server actions do not need the plugin catalog", async () => {
     expect(reads).toBe(0);
   } finally {
     await local.close();
+  }
+});
+
+test("an old window bundle gets a migration error from the former local entry point", async () => {
+  const functions = new LocalFunctions({
+    onPluginsChanged: () => () => {},
+  });
+  try {
+    await expect(functions.invoke("alpha/jobs.run", {})).rejects.toThrow(
+      'local() was removed: rebuild the plugin with action({ on: "caller" })',
+    );
+  } finally {
+    await functions.close();
   }
 });

@@ -180,7 +180,9 @@
       },
       "devDependencies": {
         "@tokamak/build": "workspace:*",
+        "jsdom": "31.0.1",
         "tailwindcss": "4.3.5",
+        "vitest": "5.1.0",
       },
     },
     "plugins/codex": {

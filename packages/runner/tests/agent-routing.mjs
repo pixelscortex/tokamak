@@ -54,7 +54,7 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
   const chat = createApi("chat");
   const open = () =>
     connect(runner.endpoint.ws, { token: runner.endpoint.token, launch: runner.launch, cleanup });
-  const row = (client) => within(client.local(ai.agents.list, {}), "replayed agent row");
+  const row = (client) => within(client.action(ai.agents.list, {}), "replayed agent row");
   const agent = (agents, id) => {
     const entry = agents.find((item) => item.id === id);
     assert.ok(entry, id + " missing from agent row");
@@ -113,8 +113,11 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       }),
       /Plugin ai process:/,
     );
-    assert.equal(await otherWindow.local(ai.run.pending, expired), false);
-    assert.equal((await otherWindow.local(ai.run.answer, { ...expired, answer: "approve" })).kind, "Expired");
+    assert.equal(await otherWindow.action(ai.run.pending, expired), false);
+    assert.equal(
+      (await otherWindow.action(ai.run.answer, { ...expired, answer: "approve" })).kind,
+      "Expired",
+    );
     console.log(
       "Killing ai expired its open question and reaped its Claude program; the Claude host survived.",
     );
@@ -245,8 +248,8 @@ await fixtureWrite(${JSON.stringify(evals)}, "evaluated\\n", { flag: "a" });
       await until("Claude host crash reaps its programs", () => !tree.some((pid) => processInfo(pid)));
       assert.ok(processInfo(await cliPid(isolatedFolder, "codex")));
       const lost = { turnId: question.turnId, questionId: question.id };
-      assert.equal(await window.local(ai.run.pending, lost), false);
-      assert.equal((await window.local(ai.run.answer, { ...lost, answer: "approve" })).kind, "Expired");
+      assert.equal(await window.action(ai.run.pending, lost), false);
+      assert.equal((await window.action(ai.run.answer, { ...lost, answer: "approve" })).kind, "Expired");
       assert.ok(!(await window.query(ai.turns.questions, {})).some(({ id }) => id === lost.questionId));
     } finally {
       isolated.release();

@@ -108,8 +108,15 @@ export const audited = action({
 
 export const callerPoint = action({
   on: "caller",
-  async handler(ctx) {
-    return ctx.point("load", { search: "owner" }, ({ search }) => "loaded:" + search);
+  args: { verifyPipeline: v.optional(v.boolean()) },
+  async handler(ctx, { verifyPipeline }) {
+    const result = await ctx.point("load", { search: "owner" }, ({ search }) => "loaded:" + search);
+    if (verifyPipeline) {
+      if (!Array.isArray(await ctx.machines.list())) throw new Error("Caller machine list unavailable");
+      const marker = await ctx.runQuery(api.work.marker, {});
+      await ctx.runMutation(api.work.store, { text: "pipeline:" + marker });
+    }
+    return result;
   },
 });
 

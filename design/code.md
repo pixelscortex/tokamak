@@ -3,7 +3,8 @@
 Saves the Git worktree before and after each agent turn on the client that
 runs it, and shows what changed. It has no screen of its own: it adds to
 chat's header and messages and fills the shell's panel. Everything is read
-from this client's Git through code's local part, so a plain browser shows none of it.
+from the caller’s Git through caller actions. Without a Runner, the change
+cards, branch chip and review controls stay hidden.
 Paper page: `App 1:1 · Code plugin`: chat's open thread as the base, then the
 screen as the app draws it with every plugin on. Nothing is drawn on top of
 the artboards; the table under "What it adds to others" says which artboard

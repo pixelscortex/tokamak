@@ -1,4 +1,4 @@
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { Id, CallerActionContext } from "@tokamak/sdk";
 import { BEAT_MS, SILENCE_MS } from "../shared/turn-timing";
 import { api } from "./_generated/api";
 
@@ -7,7 +7,7 @@ const ENDED_BY_SERVER = `The server heard nothing from this computer for ${secon
 const SERVER_LOST = `This computer could not reach the server for ${seconds} seconds, so it stopped the agent`;
 
 /**
- * The sign of life of one turn, sent from the local part that runs it: at once,
+ * The sign of life of one turn, sent from the Runner that runs it: at once,
  * then every BEAT_MS until `stop`, whatever the agent is doing (writing,
  * thinking quietly, waiting for an answer). `ended(reason)` runs once, so the
  * caller stops the agent, when the server answers that the turn has already
@@ -15,7 +15,7 @@ const SERVER_LOST = `This computer could not reach the server for ${seconds} sec
  * through for SILENCE_MS: by then the server ends the turn too, so an agent
  * left running would only write into a closed reply.
  */
-export function keepAlive(ctx: LocalContext, turnId: Id<"turns">, ended: (reason: string) => void) {
+export function keepAlive(ctx: CallerActionContext, turnId: Id<"turns">, ended: (reason: string) => void) {
   let stopped = false;
   let heard = Date.now();
   let ticked = heard;
@@ -26,7 +26,7 @@ export function keepAlive(ctx: LocalContext, turnId: Id<"turns">, ended: (reason
   }
   const beat = () => {
     const now = Date.now();
-    // A suspended local part could not check the server while it slept.
+    // A suspended Runner could not check the server while it slept.
     // Give the server a chance to answer and start a fresh outage clock.
     if (now - ticked >= SILENCE_MS) heard = now;
     ticked = now;

@@ -23,12 +23,11 @@ export function isLocalReloadTimeout(error: unknown): boolean {
 }
 
 export interface LocalTransport {
-  action?(
+  action(
     name: string,
     args: JsonValue,
     options?: ActionOptions & { signal?: ActionSignal },
   ): Promise<JsonValue>;
-  invoke(name: string, args: JsonValue, signal?: ActionSignal): Promise<JsonValue>;
 }
 
 /** Terminal errors mean the transport has removed the subscription. A new
@@ -85,31 +84,11 @@ export class TokamakClient {
   ): Promise<R | MachineFailure> {
     const name = publicName(reference);
     const input = jsonSnapshot(args, "args");
-    const value = this.#localTransport?.action
+    const value = this.#localTransport
       ? await this.#localTransport.action(name, input, options)
       : await this.#transport.action?.(name, input, options?.on, options?.signal);
     if (value === undefined) throw new Error("Transport does not support actions");
     assertJson(value, "action result");
-    return value as R;
-  }
-
-  /** True when this window has a local part (the desktop client) to run `local` functions. */
-  get hasLocal(): boolean {
-    return this.#localTransport !== undefined;
-  }
-
-  async local<A, R>(
-    reference: FunctionReference<"local", A, R>,
-    args: NoInfer<A>,
-    options?: { signal?: ActionSignal },
-  ): Promise<R> {
-    if (!this.#localTransport) throw new Error("Local functions require the Tokamak desktop client");
-    const value = await this.#localTransport.invoke(
-      publicName(reference),
-      jsonSnapshot(args, "args"),
-      options?.signal,
-    );
-    assertJson(value, "local result");
     return value as R;
   }
 

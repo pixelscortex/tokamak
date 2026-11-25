@@ -29,7 +29,7 @@ export const creator = query({
 /**
  * Sets every choice of the thread at once, when a picker changes. Only the
  * person who started the thread may change them (coding alone: its owner).
- * The local part checks them against the agent before a turn uses them.
+ * The Runner checks them against the agent before a turn uses them.
  */
 export const set = mutation({
   args: { threadId: v.string(), ...choiceFields },

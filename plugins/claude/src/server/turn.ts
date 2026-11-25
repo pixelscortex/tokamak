@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import type { Run, TurnResult } from "plugin:ai/contracts";
 import { ReplyEvents } from "./events";
 import { Permissions } from "./permissions";
@@ -43,7 +43,7 @@ function isInterrupted(message: Frame) {
   return message.terminal_reason === "aborted_streaming" || message.terminal_reason === "aborted_tools";
 }
 
-export async function turn(ctx: LocalContext, run: Run): Promise<TurnResult> {
+export async function turn(ctx: CallerActionContext, run: Run): Promise<TurnResult> {
   const lifecycle = new Turn(ctx, run);
   try {
     try {
@@ -59,7 +59,7 @@ export async function turn(ctx: LocalContext, run: Run): Promise<TurnResult> {
 }
 
 class Turn {
-  readonly #ctx: LocalContext;
+  readonly #ctx: CallerActionContext;
   readonly #run: Run;
   #wire?: ReturnType<typeof open>;
   #permissions?: Permissions;
@@ -72,7 +72,7 @@ class Turn {
   #sessionId?: string;
   stopping = false;
 
-  constructor(ctx: LocalContext, run: Run) {
+  constructor(ctx: CallerActionContext, run: Run) {
     this.#ctx = ctx;
     this.#run = run;
     run.onSteer((text) => {

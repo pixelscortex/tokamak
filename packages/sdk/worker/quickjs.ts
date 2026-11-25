@@ -25,7 +25,7 @@ async function loadLocalModule(path: string) {
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   // QuickJS can reject with null if it cannot allocate its own InternalError.
-  return error === null || message === "out of memory" ? "Plugin local function ran out of memory" : message;
+  return error === null || message === "out of memory" ? "Plugin action ran out of memory" : message;
 }
 
 export async function initialize(
@@ -53,9 +53,9 @@ export async function initialize(
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
     hooks?: HookRegistry;
-    contractProviders?: Record<string, Provider<"local">>;
+    contractProviders?: Record<string, Provider<"caller">>;
   };
-  const dispatch = workerDispatch("local", root.functions, emit, nextOp, {
+  const dispatch = workerDispatch("runner", root.functions, emit, nextOp, {
     hooks: root.hooks,
     createPrograms: (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     contracts: workerContracts(),

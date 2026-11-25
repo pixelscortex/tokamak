@@ -41,7 +41,7 @@ try {
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();
   const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
-  const address = runner ? undefined : await h.serve("local");
+  const address = runner ? undefined : await h.serve("local", { windowRouted: !live });
   const client = live
     ? await realClient(address)
     : await h.connect(address, { local: true, observe: wire.observe });
@@ -114,7 +114,7 @@ try {
 }
 
 async function aboutClaude(client) {
-  return (await client.local(ai.agents.list, {})).find(({ id }) => id === "claude")?.info;
+  return (await client.action(ai.agents.list, {})).find(({ id }) => id === "claude")?.info;
 }
 
 function caseFolder(name) {
@@ -195,7 +195,7 @@ async function discovery(client) {
     text: "Check whether Claude needs an update",
     folder: { kind: "chosen", path: h.home },
   });
-  const rejected = await client.local(ai.run.turn, {
+  const rejected = await client.action(ai.run.turn, {
     threadId,
     messageId,
     folder: h.home,

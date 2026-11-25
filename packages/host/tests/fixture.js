@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-function local(invoke) {
-  return { kind: "local", args: { kind: "any" }, invoke };
+function callerAction(invoke) {
+  return { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke };
 }
 
 let counter = 0;
 
 export const functions = {
-  echo: local((value) => value),
-  parseJson: local((text) => JSON.parse(text)),
-  pathConstants: local(() => [
+  echo: callerAction((value) => value),
+  parseJson: callerAction((text) => JSON.parse(text)),
+  pathConstants: callerAction(() => [
     sep,
     delimiter,
     path.sep,
@@ -22,7 +22,7 @@ export const functions = {
     path.posix === posix,
     path.posix.posix === posix,
   ]),
-  environment: local((name) => ({
+  environment: callerAction((name) => ({
     value: process.env[name],
     enumerable: Object.entries(process.env).some(([key]) => key === name),
     missing: process.env.TOKAMAK_UNSET_FIXTURE === undefined,
@@ -31,27 +31,27 @@ export const functions = {
     ownPath: Object.prototype.hasOwnProperty.call(process.env, "PATH"),
     hasPath: process.env.hasOwnProperty("PATH"),
   })),
-  loop: local(async () => {
+  loop: callerAction(async () => {
     console.info("loop");
     while (true) {}
   }),
-  memory: local(() => {
+  memory: callerAction(() => {
     const objects = [];
     for (;;) objects.push({ a: objects.length, b: objects.length, c: objects.length });
   }),
-  busy: local(() => {
+  busy: callerAction(() => {
     console.info("busy");
     const end = Date.now() + 1500;
     while (Date.now() < end) {}
     return "finished";
   }),
-  sleep: local(async (delay) => {
+  sleep: callerAction(async (delay) => {
     counter++;
     await new Promise((resolve) => setTimeout(resolve, delay).unref().ref());
     return "slept";
   }),
-  counter: local(() => counter),
-  flood: local(async () => {
+  counter: callerAction(() => counter),
+  flood: callerAction(async () => {
     const line = "x".repeat(8000);
     // More than the 4 MiB output queue holds while nothing reads it.
     for (let i = 0; i < 700; i++) {
@@ -67,28 +67,28 @@ export const functions = {
     }
     await new Promise(() => {});
   }),
-  pending: local(async (_, ctx) => {
+  pending: callerAction(async (_, ctx) => {
     ctx.signal.addEventListener("abort", () => {
       console.info("signal aborted");
       throw new Error("abort listener failed");
     });
     try {
-      await ctx.op("local.runQuery", {});
+      await ctx.op("plugin.call", {});
     } catch (error) {
       console.info(error.message);
     }
     try {
-      await ctx.op("local.runQuery", {});
+      await ctx.op("plugin.call", {});
     } catch (error) {
       console.info(error.message);
     }
     return "late result";
   }),
-  providers: local(async (_, ctx) => {
-    const [provider] = await ctx.contracts.list({ place: "local", owner: "consumer", name: "fixture" });
+  providers: callerAction(async (_, ctx) => {
+    const [provider] = await ctx.contracts.list({ on: "caller", owner: "consumer", name: "fixture" });
     return provider.implementation.run("input");
   }),
-  timerCapacity: local(async () => {
+  timerCapacity: callerAction(async () => {
     let armed;
     const rearm = new Promise((resolve) => {
       armed = resolve;
@@ -113,7 +113,7 @@ export const functions = {
       clearInterval(interval);
     }
   }),
-  console: local(() => {
+  console: callerAction(() => {
     console.log("%s %d %j %o", "value", "2", { a: 1 }, [3, 4]);
     console.log("%i %f %O %c tail", "2px", "3.5pt", { nested: [4] }, "color: red");
     console.log(new Date(0), new Map([["key", 1]]), new Set([2]), new Uint8Array([3, 4]));
@@ -123,7 +123,7 @@ export const functions = {
     console.debug("x".repeat(9000));
     return true;
   }),
-  missing: local(async (path) => {
+  missing: callerAction(async (path) => {
     const errors = [];
     for (const op of [readFile, fs.lstat, unlink]) {
       try {
@@ -134,7 +134,7 @@ export const functions = {
     }
     return errors;
   }),
-  filesystem: local(async (raw) => {
+  filesystem: callerAction(async (raw) => {
     const dir = await fs.mkdtemp(join(tmpdir(), "tokamak-fs-"));
     const from = join(dir, "from");
     const to = join(dir, "to");
@@ -175,8 +175,8 @@ export const functions = {
       await fs.rm(dir, { force: true, recursive: true });
     }
   }),
-  huge: local(() => "x".repeat(1024 * 1024)),
-  native: local(async ({ source, endpoint }) => {
+  huge: callerAction(() => "x".repeat(1024 * 1024)),
+  native: callerAction(async ({ source, endpoint }) => {
     const file = join(tmpdir(), randomUUID());
     await cp(source, file);
     try {
@@ -218,10 +218,12 @@ async function programTree(proc, path) {
 
 export const contractProviders = {
   programFixture: {
-    contract: { name: "programs", owner: "fixture", place: "local", dataMethods: true },
+    contract: { name: "programs", owner: "fixture", on: "caller", dataMethods: true },
     implementation: {
       linger: {
-        kind: "local",
+        kind: "action",
+        on: "caller",
+        visibility: "public",
         invokeLocal: (_, ctx) =>
           ctx.withPrograms(async (_forceStop, scope) => {
             const program = scope.proc([
@@ -236,7 +238,7 @@ export const contractProviders = {
   },
 };
 Object.assign(functions, {
-  graceful: local(async (_, ctx) => {
+  graceful: callerAction(async (_, ctx) => {
     const program = ctx.proc([
       "/bin/sh",
       "-c",
@@ -249,7 +251,7 @@ Object.assign(functions, {
     }
     return [output, await program.exited];
   }),
-  scopedTree: local(async (path, ctx) => {
+  scopedTree: callerAction(async (path, ctx) => {
     const outer = ctx.proc(["/bin/cat"]);
     const result = await ctx.withPrograms(async (forceStop, scope) => {
       const { program, pids, lines } = await programTree(scope.proc, path);
@@ -262,12 +264,12 @@ Object.assign(functions, {
     for await (const line of outer.stdout) lines.push(line);
     return { ...result, outer: [lines, await outer.exited] };
   }),
-  parkTree: local(async (path, ctx) => {
+  parkTree: callerAction(async (path, ctx) => {
     const { pids } = await programTree(ctx.proc, path);
     console.info("tree", ...pids);
     await new Promise(() => {});
   }),
-  longLine: local(async (_, ctx) => {
+  longLine: callerAction(async (_, ctx) => {
     const program = ctx.proc([
       "/bin/sh",
       "-c",
@@ -288,7 +290,7 @@ Object.assign(functions, {
     program.stop("SIGKILL");
     return [outputError, ready, reply, await program.exited];
   }),
-  inputQueue: local(async (_, ctx) => {
+  inputQueue: callerAction(async (_, ctx) => {
     const program = ctx.proc([
       "/bin/sh",
       "-c",
@@ -307,11 +309,11 @@ Object.assign(functions, {
     program.stop();
     return [accepted, message, (await program.stderr.next()).value, await program.exited];
   }),
-  immediate: local(async (_, ctx) => {
+  immediate: callerAction(async (_, ctx) => {
     const order = [];
     const skipped = setImmediate(() => order.push("cleared"));
     clearImmediate(skipped);
-    const io = ctx.op("local.runQuery", {}).then(() => order.push("io"));
+    const io = ctx.op("plugin.call", {}).then(() => order.push("io"));
     // Let the protocol reader queue the answer before the scheduler runs.
     const end = Date.now() + 75;
     while (Date.now() < end) {}

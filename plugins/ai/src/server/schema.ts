@@ -61,8 +61,8 @@ export const toolKind = v.union(
 );
 
 /**
- * A step or a helper as the sender's local part reports it: the agent's
- * report plus the times the local part saw it begin and end.
+ * A step or a helper as the sender’s Runner reports it: the agent's
+ * report plus the times the Runner saw it begin and end.
  */
 export const stepReport = v.object({
   key: v.string(),
@@ -127,7 +127,7 @@ export default defineSchema({
     /** Chat's reply message the agent's text streams into. */
     replyId: v.optional(v.string()),
     /**
-     * Who sent the message and from which device. Only that device's local part
+     * Who sent the message and from which device. Only a Runner on that device
      * runs the turn, and only it may write to the turn: the same person on a
      * second computer may not.
      */
@@ -144,8 +144,8 @@ export default defineSchema({
     /** The question the turn waits on while its state is `waiting`; gone once answered. */
     question: v.optional(question),
     /**
-     * The secret the asking local part holds for that question: `turns:answer`
-     * needs it, so only that local part can let the turn run on. Never sent to windows.
+     * The secret the Runner holds for that question: `turns:answer`
+     * needs it, so only that Runner can let the turn run on. Never sent to windows.
      */
     questionToken: v.optional(v.string()),
     /** The server time of the first Stop request, which sets the Force stop deadline. */
@@ -179,7 +179,7 @@ export default defineSchema({
     plan: v.optional(v.string()),
     /** The agent's own session, a shortcut on the computer that has it. */
     sessionId: v.optional(v.string()),
-    /** Chat's capability for the reply, chosen by the sender's local part. Never sent to windows. */
+    /** Chat's capability for the reply, chosen by the sender’s Runner. Never sent to windows. */
     replyToken: v.optional(v.string()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
@@ -221,7 +221,7 @@ export default defineSchema({
     .index("by_turnId_key", ["turnId", "key"]),
   /**
    * The last sign of life for a running or waiting turn, sent by the sender's
-   * local part every few seconds (liveness.ts). Kept apart from the turn so a
+   * Runner every few seconds (liveness.ts). Kept apart from the turn so a
    * sign does not rewrite the turn's row or wake the windows that read it.
    */
   signs: defineTable({ turnId: v.id("turns"), at: v.number() }).index("by_turnId", ["turnId"]),

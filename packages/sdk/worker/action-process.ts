@@ -32,7 +32,7 @@ export function initialize(
   functions: FunctionRegistry,
   hooks?: HookRegistry,
 ) {
-  const dispatch = workerDispatch("action", functions, (message) => emit(send, message), nextOp, {
+  const dispatch = workerDispatch("server", functions, (message) => emit(send, message), nextOp, {
     hooks,
     observeInvocation: true,
     abort(controller) {

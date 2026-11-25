@@ -381,14 +381,14 @@ test("dependency internal references can be hooked but cannot be called", async 
   });
 }, 30_000);
 
-test("build rejects local functions as hook targets", async () => {
+test("build rejects a trigger as a hook target", async () => {
   await scratch(async (root) => {
     const consumer = await backend(root, "consumer");
     await file(
       consumer,
       "src/server/policy.ts",
       `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
-       const refs = createApi<{functions: {run: FunctionReference<"local", {}, null, never, "owner">}}>("owner");
+       const refs = createApi<{functions: {run: FunctionReference<"trigger", {}, null, never, "owner">}}>("owner");
        export const invalid = hook(refs.functions.run, {});`,
     );
     const result = build(consumer);

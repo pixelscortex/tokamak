@@ -19,7 +19,7 @@ import { append, jsonBytes, line, LINE_CHARS, PLAN_BYTES, TASKS_MAX, TEXT_BYTES 
 import { access, question, stepReport, task, usage, who } from "./schema";
 
 /**
- * A turn's rows. The sender's local part (`run:turn`) calls these mutations on
+ * A turn's rows. The sender’s Runner (`run:turn`) calls these mutations on
  * the window's session, so any member's window can reach them too: each one
  * checks inside that the caller is the turn's sender, on the sender's device.
  */
@@ -230,7 +230,7 @@ export const begin = mutation({
     messageId: v.string(),
     folder: v.optional(v.string()),
     ...agentSettings,
-    /** Chat's reply capability, chosen by the local part (mutations have no secret randomness). */
+    /** Chat's reply capability, chosen by the Runner (mutations have no secret randomness). */
     replyToken: v.string(),
   },
   handler: async (ctx, { threadId, messageId, folder, replyToken, ...settings }) => {
@@ -275,7 +275,7 @@ export const begin = mutation({
 });
 
 /**
- * What `begin` hands the local part for the agent: the prompt, the earlier
+ * What `begin` hands the Runner for the agent: the prompt, the earlier
  * messages and the session to carry on when the thread's last turn was this
  * agent's on this device. Keeps the turn's settings as the thread's choices
  * when its sender started the thread.
@@ -365,7 +365,7 @@ async function promoteQueued(ctx: MutationContext<Model>, turn: Turn, replyToken
   await ctx.db.patch(turn._id, await openReply(ctx, turn.threadId, turn.agent, replyToken));
 }
 
-/** The local part reads the queued snapshot before choosing which provider to start. */
+/** The Runner reads the queued snapshot before choosing which provider to start. */
 export const queuedForMessage = query({
   args: { messageId: v.string() },
   handler: async ({ db, auth }, { messageId }) => {
@@ -535,8 +535,8 @@ export const questions = query({
 
 /**
  * The agent asks: the turn waits for the sender's answer, with no time limit.
- * Called by the sender's local part (`run.ask`), never on Full access, with a
- * token that local part keeps to itself for `turns:answer`.
+ * Called by the sender’s Runner (`run.ask`), never on Full access, with a
+ * token that Runner keeps to itself for `turns:answer`.
  */
 export const ask = mutation({
   args: { turnId: v.id("turns"), question, token: v.string() },
@@ -551,7 +551,7 @@ export const ask = mutation({
 
 /**
  * Clears the waiting question and lets the turn run on; the answer itself goes
- * from the local part to the agent and is not stored. Only the local part that
+ * from the Runner to the agent and is not stored. Only the Runner that
  * asked can call it: it checks the caller is the sender on the device that
  * runs the turn and holds the question's token, so neither another member nor
  * another window of the same device can let a turn run on while its agent

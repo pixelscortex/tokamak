@@ -110,7 +110,7 @@ async function scopesSnapshotsToFolder({ desk, code, project, start, turnRef }) 
   const prefix = turnRef(thread.threadId, turnId);
   assert.equal(git("diff", "--name-only", "HEAD", `${prefix}/before`), `${scope}/new.txt`);
   assert.equal(git("diff", "--name-only", `${prefix}/before`, `${prefix}/after`), `${scope}/agent.txt`);
-  assert.deepEqual(await desk.local(code.notices.forTurn, { threadId: thread.threadId, turnId }), {
+  assert.deepEqual(await desk.action(code.notices.forTurn, { threadId: thread.threadId, turnId }), {
     omitted: [`${scope}/large.bin`],
     warning: null,
   });
@@ -193,7 +193,7 @@ async function snapshotDeadlines({ desk, code, project, start, refs, gate }) {
   assert.equal(finished.state, "done");
   assert.equal(finished.hookNotice, "Couldn't save this turn's code");
   assert.deepEqual(
-    await desk.local(code.notices.forTurn, { threadId: afterThread.threadId, turnId: finished.turnId }),
+    await desk.action(code.notices.forTurn, { threadId: afterThread.threadId, turnId: finished.turnId }),
     {
       omitted: [],
       warning: "Couldn't save this turn's code",

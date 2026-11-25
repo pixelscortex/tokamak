@@ -1,4 +1,4 @@
-import type { LocalContext, RunningProcess } from "@tokamak/sdk";
+import type { CallerActionContext, RunningProcess } from "@tokamak/sdk";
 import { agentCommand } from "@tokamak/sdk/agent-turn";
 
 export const minimumVersion = "2.1.330";
@@ -100,7 +100,7 @@ export function killAfter(proc: RunningProcess, ms: number) {
   return () => clearTimeout(timer);
 }
 
-export function open(ctx: LocalContext, args: string[], cwd?: string) {
+export function open(ctx: CallerActionContext, args: string[], cwd?: string) {
   // Preserve the client environment so Claude can find its executable,
   // settings and existing Keychain or file login.
   const proc = ctx.proc(["claude", ...args], { cwd });
@@ -129,7 +129,7 @@ export function open(ctx: LocalContext, args: string[], cwd?: string) {
   return { proc, exited, send, control, close };
 }
 
-export async function usableVersion(ctx: LocalContext, timeout = 5_000) {
+export async function usableVersion(ctx: CallerActionContext, timeout = 5_000) {
   const answer = await agentCommand(ctx, ["claude", "--version"], timeout);
   if (answer === "missing") return answer;
   if (answer?.code !== 0) return;
@@ -141,7 +141,7 @@ export async function usableVersion(ctx: LocalContext, timeout = 5_000) {
   return diff === -1 || actual[diff] > minimum[diff] ? "ready" : "old";
 }
 
-export async function signedIn(ctx: LocalContext, timeout = 5_000): Promise<boolean | undefined> {
+export async function signedIn(ctx: CallerActionContext, timeout = 5_000): Promise<boolean | undefined> {
   const answer = await agentCommand(ctx, ["claude", "auth", "status"], timeout);
   if (!answer || answer === "missing") return;
   try {

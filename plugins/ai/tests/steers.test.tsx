@@ -73,13 +73,14 @@ afterEach(() => {
 
 function client(): TokamakClient {
   const transport = {
+    action: async () => null,
     subscribe: (name: string, _args: JsonValue, onEvent: (event: { value: JsonValue }) => void) => {
       if (name !== "ai/turns:replies") throw new Error(`Unexpected query ${name}`);
       queueMicrotask(() => onEvent({ value: [{ helpers: [], ...turn, replyId: "r1" }] as JsonValue }));
       return () => {};
     },
   } as unknown as ClientTransport;
-  return new TokamakClient(transport, { invoke: async () => null });
+  return new TokamakClient(transport);
 }
 
 function mount(part: (props: MessageProps) => unknown, text: string) {

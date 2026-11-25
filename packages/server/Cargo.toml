@@ -113,5 +113,5 @@ name = "codex_turns"
 required-features = ["local-runtime"]
 
 [[test]]
-name = "local_functions"
+name = "caller_actions"
 required-features = ["local-runtime"]

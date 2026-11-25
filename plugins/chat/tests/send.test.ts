@@ -8,21 +8,19 @@ import { draftOf, error, setDraft } from "../src/client/lib/state";
 const threadId = "chat/threads:t1" as Id<"threads">;
 const messageId = "chat/messages:m1" as Id<"messages">;
 
-/** A window's client: the server stores the message; the local part makes the folder (or fails). */
+/** A window's client: the server stores the message; a caller action makes the folder (or fails). */
 function client(folder: (() => Promise<JsonValue>) | undefined, log: string[]) {
   const transport = {
     mutation: async () => {
       log.push("stored");
       return null;
     },
-  } as unknown as ClientTransport;
-  const local = folder && {
-    invoke: async (name: string) => {
+    action: async (name: string) => {
       log.push(name);
-      return folder();
+      return folder ? folder() : { failed: true, kind: "noMachine", data: null };
     },
-  };
-  return new TokamakClient(transport, local as never);
+  } as unknown as ClientTransport;
+  return new TokamakClient(transport);
 }
 
 async function sendOnce(folder: (() => Promise<JsonValue>) | undefined) {
@@ -75,8 +73,8 @@ test("a Send whose folder cannot be made is kept but never announced", async () 
   expect(error()).toBe("Couldn't make this thread's folder: disk full");
 });
 
-test("in a window without a local part a Send is announced with no folder", async () => {
+test("in a window without a Runner a Send is announced with no folder", async () => {
   const { log, seen } = await sendOnce(undefined);
-  expect(log).toEqual(["stored", "announced"]);
+  expect(log).toEqual(["stored", "chat/folders:resolve", "announced"]);
   expect(seen[0]?.folder).toBeUndefined();
 });

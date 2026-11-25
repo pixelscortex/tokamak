@@ -1,4 +1,4 @@
-import { action, internalAction, local, provide, v } from "@tokamak/sdk";
+import { action, internalAction, provide, v } from "@tokamak/sdk";
 import { api } from "./_generated/api";
 import { localPlace, place } from "./contracts";
 
@@ -15,7 +15,7 @@ export const contractCall = action({
 
 export const localProvider = provide(localPlace, {
   id: "fixture",
-  location: local({ handler: (ctx) => ctx.call.depth }),
+  location: action({ on: "caller", handler: (ctx) => ctx.call.depth }),
 });
 
 export const callLocalContract = action({

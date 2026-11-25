@@ -5,7 +5,7 @@ export { trigger, createTrigger, createTriggerRegistry, triggerMetadata, invokeT
 export type { TriggerChange } from "./triggers";
 export { v, validate } from "./validators";
 export { contract, provide } from "./internal/contracts";
-export type { Contract, ContractPlace, Provider } from "./internal/contracts";
+export type { Contract, ContractTarget, Provider } from "./internal/contracts";
 
 export { definePlugin } from "./plugin";
 export type { PluginDefinition } from "./plugin";
@@ -38,7 +38,6 @@ export {
   pluginOnly,
   fail,
   isFailure,
-  local,
   createFunctions,
   createRegistry,
   functionMetadata,
@@ -68,7 +67,6 @@ export type {
   MachineCreation,
   ActionOptions,
   MachineFailure,
-  LocalContext,
   PluginCalls,
   WireResult,
 } from "./functions";

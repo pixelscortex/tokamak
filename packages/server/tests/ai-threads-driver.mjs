@@ -31,7 +31,7 @@ try {
 
 /** Runs one turn with the `context` replay; resolves its turn row and its reply's text. */
 async function contextTurn(window, { threadId, messageId, folder, agent, ...more }) {
-  const result = await window.local(ai.run.turn, {
+  const result = await window.action(ai.run.turn, {
     threadId,
     messageId,
     folder,
@@ -49,7 +49,7 @@ async function contextTurn(window, { threadId, messageId, folder, agent, ...more
 async function installAndSignIn() {
   const address = await h.serve("install");
   const desk = await h.connect(address, { local: true });
-  const listed = async (id) => (await desk.local(ai.agents.list, {})).find((agent) => agent.id === id);
+  const listed = async (id) => (await desk.action(ai.agents.list, {})).find((agent) => agent.id === id);
 
   // What each agent offers decides which pickers show: a speed is not a mode.
   const fake = (await listed(FAKE.id)).info;
@@ -63,9 +63,9 @@ async function installAndSignIn() {
   assert.deepEqual(other.models.find((model) => model.id === "context")?.efforts, ["low", "high"]);
 
   const sent = await desk.mutation(chat.threads.start, { text: "Hello", folder: { kind: "own" } });
-  const folder = await desk.local(chat.folders.resolve, { threadId: sent.threadId });
+  const folder = await desk.action(chat.folders.resolve, { threadId: sent.threadId });
   const run = () =>
-    desk.local(ai.run.turn, {
+    desk.action(ai.run.turn, {
       threadId: sent.threadId,
       messageId: sent.messageId,
       folder,
@@ -174,7 +174,7 @@ async function sessionsAndHistory() {
 
   // A turn that thinks and runs a command: a fresh session after it is given its answer only,
   // never its thinking or its steps.
-  const busy = await desk.local(ai.run.turn, {
+  const busy = await desk.action(ai.run.turn, {
     threadId,
     messageId: await post("Run the tests"),
     folder,
@@ -342,7 +342,7 @@ async function choicesBelongToTheThread() {
       { agent: OTHER.id, model: "context", effort: "high", speed: "fast", mode: undefined, access: "full" },
     ],
   );
-  const again = await laptop.local(ai.run.turn, {
+  const again = await laptop.action(ai.run.turn, {
     threadId,
     messageId: sent.messageId,
     folder,

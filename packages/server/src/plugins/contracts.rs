@@ -66,8 +66,8 @@ pub enum SignInField {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ContractPlace {
-    Local,
+pub enum ContractTarget {
+    Caller,
     Server,
 }
 
@@ -75,7 +75,7 @@ pub enum ContractPlace {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContractDeclaration {
     pub name: String,
-    pub place: ContractPlace,
+    pub on: ContractTarget,
     pub declaration_hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_methods: Option<LocalDataMethods>,
@@ -93,7 +93,7 @@ pub enum LocalDataMethods {
 pub struct ContractRegistration {
     pub owner: String,
     pub name: String,
-    pub place: ContractPlace,
+    pub on: ContractTarget,
     pub declaration_hash: String,
     pub registration: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -117,7 +117,7 @@ pub(crate) struct ServerProvider {
 }
 
 pub(crate) type Contracts = BTreeMap<(String, String), Vec<ServerProvider>>;
-type Declarations<'a> = BTreeMap<(&'a str, &'a str), (ContractPlace, &'a str)>;
+type Declarations<'a> = BTreeMap<(&'a str, &'a str), (ContractTarget, &'a str)>;
 
 pub(super) struct ContractLoadError {
     pub error: Error,
@@ -135,7 +135,7 @@ impl Loaded {
             .map(|name| {
                 (
                     (AUTH_CONTRACT_OWNER, name),
-                    (ContractPlace::Server, built_in_hash.as_str()),
+                    (ContractTarget::Server, built_in_hash.as_str()),
                 )
             })
             .collect();
@@ -143,13 +143,13 @@ impl Loaded {
             for declaration in &artifact.manifest.contracts {
                 declarations.insert(
                     (owner, &declaration.name),
-                    (declaration.place, &declaration.declaration_hash),
+                    (declaration.on, &declaration.declaration_hash),
                 );
             }
         }
         let mut contracts = declarations
             .iter()
-            .filter(|(_, (place, _))| *place == ContractPlace::Server)
+            .filter(|(_, (place, _))| *place == ContractTarget::Server)
             .map(|((owner, name), _)| ((owner.to_string(), name.to_string()), Vec::new()))
             .collect::<Contracts>();
         for (plugin, artifact) in &self.catalog.plugins {
@@ -178,14 +178,14 @@ impl Loaded {
             return Ok(()); // An optional owner can be installed after its providers.
         }
         let declaration = declarations.get(&(owner, name));
-        if declaration.is_some_and(|(place, _)| *place == ContractPlace::Local)
-            && registration.place == ContractPlace::Local
+        if declaration.is_some_and(|(place, _)| *place == ContractTarget::Caller)
+            && registration.on == ContractTarget::Caller
         {
             // The client lists local providers and quarantines stale builds there.
             // One mismatched local provider must not prevent catalog publication.
             return Ok(());
         }
-        if declaration != Some(&(registration.place, registration.declaration_hash.as_str())) {
+        if declaration != Some(&(registration.on, registration.declaration_hash.as_str())) {
             return Err(invalid(format!(
                 "Contract declaration mismatch for {owner}/{name} in {plugin}; rebuild against the owner's public declaration"
             )));
@@ -451,9 +451,11 @@ impl Manifest {
         let mut registrations = BTreeSet::new();
         for provider in &self.contract_providers {
             let declared = self.plugin.declares_access_to(&provider.owner);
-            let has_entry = match provider.place {
-                ContractPlace::Local => self.entries.local.is_some() && provider.methods.is_empty(),
-                ContractPlace::Server => {
+            let has_entry = match provider.on {
+                ContractTarget::Caller => {
+                    self.entries.local.is_some() && provider.methods.is_empty()
+                }
+                ContractTarget::Server => {
                     self.entries.server.is_some() && provider.unavailable.is_none()
                 }
             };

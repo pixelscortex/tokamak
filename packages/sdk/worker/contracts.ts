@@ -20,7 +20,7 @@ import { agentTurn } from "./agent-turn";
 
 import { wireData } from "./wire-data";
 
-type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
+type ProviderModule = { contractProviders?: Record<string, Provider<"caller">> };
 export type ContractInvocation = {
   plugin: string;
   owner: string;
@@ -47,7 +47,7 @@ function checkedProvider(module: ProviderModule, { plugin, owner, name, registra
   if (
     !provider ||
     provider.contract.name !== name ||
-    provider.contract.place !== "local" ||
+    provider.contract.on !== "caller" ||
     (provider.contract.owner ?? plugin) !== owner
   )
     throw new Error(`Missing local contract registration: ${owner}/${name} ${registration}`);
@@ -56,9 +56,7 @@ function checkedProvider(module: ProviderModule, { plugin, owner, name, registra
 
 function localMethod(value: unknown) {
   const method = value as FunctionDefinition | null | undefined;
-  return method?.kind === "local" || (method?.kind === "action" && method.on === "caller")
-    ? method.invokeLocal
-    : undefined;
+  return method?.kind === "action" && method.on === "caller" ? method.invokeLocal : undefined;
 }
 
 function localThread(value: unknown, args: JsonValue) {
@@ -73,7 +71,7 @@ function localThread(value: unknown, args: JsonValue) {
   }
 }
 
-function requirePlainData(provider: Provider<"local">, owner: string | undefined) {
+function requirePlainData(provider: Provider<"caller">, owner: string | undefined) {
   if (provider.contract.dataMethods !== true)
     throw new Error(
       `Local contract ${owner ? owner + "/" : ""}${provider.contract.name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
@@ -157,7 +155,7 @@ export function workerContracts() {
   return function bind(bridge: HostBridge): ContractScope {
     return {
       async list(key, selected, options) {
-        if (key.place !== "local") throw new Error("Server contracts run in server functions");
+        if (key.on !== "caller") throw new Error("Server contracts run in server functions");
         const signal = options?.signal;
         const inputSignal = options?.inputSignal ?? signal;
         const catalog = await callHost(

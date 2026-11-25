@@ -295,6 +295,10 @@ pub(crate) async fn connection(
                     let id = frame_id(&message["id"])?;
                     match message["type"].as_str() {
                         Some("invoke") if message.get("contract").is_none() => {
+                            if message["action"] != true {
+                                send(socket, result(id, Some("local() was removed: rebuild the plugin with action({ on: \"caller\" })"), Value::Null)).await?;
+                                continue;
+                            }
                             if active.contains_key(&id) {
                                 return Err("Duplicate plugin process invocation".into());
                             }
@@ -389,7 +393,7 @@ pub(crate) async fn action(
         }
     };
     let frame = json!({
-        "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
+        "type":"invoke", "fn":action.name, "args":action.args, "admittedAction":true,
     });
     let result = tokio::select! {
         () = pool.stopping.cancelled() => return Err("Runner stopped".into()),
@@ -406,7 +410,7 @@ async fn root_call(
     frame: Value,
     cancel: CancellationToken,
 ) -> (u64, Result<Value, String>) {
-    let label = format!("Plugin {} local function cancelled", lease.build.id);
+    let label = format!("Plugin {} caller action cancelled", lease.build.id);
     let response = tokio::select! {
         biased;
         () = cancel.cancelled() => Err(label),
@@ -427,19 +431,14 @@ async fn invoke_root(
     mut frame: Value,
 ) -> Result<Value, String> {
     let (plan, continuation) = root_action_frame(&mut frame);
-    let _slot = if frame["action"] == true {
-        Some(
-            pool.actions
-                .try_acquire()
-                .map_err(|_| "Runner action capacity exceeded")?,
-        )
-    } else {
-        None
-    };
+    let _slot = pool
+        .actions
+        .try_acquire()
+        .map_err(|_| "Runner action capacity exceeded")?;
     let id = &lease.build.id;
     let ancestors = std::slice::from_ref(id);
     let host = pool.host(&lease.build, &lease.slot, false).await?;
-    if frame["action"] != true || plan.is_null() {
+    if plan.is_null() {
         return run(
             pool,
             bridge,
@@ -513,9 +512,10 @@ fn root_action_frame(frame: &mut Value) -> (Value, Value) {
         fields.remove("windowProof");
         fields.remove("threadId");
         fields.remove("admittedAction");
-        if fields.get("action") == Some(&Value::Bool(true))
-            && let Some(note) = fields.remove("note")
-        {
+        // The socket checks the legacy marker at admission. Internal frames
+        // distinguish root and linked calls by their invocation kind.
+        fields.remove("action");
+        if let Some(note) = fields.remove("note") {
             fields.insert("actionDepth".into(), note["depth"].clone());
             fields.insert("hookScope".into(), note["hookScope"].clone());
             fields.insert("windowProof".into(), note["proof"].clone());
@@ -603,7 +603,7 @@ async fn window_hook(
         .map_err(|error| hook_artifact_error(pool, &artifact, error))?;
     let ancestors = [owner.to_owned(), artifact.id];
     let frame = json!({
-        "type":"invoke","fn":name,"args":input,"action":true,"admittedAction":true,
+        "type":"invoke","fn":name,"args":input,"admittedAction":true,
         "threadId":note["thread"],"hookScope":note["hookScope"],"windowProof":proof,"actionDepth":note["depth"].as_u64().unwrap_or(1).saturating_sub(1),
     });
     action_value(
@@ -953,14 +953,17 @@ impl<'a> CallRoute<'a> {
                 Invocation::Ordinary { upstream } | Invocation::Linked { upstream, .. },
             ) => CallUpstream::Embedded(upstream.ok_or("Missing embedded Runner operation scope")?),
             (Upstream::Window(connection), _) => {
-                let action_ops = (frame["action"] == true)
-                    .then(|| {
-                        host.action_ops
-                            .get_or_init(|| WindowActionOps::new(pool, &host.build))
-                            .as_ref()
-                    })
-                    .transpose()
-                    .map_err(Clone::clone)?;
+                let action_ops = matches!(
+                    invocation,
+                    Invocation::Root | Invocation::WindowAction { .. }
+                )
+                .then(|| {
+                    host.action_ops
+                        .get_or_init(|| WindowActionOps::new(pool, &host.build))
+                        .as_ref()
+                })
+                .transpose()
+                .map_err(Clone::clone)?;
                 CallUpstream::Window {
                     connection,
                     action_ops,
@@ -1132,14 +1135,7 @@ impl<'a> CallRoute<'a> {
                     .await;
             }
             _ => {
-                // Legacy local contract handlers use local.run* inside the same admitted invocation.
-                let operation = match name {
-                    "local.runQuery" => "action.runQuery",
-                    "local.runMutation" => "action.runMutation",
-                    "local.runAction" => "plugin.call",
-                    name => name,
-                }
-                .to_owned();
+                let operation = name.to_owned();
                 match upstream.dispatch(&operation, frame["payload"].take()).await {
                     Ok(value) => value,
                     Err(error) => {
@@ -1172,13 +1168,7 @@ impl<'a> CallRoute<'a> {
 
         if matches!(
             fields.get("name").and_then(Value::as_str),
-            Some(
-                "local.runQuery"
-                    | "local.runMutation"
-                    | "local.runAction"
-                    | "plugin.call"
-                    | "machines.list"
-            )
+            Some("plugin.call" | "machines.list")
         ) {
             let mut continuation = json!({
                 "depth": self.action_depth + self.ancestors.len() - 1,
@@ -1356,14 +1346,14 @@ mod tests {
         assert!(route.thread.get().is_none());
 
         let mut query = json!({
-            "name": "local.runQuery",
+            "name": "plugin.call",
             "continuation": {"depth": 0, "thread": "chat/threads:forged"},
             "threadId": "chat/threads:forged",
         });
         route.attach_continuation(&mut query, false);
         assert_eq!(
             query,
-            json!({"name": "local.runQuery", "continuation": {"depth": 1, "thread": null}})
+            json!({"name": "plugin.call", "continuation": {"depth": 1, "thread": null}})
         );
     }
 

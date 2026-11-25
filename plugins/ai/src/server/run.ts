@@ -1,6 +1,15 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
-import { fail, isFailure, local, v, type ArgsOf, type Id, type Infer, type LocalContext } from "@tokamak/sdk";
+import {
+  fail,
+  isFailure,
+  action,
+  v,
+  type ArgsOf,
+  type Id,
+  type Infer,
+  type CallerActionContext,
+} from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type Run, type Usage } from "../contracts";
 import { errorText, setupReason } from "../shared/turn-shared";
@@ -27,7 +36,7 @@ import { asking, pendingQuestion, sessionKey, settle } from "./questions";
 import { access, answer as answerValue, type stepReport } from "./schema";
 import { keepAlive } from "./keep-alive";
 import { hooksFor } from "./turn-hooks";
-import { workingOn } from "./working";
+import { windowKey, workingOn } from "./working";
 
 import { RELOADED } from "../shared/turn-timing";
 
@@ -39,8 +48,10 @@ import { RELOADED } from "../shared/turn-timing";
  * window calls this after each Send with the thread's choices; it returns
  * when the turn has ended.
  */
-export const turn = local({
+export const turn = action({
+  on: "caller",
   args: {
+    windowId: v.string(),
     threadId: v.id("threads"),
     messageId: v.string(),
     replyToken: v.optional(v.string()),
@@ -58,7 +69,8 @@ export const turn = local({
     /** Every thread starts on Full access. */
     access: v.optional(access),
   },
-  handler: async (ctx, { threadId, messageId, replyToken, folder, agentId, access, ...picked }) => {
+  handler: async (ctx, { windowId, threadId, messageId, replyToken, folder, agentId, access, ...picked }) => {
+    const owner = windowKey(ctx.auth, windowId);
     // The labels `turns:begin` records are checked here, against what the provider offers.
     const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
     agentId = queued?.agent.id ?? agentId;
@@ -98,11 +110,12 @@ export const turn = local({
     const questions = asking(ctx, {
       turnId,
       access: settings.access,
-      session: sessionKey(threadId, provider.id),
+      owner,
+      session: sessionKey(owner, threadId, provider.id),
       carried: sessionId,
     });
     // Stop answers a waiting question "cancel" first: an agent may wait for the answer before it stops.
-    const control = turnControl(turnId, ctx.auth, questions.cancel, hooks.stopBefore);
+    const control = turnControl(turnId, owner, questions.cancel, hooks.stopBefore);
     // From here until the turn is settled, the server hears from this computer (liveness.ts), and
     // quitting the app asks first (working.ts). Both are released however the turn ends.
     let lost: string | undefined;
@@ -121,6 +134,7 @@ export const turn = local({
     ctx.retiring?.addEventListener("abort", reloaded, { once: true });
     if (ctx.retiring?.aborted) reloaded();
     const unregister = workingOn(turnId, {
+      owner,
       threadId,
       agent: provider.name,
       control,
@@ -170,7 +184,7 @@ export const turn = local({
       // A graceful interruption can still return the session and its existing grants.
       questions.end(ending.sessionId);
       control.finish();
-      finishing.add(turnId);
+      finishing.set(turnId, owner);
       await writer.settled();
       const broken = writer.close();
       // The turn did not reach the thread whole; the agent's session id is kept when it gave one.
@@ -216,11 +230,12 @@ export const turn = local({
   },
 });
 
-/** Steers on the sender's local part, and records the text only once the agent can receive it. */
-export const steer = local({
-  args: { turnId: v.id("turns"), text: v.string() },
-  handler: async (ctx, { turnId, text }) => {
-    const control = controlFor(turnId, ctx.auth);
+/** Steers on the sender's window, and records the text only once the agent can receive it. */
+export const steer = action({
+  on: "caller",
+  args: { windowId: v.string(), turnId: v.id("turns"), text: v.string() },
+  handler: async (ctx, { windowId, turnId, text }) => {
+    const control = controlFor(turnId, windowKey(ctx.auth, windowId));
     if (!control) return noRunningTurn(turnId);
     const steerText = text.trim();
     if (!steerText) return fail("EmptySteer", { turnId });
@@ -231,16 +246,19 @@ export const steer = local({
 });
 
 /** Turns whose agent has settled and whose after hooks are still running. */
-const finishing = new Set<string>();
+const finishing = new Map<string, string>();
 
 /** Marks Stop on the server before asking the provider to end, so its final reply is stopped. */
-export const stop = local({
-  args: { turnId: v.id("turns") },
-  handler: async (ctx, { turnId }) => {
-    const control = controlFor(turnId, ctx.auth);
+export const stop = action({
+  on: "caller",
+  args: { windowId: v.string(), turnId: v.id("turns") },
+  handler: async (ctx, { windowId, turnId }) => {
+    const control = controlFor(turnId, windowKey(ctx.auth, windowId));
     // The agent has settled and only after hooks remain: nothing is left to stop.
     if (!control || !control.active)
-      return finishing.has(turnId) ? fail("NotRunning", { turnId, finishing: true }) : noRunningTurn(turnId);
+      return finishing.get(turnId) === windowKey(ctx.auth, windowId)
+        ? fail("NotRunning", { turnId, finishing: true })
+        : noRunningTurn(turnId);
     return (await control.requestStop(() => ctx.runMutation(api.turns.requestStop, { turnId })))
       ? null
       : noRunningTurn(turnId);
@@ -248,10 +266,11 @@ export const stop = local({
 });
 
 /** Kills the run's program groups after the deadline recorded on its server row. */
-export const forceStop = local({
-  args: { turnId: v.id("turns") },
-  handler: async (ctx, { turnId }) => {
-    const control = controlFor(turnId, ctx.auth);
+export const forceStop = action({
+  on: "caller",
+  args: { windowId: v.string(), turnId: v.id("turns") },
+  handler: async (ctx, { windowId, turnId }) => {
+    const control = controlFor(turnId, windowKey(ctx.auth, windowId));
     if (!control) return noRunningTurn(turnId);
     if ((await ctx.runQuery(api.turns.forceStopDelay, { turnId })) !== 0) return fail("TooEarly", { turnId });
     return control.forceStop();
@@ -259,17 +278,18 @@ export const forceStop = local({
 });
 
 /**
- * The sender's answer to a question waiting in this local part. The card on
+ * The sender's answer to a question waiting in this window. The card on
  * the composer calls this; it fails with `Expired` when no turn here waits on
  * that question, as after the app that asked it quit. `turns:answer` clears
  * the question on the row (checking inside that the caller is the turn's
- * sender on its device, with the token only this local part holds); only
+ * sender on its device, with the token only its Runner holds); only
  * then does the answer reach the agent.
  */
-export const answer = local({
-  args: { turnId: v.id("turns"), questionId: v.string(), answer: answerValue },
-  handler: async (ctx, { turnId, questionId, answer }) => {
-    const pending = pendingQuestion(turnId, questionId);
+export const answer = action({
+  on: "caller",
+  args: { windowId: v.string(), turnId: v.id("turns"), questionId: v.string(), answer: answerValue },
+  handler: async (ctx, { windowId, turnId, questionId, answer }) => {
+    const pending = pendingQuestion(windowKey(ctx.auth, windowId), turnId, questionId);
     if (!pending) return fail("Expired", { turnId });
     await ctx.runMutation(api.turns.answer, { turnId, questionId, token: pending.token });
     // A second click while the first answer was on its way finds nothing left to answer.
@@ -279,15 +299,17 @@ export const answer = local({
 });
 
 /**
- * Whether this local part still holds the question, so the card can say at
+ * Whether this window still owns the question, so the card can say at
  * once that a question from before the app quit has expired.
  */
-export const pending = local({
-  args: { turnId: v.id("turns"), questionId: v.string() },
-  handler: async (_ctx, { turnId, questionId }) => pendingQuestion(turnId, questionId) !== undefined,
+export const pending = action({
+  on: "caller",
+  args: { windowId: v.string(), turnId: v.id("turns"), questionId: v.string() },
+  handler: async (ctx, { windowId, turnId, questionId }) =>
+    pendingQuestion(windowKey(ctx.auth, windowId), turnId, questionId) !== undefined,
 });
 
-/** A step as the local part keeps it: the agent's latest report and when this computer saw it begin and end. */
+/** A step as the Runner keeps it: the agent's latest report and when this computer saw it begin and end. */
 type StepReport = Infer<typeof stepReport>;
 type WriteArgs = ArgsOf<typeof api.turns.write>;
 /** The report methods of a `Run`: what the agent calls while it works. */
@@ -378,7 +400,7 @@ class Unsent {
  * the computer that runs the turn. A write refused twice breaks the writer:
  * `broke` resolves, and every later report throws back to the agent.
  */
-function turnWriter(ctx: LocalContext, turnId: Id<"turns">) {
+function turnWriter(ctx: CallerActionContext, turnId: Id<"turns">) {
   const unsent = new Unsent();
   let flight: Promise<void> | undefined;
   let broken: unknown;

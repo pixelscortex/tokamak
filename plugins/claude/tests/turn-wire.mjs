@@ -6,7 +6,7 @@ export function turnWire() {
   const writes = new Map();
   let hold;
   function observeMutation(frame) {
-    if (frame.type !== "op" || frame.name !== "local.runMutation") return;
+    if (frame.type !== "op" || frame.name !== "plugin.call" || frame.payload.kind !== "mutation") return;
     const { name, args } = frame.payload;
     if (name === "ai/turns:write") {
       writes.set(args.turnId, (writes.get(args.turnId) ?? 0) + 1);

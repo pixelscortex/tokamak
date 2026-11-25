@@ -1,4 +1,4 @@
-import { TIMED_OUT, within, type LocalContext, type RunningProcess } from "@tokamak/sdk";
+import { TIMED_OUT, within, type CallerActionContext, type RunningProcess } from "@tokamak/sdk";
 
 const CLOSE_GRACE_MS = 2_000;
 
@@ -26,7 +26,7 @@ export class AppServer {
   #onEvent?: (event: Event) => void;
   readonly closed: Promise<Error>;
 
-  constructor(ctx: LocalContext, cwd?: string) {
+  constructor(ctx: CallerActionContext, cwd?: string) {
     // Omit env: ctx.proc would replace the client's environment and lose the
     // user's PATH, home, and any forwarded CODEX_HOME.
     const process = ctx.proc(["codex", "app-server"], cwd === undefined ? undefined : { cwd });

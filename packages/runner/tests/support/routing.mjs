@@ -19,15 +19,22 @@ export async function editBundle(dist, extra, transform = (code) => code) {
 export async function installLocal(folder, id, code) {
   await mkdir(folder, { recursive: true });
   const artifact = { id, entryHash: hash(""), codeHash: hash(code) };
+  const map = JSON.stringify({ version: 3, sources: [], names: [], mappings: "" });
   await Promise.all([
     writeFile(join(folder, "local-entry.js"), ""),
     writeFile(join(folder, "local.js"), code),
+    writeFile(join(folder, "local.js.map"), map),
     writeFile(
       join(folder, "manifest.json"),
       JSON.stringify({
+        formatVersion: 1,
         plugin: { id, version: "1.0.0" },
-        entries: { local: { entry: "local-entry.js", code: "local.js" } },
-        hashes: { "local-entry.js": artifact.entryHash, "local.js": artifact.codeHash },
+        entries: { local: { entry: "local-entry.js", code: "local.js", map: "local.js.map" } },
+        hashes: {
+          "local-entry.js": artifact.entryHash,
+          "local.js": artifact.codeHash,
+          "local.js.map": hash(map),
+        },
       }),
     ),
   ]);
@@ -95,11 +102,11 @@ export async function rawWindow(runner, artifact, handle, origin) {
   return {
     close: () => worker.close(),
     retire: (target = artifact) => worker.retire(target),
-    async invoke(fn, args) {
+    async invoke(fn, args, action = true) {
       const id = ++next;
       const result = Promise.withResolvers();
       calls.set(id, result);
-      await worker.send({ type: "invoke", id, fn, args });
+      await worker.send({ type: "invoke", id, fn, args, ...(action ? { action: true } : {}) });
       return within(result.promise, fn);
     },
   };

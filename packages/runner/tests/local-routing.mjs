@@ -40,7 +40,7 @@ async function plugin(id, source, contract = "") {
 async function local_arguments_continue_into_server_calls(client, api, auth, threadId) {
   for (const args of [{}, { threadId }]) {
     const note = (depth) => ({ ...auth, depth, ...args });
-    assert.deepEqual(await client.local(api.serverNotes, args), {
+    assert.deepEqual(await client.action(api.serverNotes, args), {
       args,
       local: note(0),
       query: note(1),
@@ -51,12 +51,12 @@ async function local_arguments_continue_into_server_calls(client, api, auth, thr
 }
 
 async function recursive_local_calls_keep_the_depth_limit_on_server_reentry(client, api, auth) {
-  assert.deepEqual(await client.local(api.depthAcrossServer, { remaining: 12 }), {
+  assert.deepEqual(await client.action(api.depthAcrossServer, { remaining: 12 }), {
     call: { ...auth, depth: 14 },
     query: { ...auth, depth: 15 },
   });
   await assert.rejects(
-    client.local(api.depthAcrossServer, { remaining: 13 }),
+    client.action(api.depthAcrossServer, { remaining: 13 }),
     /depth limit at routed-owner\/probe:queryNote/,
   );
 }
@@ -66,7 +66,7 @@ await plugin(
   `
   /// <reference types="node" />
   import { readFile } from "node:fs/promises";
-  import { action, local, mutation, provide, query, v, type CallContext } from "@tokamak/sdk";
+  import { action, mutation, provide, query, v, type CallContext } from "@tokamak/sdk";
   import { api } from "./_generated/api";
   import { probe, ownProbe } from "../contracts";
   export const queryNote = query({ args: { continuation: v.optional(v.any()) }, handler: ({ call }) => call });
@@ -76,7 +76,7 @@ await plugin(
   });
   export const selfProvider = provide(ownProbe, {
     echo: async (value) => value,
-    walk: local({
+    walk: action({ on: "caller",
       args: { remaining: v.number() },
       handler: (ctx, { remaining }): Promise<{ call: CallContext; query: CallContext }> =>
         remaining === 0
@@ -84,11 +84,11 @@ await plugin(
           : ownProbe.get("${owner}", ctx).walk({ remaining: remaining - 1 }),
     }),
   });
-  export const depthAcrossServer = local({
+  export const depthAcrossServer = action({ on: "caller",
     args: { remaining: v.number() },
     handler: (ctx, input) => ownProbe.get("${owner}", ctx).walk(input),
   });
-  export const serverNotes = local({
+  export const serverNotes = action({ on: "caller",
     args: { threadId: v.optional(v.id("threads")) },
     handler: async (ctx, args) => ({
       args,
@@ -98,15 +98,15 @@ await plugin(
       action: await ctx.runAction(api.probe.actionNote, {}),
     }),
   });
-  export const selfCall = local({
+  export const selfCall = action({ on: "caller",
     args: { invalid: v.boolean() },
     handler: (ctx, { invalid }) => ownProbe.get("${owner}", ctx).echo(invalid ? new Date() : { ok: true }),
   });
-  export const identify = local({
+  export const identify = action({ on: "caller",
     args: { id: v.string() },
     handler: (ctx, { id }) => probe.get(id, ctx).identify(),
   });
-  export const hold = local({
+  export const hold = action({ on: "caller",
     args: { id: v.string(), path: v.string(), cancelCall: v.optional(v.boolean()) },
     handler: async (ctx, { id, path, cancelCall }) => {
       if (!cancelCall) return probe.get(id, ctx, { signal: ctx.signal }).hold({ path, signal: ctx.signal });
@@ -125,19 +125,19 @@ await plugin(
       }
     },
   });
-  export const badArgs = local({
+  export const badArgs = action({ on: "caller",
     handler: (ctx) => probe.get("custom-alpha", ctx, { signal: ctx.signal })
       .hold({ path: (() => {}) as unknown as string, signal: ctx.signal }),
   });
   const nested = () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown);
-  export const badResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).badResult() });
-  export const deepArgs = local({ handler: (ctx) => probe.get("custom-alpha", ctx).echo(nested()) });
-  export const largeArgs = local({ handler: (ctx) => probe.get("custom-alpha", ctx).echo("🙂".repeat(300_000)) });
-  export const deepResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).deepResult() });
-  export const largeResult = local({ handler: (ctx) => probe.get("custom-alpha", ctx).largeResult() });
-  export const thrown = local({ handler: (ctx) => probe.get("custom-alpha", ctx).thrown() });
-  export const checkBad = local({ handler: (ctx) => probe.get("custom-crash", ctx).identify() });
-  export const cancelBurst = local({
+  export const badResult = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).badResult() });
+  export const deepArgs = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).echo(nested()) });
+  export const largeArgs = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).echo("🙂".repeat(300_000)) });
+  export const deepResult = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).deepResult() });
+  export const largeResult = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).largeResult() });
+  export const thrown = action({ on: "caller", handler: (ctx) => probe.get("custom-alpha", ctx).thrown() });
+  export const checkBad = action({ on: "caller", handler: (ctx) => probe.get("custom-crash", ctx).identify() });
+  export const cancelBurst = action({ on: "caller",
     handler: async (ctx) => {
       for (let batch = 0; batch < 4; batch++) {
         const controller = new AbortController();
@@ -153,12 +153,12 @@ await plugin(
       return probe.get("custom-alpha", ctx).identify();
     },
   });
-  export const callNote = local({
+  export const callNote = action({ on: "caller",
     args: { selection: v.optional(v.id("threads")) },
     handler: async (ctx) => [ctx.call, await probe.get("custom-alpha", ctx).callNote()],
   });
-  export const list = local({ handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
-  export const unavailable = local({
+  export const list = action({ on: "caller", handler: async (ctx) => (await probe.list(ctx)).map(({ id }) => id) });
+  export const unavailable = action({ on: "caller",
     handler: async (ctx) => {
       const failed: { plugin: string; message: string }[] = [];
       const ready = await probe.list(ctx, { onUnavailable: ({ plugin, message }) => failed.push({ plugin, message }) });
@@ -178,12 +178,12 @@ await plugin(
     deepResult(): Promise<unknown>;
     largeResult(): Promise<string>;
     thrown(): Promise<void>;
-  }>("probe", { place: "local", dataMethods: true });
+  }>("probe", { on: "caller", dataMethods: true });
   export const ownProbe = contract<{
     echo(value: unknown): Promise<unknown>;
     walk(input: { remaining: number }): Promise<{ call: CallContext; query: CallContext }>;
   }>("ownProbe", {
-    place: "local", dataMethods: true,
+    on: "caller", dataMethods: true,
   });
 `,
 );
@@ -192,10 +192,10 @@ function provider(id) {
   return `
     /// <reference types="node" />
     import { readFile, writeFile } from "node:fs/promises";
-    import { local, provide, type ActionSignal } from "@tokamak/sdk";
+    import { action, provide, type ActionSignal } from "@tokamak/sdk";
     import { probe } from "plugin:${owner}/contracts";
-    const identify = local({ handler: async (ctx) => ctx.auth });
-    const hold = local({ handler: async (_ctx, { path, signal }: { path: string; signal: ActionSignal }) => {
+    const identify = action({ on: "caller", handler: async (ctx) => ctx.auth });
+    const hold = action({ on: "caller", handler: async (_ctx, { path, signal }: { path: string; signal: ActionSignal }) => {
         await new Promise<void>((resolve) => {
           const timer = setInterval(() => {
             void readFile(path + ".release").then(() => { clearInterval(timer); resolve(); }, () => {});
@@ -210,7 +210,7 @@ function provider(id) {
     } });
     export default provide(probe, {
       id: "custom-alpha", identify, hold,
-      callNote: local({ handler: (ctx) => ctx.call }),
+      callNote: action({ on: "caller", handler: (ctx) => ctx.call }),
       badResult: async () => (() => {}) as unknown as string,
       echo: async (value) => value,
       deepResult: async () => Array.from({ length: 140 }).reduce((value) => [value], null as unknown),
@@ -277,10 +277,10 @@ try {
   const client = await connectWindow();
   const api = createApi(owner).probe;
   const auth = await client.query(authCaller, {});
-  assert.deepEqual(await client.local(api.identify, { id: "custom-alpha" }), auth);
-  assert.deepEqual(await client.local(api.identify, { id: "custom-beta" }), auth);
+  assert.deepEqual(await client.action(api.identify, { id: "custom-alpha" }), auth);
+  assert.deepEqual(await client.action(api.identify, { id: "custom-beta" }), auth);
   const threadId = "chat/threads:local-route";
-  assert.deepEqual(await client.local(api.callNote, { selection: threadId }), [
+  assert.deepEqual(await client.action(api.callNote, { selection: threadId }), [
     { ...auth, threadId, depth: 0 },
     { ...auth, threadId, depth: 1 },
   ]);
@@ -294,26 +294,26 @@ try {
   const initial = pids();
   assert.deepEqual(Object.keys(initial).sort(), [alpha, beta, owner].sort());
   assert.equal(new Set(Object.values(initial)).size, 3);
-  assert.deepEqual(await client.local(api.selfCall, { invalid: false }), { ok: true });
+  assert.deepEqual(await client.action(api.selfCall, { invalid: false }), { ok: true });
   await assert.rejects(
-    client.local(api.selfCall, { invalid: true }),
+    client.action(api.selfCall, { invalid: true }),
     /routed-owner\/ownProbe\.echo arguments/,
   );
   assert.deepEqual(pids(), initial, "a self route reuses the original host");
   console.log("Three distinct local process PIDs; provider received the signed-in member and device");
 
-  await assert.rejects(client.local(api.badArgs, {}), /routed-owner\/probe\.hold arguments/);
-  await assert.rejects(client.local(api.badResult, {}), /routed-owner\/probe\.badResult result/);
-  await assert.rejects(client.local(api.deepArgs, {}), /probe\.echo arguments.*nesting limit/);
-  await assert.rejects(client.local(api.largeArgs, {}), /probe\.echo arguments.*size limit/);
-  await assert.rejects(client.local(api.deepResult, {}), /probe\.deepResult result.*nesting limit/);
-  await assert.rejects(client.local(api.largeResult, {}), /probe\.largeResult result.*size limit/);
-  await assert.rejects(client.local(api.thrown, {}), /Plugin routed-alpha: original provider exception/);
+  await assert.rejects(client.action(api.badArgs, {}), /routed-owner\/probe\.hold arguments/);
+  await assert.rejects(client.action(api.badResult, {}), /routed-owner\/probe\.badResult result/);
+  await assert.rejects(client.action(api.deepArgs, {}), /probe\.echo arguments.*nesting limit/);
+  await assert.rejects(client.action(api.largeArgs, {}), /probe\.echo arguments.*size limit/);
+  await assert.rejects(client.action(api.deepResult, {}), /probe\.deepResult result.*nesting limit/);
+  await assert.rejects(client.action(api.largeResult, {}), /probe\.largeResult result.*size limit/);
+  await assert.rejects(client.action(api.thrown, {}), /Plugin routed-alpha: original provider exception/);
   assert.deepEqual(pids(), initial, "data boundary failures must not kill any warmed host");
 
   const begin = async (id, name, signal, cancelCall = false) => {
     const path = join(scratch, name);
-    const result = client.local(
+    const result = client.action(
       api.hold,
       { id: `custom-${id.slice("routed-".length)}`, path, cancelCall },
       { signal },
@@ -335,7 +335,7 @@ try {
   await until("the provider's reconstructed signal aborted", () =>
     Bun.file(leaf.path + ".cancelled").exists(),
   );
-  assert.deepEqual(await client.local(api.cancelBurst, {}), auth);
+  assert.deepEqual(await client.action(api.cancelBurst, {}), auth);
   assert.deepEqual(pids(), initial, "consecutive bursts of cancels leave all hosts running");
   console.log(
     "Non-plain arguments and results named their method; cancelling the caller aborted the provider",
@@ -350,7 +350,7 @@ try {
   await until(
     "alpha recovers",
     async () =>
-      await client.local(api.identify, { id: "custom-alpha" }).then(
+      await client.action(api.identify, { id: "custom-alpha" }).then(
         () => true,
         () => false,
       ),
@@ -364,13 +364,13 @@ try {
   // Disconnect one window and attach a new one without losing the idle processes.
   for (const close of cleanup.splice(0).reverse()) await close();
   const next = await connectWindow();
-  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
+  assert.deepEqual(await next.action(api.identify, { id: "custom-alpha" }), auth);
   assert.deepEqual(pids(), afterCrash);
 
   await editBundle(distFor(alpha), "/* replacement local artifact */");
   await reload(runner, directory, alpha);
   await until("reloaded alpha stopped", () => !alive(afterCrash[alpha]));
-  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
+  assert.deepEqual(await next.action(api.identify, { id: "custom-alpha" }), auth);
   const afterReload = pids();
   assert.notEqual(afterReload[alpha], afterCrash[alpha]);
   assert.equal(afterReload[beta], initial[beta]);
@@ -380,14 +380,14 @@ try {
   // The first lookup has no cached description for the crashing provider
   // whose implementation id differs from its plugin id.
   await Bun.sleep(260);
-  await assert.rejects(next.local(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
+  await assert.rejects(next.action(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
   for (const delay of [500, 1000, 2000]) {
     await Bun.sleep(delay + 25);
-    await assert.rejects(next.local(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
+    await assert.rejects(next.action(api.checkBad, {}), /custom-crash.*Plugin routed-crash process/);
   }
   const start = performance.now();
-  assert.deepEqual((await next.local(api.list, {})).sort(), ["custom-alpha", "custom-beta"]);
-  await assert.rejects(next.local(api.checkBad, {}), /routed-crash process: restarting after a crash/);
+  assert.deepEqual((await next.action(api.list, {})).sort(), ["custom-alpha", "custom-beta"]);
+  await assert.rejects(next.action(api.checkBad, {}), /routed-crash process: restarting after a crash/);
   assert.ok(performance.now() - start < 1_500, "lookup waited for the 4 s provider back-off");
   console.log("Unavailable custom ID preserves the provider error; listings skip its back-off");
 
@@ -412,7 +412,7 @@ contractProviders[legacyRegistration] = {
   // The reload control reply and the window's catalog event travel on different sockets.
   const catalog = Promise.withResolvers();
   await until("window sees the reloaded legacy provider", async () => {
-    const value = await next.local(api.unavailable, {});
+    const value = await next.action(api.unavailable, {});
     if (!value.failed.some(({ plugin }) => plugin === legacyProvider)) return false;
     catalog.resolve(value);
     return true;
@@ -424,7 +424,7 @@ contractProviders[legacyRegistration] = {
     /routed-owner\/probe is not all plain data.*Rebuild or update this plugin/,
   );
   assert.ok(!hosts().some(({ id }) => id === legacyProvider));
-  assert.deepEqual(await next.local(api.identify, { id: "custom-alpha" }), auth);
+  assert.deepEqual(await next.action(api.identify, { id: "custom-alpha" }), auth);
   console.log("Legacy mixed provider listed unavailable with a rebuild message without starting a host");
 
   await checkRoutesAndBuilds(runner, hosts);
@@ -440,9 +440,9 @@ async function checkRoutesAndBuilds(runner, hosts) {
   const id = "two-builds";
   const code = (version) => `
     export const functions = {
-      ping: { kind: "local", args: { kind: "any" }, invoke: () => ${version} },
-      hold: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.hold", {}) },
-      stuck: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.stuck", {}) },
+      ping: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: () => ${version} },
+      hold: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.hold", {}) },
+      stuck: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: (_, ctx) => ctx.op("test.stuck", {}) },
     };
   `;
   const old = await installLocal(join(plugins, id), id, code(1));
@@ -465,6 +465,10 @@ async function checkRoutesAndBuilds(runner, hosts) {
     rawWindow(runner, replacement, handle),
   ]);
   try {
+    await assert.rejects(
+      first.invoke("ping", null, false),
+      /local\(\) was removed: rebuild the plugin with action\(\{ on: "caller" \}\)/,
+    );
     assert.deepEqual(await Promise.all([first.invoke("ping", null), second.invoke("ping", null)]), [1, 1]);
     const oldHosts = () => hosts().filter((host) => host.id === id);
     assert.equal(oldHosts().length, 1, "simultaneous startup of the same build must reuse a PID");
@@ -529,7 +533,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
   const legacy = await installLocal(legacyDir, legacyId, code(1));
   const manifestFile = join(legacyDir, "manifest.json");
   const manifest = await Bun.file(manifestFile).json();
-  manifest.contracts = [{ name: "mixed", place: "local", dataMethods: ["read"] }];
+  manifest.contracts = [{ name: "mixed", on: "caller", dataMethods: ["read"] }];
   await writeFile(manifestFile, JSON.stringify(manifest));
   const legacyWindow = await rawWindow(runner, legacy, handle);
   try {
@@ -550,7 +554,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
       import { writeFile } from "node:fs/promises";
       await writeFile(${JSON.stringify(marker)}, process.pid + "\\n", { flag: "a" });
       export const functions = {
-        askPeer: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) =>
+        askPeer: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: (_, ctx) =>
           ctx.op("local.contract.call", {
             plugin: "${peer}", owner: "${id}", name: "probe",
             registration: "provider", method: "pid", args: [],
@@ -558,7 +562,7 @@ async function checkRoutesAndBuilds(runner, hosts) {
       };
       export const contractProviders = {
         provider: {
-          contract: { owner: "${peer}", name: "probe", place: "local", dataMethods: true },
+          contract: { owner: "${peer}", name: "probe", on: "caller", dataMethods: true },
           implementation: { pid: () => process.pid },
         },
       };
@@ -597,13 +601,13 @@ async function checkRoutesAndBuilds(runner, hosts) {
       }) : "end";
     };
     export const functions = {
-      ping: { kind: "local", args: { kind: "any" }, invoke: () => "pong" },
-      walk: { kind: "local", args: { kind: "any" }, invoke: (args, ctx) => call(args, ctx.op) },
+      ping: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: () => "pong" },
+      walk: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: (args, ctx) => call(args, ctx.op) },
     };
     export const contractProviders = {
       next: {
-        contract: { name: "probe", owner: "chain", place: "local", dataMethods: true },
-        implementation: { next: { kind: "local", invokeLocal: (args, bridge) => call(args, bridge.op) } },
+        contract: { name: "probe", owner: "chain", on: "caller", dataMethods: true },
+        implementation: { next: { kind: "action", on: "caller", visibility: "public", invokeLocal: (args, bridge) => call(args, bridge.op) } },
       },
     };
   `;
@@ -724,7 +728,7 @@ try {
   const caller = await installLocal(
     join(simulatedPlugins, "diagnostic-caller"),
     "diagnostic-caller",
-    `export const functions = {call: { kind: "local", args: { kind: "any" }, invoke: (_, ctx) =>
+    `export const functions = {call: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: (_, ctx) =>
       ctx.op("local.contract.call", {plugin: "diagnostic-provider", owner: "diagnostic-caller",
         name: "probe", registration: "provider", method: "info", args: []}) }};`,
   );

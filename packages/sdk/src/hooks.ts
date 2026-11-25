@@ -62,7 +62,6 @@ function hookBuilder<M extends DataModel>(schema?: SchemaDefinition): HookBuilde
   return (reference, handlers) => {
     const target = reference[functionName];
     const kind = reference[functionKind] ?? "query";
-    if (kind === "local") throw new Error("Only queries, mutations and actions can be hooked");
     const functions = schema ? createFunctions(schema) : { query, mutation, action };
     return Object.freeze({
       [hookBrand]: true as const,

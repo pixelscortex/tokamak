@@ -1,6 +1,6 @@
 // Generated plugin screen paths. Commit this file.
 export * from "../api";
-type Local1 = NonNullable<import("@tokamak/sdk").ResultOf<typeof import("../../server/_generated/api").api.changes.diff>>;
+type Local1 = Exclude<import("@tokamak/sdk").ResultOf<typeof import("../../server/_generated/api").api.changes.diff>, import("@tokamak/sdk").MachineFailure | null>;
 type Local2 = Local1["files"][number];
 type Local3 = | { readonly kind: "hunk"; readonly text: string }
   | {
@@ -18,7 +18,7 @@ type Props6 = Extract<NonNullable<{ children: import("@solidjs/web").JSX.Element
 type Props7 = Extract<NonNullable<{ number: number; diff: Local1 }>, object>;
 type Props8 = Extract<NonNullable<Props7 & { readonly $row: { readonly item: () => import("../../local/changes").FileDiff; readonly index: () => number } }>, object>;
 type Props9 = Extract<NonNullable<{ file: Local2 }>, object>;
-type Props10 = Extract<NonNullable<Props9 & { readonly $row: { readonly item: { readonly kind: "hunk"; readonly text: string; } | { readonly kind: "context" | "added" | "removed" | "note"; readonly old?: number | undefined; readonly new?: number | undefined; readonly text: string; }; readonly index: () => number } }>, object>;
+type Props10 = Extract<NonNullable<Props9 & { readonly $row: { readonly item: { readonly kind: "hunk"; readonly text: string; } | { readonly kind: "added" | "removed" | "context" | "note"; readonly old?: number | undefined; readonly new?: number | undefined; readonly text: string; }; readonly index: () => number } }>, object>;
 type Props11 = Extract<NonNullable<{ row: Local3 }>, object>;
 type Props12 = Extract<NonNullable<import("plugin:chat/client").HeaderProps>, object>;
 export declare const parts: {

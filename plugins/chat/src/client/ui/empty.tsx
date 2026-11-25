@@ -45,18 +45,22 @@ function FolderPicker(props: EmptyProps): JSX.Element {
   const [problem, setProblem] = createSignal<string | undefined>(undefined, { ownedWrite: true });
   const picked = (path: string) => props.folder.kind === "chosen" && props.folder.path === path;
   const valid = () => isFullPath(typed());
-  // On the desktop the local part expands `~` and checks the folder exists;
+  // On the Runner a caller action expands `~` and checks the folder exists;
   // a plain browser stores the path as typed.
   async function choose() {
     if (!valid()) return;
     setProblem(undefined);
     try {
-      const result = client.hasLocal
-        ? await client.local(api.folders.check, { path: typed() })
-        : typed().trim();
+      const path = typed();
+      const checked = await client.action(api.folders.check, { path });
+      const result = isFailure(checked) && checked.kind === "noMachine" ? path.trim() : checked;
       if (isFailure(result)) {
         setProblem(
-          result.kind === "NotAFolder" ? `There is no folder at ${result.data.path}.` : "Use a full path.",
+          result.kind === "NotAFolder"
+            ? `There is no folder at ${result.data.path}.`
+            : result.kind === "NotFullPath"
+              ? "Use a full path."
+              : "The Runner cannot check this folder.",
         );
         return;
       }

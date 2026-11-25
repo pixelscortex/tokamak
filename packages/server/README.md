@@ -492,7 +492,7 @@ Owned-probe measured release executable SHA-256:
 ## Plugin code
 
 See [Plugin host](../host/README.md) for the action process and the Runner's
-plugin process. Local functions and server actions are unavailable on Windows.
+plugin process. Caller actions and server actions are unavailable on Windows.
 
 Connected Runner heartbeat timing can be tuned on both processes with
 `TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS` (default 5000) and

@@ -1,9 +1,17 @@
-import { createApi, type FunctionReference, type Id, type ResultOf, type TokamakClient } from "@tokamak/sdk";
-import { untrack } from "solid-js";
+import {
+  createApi,
+  isFailure,
+  type FunctionReference,
+  type Id,
+  type MachineFailure,
+  type ResultOf,
+  type TokamakClient,
+} from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { MessageProps } from "plugin:chat/client";
 import { api } from "../../server/_generated/api";
 import { BEFORE_NOT_SAVED } from "../../shared/text";
+import { onRunner, runnerMissing, watchRunnerFocus, windowClient } from "./runner";
 
 /** The fields of `ai`'s turn rows that `code` reads. */
 interface TurnRow {
@@ -28,26 +36,10 @@ export interface NumberedTurn {
 }
 
 /** What the turn ending at one reply changed, with the turn it belongs to. */
-export type ReplyChange = NonNullable<ResultOf<typeof api.changes.forTurn>> & {
+export type ReplyChange = Exclude<ResultOf<typeof api.changes.forTurn>, MachineFailure | null> & {
   readonly turnId: string;
   readonly number: number;
 };
-
-/**
- * The window's client once a `code` component has mounted with a local part.
- * Change cards decide in `when` whether to show, before any card mounts, so
- * they read this instead of `useClient`. A plain browser never sets it: no
- * card, chip or panel there.
- */
-const localClient = state<TokamakClient | undefined>(undefined);
-
-/** Records `client` for the cards' `when` if it has a local part; returns whether it has one. */
-export function rememberLocalClient(client: TokamakClient): boolean {
-  if (!client.hasLocal) return false;
-  // Set after this render: a component body must not write window state.
-  if (untrack(localClient) !== client) queueMicrotask(() => localClient.set(client));
-  return true;
-}
 
 /**
  * The last reply of a turn: an agent reply followed by the person's next
@@ -113,8 +105,8 @@ export async function turnOf(client: TokamakClient, threadId: string, replyId: s
 }
 
 /**
- * At most a few local calls at once. Opening a long thread asks for every
- * reply's card and notice together, and each local call reads from the server
+ * At most a few caller actions at once. Opening a long thread asks for every
+ * reply's card and notice together, and each action reads from the server
  * on the window's connection, whose event queue is small.
  */
 const ASKING_AT_ONCE = 4;
@@ -139,27 +131,35 @@ async function load(client: TokamakClient, key: string, threadId: Id<"threads">,
   const turn = await turnOf(client, threadId, replyId).catch(() => undefined);
   const change = turn
     ? await oneAtATime(() =>
-        client.local(api.changes.forTurn, {
-          threadId,
-          turnId: turn.turnId,
-          ranEarlier: [...turn.ranEarlier],
-        }),
+        onRunner(client, () =>
+          client.action(api.changes.forTurn, {
+            threadId,
+            turnId: turn.turnId,
+            ranEarlier: [...turn.ranEarlier],
+          }),
+        ),
       ).catch(() => null)
     : null;
+  if (isFailure(change) && change.kind === "noMachine") {
+    requested.delete(key);
+    return;
+  }
   changes.set((all) => ({
     ...all,
-    [key]: change && turn ? { ...change, turnId: turn.turnId, number: turn.number } : null,
+    [key]:
+      change && !isFailure(change) && turn ? { ...change, turnId: turn.turnId, number: turn.number } : null,
   }));
 }
 
 /**
  * What the turn ending at this reply changed, from this computer's Git;
- * undefined while it is read, while the reply streams, or without a local part.
+ * undefined while it is read or the reply streams; null if the Runner is missing.
  * Reactive: the first read starts the lookup.
  */
 export function changeOf(props: MessageProps): ReplyChange | null | undefined {
-  const client = localClient();
+  const client = windowClient();
   if (!client || props.message.status === "streaming" || props.message.status === "queued") return undefined;
+  if (runnerMissing(client)) return null;
   const key = `${props.message._id}:${props.message.status}`;
   if (!requested.has(key)) {
     requested.add(key);
@@ -188,7 +188,8 @@ export function openReview(threadId: string, turnId?: string): void {
 const branches = state<Readonly<Record<string, string | null>>>({});
 
 export function branchOf(threadId: string): string | null | undefined {
-  return branches()[threadId];
+  const client = windowClient();
+  return client && runnerMissing(client) ? null : branches()[threadId];
 }
 
 /** How often a visible window reads the branch again, besides when it gets focus or is shown. */
@@ -215,24 +216,30 @@ export function followBranch(client: TokamakClient, threadId: Id<"threads">): ()
 
 function startFollowing(client: TokamakClient, threadId: Id<"threads">): () => void {
   let active = true;
-  const read = () => {
-    if (document.hidden) return;
-    void client.local(api.changes.branch, { threadId }).then(
-      (branch) => {
-        if (active && branches()[threadId] !== branch)
-          branches.set((all) => ({ ...all, [threadId]: branch }));
-      },
-      () => {},
-    );
+  let reading = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const read = async () => {
+    if (reading || document.hidden) return;
+    clearTimeout(timer);
+    reading = true;
+    try {
+      const result = await onRunner(client, () => client.action(api.changes.branch, { threadId }));
+      const branch = isFailure(result) ? null : result;
+      if (active && branches()[threadId] !== branch) branches.set((all) => ({ ...all, [threadId]: branch }));
+    } catch {
+      // Keep the last branch if the connection drops during a read.
+    } finally {
+      reading = false;
+      if (active && !runnerMissing(client)) timer = setTimeout(read, BRANCH_POLL_MS);
+    }
   };
-  read();
-  const timer = setInterval(read, BRANCH_POLL_MS);
-  window.addEventListener("focus", read);
-  document.addEventListener("visibilitychange", read);
+
+  const unwatch = watchRunnerFocus(client, read);
+  void read();
   return () => {
     active = false;
-    clearInterval(timer);
-    window.removeEventListener("focus", read);
-    document.removeEventListener("visibilitychange", read);
+    clearTimeout(timer);
+    unwatch();
   };
 }

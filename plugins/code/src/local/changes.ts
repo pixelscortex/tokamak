@@ -1,4 +1,4 @@
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext, Id } from "@tokamak/sdk";
 import { readGit, readGitUntil, threadRefs, turnRefs, type Repository } from "./git";
 
 /** What one turn changed in the thread's folder: "after" minus "before". */
@@ -66,7 +66,7 @@ function diffArgs({ prefix }: Repository, before: string, after: string, extra: 
 }
 
 /** The before and after commits of a turn, or undefined when either was never saved. */
-async function snapshots(ctx: LocalContext, turn: Turn) {
+async function snapshots(ctx: CallerActionContext, turn: Turn) {
   const prefix = turnRefs(turn.threadId, turn.turnId);
   const found = new Map<string, string>();
   for (const line of await readGit(ctx, turn.root, [
@@ -99,7 +99,7 @@ function split(path: string): { folder: string; name: string } {
  * would not have.
  */
 async function systemJunk(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   turn: Turn,
   commits: { before: string; after: string },
   files: readonly ChangedFile[],
@@ -134,7 +134,7 @@ async function systemJunk(
 }
 
 /** `git diff --numstat -z` rows: added, removed and path, NUL-terminated. */
-async function changedFiles(ctx: LocalContext, turn: Turn, before: string, after: string) {
+async function changedFiles(ctx: CallerActionContext, turn: Turn, before: string, after: string) {
   const output = (await readGit(ctx, turn.root, diffArgs(turn, before, after, ["--numstat", "-z"]))).join(
     "\n",
   );
@@ -163,7 +163,7 @@ function sum(files: readonly ChangedFile[], key: "added" | "removed"): number {
  * and this turn's snapshot starts the thread's chain, tracking started here.
  */
 export async function turnChange(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   turn: Turn,
   ranEarlier: readonly string[],
 ): Promise<TurnChange | null> {
@@ -186,7 +186,11 @@ export async function turnChange(
 }
 
 /** Whether any of `turnIds` has no snapshot ref in this thread. */
-async function ranWithoutGit(ctx: LocalContext, turn: Turn, turnIds: readonly string[]): Promise<boolean> {
+async function ranWithoutGit(
+  ctx: CallerActionContext,
+  turn: Turn,
+  turnIds: readonly string[],
+): Promise<boolean> {
   if (!turnIds.length) return false;
   const saved = new Set(
     await readGit(ctx, turn.root, [
@@ -203,7 +207,7 @@ async function ranWithoutGit(ctx: LocalContext, turn: Turn, turnIds: readonly st
 }
 
 /** Whether `before` is the thread's first snapshot: its parent is not another snapshot of the thread. */
-async function startsChain(ctx: LocalContext, turn: Turn, before: string): Promise<boolean> {
+async function startsChain(ctx: CallerActionContext, turn: Turn, before: string): Promise<boolean> {
   const [, parent] =
     (await readGit(ctx, turn.root, ["rev-list", "--parents", "-1", before]))[0]?.split(" ") ?? [];
   if (!parent) return true;
@@ -215,7 +219,7 @@ async function startsChain(ctx: LocalContext, turn: Turn, before: string): Promi
   return !snapshots.includes(parent);
 }
 
-async function fileCount(ctx: LocalContext, turn: Turn, commit: string): Promise<number> {
+async function fileCount(ctx: CallerActionContext, turn: Turn, commit: string): Promise<number> {
   const scope = turn.prefix ? ["--", `:(top,literal)${turn.prefix}/`] : [];
   const output = (
     await readGit(ctx, turn.root, ["ls-tree", "-r", "-z", "--name-only", commit, ...scope])
@@ -244,7 +248,7 @@ function noteFor(file: ChangedFile, section: Section | undefined): string | null
  * shows them. At most `DIFF_LINE_LIMIT` hunk lines are read; the file being
  * read then is marked partial, and files after it keep their counts and get no patch.
  */
-export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff | null> {
+export async function turnDiff(ctx: CallerActionContext, turn: Turn): Promise<TurnDiff | null> {
   const saved = await snapshots(ctx, turn);
   if (!saved) return null;
   const files = await changedFiles(ctx, turn, saved.before, saved.after);
@@ -292,7 +296,7 @@ export async function turnDiff(ctx: LocalContext, turn: Turn): Promise<TurnDiff 
 }
 
 /** The checked-out branch, or the short commit when HEAD is detached. */
-export async function currentBranch(ctx: LocalContext, { root }: Repository): Promise<string> {
+export async function currentBranch(ctx: CallerActionContext, { root }: Repository): Promise<string> {
   const [name] = await readGit(ctx, root, ["symbolic-ref", "--short", "-q", "HEAD"]).catch(() => []);
   if (name) return name;
   const [commit] = await readGit(ctx, root, ["rev-parse", "--short", "HEAD"]);

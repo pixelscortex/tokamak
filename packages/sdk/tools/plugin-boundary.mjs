@@ -19,7 +19,7 @@ import { windowStateModule } from "../src/window-state-protocol.ts";
 import { isInternalReferenceModule, isServerModule, isServerRoot, serverDirectory } from "./server-files.mjs";
 import { generated, definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plugin-compiler.mjs";
 
-import { contractDeclarations, importedContractEntry } from "./contracts.mjs";
+import { contractDeclarations, contractPlacementMigration, importedContractEntry } from "./contracts.mjs";
 
 import { tableDeclarations, tableReferences, tableReferenceSource } from "./table-references.mjs";
 
@@ -172,9 +172,7 @@ function publicReferences(folder, entry) {
   const refs = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
     if (!runtime.has(exported.name)) return [];
     const target = targets.get(original(exported));
-    return target && target[2] !== Visibility.Internal && target[3] !== "local"
-      ? [[exported.name, target]]
-      : [];
+    return target && target[2] !== Visibility.Internal ? [[exported.name, target]] : [];
   });
   const imports = new Set();
   for (const source of program.getSourceFiles()) {
@@ -197,8 +195,8 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
       'import { contractReference } from "@tokamak/sdk/internal/contracts";\n' +
       contractDeclarations(target.entry)
         .map(
-          ({ exported, name, place, dataMethods }) =>
-            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(place)}, ${JSON.stringify(target.id)}${dataMethods === undefined ? "" : ", " + JSON.stringify(dataMethods)});`,
+          ({ exported, name, on, dataMethods }) =>
+            `export const ${exported} = contractReference(${JSON.stringify(name)}, ${JSON.stringify(on)}, ${JSON.stringify(target.id)}${dataMethods === undefined ? "" : ", " + JSON.stringify(dataMethods)});`,
         )
         .join("\n")
     );
@@ -302,6 +300,36 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
   for (const dependency of imports) declarePlugin(root, dependency, declared, depends, tableOwners);
 }
 
+function removedClientMember(node) {
+  if (!ts.isPropertyAccessExpression(node)) return;
+  if (node.name.text === "hasLocal") return "call the action and handle the noMachine failure";
+  if (node.name.text === "local" && ts.isCallExpression(node.parent) && node.parent.expression === node)
+    return "use client.action(...)";
+}
+
+function localReceiver(node) {
+  if (ts.isPropertyAccessExpression(node) && node.name.text === "local") return node.expression;
+  if (
+    ts.isElementAccessExpression(node) &&
+    ts.isStringLiteralLike(node.argumentExpression) &&
+    node.argumentExpression.text === "local"
+  )
+    return node.expression;
+  if (
+    ts.isBindingElement(node) &&
+    ts.isObjectBindingPattern(node.parent) &&
+    (node.propertyName ?? node.name).getText().replace(/['"]/g, "") === "local" &&
+    ts.isVariableDeclaration(node.parent.parent)
+  )
+    return node.parent.parent.initializer;
+}
+
+function needsMigrationChecker(node) {
+  return (
+    !!removedClientMember(node) || !!localReceiver(node) || !!ts.forEachChild(node, needsMigrationChecker)
+  );
+}
+
 /** Check even erased type imports and unused source modules; tests are separate. */
 export function checkPluginImports(root, depends = readDescriptor(root)?.depends ?? {}) {
   root = resolve(root);
@@ -309,8 +337,13 @@ export function checkPluginImports(root, depends = readDescriptor(root)?.depends
   const imports = new Map();
   const tableOwners = new Set();
   function checkFile(path) {
-    const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
+    const parsed = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
     const options = configuration(path).options;
+    const program = needsMigrationChecker(parsed)
+      ? ts.createProgram([path], pluginCompilerOptions(root, options))
+      : undefined;
+    const source = program?.getSourceFile(path) ?? parsed;
+    const checker = program?.getTypeChecker();
     function check(id) {
       assertWindowImport(path, id);
       if (id.startsWith("@tokamak/sdk/internal/"))
@@ -342,7 +375,94 @@ export function checkPluginImports(root, depends = readDescriptor(root)?.depends
         assertPluginResolution(root, path, id, target);
       }
     }
+    const sdkContracts = new Set();
+    const sdkNamespaces = new Set();
+    const sdkFactories = new Set();
+    const importedBinding = (node, bindings) =>
+      ts.isIdentifier(node) &&
+      checker?.getSymbolAtLocation(node)?.declarations?.some((declaration) => bindings.has(declaration));
+    const sdkNamespace = (node) => importedBinding(node, sdkNamespaces);
+
+    function functionsFactory(call) {
+      if (!call || !ts.isCallExpression(call)) return false;
+      const target = call.expression;
+      return (
+        importedBinding(target, sdkFactories) ||
+        (ts.isPropertyAccessExpression(target) &&
+          target.name.text === "createFunctions" &&
+          sdkNamespace(target.expression))
+      );
+    }
+    for (const node of source.statements) {
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteralLike(node.moduleSpecifier) ||
+        node.moduleSpecifier.text !== "@tokamak/sdk"
+      )
+        continue;
+      const bindings = node.importClause?.namedBindings;
+      if (!bindings) continue;
+      if (ts.isNamespaceImport(bindings)) {
+        sdkNamespaces.add(bindings);
+        continue;
+      }
+      for (const binding of bindings.elements) {
+        const imported = (binding.propertyName ?? binding.name).text;
+        if (imported === "local") throw new Error(`${path}: use action({ on: "caller", … })`);
+        if (imported === "createFunctions") sdkFactories.add(binding);
+        if (imported === "contract") sdkContracts.add(binding.name.text);
+      }
+    }
+
     function visit(node) {
+      const local = localReceiver(node);
+      if (
+        local &&
+        (sdkNamespace(local) ||
+          functionsFactory(local) ||
+          (ts.isIdentifier(local) &&
+            checker
+              ?.getSymbolAtLocation(local)
+              ?.declarations?.some(
+                (declaration) =>
+                  ts.isVariableDeclaration(declaration) && functionsFactory(declaration.initializer),
+              )))
+      ) {
+        throw new Error(`${path}: use action({ on: "caller", … })`);
+      }
+      const replacement = removedClientMember(node);
+      if (replacement && checker) {
+        const receiver = checker.getTypeAtLocation(node.expression);
+        const sdkClient = receiver
+          .getProperty("action")
+          ?.declarations?.some(
+            (declaration) =>
+              declaration.parent?.name?.text === "TokamakClient" &&
+              inside(sdkRoot, declaration.getSourceFile().fileName),
+          );
+        const unknownClient =
+          (receiver.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0 &&
+          /(?:^|\.)(?:client|useClient\(\))$/i.test(node.expression.getText(source));
+        if (sdkClient || unknownClient) throw new Error(`${path}: ${replacement}`);
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        sdkContracts.has(node.expression.text)
+      ) {
+        const options = node.arguments[1];
+        const place =
+          options && ts.isObjectLiteralExpression(options)
+            ? options.properties.find(
+                ({ name }) =>
+                  name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === "place",
+              )
+            : undefined;
+        if (place)
+          throw new Error(
+            `${path}: ${contractPlacementMigration(ts.isPropertyAssignment(place) ? place.initializer : undefined)}`,
+          );
+      }
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&

@@ -3,7 +3,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { agentInfoCache } from "@tokamak/sdk/agent-turn";
-import { local, provide } from "@tokamak/sdk";
+import { action, provide } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { codexInfo } from "./info";
 import { codexTurn } from "./turn";
@@ -18,11 +18,13 @@ const discovery = agentInfoCache(codexInfo, async () => {
   const stamp = await stat(path).catch(() => undefined);
   return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
 });
-const info = local({
+const info = action({
+  on: "caller",
   handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
     setupDeadline === undefined ? discovery.read(ctx) : codexInfo(ctx, setupDeadline),
 });
-const start = local({
+const start = action({
+  on: "caller",
   handler: async (ctx, run: ai.Run) => {
     try {
       return await codexTurn(ctx, run);

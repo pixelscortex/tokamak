@@ -1,7 +1,9 @@
 # Tokamak Runner
 
 The Runner combines a workspace server and the local runtime in one program. It
-owns the server's action process and up to 128 QuickJS local plugin processes.
+owns the server's action process and up to 128 QuickJS local plugin processes. The plugin processes
+run caller actions and their contracts, including calls forwarded by a window
+connected to a shared workspace.
 Each local process starts on its first call and stays up until its build is
 retired, it exits, or the Runner shuts down. The registry distinguishes a
 plugin's ID and its two local bundle hashes. Windows that use the same build
