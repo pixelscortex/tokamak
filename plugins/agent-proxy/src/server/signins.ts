@@ -299,11 +299,12 @@ export const connect = internalMutation({
       accountId = same._id;
       await ctx.db.patch(same._id, { ...identity, status: "ok" });
       await storeRead(ctx, same._id, found);
+      // Every old login of the account goes, as `attachAccount` does: none may outlive the repair.
       const old = await ctx.db
         .query("logins")
         .withIndex("by_account", (q) => q.eq("account", same._id))
-        .first();
-      if (old) await ctx.db.delete(old._id);
+        .collect();
+      for (const login of old) await ctx.db.delete(login._id);
     } else {
       if (same) {
         const existing = await ctx.db.get(same.subscription);

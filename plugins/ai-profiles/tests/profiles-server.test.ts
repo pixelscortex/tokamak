@@ -12,12 +12,21 @@ import { api } from "../src/server/_generated/api";
 //
 // A subscription is removed for real, with the subscription screens' Remove
 // (`manage:remove`, TKM-265), which takes it out of every profile in the same
-// transaction. Only the "hidden, then back" rule still needs a stand-in: there
-// is no other way to make agent-proxy stop listing a subscription and list it
-// again, so the installed copy here stops listing one labelled "Removed".
+// transaction. Three stand-ins remain, each for what no window can do: the
+// installed agent-proxy stops listing a subscription labelled "Removed" (the
+// "hidden, then back" rule); the installed ai-profiles makes
+// `forgetSubscription` public, so another member can call it directly and be
+// shown to reach nothing; and its `forgetSubscription` throws while the caller
+// has a profile named "Refuses removal", to show a failed profile update rolls
+// the whole removal back.
+
+const removal = createApi<{
+  profiles: { forgetSubscription: FunctionReference<"mutation", { subscription: string }, number> };
+}>("ai-profiles", ["profiles:forgetSubscription"]);
 
 const manage = createApi<{
   manage: {
+    checkAgain: FunctionReference<"action", { id: string }, unknown>;
     remove: FunctionReference<"mutation", { id: string }, null | { failed: true; kind: string }>;
     usedBy: FunctionReference<
       "query",
@@ -25,7 +34,7 @@ const manage = createApi<{
       { id: string; code: string; name: string; threads: number }[]
     >;
   };
-}>("ai-profiles", ["manage:remove", "manage:usedBy"]);
+}>("ai-profiles", ["manage:remove", "manage:usedBy", "manage:checkAgain"]);
 
 /** The other spelling agent-proxy accepts for the same subscription id. */
 const otherForm = (id: string) =>
@@ -82,6 +91,17 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
         {
           find: "subscriptions: subscriptions.sort(",
           replace: 'subscriptions: subscriptions.filter((row) => row.label !== "Removed").sort(',
+        },
+        {
+          plugin: "ai-profiles",
+          find: "var forgetSubscription = internalMutation2(",
+          replace: "var forgetSubscription = mutation2(",
+        },
+        {
+          plugin: "ai-profiles",
+          find: "const key = subscriptionKey(args.subscription);\n    let held = 0;",
+          replace:
+            'const key = subscriptionKey(args.subscription);\n    if ((await rowsOf(ctx, ownerOf(ctx.auth))).some((row) => row.name === "Refuses removal")) throw new Error("Profiles could not be updated.");\n    let held = 0;',
         },
       ],
     });
@@ -181,11 +201,15 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     expect((await owner.query(manage.manage.usedBy, { id: gone })).map((use) => use.code).sort()).toEqual(
       [...before].sort(),
     );
-    // Another member's Remove reaches neither the subscription nor the owner's profiles.
+    // Another member's Remove reaches neither the subscription nor the owner's profiles; and
+    // `forgetSubscription` itself, called as another member, filters by the caller and removes nothing.
     expect(await (await member()).mutation(manage.manage.remove, { id: gone })).toMatchObject(
       plain("NotFound"),
     );
     expect(await (await member()).query(manage.manage.usedBy, { id: gone })).toEqual([]);
+    expect(await (await member()).mutation(removal.profiles.forgetSubscription, { subscription: gone })).toBe(
+      0,
+    );
     expect(await holding()).toEqual(before);
     // The owner's, in the other spelling of the id, removes it from Tokamak and from all of them.
     expect(await owner.mutation(manage.manage.remove, { id: otherForm(gone) })).toBeNull();
@@ -194,6 +218,26 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
       (await owner.query(api.subscriptions.list, {})).subscriptions.map((item) => item.id),
     ).not.toContain(gone);
     subs.pop();
+  });
+
+  test("a removal whose profile update fails is rolled back whole: the subscription stays, with a usable login", async () => {
+    const kept = subs[0]!;
+    const refusing = await create(owner, "Refuses removal", "RFSE");
+    await owner.mutation(api.profiles.add, { profile: refusing.id, subscription: kept });
+    // ai-profiles throws inside manage:remove's transaction, after agent-proxy deleted the subscription.
+    await expect(owner.mutation(manage.manage.remove, { id: kept })).rejects.toThrow();
+    const listed = (await owner.query(api.subscriptions.list, {})).subscriptions.find(
+      (item) => item.id === kept,
+    );
+    expect(listed).toMatchObject({ status: "ok", accounts: [{ status: "ok" }] });
+    expect((await list(owner)).find((p) => p.id === refusing.id)?.subscriptions).toContain(kept);
+    // Its login still works: Check again renews it when needed and reads with it.
+    expect(await owner.action(manage.manage.checkAgain, { id: kept })).toMatchObject({
+      id: kept,
+      status: "ok",
+    });
+    // The stand-in throws only while that profile holds something the test removes: empty it again.
+    await owner.mutation(api.profiles.remove, { profile: refusing.id, subscription: kept });
   });
 
   test("either spelling of a subscription id is the same subscription", async () => {

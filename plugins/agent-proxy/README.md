@@ -77,7 +77,7 @@ company module; when the company answered nothing the result is `Unreachable`
 and nothing changes. `removeSubscription` deletes the
 subscription, its accounts, their logins and any sign-in waiting to repair it
 or add to it, in one transaction. Anything that held it is the caller's to
-update (ai-profiles takes it out of its profiles in the same transaction). A
+update: the caller updates whatever held it. A
 renewal that the company answers after the login was deleted (signed out or
 removed meanwhile) keeps nothing, and `logins:fresh` returns null.
 

@@ -78,10 +78,11 @@ describe.skipIf(!available.length).each(available)("$name, managing either compa
     );
 
   /** Every request the fake got with this account's login, by the company whose address it went to. */
-  function loginRequests(account: string) {
+  function loginRequests(account: string, from = 0) {
     const token = (request: { headers: Record<string, string> }) =>
       request.headers.authorization?.replace(/^Bearer /i, "") ?? request.headers["x-api-key"];
     return fake.requests
+      .slice(from)
       .filter((request) => token(request)?.startsWith(`fake-${account}-`))
       .map((request) => (request.path.startsWith("/openai/") ? "openai" : "anthropic"));
   }
@@ -103,11 +104,18 @@ describe.skipIf(!available.length).each(available)("$name, managing either compa
       );
       const subscription = await finish(started, company, first);
 
-      // "Check again": the subscription's own company reads plan, accounts and models.
+      // "Check again": the subscription's own company reads plan, accounts and models. Its own
+      // reads are the requests after this mark that carry the login: at least the two details
+      // reads (profile and models for Claude, models and accounts check for ChatGPT), all of them
+      // at this company's addresses.
+      const mark = fake.requests.length;
       expect(ok(await client.action(api.manage.checkAgain, { id: subscription.id }))).toMatchObject({
         company,
         status: "ok",
       });
+      const checked = loginRequests(first, mark);
+      expect(checked.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(checked)).toEqual(new Set([company]));
 
       // "Add account": the company's own sign-in page, and the second account joins.
       const another = ok(await client.action(api.manage.addAccount, { id: subscription.id }));
