@@ -76,18 +76,27 @@ export interface Workspace {
   owner(): Promise<TokamakClient>;
   /** A window of another member of the same server. */
   member(name: string): Promise<TokamakClient>;
+  /** Stops the server and starts it again on the same data; earlier windows are closed. */
+  restart(): Promise<void>;
   stop(): Promise<void>;
+}
+
+/** A change to the installed copy of agent-proxy's server code: `find` is replaced by `replace`. */
+export interface Patch {
+  readonly find: string;
+  readonly replace: string;
 }
 
 /**
  * `signInTtlMs` builds the installed copy with a shorter sign-in lifetime, so a
  * test can watch a sign-in expire without waiting 15 minutes: the server's own
  * clock is the one sign-ins are measured by, and a test cannot move it.
+ * `patches` change the installed copy in other ways a test needs.
  */
 export async function startWorkspace(
   build: Build,
   addresses: Addresses,
-  { signInTtlMs }: { signInTtlMs?: number } = {},
+  { signInTtlMs, patches = [] }: { signInTtlMs?: number; patches?: readonly Patch[] } = {},
 ): Promise<Workspace> {
   await buildPlugins();
   const target = join(root, "target");
@@ -109,6 +118,16 @@ export async function startWorkspace(
       await writeFile(path, patched);
       manifest.hashes[file] = createHash("sha256").update(patched).digest("hex");
     }
+  for (const file of patches.length ? ["bundle.js", "transactions.js"] : []) {
+    const path = join(installation, "plugins/agent-proxy/dist", file);
+    let code = await readFile(path, "utf8");
+    for (const { find, replace } of patches) {
+      if (!code.includes(find)) throw new Error(`Nothing to patch in ${file}: ${find}`);
+      code = code.replace(find, replace);
+    }
+    await writeFile(path, code);
+    manifest.hashes[file] = createHash("sha256").update(code).digest("hex");
+  }
   await writeFile(manifestPath, JSON.stringify(manifest));
   await writeFile(join(installation, ".env.local"), `${addressesVariable}='${JSON.stringify(addresses)}'\n`);
   await mkdir(join(installation, "web"));
@@ -122,30 +141,23 @@ export async function startWorkspace(
     TOKAMAK_ACCESS_TOKEN: ownerToken,
   };
   delete env[addressesVariable];
-  const child = spawn(
-    build.server,
-    ["--plugins", join(installation, "plugins"), "--data", join(installation, "store")].concat([
-      "--listen",
-      "127.0.0.1:0",
-      "--web",
-      join(installation, "web"),
-    ]),
-    { env, stdio: ["ignore", "pipe", "pipe"] },
-  );
   let output = "";
-  child.stderr.on("data", (chunk) => (output += chunk));
-  const lines = createInterface({ input: child.stdout });
-  const closed = new Promise<void>((done) => child.once("close", () => done()));
-  const sockets: WebSocket[] = [];
-  const stop = async () => {
-    for (const socket of sockets) socket.close();
-    lines.close();
-    child.kill("SIGKILL");
-    await closed;
-    await empty(installation);
-  };
-  try {
-    const ws = await new Promise<string>((done, reject) => {
+  /** Starts the server on the installation's plugins and data; `ready` is its WebSocket address. */
+  const launch = () => {
+    const child = spawn(
+      build.server,
+      ["--plugins", join(installation, "plugins"), "--data", join(installation, "store")].concat([
+        "--listen",
+        "127.0.0.1:0",
+        "--web",
+        join(installation, "web"),
+      ]),
+      { env, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    child.stderr.on("data", (chunk) => (output += chunk));
+    const lines = createInterface({ input: child.stdout });
+    const closed = new Promise<void>((done) => child.once("close", () => done()));
+    const ready = new Promise<string>((done, reject) => {
       lines.on("line", (line) => {
         output += line + "\n";
         const url = line.match(/ws:\/\/127\.0\.0\.1:\d+\/ws/)?.[0];
@@ -154,7 +166,23 @@ export async function startWorkspace(
       child.once("error", reject);
       void closed.then(() => reject(new Error(`Server exited before readiness:\n${output}`)));
     });
-    const http = ws.replace(/^ws:/, "http:");
+    return { child, lines, closed, ready };
+  };
+  let server = launch();
+  const sockets: WebSocket[] = [];
+  const halt = async (signal: NodeJS.Signals) => {
+    for (const socket of sockets.splice(0)) socket.close();
+    server.lines.close();
+    server.child.kill(signal);
+    await server.closed;
+  };
+  const stop = async () => {
+    await halt("SIGKILL");
+    await empty(installation);
+  };
+  try {
+    let ws = await server.ready;
+    let http = ws.replace(/^ws:/, "http:");
     const connect = async (key: string) => {
       const socket = new WebSocket(ws, ["tokamak", `tokamak.bearer.${encodeURIComponent(key)}`]);
       sockets.push(socket);
@@ -185,6 +213,12 @@ export async function startWorkspace(
         });
         if (typeof device.body.key !== "string") throw new Error(`Member sign-in failed: ${device.status}`);
         return connect(device.body.key);
+      },
+      async restart() {
+        await halt("SIGTERM");
+        server = launch();
+        ws = await server.ready;
+        http = ws.replace(/^ws:/, "http:");
       },
       stop,
     };
