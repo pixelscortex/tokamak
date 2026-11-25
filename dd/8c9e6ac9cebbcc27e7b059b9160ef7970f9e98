@@ -1,0 +1,19 @@
+packages/server/tests/fixtures/query-hooks/moderation/src/server/policy.ts
+  s_a318c7bdadc5bd::t_6c119d59f49d3f 48-53,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd8c9e6ac9cebbcc27e7b059b9160ef7970f9e98",
+  "prompts": {},
+  "sessions": {
+    "s_a318c7bdadc5bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-45f3-77a0-b99b-dd5e3ad3243d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
