@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch as Choose, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Match, Show, Switch as Choose, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Chip, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { Company, SignIn, Subscription } from "../lib/api";
@@ -236,7 +236,6 @@ function MethodStep(props: {
   );
 }
 
-
 function SignInStep(props: {
   signIn: SignIn;
   listening: boolean;
@@ -396,7 +395,8 @@ function ConnectedStep(props: {
   subscription: Subscription;
   done: (label: string) => Promise<unknown>;
 }): JSX.Element {
-  const [label, setLabel] = createSignal(props.subscription.label);
+  // The field starts from the stored label once; what the person types is theirs from then on.
+  const [label, setLabel] = createSignal(untrack(() => props.subscription.label));
   const [problem, setProblem] = createSignal<string>();
   const email = () => props.subscription.accounts.find((account) => account.email)?.email;
   async function save() {
