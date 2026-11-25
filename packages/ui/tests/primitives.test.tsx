@@ -202,6 +202,81 @@ test("icon-only buttons are named by their label and default to outline", () => 
   expect(screen.getByRole("button", { name: "Cancel" }).hasAttribute("aria-label")).toBe(false);
 });
 
+test.each(["brand", "primary", "outline", "destructive", "ghost", "quiet", "bare"] as const)(
+  "%s buttons support all content at the compact size",
+  (variant) => {
+    mount(() => (
+      <>
+        <Button variant={variant} size="sm" icon={icons.add} label="Add" />
+        <Button variant={variant} size="sm" icon={icons.add}>
+          Continue
+        </Button>
+        <Button variant={variant} size="sm" disabled>
+          Sign in
+        </Button>
+        <Button variant={variant}>Default</Button>
+      </>
+    ));
+    const icon = screen.getByRole("button", { name: "Add" });
+    const mixed = screen.getByRole("button", { name: "Continue" });
+    const text = screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement;
+    const layout = /^(?:h-|w-|px-|gap-|text-(?:row|label)$)/;
+    const state = /^(?:focus-ring$|(?:\S*disabled|active):)/;
+    const defaultStates = [...screen.getByRole("button", { name: "Default" }).classList].filter((name) =>
+      state.test(name),
+    );
+    for (const button of [icon, mixed, text]) {
+      const classes = [...button.classList];
+      expect(classes.filter((name) => layout.test(name)).sort()).toEqual(
+        (button === icon
+          ? ["h-6", "w-6", "px-0", "gap-1", "text-label"]
+          : ["h-6", "px-2", "gap-1", "text-label"]
+        ).sort(),
+      );
+      expect(classes.filter((name) => state.test(name))).toEqual(defaultStates);
+    }
+    for (const button of [icon, mixed]) {
+      expect(
+        button.querySelector("svg")?.classList.contains(variant === "bare" ? "size-3" : "size-mark"),
+      ).toBe(true);
+    }
+    expect(text.querySelector("svg")).toBeNull();
+    expect(text.disabled).toBe(true);
+  },
+);
+
+test.each([
+  ["md", "h-8", "px-3", "w-8"],
+  ["lg", "h-12", "px-4", "w-12"],
+] as const)("%s buttons retain their existing size classes", (size, height, padding, width) => {
+  mount(() => (
+    <>
+      <Button size={size} icon={icons.add} label="Add" />
+      <Button size={size} icon={icons.add}>
+        Continue
+      </Button>
+    </>
+  ));
+  const sizing = /^(?:h-|w-|px-|gap-|text-(?:row|label)$)/;
+  const icon = screen.getByRole("button", { name: "Add" });
+  const mixed = screen.getByRole("button", { name: "Continue" });
+  expect([...icon.classList].filter((name) => sizing.test(name))).toEqual([
+    "gap-2",
+    "text-row",
+    height,
+    "px-0",
+    width,
+  ]);
+  expect([...mixed.classList].filter((name) => sizing.test(name))).toEqual([
+    "gap-2",
+    "text-row",
+    height,
+    padding,
+  ]);
+  expect(icon.querySelector("svg")?.classList.contains("size-4")).toBe(true);
+  expect(mixed.querySelector("svg")?.classList.contains("size-4")).toBe(true);
+});
+
 test("textarea starts one line high and grows with its text", () => {
   mount(() => <Textarea aria-label="Note" />);
   const note = screen.getByRole("textbox", { name: "Note" }) as HTMLTextAreaElement;

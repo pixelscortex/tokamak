@@ -73,6 +73,7 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   button edge sits on the box edge above it.
 - `Picker` (the ghost `Menu.Trigger`): Button's `md` size owns its height and
   padding; changing Button's ghost look changes the whole row.
+  Button also offers `sm` (24 px) for compact actions and `lg` (48 px).
 - The permission card padding (`py-1 ps-3 pe-1`): chat's `parts.Composer.div.top`
   gap and the box below it.
 - The reply header (`h-5`, mark 14 px, model in `text-data`): chat's
