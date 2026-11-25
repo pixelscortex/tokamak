@@ -16,14 +16,14 @@ None.
 
 ## What it adds to others
 
-| Target (ai-profiles)     | What                                                                                                                                                                                                                                                           | Export                             | Paper artboard                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| Subscription card        | Company (`anthropic` or `openai`), plan (Claude: "Pro", "Max", "Team", "Enterprise", "Free"; ChatGPT: Codex's names, such as "Plus", "Business", "Free"), label, enabled, status, the accounts' emails and organisation or ChatGPT workspace, models, last use | `listSubscriptions`                | `Profiles · subscriptions`, `Profiles · awaiting sign-in`, `Profiles · Claude and ChatGPT` |
-| "Signed out" on the card | `status: "signed-out"` and the reason ("Claude would not renew the login. Sign in again.", or the same with "ChatGPT")                                                                                                                                         | `listSubscriptions`, `renewLogins` | not drawn yet                                                                              |
-| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription                                                                                                                                                                  | `listSubscriptions`                | `Profiles · awaiting sign-in`                                                              |
-| Dialog, sign-in step     | The sign-in link (the company's page with PKCE challenge and `state`)                                                                                                                                                                                          | `startSignIn`                      | `Profiles · add · sign-in`, `Profiles · add · sign-in, address pasted`                     |
-| Dialog, connected step   | Plan, email, organisation and models found                                                                                                                                                                                                                     | `finishSignIn`                     | `Profiles · add · connected`                                                               |
-| Dialog lines             | Why a paste or a sign-in failed (`data.message` of each failure)                                                                                                                                                                                               | `finishSignIn`                     | not drawn yet                                                                              |
+| Target (ai-profiles)     | What                                                                                                                                                                                                                                                                                                                                | Export                             | Paper artboard                                                                             |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| Subscription card        | Company (`anthropic` or `openai`), plan (Claude: "Pro", "Max", "Team", "Enterprise", "Free"; ChatGPT: Codex's names, such as "Plus", "Business", "Free"; empty while the company has not named it, and never "Free" by guess), label, enabled, status, the accounts' emails and organisation or ChatGPT workspace, models, last use | `listSubscriptions`                | `Profiles · subscriptions`, `Profiles · awaiting sign-in`, `Profiles · Claude and ChatGPT` |
+| "Signed out" on the card | `status: "signed-out"` and the reason ("Claude would not renew the login. Sign in again.", or the same with "ChatGPT")                                                                                                                                                                                                              | `listSubscriptions`, `renewLogins` | not drawn yet                                                                              |
+| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription                                                                                                                                                                                                                                       | `listSubscriptions`                | `Profiles · awaiting sign-in`                                                              |
+| Dialog, sign-in step     | The sign-in link (the company's page with PKCE challenge and `state`)                                                                                                                                                                                                                                                               | `startSignIn`                      | `Profiles · add · sign-in`, `Profiles · add · sign-in, address pasted`                     |
+| Dialog, connected step   | Plan, email, organisation and models found                                                                                                                                                                                                                                                                                          | `finishSignIn`                     | `Profiles · add · connected`                                                               |
+| Dialog lines             | Why a paste or a sign-in failed (`data.message` of each failure)                                                                                                                                                                                                                                                                    | `finishSignIn`                     | not drawn yet                                                                              |
 
 ## If you change X, check Y
 
@@ -48,21 +48,14 @@ None.
 
 ## Known limits
 
-- **Sign-in on the server's own computer still needs a paste.** Both
-  companies return the browser to a fixed address on the person's computer:
-  Claude to `http://localhost:54545/callback`, ChatGPT to
-  `http://localhost:1455/auth/callback` (their CLIs listen there; the
-  companies accept no other address for these client ids). CLIProxyAPI
-  completes this without pasting by running a small forwarder on those two
-  ports that answers with a redirect, query string unchanged, to its own
-  callback endpoint. Tokamak has no such piece: a plugin cannot open a port,
-  and a plugin has no inbound HTTP route yet (`httpAction`, TKM-257). The
-  missing piece is a forwarder in the Runner on ports 54545 and 1455 that
-  redirects `/callback` and `/auth/callback` to an `httpAction` route of
-  `agent-proxy`, which would finish the sign-in the way `finishSignIn` does.
-  Until then the browser ends on a page that fails to load and the person
-  pastes its address, for both companies, on every computer. A Server build
-  on another machine would still need the paste.
+- **Without the desktop app the return address is pasted.** Both companies
+  send the browser back to a fixed address on the person's computer: Claude
+  to `http://localhost:54545/callback`, ChatGPT to
+  `http://localhost:1455/auth/callback`. The desktop app listens there for
+  the return (TKM-295, on a separate branch). Without the desktop app (a plain
+  browser, or signing in on another device) the page fails to load and the
+  person pastes its address, for both companies. ai-profiles' `lib/companies.ts`
+  holds each return address once, with its port and path.
 
 - **Renewal only when something asks.** A plugin's server code has no timer
   that may use the network, so a login is renewed only when a screen that

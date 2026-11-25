@@ -52,25 +52,53 @@ the link.
   parameter, after the code, or in the fragment), a `code#state`, or a bare
   code.
 - **ChatGPT** (`openai.ts`), from Codex 0.170.0's login crate: Codex's client
-  id, scopes, `id_token_add_organizations`, `codex_cli_simplified_flow` and
+  id, `id_token_add_organizations`, `codex_cli_simplified_flow` and
   `originator=codex_cli_rs`, returning to `http://localhost:1455/auth/callback`;
-  a form exchange without `state`. The login keeps the ID token, whose claims
-  give the email, the plan (`chatgpt_plan_type`, shown with Codex's names) and
-  the workspace (`chatgpt_account_id`); an account is the person within the
+  a form exchange without `state`. The ID token's claims give the email, the
+  plan (`chatgpt_plan_type`, shown with Codex's names; no claim, no plan) and
+  the workspace (`chatgpt_account_id`). The workspace id is stored on the
+  account and returned by `logins:fresh` as `workspace`, for the
+  `chatgpt-account-id` header; the ID token itself is never stored, since it
+  can be traded for an API key and nothing needs it after sign-in. An account
+  is the person within the
   workspace (`chatgpt_user_id/chatgpt_account_id`), so two people of one
   Business workspace are two accounts. Models come from
   `<ChatGPT backend>/codex/models?client_version=0.170.0` and the workspace's
   name from `/wham/accounts/check`, both with `chatgpt-account-id`. The paste
   is read as CLIProxyAPI reads a callback (with or without `http://`, or only
   its query); a bare code is refused, since ChatGPT's page never shows one and
-  its state could not be checked.
+  its state could not be checked. The state is compared before the code or an
+  `error` is read, as Codex does, so another sign-in's return is
+  `WrongSignIn`; this sign-in's error return is `Refused` with Codex's words
+  ("Codex is not enabled for your workspace…" for a missing entitlement) and
+  the sign-in keeps waiting.
 
-Nothing listens on either return address: each CLI does, on its own computer,
-and the server cannot open a port. So after signing in, the browser ends on a
-page that fails to load, and the person copies the whole address from the
-address bar and pastes it. CLIProxyAPI avoids the paste on its own computer
-with a forwarder on those ports; Tokamak would need the same in the Runner
-(`design/agent-proxy.md`, "Known limits").
+  Differences from Codex 0.170.0: the scope is CLIProxyAPI's
+  `openid profile email offline_access`, without Codex's
+  `api.connectors.read api.connectors.invoke` (these logins only carry Codex
+  turns, and the connector scopes would widen what a leaked token can do; one
+  constant, `SCOPE`); the return host is `localhost` (Codex 0.170 sends
+  `127.0.0.1`); no listener of its own and no fallback port 1457; no API-key
+  exchange after sign-in; no workspace-restriction or workspace-switch
+  parameters; renewal waits 20 s (Codex 45 s), always says `proactive_expiry`
+  and runs only when asked (no 8-day scheduled renewal); a minimal user agent;
+  expiry from the access token's `exp`, else `expires_in`, else one hour; only
+  models marked "list", no ETag cache; the account key is person plus
+  workspace.
+
+A failed code exchange (timed out, 5xx, 429, unreadable answer) may have used
+the code, so for both companies it asks for a new one: "Open the sign-in page
+again and paste the new address."
+
+The server listens on neither return address. The desktop app does (TKM-295,
+separate branch); without it, after signing in the browser ends on a page that
+fails to load, and the person copies the whole address from the address bar
+and pastes it (`design/agent-proxy.md`, "Known limits").
+
+A plan is only stored when the company's answer named it (`Details.planKnown`:
+Claude's profile carried `organization_type` or a `has_claude_*` field;
+ChatGPT's ID token carried `chatgpt_plan_type`). Otherwise it is stored empty,
+never "Free" by guess, and a repair with a known plan fills it in.
 
 `finishSignIn` claims the sign-in row first, so a second paste while one is
 being exchanged gets `Busy` and changes nothing. It exchanges the code, reads
@@ -92,8 +120,8 @@ Only a definite refusal signs out: for Claude HTTP 400 or 401 from the token
 endpoint; for ChatGPT, as Codex decides it, a 401, a 400 `invalid_grant`, or
 the codes `refresh_token_expired`, `refresh_token_reused` or
 `refresh_token_invalidated` (a ChatGPT renewal is JSON with
-`refresh_reason: "proactive_expiry"`, and keeps the old refresh and ID token
-when none comes back). A refusal deletes the login and turns the account
+`refresh_reason: "proactive_expiry"`, and keeps the old refresh token when
+none comes back). A refusal deletes the login and turns the account
 "Signed out"; `startSignIn` with `repair` then
 signs the same subscription in again in place. A 429 waits for its
 `Retry-After`; 403, 5xx, network errors and unreadable answers wait one
@@ -105,9 +133,9 @@ is open. The internal functions the proxy will call take the member as
 
 ## Tables
 
-`subscriptions`, `accounts` (one login at the company, by its account id),
-`logins` (access and refresh token, ChatGPT's ID token, expiry, renewal claim
-and next try) and
+`subscriptions`, `accounts` (one login at the company, by its account id,
+with ChatGPT's workspace id),
+`logins` (access and refresh token, expiry, renewal claim and next try) and
 `signIns` (verifier, `state`, link, an optional subscription to repair, a
 finish claim). Every row has the `owner` member
 id. Logins sit in ordinary tables: there is no secret store yet (TKM-292), so
@@ -181,7 +209,8 @@ try {
   `/plugins/agent-proxy/<set>` prefix.
 - `addAccount(company, id, { signIn, strict, plan, workspace })` registers
   synthetic credentials. For OpenAI, `plan` is the ID token's
-  `chatgpt_plan_type` (default `plus`) and `workspace` the name
+  `chatgpt_plan_type` (default `plus`; `null` leaves the claim out) and
+  `workspace` the name
   `/wham/accounts/check` gives (none for a personal account).
   Choose the next authorize account with `fake.nextSignIn(id)`. Set the
   account's `signIn` to `success`, `reject-code`, `expired`, `refuse-renewal`,
@@ -190,7 +219,7 @@ try {
   renewal rotates both tokens; a strict account that sends a used refresh
   token again has its whole login revoked, as companies that rotate do.
 - Strict mode is the default. Authorization checks the client ID, redirect,
-  and S256 challenge; exchange checks the matching verifier, redirect, client
+  and S256 challenge (and, for OpenAI, `offline_access` in the scope); exchange checks the matching verifier, redirect, client
   ID, and Anthropic's body `state`. Codex validates `state` in the callback
   before sending its form exchange, so its token body does not contain it.
   The fake redirects to the callback with `code` and `state` in the query; a
