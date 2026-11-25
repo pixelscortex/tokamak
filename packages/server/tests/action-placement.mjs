@@ -206,14 +206,20 @@ async function assertReloadTimeout(client, reload) {
   const previous = (await client.query(api.work.rows, {})).rows.length;
   const action = client.action(api.work.waitHook, {});
   void action.catch(() => {});
+  const entered = (async () => {
+    for (;;) {
+      const { rows } = await client.query(api.work.rows, {});
+      if (rows.length > previous) return Number(rows.at(-1).text);
+      await Bun.sleep(20);
+    }
+  })();
   const pid = await within(
-    (async () => {
-      for (;;) {
-        const { rows } = await client.query(api.work.rows, {});
-        if (rows.length > previous) return Number(rows.at(-1).text);
-        await Bun.sleep(20);
-      }
-    })(),
+    Promise.race([
+      entered,
+      action.then(() => {
+        throw new Error("Retiring action finished before its hook started");
+      }),
+    ]),
     "start action on retiring build",
     5000,
   );
@@ -404,6 +410,7 @@ try {
     }
     await reloadProvider(address, sharedToken);
   });
+  await reloadProvider(local.endpoint.http, local.endpoint.token);
   await assertDisconnectAndCapacity(local.endpoint.ws, local.endpoint.token, embedded);
   const oldAction = join(scratch, "old-action");
   await cp(join(source, "dist"), oldAction, { recursive: true });
