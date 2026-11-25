@@ -15,7 +15,10 @@
   "devDependencies": {
     "@solidjs/vite-plugin": "3.0.0",
     "@testing-library/dom": "10.4.2",
+    "@testing-library/user-event": "14.6.12",
     "@tokamak/build": "workspace:*",
+    "@ui-sdk/core": "0.1.0-beta.6",
+    "@ui-sdk/solid": "0.1.0-beta.6",
     "jsdom": "31.0.1",
     "tailwindcss": "4.3.5",
     "vitest": "5.1.0"

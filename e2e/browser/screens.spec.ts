@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { startHostedFixture } from "../hosted-fixture";
+import { agentChip, pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 import { screenTree } from "./screen-tree";
 
@@ -15,13 +16,9 @@ test.skip(!out, "set TOKAMAK_SCREENS to a folder to take the screenshots");
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Message" });
 const conversation = (page: Page) => page.getByRole("log", { name: "Conversation" });
-const agentRow = (page: Page) => page.getByRole("group", { name: "Agent" });
 
 async function pick(page: Page, replay: string) {
-  await agentRow(page).getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
-  await agentRow(page).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: replay, exact: true }).click();
+  await pickAgentOption(page, "Fake agent", replay);
 }
 
 async function useFolder(page: Page, folder: string) {
@@ -151,6 +148,12 @@ test("thread screens", async ({ browser }) => {
     await page.goto("/");
     await pick(page, "work");
     await shot(page, "new-thread");
+    // The agent picker open over the new thread's composer.
+    await agentChip(page).click();
+    await expect(page.getByRole("menu")).toHaveCSS("opacity", "1");
+    await shot(page, "picker-open");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
 
     // A Git folder, so the branch, the change card and the review panel show.
     const folder = join(home, "invoices-app");
@@ -191,8 +194,7 @@ test("thread screens", async ({ browser }) => {
 
     // A turn that edits a file: the change card, then the review panel.
     await unlinkGo(folder);
-    await agentRow(page).getByRole("button").nth(1).click();
-    await page.getByRole("menuitem", { name: "edit", exact: true }).click();
+    await pick(page, "edit");
     const lines = Array.from(
       { length: 240 },
       (_, n) => `  const value${n} = format(rows[${n}], columns, { plain: true, locale: "en" });`,
@@ -254,10 +256,7 @@ test("thread screens", async ({ browser }) => {
     // Ask first: the permission question on the composer's tray, and the waiting thread.
     await page.getByRole("button", { name: /^New thread/ }).click();
     await pick(page, "ask-once");
-    await agentRow(page)
-      .getByRole("button", { name: /^Permission level/ })
-      .click();
-    await page.getByRole("menuitem", { name: "Ask first" }).click();
+    await pickAgentOption(page, "Access level", "Ask first");
     await send(page, "Push the branch");
     const question = page.getByRole("group", { name: "Permission question" });
     await expect(question).toBeVisible();

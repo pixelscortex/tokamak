@@ -13,8 +13,13 @@ export interface Resolved extends Offered {
   readonly access: Access;
 }
 
-/** One picker's change: another agent, or a new model, level, speed, mode or permission level. */
-export type Change = { readonly agent: AgentEntry } | (Picked & { readonly access?: Access });
+/**
+ * One change in the picker: another agent (with one of its models when picked from the model
+ * list), or a new model, level, speed, mode or access level for the same agent.
+ */
+export type Change =
+  | { readonly agent: AgentEntry; readonly model?: string }
+  | (Picked & { readonly access?: Access });
 
 /** What a removed agent offers: nothing, so the row says it isn't installed. */
 const GONE: Info = {
@@ -85,10 +90,10 @@ export function toStored(resolved: Resolved): Choices {
 }
 
 /**
- * A picker changed: the thread's choices change at once (the new thread's stay
+ * A choice changed: the thread's choices change at once (the new thread's stay
  * in this window until its first Send), and this device remembers the agent,
  * model, level, speed and mode for the next new thread. Switching agent takes
- * that agent's last picks on this device.
+ * that agent's last picks on this device, with the model picked beside it.
  */
 export async function pick(
   client: TokamakClient,
@@ -98,10 +103,19 @@ export async function pick(
 ): Promise<void> {
   const next =
     "agent" in change
-      ? toStored(resolveWith(change.agent, lastPicks()[change.agent.id] ?? {}, current.access))
+      ? toStored(
+          resolveWith(
+            change.agent,
+            {
+              ...lastPicks()[change.agent.id],
+              ...(change.model !== undefined && { model: change.model }),
+            },
+            current.access,
+          ),
+        )
       : { ...toStored(current), ...change };
   lastAgent.set(next.agent.id);
-  if (!("agent" in change)) {
+  if (!("agent" in change) || change.model !== undefined) {
     const { agent, access: _access, ...rest } = next;
     lastPicks.set((all) => ({ ...all, [agent.id]: rest }));
   }
