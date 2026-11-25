@@ -37,7 +37,7 @@ export interface PartRegistry {
   observe(target: string, notify: (actions: readonly LoadedPartAction[]) => void): () => void;
 }
 
-export const PartActions = createContext<PartRegistry | undefined>();
+export const PartActions = createContext<PartRegistry | null>(null);
 
 type NativeSite = readonly [target: string, fingerprint: string, children: readonly NativeSite[]];
 
