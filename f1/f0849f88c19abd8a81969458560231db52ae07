@@ -1,0 +1,23 @@
+packages/engine/src/bridge.rs
+  s_9982f8c50f6e65::t_65eb840d02fcce 244-247
+packages/engine/src/engine.rs
+  s_9982f8c50f6e65::t_97db732d59cdbf 153
+packages/engine/tests/acceptance.rs
+  s_9982f8c50f6e65::t_f75674d6bc3d35 864-885
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1f0849f88c19abd8a81969458560231db52ae07",
+  "prompts": {},
+  "sessions": {
+    "s_9982f8c50f6e65": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21399-c620-7161-abf7-af78155d4bbc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
