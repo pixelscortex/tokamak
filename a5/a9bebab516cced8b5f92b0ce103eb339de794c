@@ -1,0 +1,171 @@
+packages/sdk/tools/server-builtins.mjs
+  s_467911d521291f::t_c0f5996f369149 18,22,39
+packages/sdk/tests/fixtures/types/positive.ts.txt
+  s_467911d521291f::t_1324fd73dd1172 30,32,34,36
+packages/runner/tests/local-routing.mjs
+  s_467911d521291f::t_17daa37e8caf8a 468
+  s_467911d521291f::t_1324fd73dd1172 43,54,59,69,79,87,91,101,105,109,128,133-140,156,160-161,181,186,195,197-198,213,280-281,283,297,299,305-311,316,338,353,367,373,383,386,389-390,415,427,443-445,533,554,562,601-602,606-607,728
+packages/server/src/plugins/contracts.rs
+  s_467911d521291f::t_e3cab094d56698 69-70,78,96,120,138,146,152,181-182,188,454,456-458
+  s_467911d521291f::t_0fbc4349e2a53b 455
+packages/sdk/tools/contracts.mjs
+  s_467911d521291f::t_e3cab094d56698 55-56,61,63-64,73,125,143,153,159,161,187,189,200,205
+  s_467911d521291f::t_dd398bf001f530 68-69
+packages/sdk/src/functions.ts
+  s_467911d521291f::t_f7bb1b0ab144a7 14,31,199-200,241,333,363,379-384,386-394,425,521
+  s_467911d521291f::t_e3cab094d56698 281
+  s_467911d521291f::t_a034d981d6120c 339
+packages/runner/src/artifact.rs
+  s_467911d521291f::t_e3cab094d56698 25
+  s_467911d521291f::t_c88d4e5d277c6c 80
+packages/build/tests/local.test.mjs
+  s_467911d521291f::t_1324fd73dd1172 29,34,39,42,45,67,71,97,107,111,116-117,119,128,130,135,137,141,146,149,156,161,166,182,192,197,200,211,216,221,224,228,246,273-274,347
+  s_467911d521291f::t_17daa37e8caf8a 170
+  s_467911d521291f::t_1e3051fc96699c 118,177-181,393-414
+packages/sdk/src/internal/contracts.ts
+  s_467911d521291f::t_e3cab094d56698 37,41,46,48,67,71,106,108,116,119,121,127-129,133-135,140,142,149,158-159,181,184,203,209,219
+  s_467911d521291f::t_d44811e3ae8b61 132
+packages/sdk/worker/dispatch.ts
+  s_467911d521291f::t_65e527560f0906 231,234
+  s_467911d521291f::t_90729a2f17144e 46,232,242,309
+packages/sdk/src/index.ts
+  s_467911d521291f::t_e3cab094d56698 6
+packages/server/src/plugins/mod.rs
+  s_467911d521291f::t_e3cab094d56698 104
+  s_467911d521291f::t_018ce8fcd7ed9a 103
+packages/runner/tests/fixture/src/server/work.ts
+  s_467911d521291f::t_1324fd73dd1172 2,4-5,10-11
+packages/runner/tests/support/routing.mjs
+  s_467911d521291f::t_17daa37e8caf8a 105,109
+  s_467911d521291f::t_4149f825631b9a 22,26,30,32-37
+packages/sdk/worker/contracts.ts
+  s_467911d521291f::t_1324fd73dd1172 59
+  s_467911d521291f::t_e3cab094d56698 23,50,74,158
+packages/sdk/tools/bundle.mjs
+  s_467911d521291f::t_c0f5996f369149 31,186,192,220,411-414,422-423
+packages/server/tests/code-snapshots-driver.mjs
+  s_467911d521291f::t_1324fd73dd1172 138,141,145
+packages/server/tests/contracts-driver.mjs
+  s_467911d521291f::t_1324fd73dd1172 48,54,57,60,81-82,86,89,97,181,185,189,202,216
+packages/build/src/exports.ts
+  s_467911d521291f::t_e3cab094d56698 74
+packages/runtime/js/local.ts
+  s_467911d521291f::t_65e527560f0906 128,177,180,183-184,187-188,196,206,222-224,328,337-339,354,369,384,461,477,488,496-497,500,508,523
+  s_467911d521291f::t_e3cab094d56698 63,297,303-306
+  s_467911d521291f::t_75f35b9a39127f 307-320
+e2e/fake-agent/harness.mjs
+  s_467911d521291f::t_1324fd73dd1172 343
+packages/build/README.md
+  s_467911d521291f::t_17daa37e8caf8a 68
+packages/build/src/vite.ts
+  s_467911d521291f::t_d9e8e576626102 176-184
+  s_467911d521291f::t_55c94c34ff80a7 126
+packages/sdk/src/agent-command.ts
+  s_467911d521291f::t_f7bb1b0ab144a7 1,7
+packages/sdk/tools/plugin-boundary.mjs
+  s_467911d521291f::t_e3cab094d56698 135,163-164
+  s_467911d521291f::t_a5376b8c035b55 279-295,311-322,324-327
+  s_467911d521291f::t_7499206e9021fd 224-234,240,242-246,297-310,323
+packages/runner/README.md
+  s_467911d521291f::t_d9e8e576626102 4-6
+packages/runner/tests/measure-linux-memory.mjs
+  s_467911d521291f::t_1324fd73dd1172 133
+  s_467911d521291f::t_61ca0404274fb7 103-104
+packages/sdk/worker/quickjs.ts
+  s_467911d521291f::t_e3cab094d56698 54
+  s_467911d521291f::t_1fdd89641bf1e0 56
+packages/sdk/tools/placement.mjs
+  s_467911d521291f::t_c0f5996f369149 18-19,21,25,33-35,47,49
+packages/server/tests/fixtures/action-placement/src/provider.ts
+  s_467911d521291f::t_1324fd73dd1172 1,18
+packages/sdk/src/client.ts
+  s_467911d521291f::t_17daa37e8caf8a 26,87
+packages/runner/tests/lifecycle.rs
+  s_467911d521291f::t_4c755ba1059a84 218,239,605
+packages/server/src/plugins/catalog.rs
+  s_467911d521291f::t_e3cab094d56698 177,180,254
+packages/host/tests/fixture.js
+  s_467911d521291f::t_1324fd73dd1172 7-8,14-16,25,34,38,42,48,53-54,70,76,81,87-88,91,116,126,137,178-179,221,224-226,241,254,267,272,293,312,316
+packages/host/tests/programs.rs
+  s_467911d521291f::t_4c755ba1059a84 305
+  s_467911d521291f::t_1324fd73dd1172 284
+packages/server/src/actions/runner_upstream.rs
+  s_467911d521291f::t_e3cab094d56698 7,173,201
+packages/server/tests/fixtures/action-placement/src/contracts.ts
+  s_467911d521291f::t_1324fd73dd1172 7
+packages/build/tests/contracts.test.mjs
+  s_467911d521291f::t_1324fd73dd1172 19,57-58,95,101
+packages/host/tests/protocol.rs
+  s_467911d521291f::t_4c755ba1059a84 119
+  s_467911d521291f::t_1324fd73dd1172 59
+  s_467911d521291f::t_5d0cecc25330ed 65,77,173,272
+packages/runtime/tests/local.test.mjs
+  s_467911d521291f::t_1324fd73dd1172 62-63,113,116,119,162
+  s_467911d521291f::t_768815765ef105 1,6-16,28,77,93,135,154,157
+packages/runner/src/local/quickjs/session.rs
+  s_467911d521291f::t_4c755ba1059a84 384
+  s_467911d521291f::t_65e527560f0906 288-291,915,1087,1094
+  s_467911d521291f::t_ea18d6129f0289 363,407,414-417,706,878
+.ci/check.sh
+  s_467911d521291f::t_da3ece0465e0f4 132
+GLOSSARY.md
+  s_467911d521291f::t_0b11f0af84d7c6 22,125
+packages/host/README.md
+  s_467911d521291f::t_536c935e1c105e 3,57,88
+packages/host/src/main.rs
+  s_467911d521291f::t_cb8c633b9c4791 67,88
+packages/host/src/modules.rs
+  s_467911d521291f::t_b337045b3de557 23,26
+packages/host/src/protocol.rs
+  s_467911d521291f::t_2f3d38a1dbf568 25,27
+packages/host/src/runtime.rs
+  s_467911d521291f::t_e9facad1d3588d 68
+packages/runner/tests/measure-first-text.mjs
+  s_467911d521291f::t_69a237226f150f 33
+packages/sdk/README.md
+  s_467911d521291f::t_7bc8876c9e6348 149,185-209,211-212,218,444,446,449-450,455-456,458,576,595,597,667,686,694-695,708,714-715,717,724,765
+packages/sdk/worker/action-process.ts
+  s_467911d521291f::t_b23fc6fe98b4d7 28
+packages/server/Cargo.toml
+  s_467911d521291f::t_f87c344f62f8d7 116
+packages/server/HOW_IT_WORKS.md
+  s_467911d521291f::t_8012b6e3eae473 116,120
+packages/server/PLUGINS.md
+  s_467911d521291f::t_56cd1bc950d4d9 21
+packages/server/README.md
+  s_467911d521291f::t_a79551a10383af 495
+packages/server/src/plugin-skill.md
+  s_467911d521291f::t_29ab74225c301d 24,29-30,44-46
+packages/server/tests/caller-actions-driver.mjs
+  s_467911d521291f::t_6df2235ebc903a 81,94,97,108,115,130,140,147,171,183,187-188,263-264,270-272,301,303-305,310,315,318-328,332,348,363,368,371,381,394,408,426,439,465-467
+packages/server/tests/caller_actions.rs
+  s_467911d521291f::t_ddc6030f57a103 13,18,25,55
+plugins/ai/README.md
+  s_467911d521291f::t_aca07b07afce1b 142,156,171,179
+plugins/ai/tests/agent-row.test.tsx
+  s_467911d521291f::t_49b906ca0b00e1 55,65
+plugins/ai/tests/steers.test.tsx
+  s_467911d521291f::t_ba85dd82bb2f8f 76,83
+wiki/content/docs/api/contracts.mdx
+  s_467911d521291f::t_94e5f433154419 8-9
+wiki/content/docs/api/functions.mdx
+  s_467911d521291f::t_f83394e283dd0b 40,82,84,86
+wiki/content/docs/architecture.mdx
+  s_467911d521291f::t_b89527c590a48a 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5a9bebab516cced8b5f92b0ce103eb339de794c",
+  "prompts": {},
+  "sessions": {
+    "s_467911d521291f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21439-c6af-76f3-b7f1-72ea8b30d1b6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
