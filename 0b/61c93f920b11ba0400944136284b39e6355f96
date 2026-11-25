@@ -1,0 +1,21 @@
+packages/server/tests/fixtures/plugin-machines/sandbox/api.ts
+  s_419b7bad57fe38::t_5295cfcb6349b0 1
+packages/runner/src/local/quickjs/session.rs
+  s_419b7bad57fe38::t_5295cfcb6349b0 377,538-539,541-542,599
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0b61c93f920b11ba0400944136284b39e6355f96",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
