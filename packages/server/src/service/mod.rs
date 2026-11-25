@@ -126,7 +126,7 @@ pub struct Server {
     // Shutdown must never compete for space with application calls.
     closing: mpsc::Sender<oneshot::Sender<Result<(), Error>>>,
     descriptor: Json,
-    runner: Arc<crate::actions::RunnerSlot>,
+    runner: Arc<crate::actions::Machines>,
     cleanup: Arc<Notify>,
     closed: watch::Receiver<Option<Result<(), Error>>>,
 }
@@ -170,9 +170,27 @@ type Connection = (
 pub(crate) struct SessionIdentity {
     caller: std::sync::RwLock<crate::identity::AuthContext>,
     revoked: tokio_util::sync::CancellationToken,
+    local_continuations: bool,
+    window_notes: std::sync::Mutex<std::collections::VecDeque<(String, crate::identity::CallNote)>>,
 }
 
 type SessionAuth = Arc<SessionIdentity>;
+
+pub(crate) struct WindowParent {
+    depth: usize,
+    thread: Option<String>,
+    proof: Option<String>,
+}
+
+impl WindowParent {
+    fn new(depth: usize, thread: Option<String>, proof: Option<String>) -> Self {
+        Self {
+            depth,
+            thread,
+            proof,
+        }
+    }
+}
 
 pub(crate) enum Command {
     Connect(SessionAuth, oneshot::Sender<Result<Connection, Error>>),
@@ -224,7 +242,7 @@ pub(crate) enum Action {
         name: String,
         args: Json,
         kind: Option<FunctionKind>,
-        local_parent: Option<(usize, Option<String>)>,
+        local_parent: Option<WindowParent>,
         placement: crate::actions::Placement,
     },
     Subscribe {
@@ -269,7 +287,7 @@ struct Coordinator {
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
-    runner: Arc<crate::actions::RunnerSlot>,
+    runner: Arc<crate::actions::Machines>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
     action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, CallError>)>,
     action_cancellations: BTreeMap<(u64, u64), (tokio_util::sync::CancellationToken, bool)>,

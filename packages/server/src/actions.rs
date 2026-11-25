@@ -9,11 +9,7 @@ use crate::{
 };
 use engine::OpRegistry;
 use serde_json::Value as Json;
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{Arc, OnceLock},
-};
+use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
@@ -24,7 +20,9 @@ pub(crate) use runner_upstream::runner_hashes;
 
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
 type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
-pub(crate) type RunnerSlot = OnceLock<RunnerDispatch>;
+mod machines;
+pub(crate) use machines::Machines;
+use machines::Selection;
 
 pub struct RunnerAction {
     pub plugin: String,
@@ -38,18 +36,21 @@ pub struct RunnerAction {
 
 pub(crate) enum Destination {
     Server,
-    AttachedRunner {
-        dispatch: RunnerDispatch,
-        plugin: String,
-        entry_hash: String,
-        code_hash: String,
-    },
+    AttachedRunner(RunnerDestination),
+    ConnectedRunner(RunnerDestination),
     CallerWindowRunner {
         plugin: String,
         entry_hash: String,
         code_hash: String,
     },
     Failed(MachineFailure),
+}
+
+pub(crate) struct RunnerDestination {
+    dispatch: RunnerDispatch,
+    plugin: String,
+    entry_hash: String,
+    code_hash: String,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -78,13 +79,16 @@ impl Placement {
 #[derive(Clone, Copy)]
 pub(crate) enum MachineFailure {
     NoMachine,
+    MachineLost,
 }
 
 impl MachineFailure {
     pub fn value(self) -> Json {
-        match self {
-            Self::NoMachine => serde_json::json!({"failed":true,"kind":"noMachine","data":null}),
-        }
+        let kind = match self {
+            Self::NoMachine => "noMachine",
+            Self::MachineLost => "machineLost",
+        };
+        serde_json::json!({"failed":true,"kind":kind,"data":null})
     }
 }
 
@@ -92,7 +96,7 @@ pub(crate) fn resolve(
     loaded: Option<&Loaded>,
     target: Option<&crate::plugins::Target>,
     placement: Placement,
-    runner: &RunnerSlot,
+    runner: &Machines,
     note: &CallNote,
 ) -> Destination {
     let selected = placement
@@ -108,23 +112,27 @@ pub(crate) fn resolve(
     if let (Some(loaded), Some(target)) = (loaded, target) {
         let manifest = &loaded.catalog.plugins[&target.owner].manifest;
         if let Some((entry_hash, code_hash)) = runner_hashes(manifest) {
-            if auth.is_on_this_machine()
-                && !note.is_window_continuation()
-                && let Some(dispatch) = runner.get()
-            {
-                return Destination::AttachedRunner {
-                    dispatch: dispatch.clone(),
-                    plugin: target.owner.clone(),
-                    entry_hash: entry_hash.to_owned(),
-                    code_hash: code_hash.to_owned(),
-                };
-            }
-            if placement.window {
-                return Destination::CallerWindowRunner {
-                    plugin: target.owner.clone(),
-                    entry_hash: entry_hash.to_owned(),
-                    code_hash: code_hash.to_owned(),
-                };
+            let placement_for = |dispatch| RunnerDestination {
+                dispatch,
+                plugin: target.owner.clone(),
+                entry_hash: entry_hash.to_owned(),
+                code_hash: code_hash.to_owned(),
+            };
+            match runner.select(auth, note.is_window_continuation(), placement.window) {
+                Selection::Attached(dispatch) => {
+                    return Destination::AttachedRunner(placement_for(dispatch));
+                }
+                Selection::Connected(dispatch) => {
+                    return Destination::ConnectedRunner(placement_for(dispatch));
+                }
+                Selection::Absent if placement.window => {
+                    return Destination::CallerWindowRunner {
+                        plugin: target.owner.clone(),
+                        entry_hash: entry_hash.to_owned(),
+                        code_hash: code_hash.to_owned(),
+                    };
+                }
+                _ => {}
             }
         }
     }
@@ -136,9 +144,10 @@ impl Destination {
     pub fn context(
         &self,
         note: CallNote,
-        runner: Arc<RunnerSlot>,
+        runner: Arc<Machines>,
     ) -> (ActionContext, Option<DropGuard>) {
-        let lifetime = matches!(self, Self::AttachedRunner { .. }).then(CancellationToken::new);
+        let lifetime = matches!(self, Self::AttachedRunner(_) | Self::ConnectedRunner(_))
+            .then(CancellationToken::new);
         let guard = lifetime.clone().map(CancellationToken::drop_guard);
         (
             ActionContext {
@@ -183,12 +192,13 @@ impl Destination {
                 )
                 .await
                 .map_err(Into::into),
-            Self::AttachedRunner {
-                dispatch,
-                plugin,
-                entry_hash,
-                code_hash,
-            } => {
+            Self::AttachedRunner(runner) | Self::ConnectedRunner(runner) => {
+                let RunnerDestination {
+                    dispatch,
+                    plugin,
+                    entry_hash,
+                    code_hash,
+                } = runner;
                 let source = source.ok_or("Plugin action has no action process bundle")?;
                 process
                     .invoke_runner(&source, |retiring| {
@@ -198,7 +208,7 @@ impl Destination {
                             code_hash,
                             name,
                             args,
-                            upstream: RunnerActionUpstream(upstream),
+                            upstream: RunnerActionUpstream::embedded(upstream),
                             retiring,
                         })
                     })
@@ -215,7 +225,7 @@ impl Destination {
 #[derive(Clone)]
 pub(crate) struct ActionContext {
     pub note: CallNote,
-    pub runner: Arc<RunnerSlot>,
+    pub runner: Arc<Machines>,
     pub lifetime: Option<CancellationToken>,
 }
 

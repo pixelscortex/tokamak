@@ -19,6 +19,7 @@ export type Request =
       kind: "query" | "mutation" | "action";
       depth: number;
       thread: string | null;
+      proof?: string;
       on?: "server" | "caller";
       window?: boolean;
     }

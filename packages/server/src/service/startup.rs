@@ -199,7 +199,7 @@ impl Server {
 
         let (closed_sender, closed) = watch::channel(None);
 
-        let runner = Arc::new(crate::actions::RunnerSlot::new());
+        let runner = Arc::new(crate::actions::Machines::default());
         let actor = Coordinator {
             database,
             pool,

@@ -87,7 +87,7 @@ export type LaunchLocalWorker = (
   retire(artifact: LocalArtifact): Promise<void>;
 }>;
 
-type Continuation = { depth: number; thread: string | null };
+type Continuation = { depth: number; thread: string | null; proof?: string | null };
 type WindowInvocation = { destination: "callerWindowRunner"; note: Continuation; artifact: LocalArtifact };
 type WorkerCallContext = {
   continuation?: Continuation;

@@ -179,20 +179,22 @@ action receives the original identity and call note.
 
 The workspace server chooses the destination. A direct client authenticated
 as a person on an embedded Runner's machine uses that Runner, including for
-nested actions. For a shared workspace, the window forwards caller actions
-and their nested caller actions to its own Runner.
+nested actions. A [Runner connected to a shared server](../runner/README.md#connect-a-headless-runner-to-a-shared-server)
+receives actions for its own device. A browser or nested server action with no
+exact device match can use the caller's only connected Runner. With several
+candidates, it needs an exact match. A desktop without a connected Runner for
+its device can still forward work to its own local Runner.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`
 or `local()`. Methods run inside the Runner with live input, including
 callbacks, signals, and channels. Existing `place: "local"` contracts still work.
 
-Both Runner routes support local contracts and their channels. On a shared
-workspace the window connects with the public client API, so private function
+All Runner routes support local contracts and their channels. When the
+window forwards work, it uses the public client API, so private function
 calls and server contract discovery return `runnerCapabilityUnavailable`
 with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
-are available on the embedded Runner path. A Runner connected directly to
-its workspace server can make these calls; a shared-server window currently
+are available to embedded and connected Runners; a shared-server window currently
 has the same limits as `local()`.
 
 Runner actions use the Runner's program scope and lifetime rules, including

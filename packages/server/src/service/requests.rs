@@ -78,7 +78,7 @@ impl Coordinator {
         session: SessionAuth,
         name: &str,
         args: &Json,
-        local_parent: Option<(usize, Option<String>)>,
+        local_parent: Option<WindowParent>,
         placement: Placement,
     ) -> Result<RequestCaller, String> {
         // A socket may already have admitted a write when its member
@@ -87,16 +87,37 @@ impl Coordinator {
             return Err("Session has been revoked".into());
         }
         let auth = session.caller.read().expect("auth lock").clone();
-        let note = if let Some((depth, thread)) = local_parent {
+        let note = if let Some(WindowParent {
+            depth,
+            thread,
+            proof,
+        }) = local_parent
+            && (session.local_continuations || proof.is_some())
+        {
             let validator = self
                 .plugins
                 .as_ref()
                 .and_then(|loaded| loaded.targets.get(name))
                 .map(|target| target.args.as_ref());
-            CallNote::from_local_parent(&auth, depth, thread)?
+            let parent = if let Some(proof) = proof {
+                let notes = session
+                    .window_notes
+                    .lock()
+                    .expect("window continuation notes");
+                let (_, note) = notes
+                    .iter()
+                    .find(|(key, _)| key == &proof)
+                    .ok_or("Unknown window action continuation")?;
+                note.as_window_continuation(auth.clone())
+            } else {
+                CallNote::from_local_parent(&auth, depth, thread)?
+            };
+            parent
                 .enter(name, validator, args)
                 .map_err(|error| error.to_string())?
         } else {
+            // Legacy local functions can make public calls from hosted windows
+            // without letting the socket supply inherited context.
             Some(auth.clone()).into()
         };
         Ok(RequestCaller {

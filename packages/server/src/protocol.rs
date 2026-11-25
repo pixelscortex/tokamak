@@ -183,6 +183,9 @@ pub enum Request {
         depth: usize,
         thread: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        proof: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(
             feature = "protocol-codegen",
             ts(optional, type = "\"server\" | \"caller\"")

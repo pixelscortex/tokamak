@@ -1,4 +1,6 @@
-use super::{Artifact, Host, Lease, Leases, Pool, TURN_CAPACITY, frame_id, lock, too_many_turns};
+use super::{
+    Artifact, Host, Lease, Leases, Pool, StartError, TURN_CAPACITY, frame_id, lock, too_many_turns,
+};
 use crate::local::{Request, receive, send};
 use axum::extract::ws::WebSocket;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -251,7 +253,7 @@ impl Drop for Operation<'_> {
     }
 }
 
-pub(in crate::local) async fn connection(
+pub(crate) async fn connection(
     socket: &mut WebSocket,
     pool: &Pool,
     build: Artifact,
@@ -333,7 +335,7 @@ pub(in crate::local) async fn connection(
     }
 }
 
-pub(in crate::local) async fn action(
+pub(crate) async fn action(
     pool: Pool,
     leases: Arc<Leases>,
     action: server::RunnerAction,
@@ -348,13 +350,24 @@ pub(in crate::local) async fn action(
         code_hash: action.code_hash,
     };
     let lease = leases.get(&artifact)?;
+    let connected = action.upstream.is_connected();
     let bridge = Bridge {
         leases,
         retiring: lease.retiring.clone(),
         source_retiring: Some(action.retiring),
         upstream: Upstream::Embedded(action.upstream),
     };
-    let host = pool.host(&lease.build, &lease.slot, false).await?;
+    let host = match pool.start_or_reuse(&lease.build, &lease.slot, false).await {
+        Ok(host) => host,
+        Err(StartError::Artifact(reason)) if connected => {
+            return Ok(json!({
+                "failed":true,
+                "kind":"runnerArtifactMismatch",
+                "data":{"plugin":artifact.id, "message":reason},
+            }));
+        }
+        Err(error) => return Err(error.message(&artifact.id)),
+    };
     let frame = json!({
         "type":"invoke", "fn":action.name, "args":action.args, "action":true, "admittedAction":true,
     });
@@ -399,11 +412,15 @@ async fn invoke_root(
 ) -> Result<Value, String> {
     if let Some(fields) = frame.as_object_mut() {
         fields.remove("threadId");
+        fields.remove("windowProof");
         fields.remove("admittedAction");
         if fields.get("action") == Some(&Value::Bool(true))
             && let Some(note) = fields.remove("note")
         {
             fields.insert("actionDepth".into(), note["depth"].clone());
+            if let Some(proof) = note.get("proof") {
+                fields.insert("windowProof".into(), proof.clone());
+            }
             fields.insert("threadId".into(), note["thread"].clone());
         } else {
             fields.remove("actionDepth");
@@ -685,6 +702,7 @@ struct CallRoute<'a> {
     ancestors: &'a [String],
     thread: OnceLock<String>,
     action_depth: usize,
+    window_proof: Option<&'a str>,
     args: &'a Value,
     upstream: CallUpstream<'a>,
 }
@@ -729,6 +747,7 @@ impl<'a> CallRoute<'a> {
                 .as_str()
                 .map_or_else(OnceLock::new, |id| OnceLock::from(id.to_owned())),
             args: &frame["args"],
+            window_proof: frame["windowProof"].as_str(),
             action_depth: frame["actionDepth"]
                 .as_u64()
                 .and_then(|depth| usize::try_from(depth).ok())
@@ -741,6 +760,11 @@ impl<'a> CallRoute<'a> {
     fn redact_result(&self, host: &Host, mut frame: Value) -> Value {
         if let Some(error) = frame["error"].as_str() {
             match self.upstream {
+                CallUpstream::Embedded(upstream) if upstream.is_connected() => {
+                    if let Some(Ok(ops)) = host.action_ops.get() {
+                        frame["error"] = json!(ops.env.redact(error.to_owned()));
+                    }
+                }
                 CallUpstream::Embedded(upstream) => {
                     frame["error"] = json!(upstream.redact(error.to_owned()))
                 }
@@ -772,28 +796,15 @@ impl<'a> CallRoute<'a> {
         if frame["plugin"].is_null() && self.ancestors.len() > 1 {
             frame["plugin"] = json!(host.build.id);
         }
-        let (window, action_ops) = match self.upstream {
-            CallUpstream::Embedded(upstream) => {
-                return self
-                    .embedded_operation(upstream, here, frame, opening)
-                    .await;
-            }
-            CallUpstream::Window {
-                connection,
-                action_ops,
-            } => (connection, action_ops),
-        };
         if let Some(name) = frame["name"].as_str()
             && (name == "action.env" || name.starts_with("crypto."))
+            && !matches!(self.upstream, CallUpstream::Embedded(upstream) if !upstream.is_connected())
         {
-            let ops = match action_ops {
-                Some(ops) => ops,
-                None => host
-                    .action_ops
-                    .get_or_init(|| WindowActionOps::new(self.pool, &host.build))
-                    .as_ref()
-                    .map_err(Clone::clone)?,
-            };
+            let ops = host
+                .action_ops
+                .get_or_init(|| WindowActionOps::new(self.pool, &host.build))
+                .as_ref()
+                .map_err(Clone::clone)?;
             return Ok(
                 match ops
                     .operations
@@ -806,6 +817,14 @@ impl<'a> CallRoute<'a> {
             );
         }
 
+        let window = match self.upstream {
+            CallUpstream::Embedded(upstream) => {
+                return self
+                    .embedded_operation(upstream, here, frame, opening)
+                    .await;
+            }
+            CallUpstream::Window { connection, .. } => connection,
+        };
         let wants_note = frame["name"] == "auth.current" && frame["payload"]["call"] == true;
         self.attach_continuation(&mut frame, wants_note);
         let reply = window
@@ -886,11 +905,7 @@ impl<'a> CallRoute<'a> {
                     name => name,
                 }
                 .to_owned();
-                match upstream
-                    .operations()
-                    .dispatch_call(&operation, frame["payload"].take())
-                    .await
-                {
+                match upstream.dispatch(&operation, frame["payload"].take()).await {
                     Ok(value) => value,
                     Err(error) => {
                         return Ok(
@@ -924,13 +939,14 @@ impl<'a> CallRoute<'a> {
             fields.get("name").and_then(Value::as_str),
             Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
         ) {
-            fields.insert(
-                "continuation".into(),
-                json!({
-                    "depth": self.action_depth + self.ancestors.len() - 1,
-                    "thread": self.thread.get(),
-                }),
-            );
+            let mut continuation = json!({
+                "depth": self.action_depth + self.ancestors.len() - 1,
+                "thread": self.thread.get(),
+            });
+            if let Some(proof) = self.window_proof {
+                continuation["proof"] = json!(proof);
+            }
+            fields.insert("continuation".into(), continuation);
         }
     }
 
@@ -975,7 +991,7 @@ impl<'a> CallRoute<'a> {
             ));
         }
         let frame = json!({
-            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "actionDepth":self.action_depth,
+            "type":"invoke", "fn":"", "contract":target, "args":args, "threadId":thread_id, "actionDepth":self.action_depth, "windowProof":self.window_proof,
         });
         let mut ancestors = ancestors.to_vec();
         ancestors.push(artifact.id.clone());
@@ -1074,6 +1090,7 @@ mod tests {
             ancestors: &["first".into(), "second".into()],
             thread: OnceLock::new(),
             action_depth: 0,
+            window_proof: None,
             args: &json!({"selection": "chat/threads:admitted"}),
             upstream: CallUpstream::Window {
                 connection: &window,

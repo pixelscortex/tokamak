@@ -90,6 +90,14 @@ impl CallNote {
         self
     }
 
+    pub fn as_window_continuation(&self, auth: AuthContext) -> Self {
+        Self {
+            auth: Some(auth),
+            window_continuation: true,
+            ..self.clone()
+        }
+    }
+
     pub fn is_window_continuation(&self) -> bool {
         self.window_continuation
     }

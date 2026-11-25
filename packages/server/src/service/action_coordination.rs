@@ -36,13 +36,14 @@ impl Coordinator {
             return;
         }
         if let Some(reply) = destination.immediate_reply(&note) {
-            self.respond(session, id, Ok(reply));
+            self.respond_window_action(session, id, reply, note);
             return;
         }
 
         let attached = matches!(
             destination,
-            crate::actions::Destination::AttachedRunner { .. }
+            crate::actions::Destination::AttachedRunner(_)
+                | crate::actions::Destination::ConnectedRunner(_)
         );
         let output = match self.action_session(session, attached) {
             Ok(output) => output,
@@ -112,6 +113,25 @@ impl Coordinator {
             .insert((session, id), (cancel.clone(), output.is_some()));
         self.action_jobs
             .spawn(async move { (session, id, action_job(cancel, output, invocation).await) });
+    }
+
+    fn respond_window_action(&mut self, session: u64, id: u64, mut reply: Json, note: CallNote) {
+        let Some(client) = self.sessions.get(&session) else {
+            return;
+        };
+        let proof = uuid::Uuid::new_v4().to_string();
+        let mut notes = client
+            .auth
+            .window_notes
+            .lock()
+            .expect("window continuation notes");
+        if notes.len() == 128 {
+            notes.pop_front();
+        }
+        notes.push_back((proof.clone(), note));
+        drop(notes);
+        reply["note"]["proof"] = serde_json::json!(proof);
+        self.respond(session, id, Ok(reply));
     }
 
     fn action_session(

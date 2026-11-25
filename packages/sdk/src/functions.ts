@@ -24,6 +24,8 @@ export type ServerFunctionKind = "query" | "mutation" | "action";
 export type ActionTarget = "server" | "caller";
 export type MachineFailure =
   | Failure<"noMachine", null>
+  | Failure<"machineLost", null>
+  | Failure<"runnerArtifactMismatch", { plugin: string; message: string }>
   | Failure<"runnerCapabilityUnavailable", RunnerCapability>;
 export interface ActionOptions {
   on?: ActionTarget;

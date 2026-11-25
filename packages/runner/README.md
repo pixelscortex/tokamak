@@ -146,3 +146,44 @@ executables on PATH. It opens the agent row so the two provider processes
 each describe their provider and answer `info`. The script waits
 400 ms after the row returns and reports each host's PSS separately. Neither
 measurement includes the Runner or the agent executables.
+
+## Connect a headless Runner to a shared server
+
+On macOS or Linux, start the Runner with a server origin and a private file
+containing a device key:
+
+```sh
+tokamak-runner --server https://workspace.example.com \
+  --key-file /path/to/device.key --plugins /path/to/plugins --data /path/to/runner-data
+```
+
+Use the server's HTTPS address (plain HTTP is accepted only for loopback
+development). The Runner opens the connection itself and does not listen on a
+port. Put the key on one line in a regular file with mode `600`. The command
+line contains only its path. Do not use the server's recovery key as the Runner
+key.
+
+Use the workspace's existing sign-in method to issue a dedicated device key:
+submit the same fields as the sign-in form to `POST /auth/sign-in`, with the
+provider's `method`, its `fields`, and a `deviceName` for the Runner. For an
+owner, `POST /auth/owner` with the owner recovery credential and
+`{"deviceName":"Headless Runner"}` issues the same kind of device key. Save
+only the response's `key` in the private file; the response returns it once.
+Do not print the response or put either credential in shell arguments. Use
+one device key per Runner. Signing that device out revokes the key and stops
+the Runner from reconnecting.
+
+Give the Runner the same complete plugin builds installed on the server,
+including `manifest.json`, `local-entry.js` and `local.js`. The cloud package
+omits Runner bundles, so keep the original build output to install on the
+Runner. The Runner verifies the two local bundle hashes against the call's
+catalog identity and refuses to run mismatched code. Until the server can
+distribute those bundles, update the Runner's installation when you update
+the server's plugins.
+
+The server prefers the Runner connected with the caller's own device key.
+A browser or nested server action without a matching device uses the caller's
+only connected Runner, if there is one. A desktop with an unmatched local
+Runner can still use the existing window route. After a device key is used by a Runner, its online status follows the
+Runner connection even if a window shares that key; a lost connection fails active calls with `machineLost`, then the
+Runner retries with backoff. Calls are not replayed.

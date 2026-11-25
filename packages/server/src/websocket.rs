@@ -37,6 +37,7 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 pub use crate::web::HostedWeb;
 
+mod machine;
 mod members;
 mod response;
 mod sign_in;
@@ -312,6 +313,7 @@ fn routes(
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
+        .route(crate::machine_wire::PATH, get(machine::upgrade))
         .route("/plugins", get(plugins))
         .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
     if adapter.hosted {
@@ -722,7 +724,7 @@ async fn connection(mut socket: WebSocket, adapter: Adapter, caller: AuthContext
         let session = tokio::select! {
             _ = adapter.stopping.cancelled() => return,
             _ = revoked.cancelled() => return,
-            session = adapter.server.connect_authenticated(auth, revoked.clone()) => match session { Ok(session) => session, Err(_) => return },
+            session = adapter.server.connect_authenticated(auth, revoked.clone(), !adapter.hosted && adapter.access.is_some()) => match session { Ok(session) => session, Err(_) => return },
         };
         (session, revoked)
     };

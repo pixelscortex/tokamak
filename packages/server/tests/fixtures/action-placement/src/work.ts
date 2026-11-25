@@ -97,3 +97,14 @@ export const useFailureValue = action({
   on: "caller",
   handler: async (ctx) => isFailure(await ctx.runAction(api.work.failureValue, {})),
 });
+
+export const connectedProgress = action({
+  on: "caller",
+  handler: async (ctx) => {
+    const process = ctx.proc(["/bin/sh", "-c", "echo $$; echo first; echo second; exec /bin/sleep 30"]);
+    for await (const text of process.stdout) {
+      await ctx.runMutation(api.work.store, { text });
+    }
+    return process.exited;
+  },
+});

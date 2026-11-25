@@ -59,7 +59,7 @@ pub struct AuthContext {
 }
 
 const SERVER_USER_ID: &str = "server";
-const LOCAL_DEVICE_ID: &str = "device:local";
+pub(crate) const LOCAL_DEVICE_ID: &str = "device:local";
 
 impl AuthContext {
     pub fn local() -> Self {

@@ -2,7 +2,7 @@
 //! workspace; its lifetime does not determine the lifetime of the process.
 mod session;
 
-pub(super) use session::{action, connection};
+pub(crate) use session::{action, connection};
 
 use super::{Artifact, TIMEOUT, client_env, quickjs_bundle, stderr_tail, write};
 use futures_util::StreamExt;
@@ -41,7 +41,7 @@ fn too_many_turns(limit: usize) -> String {
 type Slots = HashMap<Artifact, Entry>;
 
 #[derive(Clone)]
-pub(super) struct Pool {
+pub(crate) struct Pool {
     plugins: Arc<PathBuf>,
     env: Arc<BTreeMap<String, String>>,
     slots: Arc<Mutex<Slots>>,
@@ -75,7 +75,7 @@ struct SlotState {
 
 // A socket remembers the builds it routes to. An invocation also holds its
 // lease, so a catalog update or a disconnected window cannot retire it mid-call.
-pub(super) struct Leases {
+pub(crate) struct Leases {
     pool: Pool,
     workspace: Arc<str>,
     used: Mutex<HashMap<Artifact, Arc<Lease>>>,
@@ -106,7 +106,7 @@ impl Drop for Lease {
 }
 
 impl Leases {
-    pub(super) fn new(pool: &Pool, workspace: Arc<str>) -> Self {
+    pub(crate) fn new(pool: &Pool, workspace: Arc<str>) -> Self {
         Self {
             pool: pool.clone(),
             workspace,
@@ -217,6 +217,32 @@ impl Entry {
     }
 }
 
+enum StartError {
+    Artifact(String),
+    Process(String),
+}
+
+impl From<String> for StartError {
+    fn from(value: String) -> Self {
+        Self::Process(value)
+    }
+}
+
+impl From<&str> for StartError {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
+
+impl StartError {
+    fn message(self, id: &str) -> String {
+        let reason = match self {
+            Self::Artifact(reason) | Self::Process(reason) => reason,
+        };
+        format!("Plugin {id} process: {reason}")
+    }
+}
+
 impl Pool {
     pub(super) fn new(
         plugins: Arc<PathBuf>,
@@ -320,7 +346,7 @@ impl Pool {
     ) -> Result<Arc<Host>, String> {
         self.start_or_reuse(build, slot, routed)
             .await
-            .map_err(|reason| format!("Plugin {} process: {reason}", build.id))
+            .map_err(|error| error.message(&build.id))
     }
 
     async fn start_or_reuse(
@@ -328,7 +354,7 @@ impl Pool {
         build: &Artifact,
         slot: &Arc<Slot>,
         routed: bool,
-    ) -> Result<Arc<Host>, String> {
+    ) -> Result<Arc<Host>, StartError> {
         loop {
             let mut state = slot.state.lock().await;
             if self.stopping.is_cancelled() {
@@ -364,7 +390,8 @@ impl Pool {
             let code = tokio::time::timeout(TIMEOUT, verified)
                 .await
                 .map_err(|_| "local artifact verification stalled")?
-                .map_err(|error| error.to_string())??;
+                .map_err(|error| error.to_string())?
+                .map_err(StartError::Artifact)?;
             if self.stopping.is_cancelled() {
                 return Err("Runner stopped".into());
             }
@@ -385,7 +412,7 @@ impl Pool {
                 }
                 Err(error) => {
                     state.restart.failed(Instant::now(), false);
-                    return Err(error);
+                    return Err(error.into());
                 }
             }
         }

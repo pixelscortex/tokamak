@@ -7,6 +7,7 @@ export {
   serverDefault,
   callPrivate,
   wait,
+  connectedProgress,
   marker,
   hookedQuery,
   failureValue,

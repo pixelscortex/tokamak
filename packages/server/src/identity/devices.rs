@@ -27,6 +27,8 @@ pub(super) struct DeviceRecord {
     live_last_seen: Option<u64>,
     #[serde(skip)]
     open_sockets: usize,
+    #[serde(skip)]
+    machine_online: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     revoked_at: Option<u64>,
     #[serde(skip)]
@@ -42,6 +44,7 @@ impl DeviceRecord {
             last_seen: None,
             live_last_seen: None,
             open_sockets: 0,
+            machine_online: None,
             revoked_at: None,
             cancelled: CancellationToken::new(),
         }
@@ -111,6 +114,8 @@ pub(crate) struct DeviceEntry {
 pub(crate) enum DeviceSocket {
     Opened,
     Closed,
+    MachineOpened,
+    MachineClosed,
 }
 
 pub(crate) enum RevokeError {
@@ -151,6 +156,12 @@ pub(super) fn generate_key() -> Result<String, String> {
 }
 
 impl Identities {
+    pub(crate) fn issued_device(&self, caller: &AuthContext) -> Option<CancellationToken> {
+        let members = self.members.lock().expect("members lock");
+        let (_, device) = active_device(&members, caller)?;
+        (device.kind == Kind::Issued).then(|| device.cancelled.clone())
+    }
+
     pub(crate) fn is_bootstrap(&self, caller: &AuthContext) -> bool {
         let members = self.members.lock().expect("members lock");
         active_device(&members, caller).is_some_and(|(_, device)| device.kind == Kind::Bootstrap)
@@ -250,7 +261,7 @@ impl Identities {
                     device: device.public.clone(),
                     member: member.user.clone(),
                     last_seen: device.live_last_seen.max(device.last_seen),
-                    online: device.open_sockets > 0,
+                    online: device.machine_online.unwrap_or(device.open_sockets > 0),
                 })
                 .collect(),
         )
@@ -267,6 +278,8 @@ impl Identities {
         match socket {
             DeviceSocket::Opened => device.open_sockets += 1,
             DeviceSocket::Closed => device.open_sockets -= 1,
+            DeviceSocket::MachineOpened => device.machine_online = Some(true),
+            DeviceSocket::MachineClosed => device.machine_online = Some(false),
         }
         device.live_last_seen = Some(now()).max(device.live_last_seen);
         self.device_changes.send_replace(());
