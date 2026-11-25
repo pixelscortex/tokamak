@@ -44,13 +44,13 @@ sign-in with a target subscription (`addTo`); `finishSignIn` then adds the
 account to it. It is refused (`AlreadyAdded`, the sign-in ends) when the
 account is already signed in under this subscription or is under another of
 the member's subscriptions, and (`OtherPlan`, the sign-in keeps waiting) when
-Claude reports another plan for it: the subscription is one plan, so that
+the company reports another plan for it: the subscription is one plan, so that
 account is added as a subscription of its own. An account of this
 subscription that was signed out is signed in again in place.
 
 **Reads** (`src/server/reads.ts`), one rule for a new subscription, a repair,
 another account and `checkAgain`: a read that failed never overwrites one that
-worked. The plan is stored only when Claude's answer carried a plan field; until
+worked. The plan is stored only when the company's answer carried a plan field (`Details.planKnown`); until
 then it is empty, the plan is unknown, and an unknown plan fits any account
 (the first known read fills it in). Each account keeps the models its own read
 returned (stored only when the read returned some); the subscription's
@@ -63,7 +63,7 @@ proxy can still use the subscription) and `signed-out` only when every account
 is; each entry of `accounts` has its own `id`, `status` and `reason`.
 
 `signOutAccount` deletes the account's login here and marks it "Signed out"
-(the login is not revoked at Claude); the row stays. `signInAccount` starts a
+(the login is not revoked at the company); the row stays. `signInAccount` starts a
 sign-in that names that one account (`repairAccount`): finishing it as any
 other account is refused with `OtherAccount` and it keeps waiting. A
 `startSignIn` with `repair` and no account named takes only an account of the
@@ -72,12 +72,23 @@ subscription that is signed out, and refuses one that is signed in.
 (TKM-263) will skip a subscription that is off and an account that is signed
 out when it chooses one. `checkAgain` takes a fresh login of each signed-in
 account (`logins:fresh`, with its renewal rules) and reads the plan, the email
-and organisation, and the models again; when Claude answered nothing the result
-is `Unreachable` and nothing changes. `removeSubscription` deletes the
+and organisation, and the models again, through the subscription's own
+company module; when the company answered nothing the result is `Unreachable`
+and nothing changes. `removeSubscription` deletes the
 subscription, its accounts, their logins and any sign-in waiting to repair it
 or add to it, in one transaction. Anything that held it is the caller's to
-update. A renewal that Claude answers after the login was deleted (signed out
-or removed meanwhile) keeps nothing, and `logins:fresh` returns null.
+update (ai-profiles takes it out of its profiles in the same transaction). A
+renewal that the company answers after the login was deleted (signed out or
+removed meanwhile) keeps nothing, and `logins:fresh` returns null.
+
+Every one of these goes through the subscription's company
+(`companies[subscription.company]`, found with `internal.manage.companyOf` or
+`internal.manage.accounts`): "Add account" and an account's "Sign in" open that
+company's sign-in page, and `signins:begin` refuses a target of another
+company; "Check again" reads with that company's `details`, from the access
+token and the account's stored workspace. `tests/manage-companies.test.ts`
+checks the fake's request log: a ChatGPT login never reaches an Anthropic
+address, nor a Claude login an OpenAI one.
 
 ## Sign-in
 
@@ -87,7 +98,7 @@ page), `readPasted` (what the person pasted, as a code and its state),
 `exchange` (code to login), `renew` (a new login for a refresh token, and
 which answers mean "sign in again") and `details` (plan, account, models).
 `companies.ts` maps `anthropic` to `claude.ts` and `openai` to `openai.ts`;
-`signins.ts` and `logins.ts` name no company.
+`signins.ts`, `logins.ts` and `manage.ts` name no company.
 
 The server does the whole sign-in over the network: `startSignIn` makes a
 PKCE verifier and `state`, keeps both in the `signIns` table and returns only
@@ -140,8 +151,9 @@ A failed code exchange (timed out, 5xx, 429, unreadable answer) may have used
 the code, so for both companies it asks for a new one: "Open the sign-in page
 again and paste the new address."
 
-The server listens on neither return address. The desktop app does (TKM-295,
-separate branch); without it, after signing in the browser ends on a page that
+The server listens on neither return address. The desktop app does, while
+the Profiles page is open and a sign-in waits (TKM-295, `design/shell.md`),
+and passes the address to `finishSignIn` as the paste field would; without it, after signing in the browser ends on a page that
 fails to load, and the person copies the whole address from the address bar
 and pastes it (`design/agent-proxy.md`, "Known limits").
 

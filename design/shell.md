@@ -62,30 +62,29 @@ Also from the shell: the rail mark of each `view` (its `icon`, or its first
 letter; `ai-profiles` adds the Profiles page with a person mark under chat's), tab titles (`usePageTitle`), shortcuts (`useShortcuts`), quit
 blockers (`quitBlockers`).
 
+The desktop app's subscription sign-in commands (`app/src-tauri/src/sign_in_return.rs`,
+TKM-295), which `ai-profiles` uses for both companies' returns:
+`sign_in_return_listen` takes `port`, `path`, `expectedState`, `requestId` and
+`timeoutMs` and waits for a GET with the exact path and one matching state on
+IPv4 and, when supported, IPv6 loopback (ports 54545 for Claude and 1455 for
+ChatGPT only, up to 15 minutes). `sign_in_return_cancel` takes `port` and
+`requestId`, so cleanup cannot cancel a replacement listener.
+`sign_in_open_browser` takes an HTTPS `url` and opens it in the system
+browser; the Windows opener is unverified. Every installed plugin's code in the
+main window can use all three commands to open any HTTPS page, listen on
+either allowed loopback port, and replace another listener there.
+
 ## What it adds to others
 
 Nothing inside plugin parts. It frames them: the stage is `surface-stage`
 with radius 12 on the window tone, 8 px from the window's right and bottom
 edges (4 px when the panel is open).
 
-## Subscription sign-in
-
-The main desktop window can call `sign_in_return_listen` with `port`, `path`,
-`expectedState`, `requestId` and `timeoutMs`. It waits for a GET with the exact
-path and one matching state on IPv4 and, when supported, IPv6 loopback
-(ports 54545 and 1455 only, up to 15 minutes).
-`sign_in_return_cancel` takes `port` and `requestId`, so cleanup cannot cancel
-a replacement listener. `sign_in_open_browser` takes an HTTPS `url` and opens
-it in the system browser. The Windows opener is unverified.
-Every installed plugin's code in the main window can use all three commands
-to open any HTTPS page, listen on either allowed loopback port, and replace
-another listener there.
-
-`// later:` Consider restricting the opener to known sign-in hosts.
-
 ## If you change X, check Y
 
-- The subscription sign-in commands: the Profiles page and sign-in step use them.
+- The subscription sign-in commands: ai-profiles' Profiles page and sign-in
+  step use them, with each company's port and path from its `lib/companies.ts`;
+  a new company's port goes into `allowed_port` too.
 - Sidebar padding (`pt-1 pe-3 pb-3 ps-2`) or its density: chat's thread rows
   (`px-row`, 32 tall in dense) and ai's detail and helper rows.
 - Stage header height or padding (`h-12 ps-4 pe-2`): chat's thread header
@@ -130,12 +129,13 @@ button with a tooltip and keys) and `Notice`.
   app centres it.
 - The Members page's tab reads "New thread" (with the person icon) instead of
   "Members"; `Shell · members` copies that too.
-
 - With `ai-profiles` installed (it is in the starter set) the rail has a
   second mark, Profiles, under chat's. `Shell · frame` was copied before it
   existed and shows the rail without it; `App 1:1 · AI profiles plugin` shows
   it.
 - The test app's rail also shows test-only views (F, P, T, W, O); the Paper
   copy leaves them out.
+- The sign-in opener takes any HTTPS page: should it be limited to the
+  companies' sign-in hosts?
 - The top strip keeps 76 px (a 64 px spacer and 12 px) for the macOS window
   buttons only in the desktop app; the screenshots come from a browser, so the Paper copy has no gap there.

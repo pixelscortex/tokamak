@@ -20,11 +20,11 @@ None.
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Subscription card        | Company (`anthropic` or `openai`), plan (Claude: "Pro", "Max", "Team", "Enterprise", "Free"; ChatGPT: Codex's names, such as "Plus", "Business", "Free"; empty while the company has not named it, and never "Free" by guess), label, enabled, status, the accounts' emails and organisation or ChatGPT workspace, models, last use | `listSubscriptions`                                                  | `Profiles · subscriptions`, `Profiles · awaiting sign-in`, `Profiles · Claude and ChatGPT`                      |
 | "Signed out" on the card | `status: "signed-out"` and the reason ("Claude would not renew the login. Sign in again.", or the same with "ChatGPT")                                                                                                                                                                                                              | `listSubscriptions`, `renewLogins`                                   | not drawn yet                                                                                                   |
-| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription                                                                                                                                                                                                                                       | `listSubscriptions`                                                  | `Profiles · awaiting sign-in`                                                                                   |
+| Awaiting sign-in card    | Each sign-in that has not ended: company, the link to open, whether it repairs a subscription, adds an account (`addTo`) or signs one account in (`repairAccount`)                                                                                                                                                                  | `listSubscriptions`                                                  | `Profiles · awaiting sign-in`                                                                                   |
 | Dialog, sign-in step     | The sign-in link (the company's page with PKCE challenge and `state`)                                                                                                                                                                                                                                                               | `startSignIn`                                                        | `Profiles · add · sign-in`, `Profiles · add · sign-in, address pasted`                                          |
 | Dialog, connected step   | Plan, email, organisation and models found                                                                                                                                                                                                                                                                                          | `finishSignIn`                                                       | `Profiles · add · connected`                                                                                    |
 | Dialog lines             | Why a paste or a sign-in failed (`data.message` of each failure)                                                                                                                                                                                                                                                                    | `finishSignIn`                                                       | not drawn yet                                                                                                   |
-| Card action row          | "Check again": plan, account details and models read anew; why it failed (`Unreachable`, `SignedOut`)                                                                                                                                                                                                                               | `checkAgain`                                                         | `Profiles · subscriptions`                                                                                      |
+| Card action row          | "Check again": plan, account details and models read anew through the subscription's own company; why it failed (`Unreachable`, `SignedOut`)                                                                                                                                                                                        | `checkAgain`                                                         | `Profiles · subscriptions`                                                                                      |
 | Subscription details     | Each account's id, email, organisation, status and reason; "Add account" starts a sign-in with `addTo`; "Sign out" and "Sign in" on one account (`repairAccount`)                                                                                                                                                                   | `listSubscriptions`, `addAccount`, `signOutAccount`, `signInAccount` | `Profiles · subscription`, `Profiles · subscription · two accounts`, `Profiles · subscription · one signed out` |
 | Remove confirmation      | Removes the subscription, its accounts, their logins and any sign-in waiting for it                                                                                                                                                                                                                                                 | `removeSubscription`                                                 | `Profiles · remove`                                                                                             |
 
@@ -46,11 +46,16 @@ None.
   and its alert line.
 - Plan names (`PLANS` in `claude.ts` and `openai.ts`): the card title is the
   product ("Claude", "ChatGPT") and the plan, and the line under the emails
-  repeats it in lower case.
+  repeats it in lower case. A plan no read has named is stored empty
+  (`reads.ts`, `planKnown`) and shown as no word at all.
 - A new company: a module with the `SignInCompany` interface
   (`src/server/company.ts`), an entry in `companies.ts`, the `company` union in
-  `schema.ts`, and its words in ai-profiles' `lib/companies.ts`. Nothing else
-  names a company.
+  `schema.ts`, its words and return address in ai-profiles' `lib/companies.ts`,
+  and its return port in the desktop listener (`design/shell.md`). Nothing
+  else names a company: sign-in (`signins.ts`), renewal (`logins.ts`) and the
+  subscription screens' functions (`manage.ts`: "Add account", an account's
+  "Sign in", "Check again", the plan check of a second account) all go
+  through `companies[subscription.company]`.
 - Model names: ai-profiles drops a leading "Claude " from them, as ai does.
 
 ## Primitives used
@@ -62,11 +67,20 @@ None.
 - **Without the desktop app the return address is pasted.** Both companies
   send the browser back to a fixed address on the person's computer: Claude
   to `http://localhost:54545/callback`, ChatGPT to
-  `http://localhost:1455/auth/callback`. The desktop app listens there for
-  the return (TKM-295, on a separate branch). Without the desktop app (a plain
-  browser, or signing in on another device) the page fails to load and the
-  person pastes its address, for both companies. ai-profiles' `lib/companies.ts`
-  holds each return address once, with its port and path.
+  `http://localhost:1455/auth/callback`. The server does not listen for it;
+  the desktop app does, while the Profiles page is open and a sign-in waits
+  (`design/shell.md`), and passes the address to `finishSignIn` as the paste
+  field would. Without the desktop app (a plain browser, a Server used from
+  another machine, or signing in on another device) the page fails to load and
+  the person pastes its address, for both companies.
+- **The tables changed shape across TKM-261, 262, 264 and 265, and there is no
+  migration.** The SDK has none yet (schema migrations are deferred, and
+  declared fields do not validate writes, `packages/sdk/README.md`). Since
+  TKM-261: `company` may be `openai`; `accounts` gained `workspace` (ChatGPT's
+  account id) and `models`; `signIns` gained `addTo` and `repairAccount`;
+  `subscriptions.plan` may be empty (unknown). An early TKM-262 build stored an
+  ID token on `logins`; none does now. A store made on an older branch should
+  be recreated rather than reused.
 
 - **Sign out is local.** `signOutAccount` (and `removeSubscription`) delete
   the login here; they do not revoke it at the company. A copied refresh token
@@ -101,7 +115,6 @@ None.
   sign-in.
 - The ChatGPT plan names are Codex's display names ("Pro (More)" for `pro`,
   "Pro" for `prolite`); whether to shorten them is the owner's call.
-
 - The plan comes from the profile endpoint's `organization.organization_type`
   and `account.has_claude_max` / `has_claude_pro`, which CLIProxyAPI does not
   decode; the values are unconfirmed until the owner signs in with a real
