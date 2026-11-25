@@ -346,7 +346,6 @@ impl Supervisor {
         tokio::select! {
             biased;
             () = self.closed.cancelled() => Err("Server closed".into()),
-            result = run(source.retired.clone()) => result,
             () = reload_deadline => Err(CallError::Structured(Box::new(StructuredCallError {
                 message: "Local plugin build retired".into(),
                 details: CallErrorDetails {
@@ -358,6 +357,7 @@ impl Supervisor {
                     data: Value::Null,
                 },
             })).into()),
+            result = run(source.retired.clone()) => result,
         }
     }
 

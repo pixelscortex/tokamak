@@ -8,6 +8,14 @@ export const store = mutation({
   handler: ({ db }, { text }) => db.insert("lines", { text }),
 });
 
+export const settleRetired = mutation({
+  handler: async ({ db }) => {
+    const text = "before reload";
+    await db.insert("lines", { text });
+    return text;
+  },
+});
+
 export const rows = query({
   handler: async ({ db, call }) => ({ rows: await db.query("lines").collect(), call }),
 });
@@ -60,8 +68,13 @@ export const callPrivate = action({
 
 export const wait = action({
   on: "caller",
-  handler: async (ctx) => {
-    const process = ctx.proc(["/bin/sh", "-c", "echo $$; exec /bin/sleep 30"]);
+  args: { repeat: v.optional(v.boolean()) },
+  handler: async (ctx, { repeat }) => {
+    const process = ctx.proc([
+      "/bin/sh",
+      "-c",
+      repeat ? "echo $$; while /bin/sleep 1; do echo tick; done" : "echo $$; exec /bin/sleep 30",
+    ]);
     for await (const pid of process.stdout) {
       await ctx.runMutation(api.work.store, { text: pid });
     }

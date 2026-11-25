@@ -71,7 +71,7 @@ await writeFile(
   });
   export const waitPolicy = hook(waitHook, {
     async before(ctx, args) {
-      const process = ctx.proc(["/bin/sh", "-c", "echo $$; exec /bin/sleep 30"]);
+      const process = ctx.proc(["/bin/sh", "-c", "echo $$; while /bin/sleep 1; do echo tick; done"]);
       for await (const pid of process.stdout) await ctx.runMutation(store, { text: pid });
       await process.exited;
       return args;
@@ -216,7 +216,7 @@ async function assertReloadTimeout(client, reload) {
   const entered = (async () => {
     for (;;) {
       const { rows } = await client.query(api.work.rows, {});
-      if (rows.length > previous) return Number(rows.at(-1).text);
+      if (rows.length > previous) return Number(rows[previous].text);
       await Bun.sleep(20);
     }
   })();
@@ -232,11 +232,43 @@ async function assertReloadTimeout(client, reload) {
   );
   assert.ok(Number.isInteger(pid) && pid > 0);
   await reload();
+  const ticks = async () =>
+    (await client.query(api.work.rows, {})).rows.filter((row) => row.text === "tick").length;
+  const atReload = await ticks();
   await assert.rejects(
     within(action, "retired action times out", LOCAL_RELOAD_GRACE_MS + 3000),
     isLocalReloadTimeout,
   );
   await assertProgramsReaped([pid], "reap program from retired action");
+  const after = await ticks();
+  assert.ok(after > atReload, "the retiring action could still make nested calls");
+  await Bun.sleep(1100);
+  assert.equal(await ticks(), after, "no further nested calls after the grace period");
+}
+
+async function assertRetirementCleanup(client, marker, reload) {
+  const action = client.action(api.channel.stream, { retire: marker });
+  void action.catch(() => {});
+  await within(
+    (async () => {
+      while (!(await client.query(api.work.rows, {})).rows.some((row) => row.text === marker)) {
+        await Bun.sleep(20);
+      }
+    })(),
+    "open channel on retiring build",
+    5000,
+  );
+  await reload();
+  assert.deepEqual(await within(action, `settle retired action (${marker})`, LOCAL_RELOAD_GRACE_MS + 3000), {
+    result: { sessionId: "fixture", stopped: true },
+    received: ["started", "steered"],
+    settled: {
+      mutation: "after reload",
+      contract: 2,
+      query: "hooked",
+      action: { runner: true, depth: 1 },
+    },
+  });
 }
 
 async function reloadProvider(address, token, plugin = "fixture-hooks") {
@@ -459,27 +491,34 @@ try {
   const actionSource = join(source, "src/work.ts");
   await writeFile(
     actionSource,
-    (await readFile(actionSource, "utf8")).replace("exec /bin/sleep 30", "exec /bin/sleep 31"),
+    (await readFile(actionSource, "utf8"))
+      .replace("before reload", "after reload")
+      .replace("exec /bin/sleep 30", "exec /bin/sleep 31"),
   );
   build(source);
   const newAction = join(source, "dist");
 
-  await assertReloadTimeout(embedded, async () => {
-    await cp(newAction, join(plugins, "ai"), { recursive: true });
+  const reloadEmbedded = async (artifact) => {
+    await cp(artifact, join(plugins, "ai"), { recursive: true });
     await reloadProvider(local.endpoint.http, local.endpoint.token, "ai");
-  });
-  await cp(oldAction, join(plugins, "ai"), { recursive: true });
-  await reloadProvider(local.endpoint.http, local.endpoint.token, "ai");
-
-  await assertReloadTimeout(window, async () => {
-    await cp(newAction, join(plugins, "ai"), { recursive: true });
+  };
+  const reloadWindow = async (artifact) => {
+    await cp(artifact, join(plugins, "ai"), { recursive: true });
     if (mode === "--cloud") {
-      const staged = join(scratch, "new-action-cloud");
-      await stageServerPlugin(newAction, staged);
+      const staged = join(await mkdtemp(join(scratch, "action-cloud-")), "ai");
+      await stageServerPlugin(artifact, staged);
       await cp(staged, join(serverPlugins, "ai"), { recursive: true });
     }
     await reloadProvider(address, sharedToken, "ai");
-  });
+  };
+  await assertRetirementCleanup(embedded, "embedded-retiring", () => reloadEmbedded(newAction));
+  await reloadEmbedded(oldAction);
+  await assertReloadTimeout(embedded, () => reloadEmbedded(newAction));
+  await reloadEmbedded(oldAction);
+
+  await assertRetirementCleanup(window, "window-retiring", () => reloadWindow(newAction));
+  await reloadWindow(oldAction);
+  await assertReloadTimeout(window, () => reloadWindow(newAction));
   await local.stop();
   const offlineWindow = await connect(address, { launch: local.launch, token: sharedToken, cleanup });
   assert.deepEqual(

@@ -20,6 +20,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::{CancellationToken, DropGuard};
 
 mod runner_hooks;
 pub use runner_hooks::RunnerHookPlan;
@@ -141,6 +142,23 @@ pub(crate) fn resolve(
 }
 
 impl Destination {
+    pub fn context(
+        &self,
+        note: CallNote,
+        runner: Arc<RunnerSlot>,
+    ) -> (ActionContext, Option<DropGuard>) {
+        let lifetime = matches!(self, Self::AttachedRunner { .. }).then(CancellationToken::new);
+        let guard = lifetime.clone().map(CancellationToken::drop_guard);
+        (
+            ActionContext {
+                note,
+                runner,
+                lifetime,
+            },
+            guard,
+        )
+    }
+
     pub fn immediate_reply(
         &self,
         note: &CallNote,
@@ -191,6 +209,7 @@ impl Destination {
             commands: &scope.commands,
             process: &scope.process,
             runner: &scope.runner,
+            lifetime: scope.lifetime.clone(),
             dispatch: match &self {
                 Self::AttachedRunner { dispatch, .. } => Some(dispatch.clone()),
                 _ => None,
@@ -284,6 +303,7 @@ struct ActionStageExecutor<'a> {
     process: &'a Arc<Supervisor>,
     runner: &'a Arc<RunnerSlot>,
     dispatch: Option<RunnerDispatch>,
+    lifetime: Option<CancellationToken>,
 }
 
 impl ActionStageExecutor<'_> {
@@ -306,6 +326,7 @@ impl ActionStageExecutor<'_> {
             ActionContext {
                 note,
                 runner: self.runner.clone(),
+                lifetime: self.lifetime.clone(),
             },
         )
         .map_err(|error| error.to_string())?;
@@ -383,14 +404,17 @@ pub fn runner_action_artifact_unavailable() -> engine::CallError {
     .into()
 }
 
+#[derive(Clone)]
 pub(crate) struct ActionContext {
     pub note: CallNote,
     pub runner: Arc<RunnerSlot>,
+    pub lifetime: Option<CancellationToken>,
 }
 
 pub(crate) struct NestedCall {
     pub note: CallNote,
     pub generation: Option<Arc<Loaded>>,
+    pub lifetime: Option<CancellationToken>,
     pub owner: Option<String>,
     pub name: String,
     pub args: Json,
@@ -426,6 +450,7 @@ pub(crate) fn operations(
         owner.clone(),
         environment.clone(),
         context.note.clone(),
+        context.lifetime.clone(),
     )?;
     if let (Some(loaded), Some(owner)) = (&generation, &owner) {
         register_plugin_call(
@@ -434,10 +459,25 @@ pub(crate) fn operations(
             owner.clone(),
             commands.clone(),
             process.clone(),
-            context.note.clone(),
-            context.runner.clone(),
+            &context,
         )?;
-        crate::plugins::register_contract_list(&mut ops, loaded.clone(), owner.clone())?;
+        if let Some(lifetime) = &context.lifetime {
+            let lifetime = lifetime.clone();
+            let commands = commands.clone();
+            let owner = owner.clone();
+            ops.register_call("contract.list", move |payload| {
+                let (lifetime, commands, owner) =
+                    (lifetime.clone(), commands.clone(), owner.clone());
+                async move {
+                    let current = current_plugins(&commands, &lifetime).await?;
+                    current
+                        .contract_providers(&owner, &payload)
+                        .map_err(Into::into)
+                }
+            })?;
+        } else {
+            crate::plugins::register_contract_list(&mut ops, loaded.clone(), owner.clone())?;
+        }
     }
     Ok(ActionOperations::new(
         Arc::new(ops),
@@ -457,6 +497,7 @@ pub(crate) fn register_nested_calls(
     owner: Option<String>,
     environment: Arc<crate::environment::Snapshot>,
     note: CallNote,
+    lifetime: Option<CancellationToken>,
 ) -> Result<(), engine::Error> {
     for (operation, kind) in [
         ("action.runQuery", FunctionKind::Query),
@@ -467,12 +508,14 @@ pub(crate) fn register_nested_calls(
         let owner = owner.clone();
         let environment = environment.clone();
         let note = note.clone();
+        let lifetime = lifetime.clone();
         ops.register_call(operation, move |payload| {
             let environment = environment.clone();
             let commands = commands.clone();
             let generation = generation.clone();
             let owner = owner.clone();
             let note = note.clone();
+            let lifetime = lifetime.clone();
             async move {
                 let name = payload["name"]
                     .as_str()
@@ -489,6 +532,7 @@ pub(crate) fn register_nested_calls(
                     .try_send(Command::RunFunction(NestedCall {
                         note,
                         generation,
+                        lifetime,
                         owner,
                         name,
                         args,
@@ -515,11 +559,15 @@ fn register_plugin_call(
     owner: String,
     commands: mpsc::WeakSender<Command>,
     process: Arc<Supervisor>,
-    note: CallNote,
-    runner: Arc<RunnerSlot>,
+    context: &ActionContext,
 ) -> Result<(), engine::Error> {
     let catalog = loaded.clone();
-    let caller = owner.clone();
+    let caller = owner;
+    let ActionContext {
+        note,
+        runner,
+        lifetime,
+    } = context.clone();
     ops.register_call("plugin.call", move |payload| {
         let loaded = catalog.clone();
         let owner = caller.clone();
@@ -527,7 +575,15 @@ fn register_plugin_call(
         let process = process.clone();
         let runner = runner.clone();
         let note = note.clone();
+        let lifetime = lifetime.clone();
         async move {
+            let loaded = match &lifetime {
+                Some(token) => current_plugins(&commands, token).await?,
+                None => loaded,
+            };
+            if !loaded.catalog.plugins.contains_key(&owner) {
+                return Err("Calling plugin was removed".into());
+            }
             let name = payload["name"]
                 .as_str()
                 .ok_or("plugin call requires a function name")?;
@@ -546,6 +602,7 @@ fn register_plugin_call(
                     .try_send(Command::RunFunction(NestedCall {
                         note,
                         generation: Some(loaded),
+                        lifetime,
                         owner: Some(owner),
                         name: name.into(),
                         args,
@@ -560,44 +617,74 @@ fn register_plugin_call(
                     .map_err(Into::into);
             }
             let note = note.enter(name, Some(&target.args), &args)?;
-            let environment = Arc::new(crate::environment::Snapshot::new(
-                Some(&loaded),
-                Some(&target.owner),
-            ));
             let on = requested_placement(&payload)?;
-            let destination = resolve(
-                Some(&loaded),
-                Some(&target),
-                Placement::new(on, None, None),
-                &runner,
-                &note,
-            );
-            if let Destination::Failed(error) = destination {
-                return Ok(error.value());
-            }
-
-            let source = loaded.action_sources.get(&target.owner).cloned();
-            let ops = operations(
+            run_nested_action(
+                loaded,
+                target,
                 commands,
-                Some(loaded),
-                Some(target.owner.clone()),
-                environment.clone(),
-                process.clone(),
+                process,
                 ActionContext {
                     note,
-                    runner: runner.clone(),
+                    runner,
+                    lifetime,
                 },
+                args,
+                on,
             )
-            .map_err(|e| e.to_string())?;
-            let result = destination
-                .invoke(&process, source, target.local_name, args, ops)
-                .await;
-
-            result.map_err(|error| error.map_text(|text| environment.redact(text)).into())
+            .await
         }
     })?;
 
     Ok(())
+}
+
+async fn run_nested_action(
+    loaded: Arc<Loaded>,
+    target: crate::plugins::Target,
+    commands: mpsc::WeakSender<Command>,
+    process: Arc<Supervisor>,
+    parent: ActionContext,
+    args: Json,
+    on: Option<ActionTarget>,
+) -> Result<Json, engine::CallError> {
+    let destination = resolve(
+        Some(&loaded),
+        Some(&target),
+        Placement::new(on, None, None),
+        &parent.runner,
+        &parent.note,
+    );
+    if let Destination::Failed(error) = destination {
+        return Ok(error.value());
+    }
+
+    let environment = Arc::new(crate::environment::Snapshot::new(
+        Some(&loaded),
+        Some(&target.owner),
+    ));
+    let source = loaded.action_sources.get(&target.owner).cloned();
+    let (context, _guard) = destination.context(parent.note, parent.runner);
+    let ops = operations(
+        commands,
+        Some(loaded),
+        Some(target.owner),
+        environment.clone(),
+        process.clone(),
+        context,
+    )
+    .map_err(|e| e.to_string())?;
+    let invocation = destination.invoke(&process, source, target.local_name, args, ops);
+    let result = if let Some(lifetime) = parent.lifetime {
+        tokio::select! {
+            biased;
+            () = lifetime.cancelled() => return Err("Action cancelled".into()),
+            result = invocation => result,
+        }
+    } else {
+        invocation.await
+    };
+
+    result.map_err(|error| error.map_text(|text| environment.redact(text)).into())
 }
 
 fn requested_placement(payload: &Json) -> Result<Option<ActionTarget>, &'static str> {
@@ -606,4 +693,23 @@ fn requested_placement(payload: &Json) -> Result<Option<ActionTarget>, &'static 
         .map(|on| serde_json::from_value(on.clone()))
         .transpose()
         .map_err(|_| "Invalid action target")
+}
+
+async fn current_plugins(
+    commands: &mpsc::WeakSender<Command>,
+    lifetime: &CancellationToken,
+) -> Result<Arc<Loaded>, String> {
+    let (reply, wait) = oneshot::channel();
+    commands
+        .upgrade()
+        .ok_or("Server closed")?
+        .try_send(Command::CurrentPlugins(reply))
+        .map_err(|error| error.to_string())?;
+    tokio::select! {
+        biased;
+        () = lifetime.cancelled() => Err("Action cancelled".into()),
+        result = wait => result
+            .map_err(|_| "Server closed")?
+            .ok_or_else(|| "Plugin catalog unavailable".into()),
+    }
 }

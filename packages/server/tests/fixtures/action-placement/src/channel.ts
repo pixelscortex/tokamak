@@ -1,4 +1,4 @@
-import { action, provide } from "@tokamak/sdk";
+import { action, provide, v } from "@tokamak/sdk";
 import {
   AGENT_TURN_PROTOCOL,
   openLocalChannel,
@@ -6,7 +6,7 @@ import {
   type Run,
   type TurnResult,
 } from "@tokamak/sdk/agent-turn";
-import { agent } from "./contracts";
+import { agent, localPlace } from "./contracts";
 import { api } from "./_generated/api";
 
 let observedAborts = 0;
@@ -47,7 +47,11 @@ export const provider = provide(agent, {
 
 export const stream = action({
   on: "caller",
-  handler: async (ctx) => {
+  args: { retire: v.optional(v.string()) },
+  handler: async (ctx, { retire }) => {
+    const retired = new Promise<void>((resolve) =>
+      ctx.retiring?.addEventListener("abort", () => resolve(), { once: true }),
+    );
     const provider = await agent.get("fixture", ctx);
     if (!provider) throw new Error("Fixture provider missing");
 
@@ -80,9 +84,20 @@ export const stream = action({
     if (!channel) throw new Error("Fixture channel missing");
     try {
       await Promise.race([listening, channel.result]);
+      let settled;
+      if (retire) {
+        await ctx.runMutation(api.work.store, { text: retire });
+        await retired;
+        settled = {
+          mutation: await ctx.runMutation(api.work.settleRetired, {}),
+          contract: await localPlace.get("external", ctx).location(),
+          query: await ctx.runQuery(api.work.marker, {}),
+          action: await ctx.runAction(api.work.callerDefault, {}),
+        };
+      }
       await channel.send("steer", { ...address, text: "steered" });
       await channel.send("stop", address);
-      return { result: await channel.result, received };
+      return { result: await channel.result, received, ...(settled && { settled }) };
     } finally {
       await channel.close();
     }
