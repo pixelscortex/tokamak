@@ -1,0 +1,23 @@
+plugins/ai/src/client/lib/turn.ts
+  s_419b7bad57fe38::t_032aee705668b1 47-48
+plugins/ai/src/client/lib/agents.ts
+  s_419b7bad57fe38::t_032aee705668b1 1,87,93-94,96-99
+plugins/ai/src/client/lib/turn-controls.ts
+  s_419b7bad57fe38::t_032aee705668b1 69,83-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "068ff6b8fd9ac90d6130eaf70043c54e5bedffed",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
