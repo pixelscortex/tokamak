@@ -3,53 +3,66 @@ import type {} from "@tokamak/sdk/web";
 import { internal } from "./_generated/internal";
 import {
   action,
+  idIn,
   internalMutation,
   internalQuery,
+  isExpired,
   mutation,
+  notFound,
   ownerOf,
+  signInViewOf,
   viewOf,
   type SignInView,
   type SubscriptionView,
 } from "./_functions";
 import { companyAddresses } from "./addresses";
-import { SignInError, exchange, models, profile, readPasted, signInLink } from "./claude";
+import { SignInError, accountDetails, exchange, models, readPasted, signInLink } from "./claude";
 import { randomToken } from "./pkce";
 
 /**
  * Adding a subscription, or signing one in again. The server makes the link
  * and keeps the PKCE verifier; the person signs in on Claude's page and pastes
- * back what it ends on; the server trades that for the login. The sign-in is
- * a row, so it lives on when the dialog closes and can be cancelled from the
- * "Awaiting sign-in" card. Whatever ends it (done, cancelled, refused) removes
- * the row, and only a finished sign-in ever writes a subscription.
+ * back the address the browser ended on; the server trades that for the
+ * login. The sign-in is a row, so it lives on when the dialog closes and can
+ * be cancelled from the "Awaiting sign-in" card.
  *
- * These are plugin-only: the window reaches them through `ai-profiles`, and
+ * A wrong paste never ends it: the same link can be opened again for a new
+ * code, and the verifier stays. It ends when it is finished, cancelled,
+ * replaced by a new start for the same target, or 15 minutes old. Finishing
+ * is claimed on the row, so a second paste while one is being exchanged gets
+ * "already finishing" and changes nothing.
+ *
+ * These are plugin-only: other plugins reach them as the calling member, and
  * no result carries the login, the verifier or anything read from them.
  */
 
-const signInId = v.id("signIns");
+/** How long one finish holds its claim: longer than the exchange and the reads after it. */
+const FINISH_CLAIM_MS = 90_000;
+const EXPIRED = "This sign-in expired after 15 minutes. Start again.";
+
+type Failed = { failed: true; kind: string; data: { message: string } };
 
 /** One "Awaiting sign-in" per target: starting again replaces the unfinished one. */
 export const begin = internalMutation({
   args: {
+    owner: v.string(),
     verifier: v.string(),
     state: v.string(),
     link: v.string(),
     repair: v.optional(v.id("subscriptions")),
   },
-  handler: async (ctx, { verifier, state, link, repair }) => {
-    const owner = ownerOf(ctx.auth);
+  handler: async (ctx, { owner, verifier, state, link, repair }) => {
     if (repair) {
       const subscription = await ctx.db.get(repair);
-      if (!subscription || subscription.owner !== owner)
-        return fail("Gone", { message: "That subscription is gone." });
+      if (!subscription || subscription.owner !== owner) return notFound("subscription");
     }
+    const now = Date.now();
     const open = await ctx.db
       .query("signIns")
       .withIndex("by_owner", (q) => q.eq("owner", owner))
       .collect();
-    for (const row of open) if (row.repair === repair) await ctx.db.delete(row._id);
-    const startedAt = Date.now();
+    // The same target is replaced; expired ones of any target go too.
+    for (const row of open) if (row.repair === repair || isExpired(row, now)) await ctx.db.delete(row._id);
     const id = await ctx.db.insert("signIns", {
       owner,
       company: "anthropic",
@@ -57,18 +70,10 @@ export const begin = internalMutation({
       verifier,
       state,
       link,
-      startedAt,
+      startedAt: now,
       ...(repair && { repair }),
     });
-    const started: SignInView = {
-      id,
-      company: "anthropic",
-      method: "subscription",
-      link,
-      startedAt,
-      ...(repair && { repair }),
-    };
-    return started;
+    return signInViewOf((await ctx.db.get(id))!, now);
   },
 });
 
@@ -81,35 +86,77 @@ export const startSignIn = pluginOnly(
       /** A signed-out subscription to repair in place instead of adding a new one. */
       repair: v.optional(v.string()),
     },
-    handler: async (ctx, { repair }) => {
+    handler: async (ctx, { repair }): Promise<SignInView | Failed> => {
+      let target: Id<"subscriptions"> | undefined;
+      if (repair !== undefined) {
+        const ref = idIn("subscriptions", repair);
+        if (!ref) return notFound("subscription");
+        target = ref;
+      }
       const verifier = randomToken();
       const state = randomToken();
       const link = signInLink(await companyAddresses(ctx), verifier, state);
       return ctx.runMutation(internal.signins.begin, {
+        owner: ownerOf(ctx.auth),
         verifier,
         state,
         link,
-        ...(repair !== undefined && { repair: repair as Id<"subscriptions"> }),
+        ...(target && { repair: target }),
       });
     },
   }),
 );
 
-/** The caller's sign-in, with its verifier; internal, for `finishSignIn` only. */
-export const pending = internalQuery({
-  args: { id: signInId },
-  handler: async (ctx, { id }) => {
+/**
+ * Claims a waiting sign-in for one finish and returns it with its verifier;
+ * deletes it when it has expired. Internal, for `finishSignIn` only.
+ */
+export const claimFinish = internalMutation({
+  args: { owner: v.string(), id: v.id("signIns") },
+  handler: async (ctx, { owner, id }) => {
     const row = await ctx.db.get(id);
-    return row && row.owner === ownerOf(ctx.auth) ? row : null;
+    if (!row || row.owner !== owner)
+      return fail("Cancelled", { message: "This sign-in is no longer waiting. Start again." });
+    const now = Date.now();
+    // Not a `fail`: a mutation that fails rolls back, and the delete must stay.
+    if (isExpired(row, now)) {
+      await ctx.db.delete(id);
+      return { expired: true as const };
+    }
+    if ((row.finishingUntil ?? 0) > now)
+      return fail("Busy", { message: "This sign-in is already finishing. Wait a moment." });
+    await ctx.db.patch(id, { finishingUntil: now + FINISH_CLAIM_MS });
+    return { expired: false as const, verifier: row.verifier, state: row.state };
+  },
+});
+
+/** Lets go of the claim after a failed finish; the sign-in keeps waiting. */
+export const release = internalMutation({
+  args: { owner: v.string(), id: v.id("signIns") },
+  handler: async (ctx, { owner, id }) => {
+    const row = await ctx.db.get(id);
+    if (!row || row.owner !== owner) return false;
+    const { finishingUntil: _claim, _id, _creationTime, ...fields } = row;
+    await ctx.db.replace(_id, fields);
+    return true;
+  },
+});
+
+/** The member's waiting sign-in, with its verifier; null when gone or expired. */
+export const pending = internalQuery({
+  args: { owner: v.string(), id: v.id("signIns") },
+  handler: async (ctx, { owner, id }) => {
+    const row = await ctx.db.get(id);
+    return row && row.owner === owner && !isExpired(row, Date.now()) ? row : null;
   },
 });
 
 /** Ends a sign-in without a subscription; false when it had already ended. */
 export const drop = internalMutation({
-  args: { id: signInId },
-  handler: async (ctx, { id }) => {
+  args: { owner: v.string(), id: v.id("signIns") },
+  handler: async (ctx, { owner, id }) => {
     const row = await ctx.db.get(id);
-    if (!row || row.owner !== ownerOf(ctx.auth)) return false;
+    if (!row || row.owner !== owner) return false;
     await ctx.db.delete(id);
     return true;
   },
@@ -120,8 +167,10 @@ export const cancelSignIn = pluginOnly(
   mutation({
     args: { id: v.string() },
     handler: async (ctx, { id }) => {
-      const row = await ctx.db.get(id as Id<"signIns">);
-      if (row && row.owner === ownerOf(ctx.auth)) await ctx.db.delete(row._id);
+      const ref = idIn("signIns", id);
+      const row = ref && (await ctx.db.get(ref));
+      if (!row || row.owner !== ownerOf(ctx.auth)) return notFound("sign-in");
+      await ctx.db.delete(row._id);
       return null;
     },
   }),
@@ -136,7 +185,8 @@ const model = v.object({ id: v.string(), name: v.string() });
  */
 export const connect = internalMutation({
   args: {
-    id: signInId,
+    owner: v.string(),
+    id: v.id("signIns"),
     accountId: v.string(),
     email: v.optional(v.string()),
     organization: v.optional(v.string()),
@@ -146,8 +196,7 @@ export const connect = internalMutation({
     refresh: v.string(),
     expiresAt: v.number(),
   },
-  handler: async (ctx, { id, access, refresh, expiresAt, ...found }) => {
-    const owner = ownerOf(ctx.auth);
+  handler: async (ctx, { owner, id, access, refresh, expiresAt, ...found }) => {
     const signIn = await ctx.db.get(id);
     if (!signIn || signIn.owner !== owner)
       return fail("Cancelled", { message: "The sign-in was cancelled. Nothing was added." });
@@ -214,50 +263,65 @@ export const connect = internalMutation({
   },
 });
 
-type Failed = { failed: true; kind: string; data: { message: string } };
-
 /**
- * Finishes a sign-in with what the person pasted: the link the browser ended
- * on, or Claude's `code#state`. A paste that cannot be read, or that belongs to
- * another sign-in, leaves the sign-in waiting for another try; a code Claude
- * refuses ends it, since a code works once.
+ * Finishes a sign-in with what the person pasted: the address the browser
+ * ended on, a `code#state`, or the code alone. A paste that cannot be read,
+ * belongs to another sign-in, or that Claude refuses leaves the sign-in
+ * waiting with its claim released, so the person can paste again or open the
+ * page again for a new code. Already added, or the repaired subscription
+ * gone, ends it.
  */
 export const finishSignIn = pluginOnly(
   action({
     args: { id: v.string(), pasted: v.string() },
     handler: async (ctx, { id, pasted }): Promise<SubscriptionView | Failed> => {
-      const signInRef = id as Id<"signIns">;
-      const signIn = await ctx.runQuery(internal.signins.pending, { id: signInRef });
-      if (!signIn) return fail("Cancelled", { message: "This sign-in is no longer waiting. Start again." });
+      const ref = idIn("signIns", id);
+      if (!ref) return notFound("sign-in");
+      const owner = ownerOf(ctx.auth);
+      const args = { owner, id: ref };
+      /** Ends this finish: the sign-in keeps waiting (claim released) or is over. */
+      const settle = (end: boolean) =>
+        end ? ctx.runMutation(internal.signins.drop, args) : ctx.runMutation(internal.signins.release, args);
       const read = readPasted(pasted);
-      if ("error" in read) return fail("Unreadable", { message: read.error });
-      if (read.state !== undefined && read.state !== signIn.state)
+      // A paste that cannot be read changes nothing, not even the claim.
+      if ("error" in read) {
+        const waiting = await ctx.runQuery(internal.signins.pending, args);
+        return waiting
+          ? fail("Unreadable", { message: read.error })
+          : fail("Cancelled", { message: "This sign-in is no longer waiting. Start again." });
+      }
+      const claimed = await ctx.runMutation(internal.signins.claimFinish, args);
+      if (isFailure(claimed)) return claimed;
+      if (claimed.expired) return fail("Expired", { message: EXPIRED });
+      if (read.state !== undefined && read.state !== claimed.state) {
+        await settle(false);
         return fail("WrongSignIn", {
-          message: "That code belongs to another sign-in. Paste the one from the page this dialog opened.",
+          message: "That address belongs to another sign-in. Paste the one from the page this dialog opened.",
         });
+      }
       const addresses = await companyAddresses(ctx);
       let signedIn: Awaited<ReturnType<typeof exchange>>;
       try {
-        signedIn = await exchange(addresses, { code: read.code, state: signIn.state }, signIn.verifier);
+        signedIn = await exchange(addresses, { code: read.code, state: claimed.state }, claimed.verifier);
       } catch (error) {
+        await settle(false);
         if (!(error instanceof SignInError)) throw error;
-        if (error.kind === "Refused") await ctx.runMutation(internal.signins.drop, { id: signInRef });
         return fail(error.kind, { message: error.message });
       }
       const { login } = signedIn;
       const [about, found] = await Promise.all([
-        profile(addresses, login.access),
+        accountDetails(addresses, login.access),
         models(addresses, login.access),
       ]);
       const accountId = about.identity.accountId ?? signedIn.identity.accountId;
       if (!accountId) {
-        await ctx.runMutation(internal.signins.drop, { id: signInRef });
-        return fail("Refused", { message: "Claude did not say which account signed in. Start again." });
+        await settle(false);
+        return fail("Refused", { message: "Claude did not say which account signed in. Try again." });
       }
       const email = about.identity.email ?? signedIn.identity.email;
       const organization = about.identity.organization ?? signedIn.identity.organization;
       const added = await ctx.runMutation(internal.signins.connect, {
-        id: signInRef,
+        ...args,
         accountId,
         ...(email !== undefined && { email }),
         ...(organization !== undefined && { organization }),
@@ -267,10 +331,8 @@ export const finishSignIn = pluginOnly(
         refresh: login.refresh,
         expiresAt: login.expiresAt,
       });
-      // Already added, or the subscription went away: this sign-in cannot end well, so it ends.
-      // Signed in as another account while repairing: it keeps waiting for the right one.
-      if (isFailure(added) && (added.kind === "AlreadyAdded" || added.kind === "Gone"))
-        await ctx.runMutation(internal.signins.drop, { id: signInRef });
+      // `connect` rolls back on failure, so the sign-in is still there with its claim.
+      if (isFailure(added)) await settle(added.kind === "AlreadyAdded" || added.kind === "Gone");
       return added;
     },
   }),

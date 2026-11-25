@@ -1,4 +1,11 @@
-import { createFunctions, type AuthContext, type Doc, type ModelFromSchema } from "@tokamak/sdk";
+import {
+  createFunctions,
+  fail,
+  type AuthContext,
+  type Doc,
+  type Id,
+  type ModelFromSchema,
+} from "@tokamak/sdk";
 import schema from "./schema";
 
 export const { query, mutation, action, internalQuery, internalMutation, internalAction } =
@@ -14,6 +21,32 @@ export const ownerOf = (auth: AuthContext) => auth.user.id;
 
 /** Renew a login this long before it runs out, so a turn never starts on a dying one. */
 export const RENEW_BEFORE_MS = 5 * 60_000;
+
+/**
+ * A sign-in nobody finished within this time is over: its link and verifier
+ * are no longer used, and it is deleted by the next call that changes sign-ins.
+ * (Kept as one plain number so the sign-in test can build a copy with a short one.)
+ */
+export const SIGN_IN_TTL_MS = 900000;
+
+export const isExpired = (signIn: { startedAt: number }, now: number) =>
+  now - signIn.startedAt >= SIGN_IN_TTL_MS;
+
+type Table = "subscriptions" | "accounts" | "signIns";
+
+/**
+ * `value` as an id of `table`, or null. The window and other plugins pass ids
+ * as strings, and `db.get` accepts an id of any of this plugin's tables, so
+ * every function that takes an id checks its table before reading it: a
+ * subscription id must never cancel a sign-in, nor a sign-in id get a label.
+ */
+export function idIn<T extends Table>(table: T, value: string): Id<T> | null {
+  return new RegExp(`^(?:agent-proxy/)?${table}:[A-Za-z0-9_-]+$`).test(value) ? (value as Id<T>) : null;
+}
+
+/** The plain answer for an id that is malformed, of another table, gone, or another member's. */
+export const notFound = (what: "subscription" | "sign-in") =>
+  fail("NotFound", { message: `That ${what} is gone.` });
 
 /** What the window and other plugins may learn of a subscription: never the login. */
 export interface SubscriptionView {
@@ -42,6 +75,20 @@ export interface SignInView {
   readonly startedAt: number;
   /** The subscription it repairs in place. */
   readonly repair?: string;
+  /** Older than 15 minutes: it can no longer finish; the person starts again. */
+  readonly expired: boolean;
+}
+
+export function signInViewOf(row: Doc<Model, "signIns">, now: number): SignInView {
+  return {
+    id: row._id,
+    company: row.company,
+    method: row.method,
+    link: row.link,
+    startedAt: row.startedAt,
+    ...(row.repair !== undefined && { repair: row.repair }),
+    expired: isExpired(row, now),
+  };
 }
 
 export function viewOf(

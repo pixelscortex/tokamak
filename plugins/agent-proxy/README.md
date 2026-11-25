@@ -2,30 +2,33 @@
 
 This plugin owns a person's AI subscriptions, the provider accounts in them,
 their logins and the sign-in that makes them. It knows nothing about threads.
-The proxy itself (an inbound HTTP route) comes later (TKM-263); today it holds
-subscriptions for the Profiles screen of `ai-profiles`.
+The proxy itself (an inbound HTTP route) comes later (TKM-263); today other
+plugins read and change subscriptions through its exports.
 
 ## Exports
 
 All in `src/server/api.ts`, all plugin-only (`plugin:agent-proxy/server`): no
 window calls them directly, and none returns a login. Each answers for the
 calling member only, so another member of a shared server never sees or
-changes someone else's subscriptions.
+changes someone else's subscriptions. Every id is checked to be of the right
+table; a malformed id, an id of another table, or another member's gets
+`fail("NotFound")` and changes nothing.
 
-| Function            | Kind     | Arguments                                                    | Result                                                         |
-| ------------------- | -------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
-| `listSubscriptions` | query    | none                                                         | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
-| `startSignIn`       | action   | `{ company: "anthropic", method: "subscription", repair? }`  | `SignInView` (the link to open), or `fail("Gone")`             |
-| `finishSignIn`      | action   | `{ id, pasted }`: the callback link or Claude's `code#state` | `SubscriptionView`, or a failure with `data.message`           |
-| `cancelSignIn`      | mutation | `{ id }`                                                     | `null`                                                         |
-| `setLabel`          | mutation | `{ id, label }`                                              | `null`, or `fail("Gone" \| "TooLong")`                         |
-| `setEnabled`        | mutation | `{ id, enabled }`                                            | `null`, or `fail("Gone")`                                      |
-| `renewLogins`       | action   | none                                                         | `{ renewed, signedOut }`                                       |
+| Function            | Kind     | Arguments                                                   | Result                                                         |
+| ------------------- | -------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| `listSubscriptions` | query    | none                                                        | `{ subscriptions: SubscriptionView[], signIns: SignInView[] }` |
+| `startSignIn`       | action   | `{ company: "anthropic", method: "subscription", repair? }` | `SignInView` (the link to open), or `fail("NotFound")`         |
+| `finishSignIn`      | action   | `{ id, pasted }`: the address the browser ended on, or code | `SubscriptionView`, or a failure with `data.message`           |
+| `cancelSignIn`      | mutation | `{ id }`                                                    | `null`, or `fail("NotFound")`                                  |
+| `setLabel`          | mutation | `{ id, label }`                                             | `null`, or `fail("NotFound" \| "TooLong")`                     |
+| `setEnabled`        | mutation | `{ id, enabled }`                                           | `null`, or `fail("NotFound")`                                  |
+| `renewLogins`       | action   | none                                                        | `{ renewed, signedOut, waiting }`                              |
 
-`finishSignIn` failures: `Unreadable` and `WrongSignIn` (the sign-in keeps
-waiting for another paste), `Refused` (Claude refused the code; the sign-in
-ends), `Unreachable` (try again), `Cancelled`, `AlreadyAdded`, `Gone`, and
-`OtherAccount` when a repair signed in as another account (it keeps waiting).
+`finishSignIn` failures that keep the sign-in waiting: `Unreadable`,
+`WrongSignIn`, `Refused` (Claude did not accept the code; paste again or open
+the page again for a new code), `Unreachable`, `OtherAccount` (a repair signed
+in as another account) and `Busy` (another finish of it is running). Ones that
+end it: `AlreadyAdded`, `Gone`, `Expired`, `Cancelled`, `NotFound`.
 
 ## Sign-in
 
@@ -33,30 +36,50 @@ The server does the whole sign-in over the network, as CLIProxyAPI does
 (`internal/auth/claude/anthropic_auth.go`): `startSignIn` makes a PKCE
 verifier and `state`, keeps both in the `signIns` table and returns only the
 link (Claude Code's client id, scopes and `http://localhost:54545/callback`
-redirect, `code=true`). The person signs in on Claude's page and pastes the
-link the browser ended on or the `code#state` the page shows. `finishSignIn`
-exchanges it (JSON with `state`), reads the plan, email and organisation from
+redirect, `code=true`).
+
+Nothing listens on that redirect: the Claude Code CLI does, on its own
+computer, and the server cannot. So after signing in, the browser ends on a
+`localhost:54545` page that fails to load, and the person copies the whole
+address from the address bar and pastes it. The page that shows `code#state`
+belongs to Claude's hosted manual-code redirect, which this sign-in does not
+use; which redirect to use is open for the owner. `finishSignIn` still reads
+an address (state as a parameter, after the code, or in the fragment), a
+`code#state`, or a bare code.
+
+`finishSignIn` claims the sign-in row first, so a second paste while one is
+being exchanged gets `Busy` and changes nothing. It exchanges the code (JSON
+with `state`), reads the plan, email and organisation from
 `/api/oauth/profile` and the models from `/v1/models`, and stores the login in
 `logins` in the same transaction that ends the sign-in. A cancel that lands
-while Claude answers wins, and nothing is stored. Server actions have no
-`crypto.subtle`, so `pkce.ts` computes the S256 challenge itself.
+while Claude answers wins, and nothing is stored. A sign-in nobody finishes
+within 15 minutes is listed as `expired`, cannot finish, and is deleted by the
+next start, cancel or finish. Server actions have no `crypto.subtle`, so
+`pkce.ts` computes the S256 challenge itself.
 
 ## Renewal
 
 `logins:fresh` (internal) is the one way to a usable login: it renews the
 login when it runs out within five minutes, and the proxy will call it before
-every request. A renewal Claude refuses (HTTP 400 or 401) deletes the login and
-turns the account "Signed out"; `startSignIn` with `repair` then signs the same
-subscription in again in place. Both writes check the refresh token the
-renewal used, so a renewal that loses a race does not sign the account out.
-A plugin's server code has no timer that may use the network (`maintenance`
-is a mutation), so `renewLogins` runs while the Profiles screen is open.
+every request. Renewal is claimed on the login row, so one call at a time
+sends a refresh token to Claude; a caller that loses the claim uses the stored
+login while it still works, or waits a few seconds for the new one. A
+renewal Claude refuses (HTTP 400 or 401 from the token endpoint) deletes the
+login and turns the account "Signed out"; `startSignIn` with `repair` then
+signs the same subscription in again in place. A 429 waits for its
+`Retry-After`; 403, 5xx, network errors and unreadable answers wait one
+minute, doubling up to 30 minutes, and the account stays signed in. A plugin's
+server code has no timer that may use the network (`maintenance` is a
+mutation), so `renewLogins` runs only while a screen that shows subscriptions
+is open. The internal functions the proxy will call take the member as
+`owner`, since a proxy request has a turn key and no member behind it.
 
 ## Tables
 
 `subscriptions`, `accounts` (one login at the company, by its account id),
-`logins` (access and refresh token, expiry) and `signIns` (verifier, `state`,
-link, an optional subscription to repair). Every row has the `owner` member
+`logins` (access and refresh token, expiry, renewal claim and next try) and
+`signIns` (verifier, `state`, link, an optional subscription to repair, a
+finish claim). Every row has the `owner` member
 id. Logins sit in ordinary tables: there is no secret store yet (TKM-292), so
 whoever can read the server's database can read them. No function logs them.
 
@@ -127,13 +150,17 @@ try {
   `/plugins/agent-proxy/<set>` prefix.
 - `addAccount(company, id, { signIn, strict })` registers synthetic credentials.
   Choose the next authorize account with `fake.nextSignIn(id)`. Set the
-  account's `signIn` to `success`, `reject-code`, `expired`, or
-  `refuse-renewal`. Successful JSON renewal rotates both tokens.
+  account's `signIn` to `success`, `reject-code`, `expired`, `refuse-renewal`,
+  `unavailable` (HTTP 503 from the token endpoint) or `limited` (HTTP 429,
+  `Retry-After: 120`). `tokenDelayMs` slows its token answers. Successful JSON
+  renewal rotates both tokens; a strict account that sends a used refresh
+  token again has its whole login revoked, as companies that rotate do.
 - Strict mode is the default. Authorization checks the client ID, redirect,
   and S256 challenge; exchange checks the matching verifier, redirect, client
   ID, and Anthropic's body `state`. Codex validates `state` in the callback
   before sending its form exchange, so its token body does not contain it.
-  Claude accepts pasted `code#state` and sends separate JSON fields. A Claude
+  The fake redirects to the callback with `code` and `state` in the query; a
+  Claude exchange sends them as separate JSON fields. A Claude
   Bearer turn requires `anthropic-beta: oauth-2025-04-20`; a Codex turn requires
   the matching `chatgpt-account-id`. Use `{ strict: false }` for a synthetic
   API-key client that does not use subscription headers.
@@ -189,9 +216,10 @@ proto run bun -- plugins/agent-proxy/tests/fake-companies/record.ts anthropic /p
 proto run bun -- plugins/agent-proxy/tests/fake-companies/record.ts openai /private/codex-fixture.json
 ```
 
-Open the printed sign-in link and consent in your browser. Paste Claude's
-`code#state` or, for Codex, the full callback URL from the browser address
-bar. The redirect need not load a local page. The script exchanges the
+Open the printed sign-in link and consent in your browser. Paste the full
+address the browser ends on (for Claude, `localhost:54545/callback?…`; for
+Codex, `localhost:1455/auth/callback?…`) from the address bar. The redirect
+need not load a local page. The script exchanges the
 callback, makes one short streamed turn, and writes only the cleaned fixture
 to a new file. The login stays in memory and is never printed or written.
 Use an account authorized for the requested model; set `TOKAMAK_RECORD_MODEL`

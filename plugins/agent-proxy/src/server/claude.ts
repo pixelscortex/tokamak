@@ -7,10 +7,15 @@ import { challenge } from "./pkce";
  * CLIProxyAPI does it (internal/auth/claude/anthropic_auth.go, public source):
  * the same client id, scopes, authorize parameters and redirect as the
  * Claude Code CLI, a JSON token exchange that carries `state`, and a JSON
- * refresh with the narrower scope. The redirect is a localhost address no one
- * listens on: with `code=true` Claude's page shows `code#state` for the
- * person to paste, and a browser that does follow it ends on a link that
- * holds both.
+ * refresh with the narrower scope.
+ *
+ * The redirect is the CLI's own `http://localhost:54545/callback`. The CLI
+ * listens there; the server does not, and cannot on the person's computer. So
+ * after signing in, the browser ends on that address and shows a page that
+ * fails to load, and the person copies the whole address from the address bar
+ * and pastes it. (Claude's page that shows `code#state` belongs to its hosted
+ * manual-code redirect, which this sign-in does not use; which redirect to use
+ * is open for the owner. A pasted `code#state` or bare code is still read.)
  *
  * Nothing here logs or throws a login. Errors name the step and the HTTP
  * status only, never a response body.
@@ -29,9 +34,10 @@ const TIMEOUT_MS = 20_000;
 /** The headers the native client's HTTP library sends to the OAuth endpoints. */
 const OAUTH_HEADERS = {
   accept: "application/json, text/plain, */*",
-  "content-type": "application/json",
   "user-agent": "axios/1.15.2",
 };
+/** A login whose answer has no `expires_in` is taken to last this long, never "already expired". */
+const ASSUMED_LIFETIME_S = 3600;
 
 export function signInLink(addresses: Addresses, verifier: string, state: string): string {
   const link = new URL(addresses.anthropic.authorize);
@@ -51,8 +57,9 @@ export function signInLink(addresses: Addresses, verifier: string, state: string
 export type Pasted = { code: string; state: string | undefined } | { error: string };
 
 /**
- * What the person pasted: the whole link the browser ended on, or the
- * `code#state` Claude's page shows, or the code alone.
+ * What the person pasted: the whole address the browser ended on, or a
+ * `code#state`, or the code alone. In an address the state may be a query
+ * parameter, follow the code after a "#", or sit in the fragment.
  */
 export function readPasted(text: string): Pasted {
   const value = text.trim();
@@ -70,7 +77,9 @@ export function readPasted(text: string): Pasted {
     if (!code) return { error: "That link has no code in it. Paste the whole link." };
     // A pasted Claude code can carry its state after a "#" inside the parameter too.
     const [bare, inner] = code.split("#", 2) as [string, string | undefined];
-    return { code: bare, state: url.searchParams.get("state") ?? inner };
+    const fragment = url.hash.replace(/^#/, "");
+    const hashed = fragment.includes("=") ? new URLSearchParams(fragment).get("state") : fragment;
+    return { code: bare, state: url.searchParams.get("state") ?? inner ?? (hashed || undefined) };
   }
   const [code, state] = value.split("#", 2) as [string, string | undefined];
   if (!code || /\s/.test(code))
@@ -103,7 +112,7 @@ async function post(url: string, body: Record<string, string>, step: string): Pr
   try {
     return await fetch(url, {
       method: "POST",
-      headers: OAUTH_HEADERS,
+      headers: { ...OAUTH_HEADERS, "content-type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -126,7 +135,7 @@ function login(answer: TokenAnswer, previousRefresh?: string): Login {
   const access = text(answer.access_token);
   // A renewal that sends no new refresh token keeps the old one (CLIProxyAPI does the same).
   const refresh = text(answer.refresh_token) ?? previousRefresh;
-  const seconds = typeof answer.expires_in === "number" ? answer.expires_in : 0;
+  const seconds = typeof answer.expires_in === "number" ? answer.expires_in : ASSUMED_LIFETIME_S;
   if (!access || !refresh) throw new SignInError("Refused", "Claude answered without a login. Start again.");
   return { access, refresh, expiresAt: Date.now() + seconds * 1000 };
 }
@@ -151,14 +160,20 @@ export async function exchange(
   );
   if (!response.ok) {
     await response.body?.cancel();
+    const busy = response.status >= 500 || response.status === 429;
     throw new SignInError(
-      response.status >= 500 ? "Unreachable" : "Refused",
-      response.status >= 500
+      busy ? "Unreachable" : "Refused",
+      busy
         ? `Claude could not finish the sign-in (HTTP ${response.status}). Try again.`
-        : "Claude did not accept that code. It may have been used or expired. Start again.",
+        : "Claude did not accept that code. Paste the whole address again, or open the sign-in page again for a new code.",
     );
   }
-  const answer = (await response.json()) as TokenAnswer;
+  let answer: TokenAnswer;
+  try {
+    answer = (await response.json()) as TokenAnswer;
+  } catch {
+    throw new SignInError("Unreachable", "Claude's answer could not be read. Try again.");
+  }
   return {
     login: login(answer),
     identity: {
@@ -169,8 +184,25 @@ export async function exchange(
   };
 }
 
-/** A renewed login, `"refused"` when Claude will not renew it, or null when it could not be asked. */
-export async function renew(addresses: Addresses, refresh: string): Promise<Login | "refused" | null> {
+export type Renewal =
+  | { readonly kind: "renewed"; readonly login: Login }
+  /** HTTP 400 or 401 from the token endpoint: the refresh token is dead. */
+  | { readonly kind: "refused" }
+  /** Not now: 429 (with the wait it asked for), 403, 5xx, a network error or an unreadable answer. */
+  | { readonly kind: "later"; readonly afterMs?: number };
+
+/** Seconds or an HTTP date in `Retry-After`, as milliseconds from now. */
+function retryAfter(response: Response): number | undefined {
+  const value = response.headers.get("retry-after")?.trim();
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
+}
+
+/** Asks Claude for a new login with `refresh`; only 400 and 401 count as a refusal. */
+export async function renew(addresses: Addresses, refresh: string): Promise<Renewal> {
   let response: Response;
   try {
     response = await post(
@@ -179,17 +211,18 @@ export async function renew(addresses: Addresses, refresh: string): Promise<Logi
       "renewal",
     );
   } catch {
-    return null;
+    return { kind: "later" };
   }
   if (!response.ok) {
     await response.body?.cancel();
-    // 400 and 401 are a dead refresh token (invalid_grant); 429 and 5xx are worth another try later.
-    return response.status === 400 || response.status === 401 ? "refused" : null;
+    if (response.status === 400 || response.status === 401) return { kind: "refused" };
+    const afterMs = response.status === 429 ? retryAfter(response) : undefined;
+    return afterMs === undefined ? { kind: "later" } : { kind: "later", afterMs };
   }
   try {
-    return login((await response.json()) as TokenAnswer, refresh);
+    return { kind: "renewed", login: login((await response.json()) as TokenAnswer, refresh) };
   } catch {
-    return null;
+    return { kind: "later" };
   }
 }
 
@@ -202,7 +235,7 @@ async function get(url: string, access: string, headers: Record<string, string> 
     if (response.ok) return (await response.json()) as Record<string, unknown>;
     await response.body?.cancel();
   } catch {
-    // The profile and the model list are advisory: the sign-in does not fail on them.
+    // The account details and the model list are advisory: the sign-in does not fail on them.
   }
   return undefined;
 }
@@ -214,8 +247,8 @@ const PLANS: Record<string, string> = {
   claude_enterprise: "Enterprise",
 };
 
-/** The plan, email and organisation the profile endpoint reports. */
-export async function profile(
+/** The plan, email and organisation Claude reports for the login (`/api/oauth/profile`). */
+export async function accountDetails(
   addresses: Addresses,
   access: string,
 ): Promise<{ plan: string; identity: Partial<Identity> }> {

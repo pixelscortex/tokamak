@@ -2,27 +2,37 @@
 import { createApi, type ReferenceFromDefinition } from "@tokamak/sdk";
 type References = {
   readonly "logins": {
+    readonly "accountsOf": ReferenceFromDefinition<typeof import("../logins")["accountsOf"]>;
+    readonly "claim": ReferenceFromDefinition<typeof import("../logins")["claim"]>;
     readonly "due": ReferenceFromDefinition<typeof import("../logins")["due"]>;
     readonly "fresh": ReferenceFromDefinition<typeof import("../logins")["fresh"]>;
+    readonly "later": ReferenceFromDefinition<typeof import("../logins")["later"]>;
     readonly "read": ReferenceFromDefinition<typeof import("../logins")["read"]>;
     readonly "refused": ReferenceFromDefinition<typeof import("../logins")["refused"]>;
     readonly "renewed": ReferenceFromDefinition<typeof import("../logins")["renewed"]>;
   };
   readonly "signins": {
     readonly "begin": ReferenceFromDefinition<typeof import("../signins")["begin"]>;
+    readonly "claimFinish": ReferenceFromDefinition<typeof import("../signins")["claimFinish"]>;
     readonly "connect": ReferenceFromDefinition<typeof import("../signins")["connect"]>;
     readonly "drop": ReferenceFromDefinition<typeof import("../signins")["drop"]>;
     readonly "pending": ReferenceFromDefinition<typeof import("../signins")["pending"]>;
+    readonly "release": ReferenceFromDefinition<typeof import("../signins")["release"]>;
   };
 };
 export const internal: References = createApi("agent-proxy", [
+  "logins:accountsOf",
+  "logins:claim",
   "logins:due",
   "logins:fresh",
+  "logins:later",
   "logins:read",
   "logins:refused",
   "logins:renewed",
   "signins:begin",
+  "signins:claimFinish",
   "signins:connect",
   "signins:drop",
   "signins:pending",
+  "signins:release",
 ]);

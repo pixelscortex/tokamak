@@ -12,5 +12,5 @@ export default definePlugin({
     "net:auth.openai.com",
     "net:chatgpt.com",
   ],
-  description: "Provider accounts and model access for agent profiles.",
+  description: "AI subscriptions, their provider accounts and logins, and sign-in.",
 });

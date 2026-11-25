@@ -12,7 +12,11 @@ import { stream, turn } from "./stream";
 export type Answer =
   | { kind: "normal" | "signed-out" | "overloaded" }
   | { kind: "limit" | "partial-limit"; resetAt: number; scope?: "account" | "model" };
-export type SignIn = "success" | "reject-code" | "expired" | "refuse-renewal";
+/**
+ * How the account's token endpoint answers: `unavailable` gives HTTP 503 and
+ * `limited` HTTP 429 with `Retry-After: 120`, to the code exchange and to renewals alike.
+ */
+export type SignIn = "success" | "reject-code" | "expired" | "refuse-renewal" | "unavailable" | "limited";
 
 function providerPath(path: string) {
   return path.replace(/^\/backend-api(?=\/)/, "");
@@ -45,6 +49,8 @@ export async function startFakeCompanies({
       expiresAt: number;
       generation: number;
       strict: boolean;
+      /** Milliseconds the token endpoint waits before it answers for this account. */
+      tokenDelayMs: number;
       authorization?: { challenge: string; state: string; redirect: string };
     }
   >();
@@ -56,6 +62,8 @@ export async function startFakeCompanies({
     account?: string;
   }[] = [];
   let replay: Fixture["exchanges"] = [];
+  /** Refresh tokens already used, by the account they belonged to (strict accounts revoke on reuse). */
+  const usedRefresh = new Map<string, string>();
 
   function find(company: Company, value: string | undefined, key: "accessToken" | "refreshToken" | "code") {
     return [...accounts.values()].find((account) => account.company === company && account[key] === value);
@@ -139,6 +147,18 @@ export async function startFakeCompanies({
     }
     if (token && request.method === "POST") {
       const invalidGrant = () => Response.json({ error: "invalid_grant" }, { status: 400 });
+      // A refresh token sent twice: as companies that rotate tokens do, the whole login is revoked.
+      const reused = renewal ? accounts.get(usedRefresh.get(String(fields?.refresh_token)) ?? "") : undefined;
+      if (reused?.strict) {
+        reused.generation++;
+        reused.accessToken = `fake-${reused.id}-revoked-${reused.generation}`;
+        reused.refreshToken = `fake-${reused.id}-revoked-refresh-${reused.generation}`;
+        return invalidGrant();
+      }
+      if (account?.tokenDelayMs) await new Promise((done) => setTimeout(done, account.tokenDelayMs));
+      if (account?.signIn === "unavailable") return Response.json({ error: "unavailable" }, { status: 503 });
+      if (account?.signIn === "limited")
+        return Response.json({ error: "rate_limited" }, { status: 429, headers: { "retry-after": "120" } });
       if (
         !account ||
         !fields ||
@@ -167,6 +187,7 @@ export async function startFakeCompanies({
         }
       }
       if (renewal) {
+        usedRefresh.set(account.refreshToken, account.id);
         account.generation++;
         account.accessToken = `fake-${account.id}-access-${account.generation}`;
         account.refreshToken = `fake-${account.id}-refresh-${account.generation}`;
@@ -402,6 +423,7 @@ export async function startFakeCompanies({
         accessToken: `fake-${id}-access`,
         refreshToken: `fake-${id}-refresh`,
         generation: 0,
+        tokenDelayMs: 0,
         expiresAt: Infinity,
         answers: [] as Answer[],
       };

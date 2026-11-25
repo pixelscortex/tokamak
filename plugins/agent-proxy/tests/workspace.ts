@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -78,7 +79,16 @@ export interface Workspace {
   stop(): Promise<void>;
 }
 
-export async function startWorkspace(build: Build, addresses: Addresses): Promise<Workspace> {
+/**
+ * `signInTtlMs` builds the installed copy with a shorter sign-in lifetime, so a
+ * test can watch a sign-in expire without waiting 15 minutes: the server's own
+ * clock is the one sign-ins are measured by, and a test cannot move it.
+ */
+export async function startWorkspace(
+  build: Build,
+  addresses: Addresses,
+  { signInTtlMs }: { signInTtlMs?: number } = {},
+): Promise<Workspace> {
   await buildPlugins();
   const target = join(root, "target");
   await mkdir(target, { recursive: true });
@@ -90,6 +100,15 @@ export async function startWorkspace(build: Build, addresses: Addresses): Promis
   const manifestPath = join(installation, "plugins/agent-proxy/dist/manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.plugin.permissions.push("net:127.0.0.1");
+  if (signInTtlMs !== undefined)
+    for (const file of ["bundle.js", "transactions.js"]) {
+      const path = join(installation, "plugins/agent-proxy/dist", file);
+      const code = await readFile(path, "utf8");
+      const patched = code.replace("SIGN_IN_TTL_MS = 900000", `SIGN_IN_TTL_MS = ${signInTtlMs}`);
+      if (patched === code) throw new Error(`No sign-in lifetime to shorten in ${file}`);
+      await writeFile(path, patched);
+      manifest.hashes[file] = createHash("sha256").update(patched).digest("hex");
+    }
   await writeFile(manifestPath, JSON.stringify(manifest));
   await writeFile(join(installation, ".env.local"), `${addressesVariable}='${JSON.stringify(addresses)}'\n`);
   await mkdir(join(installation, "web"));

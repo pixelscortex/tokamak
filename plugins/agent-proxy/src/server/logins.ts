@@ -1,123 +1,210 @@
 import { v, type Id } from "@tokamak/sdk";
 import type {} from "@tokamak/sdk/web";
 import { internal } from "./_generated/internal";
-import { RENEW_BEFORE_MS, internalAction, internalMutation, internalQuery, ownerOf } from "./_functions";
+import { RENEW_BEFORE_MS, internalAction, internalMutation, internalQuery } from "./_functions";
 import { companyAddresses } from "./addresses";
 import { renew } from "./claude";
 
 /**
  * The stored logins. Everything here is internal: no window and no other
- * plugin can call it, and nothing it returns leaves this plugin. The one
- * way to a usable login is `fresh`, which renews it first when it is about
- * to run out; the proxy (TKM-263) will call it before every request.
+ * plugin can call it, and nothing it returns leaves this plugin. The one way
+ * to a usable login is `fresh`, which renews it first when it is about to run
+ * out; the proxy (TKM-263) will call it before every request.
+ *
+ * These take the member as `owner` instead of reading the caller: a proxy
+ * request carries a turn key, with no member behind it. Every public or
+ * plugin-only function passes its caller here.
+ *
+ * Renewal is claimed: one call at a time sends a refresh token to Claude,
+ * because a company that revokes a login when a refresh token is used twice
+ * would sign the account out. Failures that are not a refusal wait before the
+ * next try, so an open screen does not ask every minute forever.
  */
 
-const accountId = v.id("accounts");
+const account = v.id("accounts");
+const owner = v.string();
 const REFUSED = "Claude would not renew the login. Sign in again.";
+/** How long a claim holds: longer than one renewal request (20 s timeout) takes. */
+const CLAIM_MS = 30_000;
+/** First wait after a failed renewal; it doubles with each failure in a row, up to the cap. */
+const BACKOFF_MS = 60_000;
+const BACKOFF_CAP_MS = 30 * 60_000;
+/** A caller that lost the claim and has no usable login waits this long, this many times. */
+const WAIT_MS = 1_000;
+const WAITS = 5;
 
-/** The caller's login for `account`, or null when it has none or it is someone else's. */
+/** The login for `account`, or null when there is none or it is another member's. */
 export const read = internalQuery({
-  args: { account: accountId },
-  handler: async (ctx, { account }) => {
+  args: { owner, account },
+  handler: async (ctx, args) => {
     const row = await ctx.db
       .query("logins")
-      .withIndex("by_account", (q) => q.eq("account", account))
+      .withIndex("by_account", (q) => q.eq("account", args.account))
       .first();
-    return row && row.owner === ownerOf(ctx.auth) ? row : null;
+    return row && row.owner === args.owner ? row : null;
   },
 });
 
-/** The caller's accounts whose login runs out within the renewal margin, soonest first. */
+/** A member's signed-in accounts, for the proxy to choose from (TKM-263). */
+export const accountsOf = internalQuery({
+  args: { owner },
+  handler: async (ctx, args) =>
+    (
+      await ctx.db
+        .query("accounts")
+        .withIndex("by_owner", (q) => q.eq("owner", args.owner))
+        .collect()
+    )
+      .filter((row) => row.status === "ok")
+      .map((row) => ({ account: row._id, subscription: row.subscription })),
+});
+
+/** A member's accounts whose login runs out within the renewal margin, soonest first. */
 export const due = internalQuery({
-  handler: async (ctx) => {
-    const owner = ownerOf(ctx.auth);
+  args: { owner },
+  handler: async (ctx, args) => {
     const soon = Date.now() + RENEW_BEFORE_MS;
     const accounts = await ctx.db
       .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("owner", owner))
+      .withIndex("by_owner", (q) => q.eq("owner", args.owner))
       .collect();
     const due: { account: Id<"accounts">; expiresAt: number }[] = [];
-    for (const account of accounts) {
-      if (account.status !== "ok") continue;
+    for (const row of accounts) {
+      if (row.status !== "ok") continue;
       const login = await ctx.db
         .query("logins")
-        .withIndex("by_account", (q) => q.eq("account", account._id))
+        .withIndex("by_account", (q) => q.eq("account", row._id))
         .first();
-      if (login && login.expiresAt <= soon) due.push({ account: account._id, expiresAt: login.expiresAt });
+      if (login && login.expiresAt <= soon) due.push({ account: row._id, expiresAt: login.expiresAt });
     }
     return due.sort((a, b) => a.expiresAt - b.expiresAt);
   },
 });
 
 /**
- * Keeps a renewed login, unless the account changed meanwhile (signed out or
- * signed in again): `refresh` is the token the renewal was made with.
+ * Takes the right to renew: the refresh token to send, or why not now
+ * (another call holds the claim, or the last failure asked to wait).
  */
+export const claim = internalMutation({
+  args: { owner, account },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("logins")
+      .withIndex("by_account", (q) => q.eq("account", args.account))
+      .first();
+    if (!row || row.owner !== args.owner) return { kind: "gone" as const };
+    const now = Date.now();
+    if ((row.renewingUntil ?? 0) > now) return { kind: "busy" as const };
+    if ((row.retryAt ?? 0) > now) return { kind: "later" as const };
+    await ctx.db.patch(row._id, { renewingUntil: now + CLAIM_MS });
+    return { kind: "claimed" as const, refresh: row.refresh };
+  },
+});
+
+/** Keeps a renewed login and lets go of the claim; false when the login changed meanwhile. */
 export const renewed = internalMutation({
   args: {
-    account: accountId,
+    owner,
+    account,
     refresh: v.string(),
     access: v.string(),
     next: v.string(),
     expiresAt: v.number(),
   },
-  handler: async (ctx, { account, refresh, access, next, expiresAt }) => {
+  handler: async (ctx, { owner, account, refresh, access, next, expiresAt }) => {
     const row = await ctx.db
       .query("logins")
       .withIndex("by_account", (q) => q.eq("account", account))
       .first();
-    if (!row || row.owner !== ownerOf(ctx.auth) || row.refresh !== refresh) return false;
-    await ctx.db.patch(row._id, { access, refresh: next, expiresAt });
+    if (!row || row.owner !== owner || row.refresh !== refresh) return false;
+    await ctx.db.replace(row._id, { owner, account, access, refresh: next, expiresAt });
     return true;
   },
 });
 
 /** Claude will not renew it: the login is deleted and the account shows "Signed out". */
 export const refused = internalMutation({
-  args: { account: accountId, refresh: v.string() },
-  handler: async (ctx, { account, refresh }) => {
+  args: { owner, account, refresh: v.string() },
+  handler: async (ctx, args) => {
     const row = await ctx.db
       .query("logins")
-      .withIndex("by_account", (q) => q.eq("account", account))
+      .withIndex("by_account", (q) => q.eq("account", args.account))
       .first();
-    if (!row || row.owner !== ownerOf(ctx.auth) || row.refresh !== refresh) return false;
+    if (!row || row.owner !== args.owner || row.refresh !== args.refresh) return false;
     await ctx.db.delete(row._id);
-    await ctx.db.patch(account, { status: "signed-out", reason: REFUSED });
+    await ctx.db.patch(args.account, { status: "signed-out", reason: REFUSED });
     return true;
   },
 });
 
+/** Not now: lets go of the claim and sets when to try again. */
+export const later = internalMutation({
+  args: { owner, account, refresh: v.string(), afterMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("logins")
+      .withIndex("by_account", (q) => q.eq("account", args.account))
+      .first();
+    if (!row || row.owner !== args.owner || row.refresh !== args.refresh) return false;
+    const failures = (row.failures ?? 0) + 1;
+    const wait = args.afterMs ?? Math.min(BACKOFF_MS * 2 ** (failures - 1), BACKOFF_CAP_MS);
+    const { renewingUntil: _claim, ...rest } = row;
+    const { _id, _creationTime, ...fields } = rest;
+    await ctx.db.replace(_id, { ...fields, retryAt: Date.now() + wait, failures });
+    return true;
+  },
+});
+
+/** `renewed` says whether this call got a new login from Claude. */
+type Fresh = { access: string; expiresAt: number; renewed: boolean } | null;
+const usable = (login: { access: string; expiresAt: number } | null, margin = 0): Fresh =>
+  login && login.expiresAt > Date.now() + margin
+    ? { access: login.access, expiresAt: login.expiresAt, renewed: false }
+    : null;
+
 /**
  * A login that is good for at least the renewal margin, renewed first when
- * needed; null when the account is signed out or Claude could not be asked.
- * Returns the access token: only this plugin's own server code may call it.
+ * needed; when it cannot be renewed now, the stored one while it still works;
+ * null when the account is signed out or has nothing usable. Returns the
+ * access token: only this plugin's own server code may call it.
  */
 export const fresh = internalAction({
-  args: { account: accountId },
-  handler: async (ctx, { account }): Promise<{ access: string; expiresAt: number } | null> => {
-    const login = await ctx.runQuery(internal.logins.read, { account });
+  args: { owner, account },
+  handler: async (ctx, args): Promise<Fresh> => {
+    const login = await ctx.runQuery(internal.logins.read, args);
     if (!login) return null;
-    if (login.expiresAt > Date.now() + RENEW_BEFORE_MS)
-      return { access: login.access, expiresAt: login.expiresAt };
-    const next = await renew(await companyAddresses(ctx), login.refresh);
-    // Not reachable now: an unexpired login is still usable, an expired one is not.
-    if (!next)
-      return login.expiresAt > Date.now() ? { access: login.access, expiresAt: login.expiresAt } : null;
-    // Both writes check the refresh token the renewal used. Claude rotates it, so a
-    // second renewal racing the first is refused; that must not sign the account out.
-    const kept =
-      next === "refused"
-        ? await ctx.runMutation(internal.logins.refused, { account, refresh: login.refresh })
-        : await ctx.runMutation(internal.logins.renewed, {
-            account,
-            refresh: login.refresh,
-            access: next.access,
-            next: next.refresh,
-            expiresAt: next.expiresAt,
-          });
-    if (kept) return next === "refused" ? null : { access: next.access, expiresAt: next.expiresAt };
-    // Another call renewed it first, or it was signed in again: use what is stored now.
-    const now = await ctx.runQuery(internal.logins.read, { account });
-    return now && now.expiresAt > Date.now() ? { access: now.access, expiresAt: now.expiresAt } : null;
+    const good = usable(login, RENEW_BEFORE_MS);
+    if (good) return good;
+    const claimed = await ctx.runMutation(internal.logins.claim, args);
+    if (claimed.kind === "gone") return null;
+    if (claimed.kind === "later") return usable(login);
+    if (claimed.kind === "busy") {
+      // Renewal starts five minutes early, so the stored login usually still works.
+      if (usable(login)) return usable(login);
+      for (let i = 0; i < WAITS; i++) {
+        await new Promise((done) => setTimeout(done, WAIT_MS));
+        const now = await ctx.runQuery(internal.logins.read, args);
+        if (!now) return null;
+        if (now.refresh !== login.refresh) return usable(now);
+      }
+      return null;
+    }
+    const answer = await renew(await companyAddresses(ctx), claimed.refresh);
+    const refresh = claimed.refresh;
+    if (answer.kind === "renewed") {
+      const { access, refresh: next, expiresAt } = answer.login;
+      await ctx.runMutation(internal.logins.renewed, { ...args, refresh, access, next, expiresAt });
+      return { access, expiresAt, renewed: true };
+    }
+    if (answer.kind === "refused") {
+      await ctx.runMutation(internal.logins.refused, { ...args, refresh });
+      return null;
+    }
+    await ctx.runMutation(internal.logins.later, {
+      ...args,
+      refresh,
+      ...(answer.afterMs !== undefined && { afterMs: answer.afterMs }),
+    });
+    return usable(login);
   },
 });
