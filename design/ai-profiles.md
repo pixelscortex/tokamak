@@ -81,11 +81,25 @@ subscription", "Copy link", "Back"; brand "Open sign-in page" as a link,
 `Dialog`, `Icon`, `icons`, `Input` (`md` `mono`, `lg`), `Row` (single and
 double), `Switch` (solid-js's `Switch` is imported as `Choose`); its own `CompanyMark`.
 
+How the Paper copies were made: `e2e/browser/screens.spec.ts` ("profiles
+screens") takes each screen; `e2e/paper-html.ts` turns the page with
+`PAPER_DROP="dialog-"` and the dialog and its backdrop with `--page`, since
+the converter clips the dialog to the stage while the browser draws it in the
+top layer. The dialog screens share the shell of `Profiles · subscriptions`
+and swap only the Subscriptions section. The Switch's transparent 2 px border
+is left out (Paper measures from inside it). Matched to this branch,
+`feature/tkm-261`.
+
 ## Open questions
 
 - "Open sign-in page" is a link that opens a new window. In a browser it opens
   a tab; the desktop app has no opener for outside links (no Tauri opener
   plugin), so it may do nothing there, and "Copy link" is the way. The owner's
   real check covers it.
+- In the browser test run the dialog sits at the window's top-left corner, as
+  the shell's sign-in dialog does (`design/shell.md`); the Paper copies draw
+  it there. Check where the desktop app puts it.
+- Rows show their text in ink-2 at rest (the `Row` look); the owner's drawing
+  has the company and method names in ink.
 - The rail now has a Profiles mark whenever ai-profiles is installed (it is in
   the starter set); the `App 1:1 · Shell` copy still shows the rail without it.
