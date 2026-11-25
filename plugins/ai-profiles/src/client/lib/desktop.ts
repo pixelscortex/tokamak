@@ -20,6 +20,7 @@ type ReturnResult =
 export async function listenForSignInReturn(args: {
   port: number;
   path: string;
+  expectedState: string;
   requestId: string;
   timeoutMs: number;
 }): Promise<ReturnResult> {

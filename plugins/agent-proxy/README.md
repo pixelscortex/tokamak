@@ -38,8 +38,8 @@ verifier and `state`, keeps both in the `signIns` table and returns only the
 link (Claude Code's client id, scopes and `http://localhost:54545/callback`
 redirect, `code=true`).
 
-The desktop app listens for that redirect while the Profiles sign-in step
-is open. It passes the address to `finishSignIn`, just as the paste field
+The desktop app listens for that redirect while Profiles is open and a
+sign-in is waiting. It passes the address to `finishSignIn`, just as the paste field
 does. In a plain browser, on another device, or if the listener is unavailable,
 the person copies the whole address from the address bar and pastes it.
 `finishSignIn` reads an address (state as a parameter, after the code, or in

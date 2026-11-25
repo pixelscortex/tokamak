@@ -1,4 +1,4 @@
-import { createEffect } from "solid-js";
+import { createEffect, createSignal, untrack } from "solid-js";
 import type { SignIn } from "./api";
 import { cancelSignInReturn, hasDesktopSignIn, listenForSignInReturn } from "./desktop";
 
@@ -8,33 +8,65 @@ const returns = {
 };
 const lifetime = 15 * 60_000;
 
-/** One listener per active dialog. A refused return can be retried within the original lifetime. */
-export function watchSignInReturn(
-  active: () => SignIn | undefined,
-  finish: (address: string) => Promise<boolean>,
-): void {
-  createEffect(active, (signIn) => {
-    if (!signIn || signIn.expired || !hasDesktopSignIn()) return;
-    const target = returns[signIn.company];
-    const deadline = signIn.startedAt + lifetime;
-    let stopped = false;
-    let pending: string | undefined;
-    async function listen() {
-      while (!stopped) {
-        const timeoutMs = deadline - Date.now();
-        if (timeoutMs <= 0) return;
-        const requestId = crypto.getRandomValues(new Uint32Array(4)).join("-");
-        pending = requestId;
-        const result = await listenForSignInReturn({ ...target, requestId, timeoutMs });
-        pending = undefined;
-        if (stopped || result.status !== "returned" || (await finish(result.address))) return;
-      }
-    }
-    // This enhancement can fail without taking away the paste path.
-    void listen().catch(() => {});
-    return () => {
-      stopped = true;
-      if (pending !== undefined) void cancelSignInReturn(target.port, pending).catch(() => {});
-    };
+/** Finish returns true when the sign-in can still accept a retry. */
+export function watchSignInReturns(
+  waiting: () => readonly SignIn[],
+  finish: (signIn: SignIn, address: string) => Promise<boolean>,
+): (id: string) => boolean {
+  const watching = (Object.keys(returns) as (keyof typeof returns)[]).map((company) => {
+    const [listening, setListening] = createSignal<string>();
+    // Each company has one port. If several sign-ins are waiting, listen for the newest.
+    const newest = () =>
+      waiting().reduce<SignIn | undefined>((latest, signIn) => {
+        if (signIn.company !== company || signIn.expired) return latest;
+        return !latest || signIn.startedAt >= latest.startedAt ? signIn : latest;
+      }, undefined);
+    createEffect(
+      () => newest()?.id,
+      (id) => {
+        setListening(undefined);
+        const signIn = untrack(newest);
+        if (!id || !signIn || !hasDesktopSignIn()) return;
+        const expectedState = URL.canParse(signIn.link)
+          ? new URL(signIn.link).searchParams.get("state")
+          : null;
+        if (!expectedState) return;
+        const { port, path } = returns[company];
+        const deadline = signIn.startedAt + lifetime;
+        let pending: string | undefined;
+        let stopped = false;
+        async function listen(signIn: SignIn, state: string) {
+          while (!stopped) {
+            const timeoutMs = deadline - Date.now();
+            if (timeoutMs <= 0) return;
+            const requestId = crypto.getRandomValues(new Uint32Array(4)).join("-");
+            pending = requestId;
+            setListening(id);
+            const result = await listenForSignInReturn({
+              port,
+              path,
+              expectedState: state,
+              requestId,
+              timeoutMs,
+            });
+            pending = undefined;
+            if (stopped) return;
+            setListening(undefined);
+            if (result.status !== "returned" || !(await finish(signIn, result.address))) return;
+          }
+        }
+        // IPC failure leaves the user the same paste flow as a plain browser.
+        void listen(signIn, expectedState).catch(() => {
+          pending = undefined;
+          if (!stopped) setListening(undefined);
+        });
+        return () => {
+          stopped = true;
+          if (pending !== undefined) void cancelSignInReturn(port, pending).catch(() => {});
+        };
+      },
+    );
+    return listening;
   });
+  return (id) => watching.some((listening) => listening() === id);
 }

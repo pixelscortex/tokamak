@@ -77,7 +77,9 @@ None. It publishes no `component`.
   step pills and the close button share its header line.
 - The desktop sign-in step uses the shell's return listener (listen and
   cancel) and HTTPS opener; see `design/shell.md`. Keep the company callback
-  map in `lib/sign-in-return.ts` aligned with the provider redirects.
+  map in `lib/sign-in-return.ts` aligned with the provider redirects. Later,
+  derive the port and path from the company's `returnAddress` in
+  `lib/companies.ts` once that file lands.
 - Adding OpenAI (TKM-262): the company row becomes a button, a method step and
   a sign-in title per company; `productOf` and `agentOf` in `lib/api.ts`.
 
@@ -101,12 +103,13 @@ is left out (Paper measures from inside it). Matched to this branch,
 ## Open questions
 
 - **The sign-in step differs from the drawing.** The address field stays
-  visible. Desktop opens the sign-in page in the system browser and, when
-  the loopback port is free, finishes automatically after the browser
-  returns. In a plain browser, on another device, or if the port is busy,
-  paste the address the browser ended on. Closing stops the desktop
-  listener but leaves the server sign-in waiting; Continue on the card
-  listens again for the time left. Cancel, expiry and completion stop it.
+  visible. The Paper copy shows the browser wording. With a desktop listener,
+  the dialog says Tokamak can finish automatically; if the listener is busy
+  or unavailable, it shows the browser wording. Desktop opens the sign-in
+  page in the system browser; the Windows opener is unverified. The Profiles
+  page keeps listening for the newest waiting sign-in per company even
+  after the dialog closes. Cancel, expiry, completion, or leaving the
+  Profiles page stops it.
 - The company rows' 2 px gap, the method row's 18 px icon and its band-on-hover
   are not available without restyling `Row` or `Icon` (see above).
 

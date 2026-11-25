@@ -1,11 +1,12 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/dom";
+import { screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { render } from "@solidjs/web";
-import { createSignal } from "solid-js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
 import * as desktop from "../src/client/lib/desktop";
-import { AddDialog, type Step } from "../src/client/ui/add-dialog";
+import { Profiles } from "../src/client/pages/profiles";
 
 vi.mock("../src/client/lib/desktop", () => ({
   hasDesktopSignIn: vi.fn(),
@@ -28,49 +29,62 @@ const subscription: Subscription = {
   createdAt: 1,
 };
 
-function pendingReturn() {
-  type Result = Awaited<ReturnType<typeof desktop.listenForSignInReturn>>;
-  let resolve!: (result: Result) => void;
-  const promise = new Promise<Result>((done) => {
+function pending<T>() {
+  let resolve!: (result: T) => void;
+  const promise = new Promise<T>((done) => {
     resolve = done;
   });
   return { promise, resolve };
 }
 
+let id = 0;
 function mount() {
   const signIn: SignIn = {
-    id: "sign-in",
+    id: `sign-in-${++id}`,
     company: "anthropic",
     method: "subscription",
-    link: "https://claude.example/authorize",
+    link: "https://claude.example/authorize?state=test",
     startedAt: Date.now(),
     expired: false,
   };
-  const [step, setStep] = createSignal<Step | undefined>({ kind: "sign-in", signIn });
-  const finish = vi.fn(
-    async (
-      _signIn: SignIn,
-      _address: string,
-    ): Promise<
-      | Subscription
-      | {
-          failed: true;
-          kind: string;
-          data: { message: string };
-        }
-    > => subscription,
-  );
+  type Listing = { signIns: SignIn[]; subscriptions: Subscription[] };
+  let listed: Listing = { signIns: [signIn], subscriptions: [] };
+  let publish: () => void = () => {};
+  const update = (next: Listing) => {
+    listed = next;
+    publish();
+  };
+  const finish = vi.fn(async (_args: JsonValue) => {
+    update({ signIns: [], subscriptions: [subscription] });
+    return subscription as unknown as JsonValue;
+  });
+  const cancel = vi.fn(async (_args: JsonValue) => {
+    update({ signIns: [], subscriptions: [] });
+    return null;
+  });
+  const transport: ClientTransport = {
+    async query() {
+      return null;
+    },
+    async action(name, args) {
+      return name.endsWith(":finishSignIn") ? finish(args) : null;
+    },
+    async mutation(name, args) {
+      return name.endsWith(":cancelSignIn") ? cancel(args) : null;
+    },
+    subscribe(_name, _args, onEvent) {
+      publish = () => onEvent({ value: structuredClone(listed) as unknown as JsonValue });
+      queueMicrotask(publish);
+      return () => {};
+    },
+  };
   const root = document.createElement("div");
   document.body.append(root);
   const dispose = render(
     () => (
-      <AddDialog
-        step={step()}
-        onStep={setStep}
-        start={async () => signIn}
-        finish={finish}
-        setLabel={async () => null}
-      />
+      <ClientContext value={new TokamakClient(transport)}>
+        <Profiles />
+      </ClientContext>
     ),
     root,
   );
@@ -79,7 +93,12 @@ function mount() {
     root.remove();
     unmount = undefined;
   };
-  return { finish, signIn, setStep, dialog: screen.findByRole("dialog") };
+  return { finish, cancel, signIn, update };
+}
+
+async function continueSignIn(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Continue" }));
+  return within(await screen.findByRole("dialog", { name: "Sign in to Claude" }));
 }
 
 let unmount: (() => void) | undefined;
@@ -98,61 +117,113 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-test("desktop opens the system browser and finishes its return through the paste handler", async () => {
-  const pending = pendingReturn();
-  vi.mocked(desktop.listenForSignInReturn).mockReturnValue(pending.promise);
-  const { signIn, finish, dialog } = mount();
+type Return = Awaited<ReturnType<typeof desktop.listenForSignInReturn>>;
 
-  fireEvent.click(within(await dialog).getByRole("button", { name: "Open sign-in page" }));
-  expect(desktop.openSignInBrowser).toHaveBeenCalledWith(signIn.link);
-  expect(desktop.listenForSignInReturn).toHaveBeenCalledWith(
-    expect.objectContaining({ port: 54545, path: "/callback" }),
-  );
-  pending.resolve({ status: "returned", address });
-  expect(await screen.findByText("Connected")).toBeTruthy();
-  expect(finish).toHaveBeenCalledExactlyOnceWith(signIn, address);
-});
-
-test("a wrong state leaves sign-in waiting and rearms the one-shot listener", async () => {
-  vi.mocked(desktop.listenForSignInReturn)
-    .mockResolvedValueOnce({ status: "returned", address })
-    .mockReturnValue(new Promise(() => {}));
-  const { finish } = mount();
-  finish.mockResolvedValueOnce({ failed: true, kind: "WrongSignIn", data: { message: "Wrong state" } });
-  expect((await screen.findByRole("alert")).textContent).toBe("Wrong state");
-  expect(desktop.listenForSignInReturn).toHaveBeenCalledTimes(2);
-});
-
-test.each(["busy", "unavailable"] as const)("%s desktop listener leaves paste available", async (status) => {
-  vi.mocked(desktop.hasDesktopSignIn).mockReturnValue(status !== "unavailable");
-  vi.mocked(desktop.listenForSignInReturn).mockResolvedValue({ status });
-  const { signIn, finish, dialog } = mount();
+test("the return finishes from the Awaiting sign-in card after the system browser opens and the dialog closes", async () => {
+  const incoming = pending<Return>();
+  vi.mocked(desktop.listenForSignInReturn).mockReturnValue(incoming.promise);
+  const { signIn, finish } = mount();
   const user = userEvent.setup({ document });
-  const open = within(await dialog);
-  const field = open.getByRole("textbox", { name: /Address the sign-in/ });
-  await user.clear(field);
-  await user.type(field, address);
-  await user.click(open.getByRole("button", { name: "Continue" }));
-  expect(await screen.findByText("Connected")).toBeTruthy();
-  expect(finish).toHaveBeenCalledExactlyOnceWith(signIn, address);
+  const dialog = await continueSignIn(user);
+  await user.click(dialog.getByRole("button", { name: "Open sign-in page" }));
+  expect(desktop.openSignInBrowser).toHaveBeenCalledWith(signIn.link);
+  await user.click(dialog.getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(desktop.listenForSignInReturn).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ port: 54545, path: "/callback", expectedState: "test" }),
+  );
+  expect(desktop.cancelSignInReturn).not.toHaveBeenCalled();
+  incoming.resolve({ status: "returned", address });
+  expect(await screen.findByText("Personal")).toBeTruthy();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(finish).toHaveBeenCalledExactlyOnceWith({ id: signIn.id, pasted: address });
 });
 
-test.each(["cancel", "expiry", "close", "unmount"] as const)(
-  "%s stops the listener and ignores a late return",
+test.each(["busy", "unavailable"] as const)(
+  "%s uses browser wording and keeps the paste path",
+  async (status) => {
+    vi.mocked(desktop.listenForSignInReturn).mockResolvedValue({ status });
+    const { signIn, finish } = mount();
+    const user = userEvent.setup({ document });
+    const dialog = await continueSignIn(user);
+    expect(await dialog.findByText(/ends on a page that may not load/)).toBeTruthy();
+    const field = dialog.getByRole("textbox", { name: /Address the sign-in/ });
+    await user.clear(field);
+    await user.type(field, address);
+    await user.click(dialog.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("dialog", { name: "Connected" })).toBeTruthy();
+    expect(finish).toHaveBeenCalledExactlyOnceWith({ id: signIn.id, pasted: address });
+  },
+);
+
+test.each(["paste in flight", "failed automatic finish"] as const)(
+  "%s leaves the return available to retry",
+  async (mode) => {
+    const incoming = pending<Return>();
+    vi.mocked(desktop.listenForSignInReturn)
+      .mockReturnValueOnce(incoming.promise)
+      .mockReturnValue(pending<Return>().promise);
+    const { signIn, finish } = mount();
+    const paste = pending<JsonValue>();
+    if (mode === "paste in flight") finish.mockReturnValueOnce(paste.promise);
+    else finish.mockRejectedValueOnce(new Error("Connection lost"));
+    const user = userEvent.setup({ document });
+    const dialog = await continueSignIn(user);
+    const field = dialog.getByRole<HTMLInputElement>("textbox", { name: /Address the sign-in/ });
+    if (mode === "paste in flight") {
+      await user.clear(field);
+      await user.type(field, "other");
+      await user.click(dialog.getByRole("button", { name: "Continue" }));
+    }
+    incoming.resolve({ status: "returned", address });
+    await waitFor(() => expect(field.value).toBe(address));
+    expect(finish).toHaveBeenCalledTimes(1);
+    if (mode === "paste in flight")
+      paste.resolve({ failed: true, kind: "WrongSignIn", data: { message: "Wrong state" } });
+    await dialog.findByRole("alert");
+    await user.click(dialog.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("dialog", { name: "Connected" })).toBeTruthy();
+    expect(finish).toHaveBeenLastCalledWith({ id: signIn.id, pasted: address });
+  },
+);
+
+test.each(["cancel", "expiry", "unmount"] as const)(
+  "%s stops listening and ignores a late return",
   async (end) => {
-    const pending = pendingReturn();
-    vi.mocked(desktop.listenForSignInReturn).mockReturnValue(pending.promise);
-    const { finish, dialog, signIn, setStep } = mount();
-    const open = await dialog;
+    const incoming = pending<Return>();
+    vi.mocked(desktop.listenForSignInReturn).mockReturnValue(incoming.promise);
+    const { cancel, finish, signIn, update } = mount();
+    const button = await screen.findByRole("button", { name: "Cancel" });
+    await waitFor(() => expect(desktop.listenForSignInReturn).toHaveBeenCalledTimes(1));
     const [[{ requestId }]] = vi.mocked(desktop.listenForSignInReturn).mock.calls;
     if (end === "unmount") unmount?.();
-    else if (end === "close") fireEvent.click(within(open).getByRole("button", { name: "Close" }));
-    // These are the same transitions the Profiles view applies on server updates.
-    else if (end === "expiry") setStep({ kind: "sign-in", signIn: { ...signIn, expired: true } });
-    else setStep(undefined);
+    else if (end === "expiry") update({ subscriptions: [], signIns: [{ ...signIn, expired: true }] });
+    else {
+      await userEvent.setup({ document }).click(button);
+      expect(cancel).toHaveBeenCalledWith({ id: signIn.id });
+    }
     await waitFor(() => expect(desktop.cancelSignInReturn).toHaveBeenCalledExactlyOnceWith(54545, requestId));
-    pending.resolve({ status: "returned", address });
-    await pending.promise;
+    incoming.resolve({ status: "returned", address });
+    await incoming.promise;
     expect(finish).not.toHaveBeenCalled();
   },
 );
+
+test("a newer sign-in replaces the previous listener on its company's port", async () => {
+  vi.mocked(desktop.listenForSignInReturn).mockReturnValue(pending<Return>().promise);
+  const { signIn, update } = mount();
+  await waitFor(() => expect(desktop.listenForSignInReturn).toHaveBeenCalledTimes(1));
+  const [[{ requestId }]] = vi.mocked(desktop.listenForSignInReturn).mock.calls;
+  const newer = {
+    ...signIn,
+    id: "newer",
+    startedAt: signIn.startedAt + 1,
+    link: signIn.link.replace("test", "new"),
+  };
+  update({ signIns: [signIn, newer], subscriptions: [] });
+  await waitFor(() => expect(desktop.listenForSignInReturn).toHaveBeenCalledTimes(2));
+  expect(desktop.cancelSignInReturn).toHaveBeenCalledWith(54545, requestId);
+  expect(desktop.listenForSignInReturn).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedState: "new" }),
+  );
+});
