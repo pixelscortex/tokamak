@@ -27,7 +27,8 @@ impl Coordinator {
         let destination = resolve(
             self.plugins.as_deref(),
             target,
-            placement,
+            &placement,
+            None,
             &self.runner,
             &note,
         );

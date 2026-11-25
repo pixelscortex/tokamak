@@ -173,6 +173,11 @@ Do not print the response or put either credential in shell arguments. Use
 one device key per Runner. Signing that device out revokes the key and stops
 the Runner from reconnecting.
 
+For a plugin-managed machine, use the key returned by
+[`ctx.machines.create`](../sdk/README.md#run-actions-on-a-sandbox-machine) in
+the same private key file. No sign-in or machine id is needed on the Runner.
+The owning plugin can revoke that key with `ctx.machines.remove`.
+
 Install the full Runner build of every plugin this machine serves in
 `--plugins`, including `manifest.json`, `local-entry.js`, and `local.js`.
 Reinstall the build after every plugin update. The cloud package omits Runner
@@ -180,8 +185,8 @@ bundles and automatic delivery is separate work. A missing or mismatched build
 returns `runnerArtifactMismatch`. In a caller action, `ctx.env` comes from the
 Runner's own environment.
 
-The server uses the connected Runner for the exact device in the caller's
-call note. A desktop without a connection for its device can still use the
+For `on: "caller"`, the server uses the connected Runner for the exact device
+in the caller's call note. A desktop without a connection for its device can still use the
 window route. A browser without a Runner for its device gets `noMachine`.
 The newest connection using a device key takes over; the old Runner exits
 if it receives the takeover notice. Connection loss fails active calls with

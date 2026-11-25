@@ -53,6 +53,8 @@ export type {
   ActionContext,
   CallerActionContext,
   ActionTarget,
+  MachineId,
+  MachineEntry,
   ActionOptions,
   MachineFailure,
   LocalContext,

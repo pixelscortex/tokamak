@@ -219,6 +219,14 @@ sign out their own devices. A forbidden sign-out returns HTTP 403.
 The server closes the device's sockets with code 4001 and rejects the key on
 reconnect. The bootstrap owner key stays available for recovery.
 
+Owners and admins can also read `GET /devices/machines/live` using the same
+authenticated SSE transport. Each event is an array of plugin machine entries
+with `id`, `name`, `owner: { kind: "plugin", plugin, name }`, `online`, and
+`lastSeen`. Here `owner.name` is the owning plugin's display name recorded at
+creation. Keep this stream separate from member devices: the owning plugin
+removes its machines through the SDK, and the member device revoke route
+does not accept their ids.
+
 Shared startup keeps device sign-in available if a plugin fails to initialize.
 The server logs every skipped plugin and its error, and `GET /plugins` includes
 a `skipped` map from plugin IDs to error messages.

@@ -48,6 +48,7 @@ use response::{account_result, snapshots};
 const CONNECTIONS: u32 = 64;
 const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
 pub const DEVICE_SIGNED_OUT: u16 = 4001;
+const PLUGIN_MACHINE_STREAM_PATH: &str = "/devices/machines/live";
 const DEVICE_STREAM_PATH: &str = "/devices/live";
 pub const WS_PROTOCOL: &str = "tokamak";
 const RUNNER_WORKER_PATH: &str = "/local-worker";
@@ -234,6 +235,10 @@ async fn serve_inner(
         .clear_revoked_window_state(&identities)
         .await
         .map_err(io::Error::other)?;
+    server.machines().configure(
+        identities.clone(),
+        crate::web::configured_public_url().map_err(|error| io::Error::other(error.to_string()))?,
+    );
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
     let hosted = web.is_some();
@@ -322,6 +327,7 @@ fn routes(
             .merge(members::routes())
             .merge(sign_in::routes())
             .route(DEVICE_STREAM_PATH, get(devices_live))
+            .route(PLUGIN_MACHINE_STREAM_PATH, get(plugin_machines_live))
             .route(DEVICE_REVOKE_PATH, post(revoke_device));
     } else if adapter.access.is_some() {
         app = app.route("/health", get(health));
@@ -399,7 +405,12 @@ fn start_last_seen_timer(
 
 async fn flush_last_seen(identities: Arc<Identities>) {
     // A lost display timestamp must never prevent use of an otherwise valid key.
-    match tokio::task::spawn_blocking(move || identities.flush_last_seen()).await {
+    match tokio::task::spawn_blocking(move || {
+        identities.flush_plugin_machine_presence()?;
+        identities.flush_last_seen()
+    })
+    .await
+    {
         Ok(Ok(())) => {}
         Ok(Err(error)) => eprintln!("Could not save device last seen: {error}"),
         Err(error) => eprintln!("Device last-seen task failed: {error}"),
@@ -445,6 +456,9 @@ async fn authorize(
             authorization_preflight(&headers, methods, allowed_headers),
             origin,
         );
+    }
+    if path == Some(crate::machine_wire::PATH) {
+        return next.run(request).await;
     }
     let public = adapter.hosted
         && (request.uri().path() == "/health"
@@ -501,6 +515,7 @@ fn preflight_route(path: Option<&str>) -> Option<(&'static str, &'static str)> {
         Some(
             sign_in::METHODS
             | DEVICE_STREAM_PATH
+            | PLUGIN_MACHINE_STREAM_PATH
             | "/plugins"
             | "/plugins/{id}/{revision}/assets/{*name}",
         ) => Some(("GET", "authorization")),
@@ -575,6 +590,19 @@ async fn devices_live(
     Extension(caller): Extension<AuthContext>,
 ) -> Response {
     snapshots(adapter, caller, Identities::devices)
+}
+
+async fn plugin_machines_live(
+    State(adapter): State<Adapter>,
+    Extension(caller): Extension<AuthContext>,
+) -> Response {
+    if !members::can_manage(caller.user.role) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    snapshots(adapter, caller, |identities, caller| {
+        let (caller, _) = identities.active_caller(caller)?;
+        members::can_manage(caller.user.role).then(|| identities.plugin_machine_entries(None))
+    })
 }
 
 fn authorization_preflight(

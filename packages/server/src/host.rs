@@ -22,16 +22,18 @@ struct TransactionContext {
     failure: Failure,
     active_hooks: Arc<std::sync::Mutex<Vec<Arc<engine::CallError>>>>,
     reads: Arc<Mutex<ReadSet>>,
+    machines: Arc<crate::actions::Machines>,
 }
 
 impl TransactionContext {
-    fn new(tx: Transaction) -> Self {
+    fn new(tx: Transaction, machines: Arc<crate::actions::Machines>) -> Self {
         Self {
             shared: Arc::new(Mutex::new(Some(tx))),
             observations: Arc::default(),
             failure: Arc::default(),
             active_hooks: Arc::default(),
             reads: Arc::default(),
+            machines,
         }
     }
 
@@ -97,6 +99,7 @@ pub(crate) struct Invocation<'a> {
     pub plugins: Option<Arc<crate::plugins::Loaded>>,
     pub determinism: Determinism,
     pub note: CallNote,
+    pub machines: Arc<crate::actions::Machines>,
 }
 
 pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocation<'_>) -> Call {
@@ -109,6 +112,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         plugins,
         determinism,
         note,
+        machines,
     } = invocation;
     let note = match plugins.as_ref().and_then(|loaded| loaded.targets.get(name)) {
         Some(target) => note.with_root_args(&target.args, &args),
@@ -133,7 +137,7 @@ pub(crate) async fn invoke(db: &data::Database, pool: &Pool, invocation: Invocat
         }
     };
 
-    let context = TransactionContext::new(tx);
+    let context = TransactionContext::new(tx, machines);
 
     let ops = operations(
         context.clone(),
@@ -274,6 +278,9 @@ fn operations(
     database_operations::register(&mut ops, tx.clone(), scope.clone(), space, writable);
 
     if let Some((plugins, owner)) = graph {
+        tx.machines
+            .register_list(&mut ops, owner.clone(), &note)
+            .expect("unique operation");
         crate::plugins::register_contract_list(&mut ops, plugins.clone(), owner.clone())
             .expect("unique operation");
         if let Some(hooks) = hooks::QueryHooks::for_target(&plugins, qualified, &note, &tx) {

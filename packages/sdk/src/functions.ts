@@ -21,10 +21,40 @@ import {
 import { Visibility } from "./visibility";
 
 export type ServerFunctionKind = "query" | "mutation" | "action";
-export type ActionTarget = "server" | "caller";
+declare const machineId: unique symbol;
+export type MachineId = string & { readonly [machineId]: true };
+export type ActionTarget = "server" | "caller" | MachineId;
+
+export interface MachineEntry {
+  id: MachineId;
+  name: string;
+  owner: { kind: "plugin"; plugin: string } | { kind: "person"; user: string };
+  online: boolean;
+  lastSeen: number | null;
+}
+
+interface MachineList {
+  /** A snapshot; presence changes do not invalidate query subscriptions. */
+  list(): Promise<MachineEntry[]>;
+}
+
+interface MachineManagement extends MachineList {
+  create(options: { name: string }): Promise<{ id: MachineId; key: string }>;
+  remove(id: MachineId): Promise<null | Failure<"machineForbidden", null>>;
+  waitOnline(
+    id: MachineId,
+    options?: { timeoutMs?: number },
+  ): Promise<null | Failure<"machineForbidden" | "machineOffline", null>>;
+}
+
+const machineList = (host: HostBridge): MachineList => ({
+  list: () => callHost(host, "machines.list", {}),
+});
 export type MachineFailure =
   | Failure<"noMachine", null>
   | Failure<"machineLost", null>
+  | Failure<"machineOffline", null>
+  | Failure<"machineForbidden", null>
   | Failure<"runnerArtifactMismatch", { plugin: string; message: string }>
   | Failure<"runnerCapabilityUnavailable", RunnerCapability>;
 export interface ActionOptions {
@@ -148,6 +178,7 @@ type RunFunction<K extends FunctionKind> = <A, R>(
 ) => Promise<R>;
 
 export interface QueryContext<M extends DataModel> extends ContractContext {
+  readonly machines: MachineList;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseReader<M>;
@@ -156,6 +187,7 @@ export interface QueryContext<M extends DataModel> extends ContractContext {
 }
 
 export interface MutationContext<M extends DataModel> extends ContractContext {
+  readonly machines: MachineList;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseWriter<M>;
@@ -166,6 +198,9 @@ export interface MutationContext<M extends DataModel> extends ContractContext {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext extends ContractContext {
+  /** Management operations run on the server. */
+  readonly machines: MachineManagement;
+  readonly server: { url(): Promise<string | null> };
   readonly auth: AuthContext;
   readonly call: CallContext;
   use<T>(api: T): PluginCalls<T, ServerFunctionKind>;
@@ -294,6 +329,17 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
       });
   return Object.freeze({
     call,
+    machines: Object.freeze({
+      ...machineList(bridge),
+      create: (options: { name: string }) => callHost(bridge, "machines.create", options),
+      remove: (id: MachineId) => callHost(bridge, "machines.remove", { id }),
+      waitOnline: (id: MachineId, options?: { timeoutMs?: number }) =>
+        callHost(bridge, "machines.waitOnline", {
+          id,
+          ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+        }),
+    }),
+    server: Object.freeze({ url: () => callHost(bridge, "server.url", {}) }),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
       return auth;
@@ -408,6 +454,7 @@ function builder<
               ? actionContext(host, auth, call)
               : {
                   call,
+                  machines: Object.freeze(machineList(host)),
                   get auth() {
                     return caller();
                   },
@@ -553,6 +600,13 @@ type ActionBuilder<V extends Visibility> = {
     args?: undefined;
     handler: (ctx: CallerActionContext, args: A) => R;
   }): FunctionDefinition<"action", A, WireResult<R | MachineFailure>, V> & { readonly on: "caller" };
+  <F extends Fields = Record<never, never>, R = unknown>(definition: {
+    on: MachineId;
+    args?: F;
+    handler: (ctx: CallerActionContext, args: ObjectValue<F>) => R;
+  }): FunctionDefinition<"action", ObjectValue<F>, WireResult<R | MachineFailure>, V> & {
+    readonly on: MachineId;
+  };
   <F extends Fields = Record<never, never>, R = unknown>(definition: {
     on?: "server";
     args?: F;

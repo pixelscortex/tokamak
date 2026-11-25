@@ -180,8 +180,8 @@ action receives the original identity and call note.
 The workspace server chooses the destination. A direct client authenticated
 as a person on an embedded Runner's machine uses that Runner, including for
 nested actions. A [Runner connected to a shared server](../runner/README.md#connect-a-headless-runner-to-a-shared-server)
-receives actions only for the device in the original call note, including
-nested actions from that device. A desktop without a connected Runner for
+receives `"caller"` actions for the exact device in the original call note,
+including nested actions from that device. A desktop without a connected Runner for
 its device can still forward work to its own local Runner. A browser without
 a Runner for its device gets `noMachine`.
 
@@ -189,6 +189,68 @@ Install the full Runner build of each served plugin in the remote Runner's
 `--plugins` directory after every update. Missing or mismatched builds return
 `runnerArtifactMismatch`; automatic delivery is separate work. In a caller
 action on a connected Runner, `ctx.env` comes from the Runner's environment.
+
+#### Run actions on a sandbox machine
+
+A server action can create a machine for its plugin. Pass the returned key to
+your sandbox provider as a secret. The provider starts a Runner with
+`--server` set to the workspace URL and `--key-file` pointing to the key in a
+private file. Install the full plugin build in the Runner's `--plugins`
+directory. The Runner identifies itself with the key; it does not need the id.
+
+```ts
+import { action, fail, isFailure } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const newSandbox = action({
+  handler: async (ctx) => {
+    const server = await ctx.server.url();
+    if (!server) return fail("sandboxServerUrlMissing");
+
+    const { id, key } = await ctx.machines.create({ name: "Thread sandbox" });
+    await startSandbox({ server, runnerKey: key }); // Your provider code.
+    const ready = await ctx.machines.waitOnline(id);
+    if (isFailure(ready)) return ready;
+    return id; // Save the id with the thread. Do not store or return the key.
+  },
+});
+
+// Inside a server action:
+await ctx.runAction(api.jobs.collect, { cwd }, { on: machineId });
+// From the owning plugin's window:
+await client.action(api.jobs.collect, { cwd }, { on: machineId });
+```
+
+Set `TOKAMAK_PUBLIC_URL` on the server to its reachable HTTP(S) origin, for
+example `https://workspace.example.com`. `ctx.server.url()` returns `null` if
+it is unset. Use HTTPS for a Runner outside loopback.
+
+`MachineId` is a branded string. Keep ids returned by `create` or `list` and
+supply them in per-call options for dynamic placement. For a fixed default in
+an action declaration, use a literal such as `on: "device:example" as MachineId`
+with an actual issued id. The action has the Runner capabilities described
+above. The original caller and call note reach the action, including the
+thread, and queries and mutations still execute on the server.
+
+A window can target a plugin machine only through an action owned by that
+plugin. Server code in the owning plugin can also target it when delegating
+to an action it has permission to call. A person's machine is available
+only to calls started by that person. Unknown, removed and forbidden ids all
+return `machineForbidden`. An authorized machine with no current Runner
+returns `machineOffline` immediately. If its Runner disconnects during the
+action, the result is `machineLost`. Calls are never queued or replayed.
+
+`ctx.machines.list()` returns the plugin's machines and the signed-in
+person's issued devices, with `owner`, `online` (Runner connection) and
+`lastSeen` (Unix milliseconds or `null`). It is a snapshot in queries,
+mutations and actions; presence changes do not refresh subscriptions.
+`create`, `waitOnline` and `remove` run only in server actions. The credential
+store is separate from plugin database transactions. The key is returned only
+by `create`. `waitOnline` returns `null` when connected and `machineOffline`
+after 30 seconds by default; pass `{ timeoutMs }` for a different limit, up
+to two minutes. When deleting a sandbox, call `ctx.machines.remove(id)` to
+revoke its key and disconnect the Runner, then delete the container with your
+provider. Clean up both resources if provisioning fails.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`

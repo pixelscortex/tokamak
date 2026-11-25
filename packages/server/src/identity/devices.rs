@@ -241,6 +241,37 @@ impl Identities {
         Ok(())
     }
 
+    pub(crate) fn owns_machine(&self, user: &str, id: &str) -> bool {
+        self.with_active(user, |member| {
+            Some(member.devices.iter().any(|device| {
+                device.kind == Kind::Issued && device.is_active() && device.public.id == id
+            }))
+        })
+        .unwrap_or(false)
+    }
+
+    pub(crate) fn personal_machines(&self, user: &str) -> Vec<serde_json::Value> {
+        self.with_active(user, |member| {
+            Some(
+                member
+                    .devices
+                    .iter()
+                    .filter(|device| device.kind == Kind::Issued && device.is_active())
+                    .map(|device| {
+                        serde_json::json!({
+                            "id":device.public.id,
+                            "name":device.public.name,
+                            "owner":{"kind":"person","user":user},
+                            "online":device.machine_sockets.unwrap_or(0) > 0,
+                            "lastSeen":device.live_last_seen.max(device.last_seen),
+                        })
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default()
+    }
+
     pub(crate) fn device_updates(&self) -> tokio::sync::watch::Receiver<()> {
         self.device_changes.subscribe()
     }

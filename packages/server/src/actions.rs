@@ -21,8 +21,8 @@ pub(crate) use runner_upstream::runner_hashes;
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
 pub(crate) type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
 mod machines;
-pub(crate) use machines::Machines;
 use machines::Selection;
+pub(crate) use machines::{Machines, Owner as MachineOwner};
 
 pub struct RunnerAction {
     pub plugin: String,
@@ -53,7 +53,7 @@ pub(crate) struct RunnerDestination {
     code_hash: String,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 pub(crate) struct Placement {
     on: Option<ActionTarget>,
     window: bool,
@@ -80,6 +80,8 @@ impl Placement {
 pub(crate) enum MachineFailure {
     NoMachine,
     MachineLost,
+    Offline,
+    Forbidden,
 }
 
 impl MachineFailure {
@@ -87,6 +89,8 @@ impl MachineFailure {
         let kind = match self {
             Self::NoMachine => "noMachine",
             Self::MachineLost => "machineLost",
+            Self::Offline => "machineOffline",
+            Self::Forbidden => "machineForbidden",
         };
         serde_json::json!({"failed":true,"kind":kind,"data":null})
     }
@@ -95,19 +99,30 @@ impl MachineFailure {
 pub(crate) fn resolve(
     loaded: Option<&Loaded>,
     target: Option<&crate::plugins::Target>,
-    placement: Placement,
+    placement: &Placement,
+    caller: Option<&str>,
     runner: &Machines,
     note: &CallNote,
 ) -> Destination {
     let selected = placement
         .on
-        .unwrap_or_else(|| target.map(|target| target.on).unwrap_or_default());
-    if selected == ActionTarget::Server {
+        .as_ref()
+        .or_else(|| target.map(|target| &target.on))
+        .unwrap_or(&ActionTarget::Server);
+    if *selected == ActionTarget::Server {
         return Destination::Server;
     }
 
-    let Some(auth) = note.auth.as_ref().filter(|auth| auth.is_person()) else {
-        return Destination::Failed(MachineFailure::NoMachine);
+    let named = if let ActionTarget::Machine(id) = selected {
+        let Some(plugin) = caller.or_else(|| target.map(|target| target.owner.as_str())) else {
+            return Destination::Failed(MachineFailure::Forbidden);
+        };
+        match runner.named(id, plugin, note) {
+            Ok(dispatch) => Some(dispatch),
+            Err(error) => return Destination::Failed(error),
+        }
+    } else {
+        None
     };
     if let (Some(loaded), Some(target)) = (loaded, target) {
         let manifest = &loaded.catalog.plugins[&target.owner].manifest;
@@ -117,6 +132,12 @@ pub(crate) fn resolve(
                 plugin: target.owner.clone(),
                 entry_hash: entry_hash.to_owned(),
                 code_hash: code_hash.to_owned(),
+            };
+            if let Some(dispatch) = named {
+                return Destination::ConnectedRunner(placement_for(dispatch));
+            }
+            let Some(auth) = note.auth.as_ref().filter(|auth| auth.is_person()) else {
+                return Destination::Failed(MachineFailure::NoMachine);
             };
             match runner.select(auth, note.is_window_continuation()) {
                 Selection::Attached(dispatch) => {
@@ -261,6 +282,20 @@ pub(crate) fn operations(
         );
     }
     environment.register(&mut ops)?;
+    if let (Some(loaded), Some(owner)) = (&generation, &owner) {
+        context
+            .runner
+            .register_list(&mut ops, owner.clone(), &context.note)?;
+        if context.lifetime.is_none() {
+            let plugin = &loaded.catalog.plugins[owner].manifest.plugin;
+            context.runner.register_management(
+                &mut ops,
+                owner.clone(),
+                plugin.name.clone().unwrap_or_else(|| owner.clone()),
+                context.note.clone(),
+            )?;
+        }
+    }
     register_nested_calls(
         &mut ops,
         commands.clone(),
@@ -447,7 +482,7 @@ fn register_plugin_call(
                     lifetime,
                 },
                 args,
-                on,
+                (owner, on),
             )
             .await
         }
@@ -463,12 +498,13 @@ async fn run_nested_action(
     process: Arc<Supervisor>,
     parent: ActionContext,
     args: Json,
-    on: Option<ActionTarget>,
+    (caller, on): (String, Option<ActionTarget>),
 ) -> Result<Json, engine::CallError> {
     let destination = resolve(
         Some(&loaded),
         Some(&target),
-        Placement::new(on, None),
+        &Placement::new(on, None),
+        Some(&caller),
         &parent.runner,
         &parent.note,
     );

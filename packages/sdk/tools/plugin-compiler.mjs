@@ -57,7 +57,44 @@ export function runtimeExportNames(checker, module, seen = new Set()) {
 }
 
 export function definitionInfo(checker, symbol, source) {
-  return definitionTypeInfo(checker, checker.getTypeOfSymbolAtLocation(symbol, source), source);
+  const info = definitionTypeInfo(checker, checker.getTypeOfSymbolAtLocation(symbol, source), source);
+  if (info?.kind === "action" && info.on === undefined) {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    info.on = declaredActionPlacement(checker, target.valueDeclaration?.initializer);
+  }
+  return info;
+}
+
+export function declaredActionPlacement(checker, expression, seen = new Set()) {
+  if (!expression || seen.has(expression)) return;
+  seen.add(expression);
+  if (ts.isIdentifier(expression)) {
+    const symbol = checker.getSymbolAtLocation(expression);
+    const target = symbol?.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    return declaredActionPlacement(checker, target?.valueDeclaration?.initializer, seen);
+  }
+  if (!ts.isCallExpression(expression)) return;
+  const options = expression.arguments[0];
+  return actionPlacementLiteral(checker, options) ?? declaredActionPlacement(checker, options, seen);
+}
+
+export function actionPlacementLiteral(checker, options) {
+  if (!options || !ts.isObjectLiteralExpression(options)) return;
+  const field = [...options.properties].reverse().find((property) => {
+    if (ts.isSpreadAssignment(property))
+      return !!checker.getTypeAtLocation(property.expression).getProperty("on");
+    const name = property.name;
+    return name && (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) && name.text === "on";
+  });
+  if (!field || !ts.isPropertyAssignment(field)) return;
+  let value = field.initializer;
+  while (ts.isAsExpression(value) || ts.isParenthesizedExpression(value)) value = value.expression;
+  if (!ts.isStringLiteralLike(value)) return;
+  return /^(server|caller|machine:[\w-]+|device:[\w-]+|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/.test(
+    value.text,
+  )
+    ? value.text
+    : undefined;
 }
 
 export function definitionTypeInfo(checker, type, source) {

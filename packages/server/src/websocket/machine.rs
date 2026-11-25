@@ -11,12 +11,26 @@ use std::{
 
 pub(super) async fn upgrade(
     State(adapter): State<Adapter>,
-    Extension(auth): Extension<AuthContext>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let Some(revoked) = adapter.identities.issued_device(&auth) else {
+    let Some(key) = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+    else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
+    let (identity, revoked) =
+        if let Some((id, plugin, revoked)) = adapter.identities.authenticate_plugin_machine(key) {
+            (Identity::Plugin { id, plugin }, revoked)
+        } else if let Some(auth) = adapter.identities.authenticate(key)
+            && let Some(revoked) = adapter.identities.issued_device(&auth)
+        {
+            (Identity::Person(auth), revoked)
+        } else {
+            return StatusCode::UNAUTHORIZED.into_response();
+        };
     let Ok(permit) = adapter.connections.clone().try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
@@ -25,7 +39,7 @@ pub(super) async fn upgrade(
         .max_message_size(MESSAGE_BYTES)
         .on_upgrade(move |socket| async move {
             let _permit = permit;
-            connection(socket, adapter, auth, revoked).await;
+            connection(socket, adapter, identity, revoked).await;
         })
         .into_response()
 }
@@ -161,10 +175,32 @@ fn dispatch_to(peer: Peer, scopes: Scopes) -> crate::actions::RunnerDispatch {
     Arc::new(move |action| Box::pin(dispatch(peer.clone(), scopes.clone(), action)))
 }
 
+enum Identity {
+    Person(AuthContext),
+    Plugin { id: String, plugin: String },
+}
+
+impl Identity {
+    fn machine(&self) -> (&str, crate::actions::MachineOwner) {
+        use crate::actions::MachineOwner;
+        match self {
+            Self::Person(auth) => (&auth.device.id, MachineOwner::Person(auth.user.id.clone())),
+            Self::Plugin { id, plugin } => (id, MachineOwner::Plugin(plugin.clone())),
+        }
+    }
+
+    fn seen(&self, identities: &Identities, event: DeviceSocket) {
+        match self {
+            Self::Person(auth) => identities.record_last_seen(auth, event),
+            Self::Plugin { id, .. } => identities.plugin_machine_seen(id, event),
+        }
+    }
+}
+
 async fn connection(
     mut socket: WebSocket,
     adapter: Adapter,
-    auth: AuthContext,
+    identity: Identity,
     revoked: CancellationToken,
 ) {
     if revoked.is_cancelled() || adapter.stopping.is_cancelled() {
@@ -173,14 +209,18 @@ async fn connection(
     let (peer, mut outgoing) = Peer::new();
     let scopes = Scopes::default();
     let replaced = CancellationToken::new();
-    adapter
-        .identities
-        .record_last_seen(&auth, DeviceSocket::MachineOpened);
-    let registration = adapter.server.machines().connect(
-        &auth,
+    identity.seen(&adapter.identities, DeviceSocket::MachineOpened);
+    let (id, owner) = identity.machine();
+    let Some(registration) = adapter.server.machines().connect(
+        id,
+        owner,
         dispatch_to(peer.clone(), scopes.clone()),
         replaced.clone(),
-    );
+        revoked.clone(),
+    ) else {
+        identity.seen(&adapter.identities, DeviceSocket::MachineClosed);
+        return;
+    };
     let (interval, limit) = machine_wire::heartbeat();
     let mut ticks = tokio::time::interval(interval);
     let mut deadline = tokio::time::Instant::now() + limit;
@@ -204,7 +244,7 @@ async fn connection(
                 }
                 Some(Ok(Message::Pong(_))) => {
                     deadline = tokio::time::Instant::now() + limit;
-                    adapter.identities.record_last_seen(&auth, DeviceSocket::MachineHeartbeat);
+                    identity.seen(&adapter.identities, DeviceSocket::MachineHeartbeat);
                     continue;
                 }
                 Some(Ok(Message::Ping(_))) => continue,
@@ -220,16 +260,15 @@ async fn connection(
         if !tokio::select! {
             biased;
             () = replaced.cancelled() => false,
+            () = revoked.cancelled() => false,
             result = tokio::time::timeout_at(deadline, socket.send(send)) => matches!(result, Ok(Ok(()))),
         } {
             break;
         }
     }
     peer.stop().cancel();
-    adapter
-        .identities
-        .record_last_seen(&auth, DeviceSocket::MachineClosed);
     drop(registration);
+    identity.seen(&adapter.identities, DeviceSocket::MachineClosed);
     if revoked.is_cancelled() {
         close(&mut socket, DEVICE_SIGNED_OUT, "Device signed out").await;
     } else if replaced.is_cancelled() {
