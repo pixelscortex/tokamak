@@ -29,9 +29,11 @@ export interface SignInCompany {
   /**
    * The plan, the account (its company id, email and organisation or
    * workspace) and the models the login may use. Advisory: a read that fails
-   * leaves a field out instead of failing the sign-in.
+   * leaves a field out instead of failing the sign-in. Works at sign-in (with
+   * what `exchange` gave) and later from a stored login: the access token and
+   * the account's `workspace`, as `logins:fresh` returns them.
    */
-  details(addresses: Addresses, signedIn: SignedIn): Promise<Details>;
+  details(addresses: Addresses, login: ReadWith): Promise<Details>;
 }
 
 export type Pasted =
@@ -72,6 +74,12 @@ export interface Identity {
 
 export interface SignedIn {
   readonly login: Login;
+  readonly identity: Partial<Identity>;
+}
+
+/** What `details` reads with: a login's access token (and ID token at sign-in) and what is known of the account. */
+export interface ReadWith {
+  readonly login: Pick<Login, "access" | "idToken">;
   readonly identity: Partial<Identity>;
 }
 

@@ -55,7 +55,8 @@ the link.
   id, `id_token_add_organizations`, `codex_cli_simplified_flow` and
   `originator=codex_cli_rs`, returning to `http://localhost:1455/auth/callback`;
   a form exchange without `state`. The ID token's claims give the email, the
-  plan (`chatgpt_plan_type`, shown with Codex's names; no claim, no plan) and
+  plan (`chatgpt_plan_type`, else the workspace's `plan_type` from
+  `/wham/accounts/check`, shown with Codex's names; with neither, no plan) and
   the workspace (`chatgpt_account_id`). The workspace id is stored on the
   account and returned by `logins:fresh` as `workspace`, for the
   `chatgpt-account-id` header; the ID token itself is never stored, since it

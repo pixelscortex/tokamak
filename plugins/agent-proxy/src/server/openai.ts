@@ -6,6 +6,7 @@ import {
   text,
   type Details,
   type Identity,
+  type ReadWith,
   type Login,
   type Pasted,
   type Renewal,
@@ -230,10 +231,6 @@ export function claimsOf(jwt: string | undefined): Claims | undefined {
   }
 }
 
-/** The workspace a login acts for: the `chatgpt-account-id` every backend request carries. */
-export const workspaceOf = (login: Pick<Login, "idToken">) =>
-  text(claimsOf(login.idToken)?.[AUTH_CLAIM]?.chatgpt_account_id);
-
 type TokenAnswer = {
   id_token?: unknown;
   access_token?: unknown;
@@ -398,15 +395,38 @@ async function get(url: string, access: string, workspace: string) {
   return undefined;
 }
 
-export async function details(addresses: Addresses, { login }: { login: Login }): Promise<Details> {
-  const claims = claimsOf(login.idToken);
-  const raw = text(claims?.[AUTH_CLAIM]?.chatgpt_plan_type)?.toLowerCase();
-  // No claim, no plan: an ID token without `chatgpt_plan_type` says nothing about it.
-  const planKnown = raw !== undefined;
-  const plan = raw ? (PLANS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1)) : "";
-  const identity = identityOf(login.idToken);
-  const workspace = workspaceOf(login);
-  if (!workspace) return { plan, planKnown, identity, models: [] };
+/** Codex's name for a raw plan type, or the raw type capitalised when Codex has none. */
+const planName = (raw: string) => PLANS[raw] ?? raw.charAt(0).toUpperCase() + raw.slice(1);
+
+/**
+ * The workspace entries of `/wham/accounts/check`, in either of the two forms
+ * Codex reads (`backend-client/src/types.rs`): a list of entries, or a map by
+ * account id with `account_ordering`.
+ */
+function workspaces(
+  answer: Record<string, unknown> | undefined,
+): { id?: unknown; name?: unknown; plan_type?: unknown }[] {
+  const accounts = answer?.accounts;
+  if (Array.isArray(accounts)) return accounts as { id?: unknown }[];
+  if (typeof accounts !== "object" || accounts === null) return [];
+  return Object.values(accounts as Record<string, { account?: Record<string, unknown> }>).flatMap((entry) =>
+    entry?.account ? [{ ...entry.account, id: entry.account.account_id }] : [],
+  );
+}
+
+/**
+ * Reads at sign-in from the ID token, and later from a stored login with the
+ * account's workspace id (the ID token is not stored). The plan is the ID
+ * token's `chatgpt_plan_type`, else the workspace's `plan_type` from
+ * `/wham/accounts/check` ("current subscription … independent of token
+ * claims" in Codex); with neither, it is unknown.
+ */
+export async function details(addresses: Addresses, { login, identity: known }: ReadWith): Promise<Details> {
+  const claimed = text(claimsOf(login.idToken)?.[AUTH_CLAIM]?.chatgpt_plan_type)?.toLowerCase();
+  const identity = { ...known, ...identityOf(login.idToken) };
+  const workspace = identity.workspace;
+  if (!workspace)
+    return { plan: claimed ? planName(claimed) : "", planKnown: claimed !== undefined, identity, models: [] };
   const [catalog, accounts] = await Promise.all([
     get(`${addresses.openai.api}/codex/models?client_version=${CLIENT_VERSION}`, login.access, workspace),
     get(`${addresses.openai.api}/wham/accounts/check`, login.access, workspace),
@@ -421,11 +441,15 @@ export async function details(addresses: Addresses, { login }: { login: Login })
       ? [{ id, name: text(model.display_name) ?? id }]
       : [];
   });
-  const entry = Array.isArray(accounts?.accounts)
-    ? (accounts.accounts as { id?: unknown; name?: unknown }[]).find((account) => account.id === workspace)
-    : undefined;
+  const entry = workspaces(accounts).find((account) => account.id === workspace);
   const organization = text(entry?.name);
-  return { plan, planKnown, identity: { ...identity, ...(organization && { organization }) }, models };
+  const raw = claimed ?? text(entry?.plan_type)?.toLowerCase();
+  return {
+    plan: raw ? planName(raw) : "",
+    planKnown: raw !== undefined,
+    identity: { ...identity, ...(organization && { organization }) },
+    models,
+  };
 }
 
 /** ChatGPT's sign-in, as the rest of the plugin uses every company's. */
