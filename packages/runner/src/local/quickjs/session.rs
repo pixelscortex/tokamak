@@ -556,6 +556,13 @@ fn contains_string(value: &Value, needle: &str) -> bool {
     }
 }
 
+fn contract_target_name(plugin: &str, target: &Value) -> String {
+    match target["method"].as_str() {
+        Some(method) => format!("plugin {plugin}/{method}"),
+        None => format!("plugin {plugin} contract {}", target["name"]),
+    }
+}
+
 struct CallRoute<'a> {
     pool: &'a Pool,
     bridge: &'a Bridge,
@@ -672,11 +679,10 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
-        let name = match target["method"].as_str() {
-            Some(method) => format!("plugin {}/{method}", artifact.id),
-            None => format!("plugin {} contract {}", artifact.id, target["name"]),
-        };
-        next_call_depth(ancestors.len() - 1, &name)?;
+        next_call_depth(
+            ancestors.len() - 1,
+            &contract_target_name(&artifact.id, &target),
+        )?;
         if lease.is_some() && ancestors.contains(&artifact.id) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
