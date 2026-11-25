@@ -31,7 +31,7 @@ Not drawn yet: the thread list after several turns (its status icons show on the
 "Only Sam can run the agent here"), the picker over an open thread or with a second agent, a
 pending steer, queued messages, the expired question line, "Force stop".
 
-## The agent picker
+### The agent picker
 
 The agent row holds one picker, drawn by the owner in the Paper file "Tokamak — Directions"
 (artboard "6 · Thread · picker open"; its first column is not built here).
@@ -58,7 +58,18 @@ The agent row holds one picker, drawn by the owner in the Paper file "Tokamak �
 
 What the picker offers comes from one public function, `agents:list` (the agents and their
 models, levels, speeds and modes as this computer's local part answers). Nothing else adds
-choices, so narrowing that one answer narrows the picker. A stored model, level, speed or mode
+choices. What that means for a plugin that changes its answer:
+
+- It changes the picker's agents and models, the agent a new thread starts with, the chip's
+  fallback model and effort, and the settings a new turn starts with.
+- The answer is fetched once for the window (`lib/agents.ts`) and takes no thread, so it is
+  the same for every thread and is not asked again when something else changes.
+- The same answer feeds the agent marks on reply headers and thread rows and the "isn't
+  installed" line. An agent removed from it loses its mark, and its threads say it isn't
+  installed.
+- The turn checks the agent's own `info`, not this list.
+
+A stored model, level, speed or mode
 that is no longer offered reads as the first offered one, in the chip and in the turn alike
 (`shared/offered.ts`); the next change stores that fallback. A thread whose agent is gone
 keeps it and says it isn't installed, as before.
@@ -148,6 +159,13 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   sender's own computer today.
 - The drawing marks the picked row with a fill and medium text; the menu's radio item marks
   it with its check only.
+- The popover is wider than drawn (about 686 against 512) because the bar's radio items
+  are wider than the drawn dropdowns, and a long model list can reach the top of the window.
+- A thread whose agent is no longer in the `agents:list` answer says it "isn't installed"
+  and holds Send. Whether it should switch to the first offered agent, or say it is not
+  offered, is not decided.
+- The closed chip shows the model and effort only; speed, mode and the access level are
+  read in the popover.
 - The agent rows on every `AI ·` artboard and the whole `AI · picker open` artboard were
   taken again from `feature/tkm-259` (TKM-259); the rest of those artboards is still the
   earlier copy. The picker's "Runs on" shows "This Mac" in Paper, not the test computer's name.

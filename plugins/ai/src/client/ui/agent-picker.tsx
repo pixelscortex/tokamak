@@ -16,9 +16,11 @@ import { AgentMark } from "./agent-mark";
  *
  * The chip (`PickerChip`) and the column area (`PickerColumns`) are one element each, so
  * another plugin can add a column or a piece of the chip by naming them. What the picker
- * offers comes from `agents:list` alone (through `lib/agents.ts`), so narrowing that one
- * call narrows the picker. A stored choice the agent no longer offers already reads as its
- * first offered one (`offered` in `shared/offered.ts`), here and in the turn alike.
+ * offers comes from `agents:list` alone (through `lib/agents.ts`). That answer is fetched
+ * once for the window and is the same for every thread; it also feeds the agent marks and
+ * the "isn't installed" line, so narrowing it narrows those too. A stored choice the agent
+ * no longer offers already reads as its first offered one (`offered` in
+ * `shared/offered.ts`), here and in the turn alike.
  */
 export function AgentPicker(props: {
   current: Resolved;
@@ -229,7 +231,8 @@ function PickerSettings(props: { current: Resolved; change: (next: Change) => vo
         onPick={(next) => props.change({ access: next as Access })}
       />
       <span class="flex-1" />
-      <span class="inline-flex h-8 items-center gap-2 px-2 text-label">
+      {/* A fact, not a choice: kept out of the menu's own tree, where plain text is skipped or misread. */}
+      <span aria-hidden="true" class="inline-flex h-8 items-center gap-2 px-2 text-label">
         <span class="font-normal text-ink-3">Runs on</span>
         <Icon path={computerIcon} size={12} class="text-ink-2" />
         <span class="text-ink-2">{me.device.name}</span>
