@@ -172,14 +172,14 @@ impl Destination {
     ) -> Result<Json, CallError> {
         let Some(scope) = upstream.scope.clone() else {
             return self
-                .invoke_owner(process, source, name, args, upstream)
+                .invoke_owner(process, source, name, args, upstream, None)
                 .await
                 .map_err(Into::into);
         };
         let Some(target) = HookTarget::load(&scope.generation, &format!("{}/{name}", scope.owner))
         else {
             return self
-                .invoke_owner(process, source, name, args, upstream)
+                .invoke_owner(process, source, name, args, upstream, None)
                 .await
                 .map_err(Into::into);
         };
@@ -194,14 +194,32 @@ impl Destination {
                 _ => None,
             },
         };
-        run_action(
-            &target,
-            &note,
-            args,
-            |hook, _, note, input| stages.execute(hook, note, input),
-            |args| self.invoke_owner(process, source, name, args, upstream),
-        )
-        .await
+        let retirement = if stages.dispatch.is_some() {
+            Some(
+                source
+                    .clone()
+                    .ok_or("Plugin action has no action process bundle")?,
+            )
+        } else {
+            None
+        };
+        let chain = |retiring| {
+            run_action(
+                &target,
+                &note,
+                args,
+                |hook, _, note, input| stages.execute(hook, note, input),
+                |args| self.invoke_owner(process, source, name, args, upstream, retiring),
+            )
+        };
+        match retirement {
+            Some(source) => {
+                process
+                    .invoke_runner(&source, |retiring| chain(Some(retiring)))
+                    .await
+            }
+            None => chain(None).await,
+        }
         .map_err(Into::into)
     }
 
@@ -212,6 +230,7 @@ impl Destination {
         name: String,
         args: Json,
         upstream: ActionOperations,
+        retiring: Option<tokio_util::sync::CancellationToken>,
     ) -> Result<Json, engine::CallError> {
         match self {
             Self::Server => {
@@ -230,20 +249,24 @@ impl Destination {
                 entry_hash,
                 code_hash,
             } => {
-                let source = source.ok_or("Plugin action has no action process bundle")?;
-                process
-                    .invoke_runner(&source, |retiring| {
-                        dispatch(RunnerAction {
-                            plugin,
-                            entry_hash,
-                            code_hash,
-                            name,
-                            args,
-                            upstream: RunnerActionUpstream(upstream),
-                            retiring,
-                        })
+                let run = |retiring| {
+                    dispatch(RunnerAction {
+                        plugin,
+                        entry_hash,
+                        code_hash,
+                        name,
+                        args,
+                        upstream: RunnerActionUpstream(upstream),
+                        retiring,
                     })
-                    .await
+                };
+                match retiring {
+                    Some(retiring) => run(retiring).await,
+                    None => {
+                        let source = source.ok_or("Plugin action has no action process bundle")?;
+                        process.invoke_runner(&source, run).await
+                    }
+                }
             }
             Self::Failed(error) => Ok(error.value()),
             Self::CallerWindowRunner { .. } => {

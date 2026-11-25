@@ -48,7 +48,7 @@ await writeFile(
   `
   import { action, hook, provide } from "@tokamak/sdk";
   import { localPlace } from "plugin:ai/contracts";
-  import { audited, marker, rows, store } from "plugin:ai/server";
+  import { audited, marker, rows, store, wait } from "plugin:ai/server";
   export const policy = hook(marker, { after: () => "hooked" });
   export const audit = hook(audited, {
     async before(ctx, args) {
@@ -60,6 +60,14 @@ await writeFile(
     },
     after(_ctx, result) {
       return typeof result === "string" ? result.toUpperCase() : result;
+    },
+  });
+  export const waitPolicy = hook(wait, {
+    async before(ctx, args) {
+      const process = ctx.proc(["/bin/sh", "-c", "echo $$; exec /bin/sleep 30"]);
+      for await (const pid of process.stdout) await ctx.runMutation(store, { text: pid });
+      await process.exited;
+      return args;
     },
   });
   export const provider = provide(localPlace, {

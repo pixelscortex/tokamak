@@ -326,10 +326,12 @@ impl Supervisor {
         Ok((slot, plugin))
     }
 
-    pub(crate) async fn invoke_runner(
+    pub(crate) async fn invoke_runner<
+        F: std::future::Future<Output = Result<Value, engine::CallError>>,
+    >(
         &self,
         source: &Source,
-        run: impl FnOnce(CancellationToken) -> crate::RunnerFuture,
+        run: impl FnOnce(CancellationToken) -> F,
     ) -> Result<Value, engine::CallError> {
         use crate::protocol::{
             CallError, CallErrorDetails, LOCAL_RELOAD_GRACE_MS, StructuredCallError,
