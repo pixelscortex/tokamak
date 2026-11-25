@@ -1,0 +1,94 @@
+packages/sdk/tools/plugin-boundary.mjs
+  s_ba25387409099f::t_9ac5446f422513 262-263
+  s_ba25387409099f::t_67fc4b8aac8354 1,194,224-226,233,241,248-249,260-261,343-349
+  s_ba25387409099f::t_6063390a53f430 23-25,115-116,164-167,200-201
+  s_ba25387409099f::t_61d3da0062cc62 223,245
+  s_ba25387409099f::t_8017a035e6fc81 202-204
+  s_9982f8c50f6e65::t_1291dc347c22cd 222
+packages/build/README.md
+  s_9982f8c50f6e65::t_29a8ecc0fd81ad 89-93
+packages/build/src/descriptor.ts
+  s_9982f8c50f6e65::t_7da2bed440fa67 3-4
+packages/build/src/vite.ts
+  s_9982f8c50f6e65::t_39d7841e404b63 48,145
+packages/build/tests/ref-fixtures.mjs
+  s_9982f8c50f6e65::t_1536f6cad3c54d 1-162
+packages/build/tests/refs.test.mjs
+  s_9982f8c50f6e65::t_ef198df76dfa98 1-77
+packages/build/tests/run.sh
+  s_9982f8c50f6e65::t_481f76dcea52c6 3
+packages/sdk/README.md
+  s_9982f8c50f6e65::t_5601fa40198259 95-96,618-651
+packages/sdk/src/api.ts
+  s_9982f8c50f6e65::t_912fd93c21fbb9 4,49-66
+packages/sdk/src/index.ts
+  s_9982f8c50f6e65::t_dd23685868657b 10-18,96
+packages/sdk/src/schema.ts
+  s_9982f8c50f6e65::t_ac7391a89edf56 1-2,4-5,69-71,75,110-118
+packages/sdk/src/validators.ts
+  s_9982f8c50f6e65::t_e8d908c797b67c 10,16-24,31-38,90-94,96,100,103,110,114,118,122-138,205-207,217-229
+packages/sdk/tools/bundle.mjs
+  s_9982f8c50f6e65::t_22110caf044673 7,164,167-169,283,309-316,320,323,344,357,376
+packages/sdk/tools/plugin-compiler.mjs
+  s_9982f8c50f6e65::t_a910291cc4bd09 20
+packages/sdk/tools/plugin-descriptor.ts
+  s_9982f8c50f6e65::t_080e400eccbd0b 1-75
+packages/sdk/tools/table-references.mjs
+  s_9982f8c50f6e65::t_9a513d64204779 1-98
+packages/server/src/data/README.md
+  s_9982f8c50f6e65::t_0b2a4fd5ef4f99 36-39,64-75
+packages/server/src/data/mod.rs
+  s_9982f8c50f6e65::t_3737d2af765c61 23,215-216
+packages/server/src/data/query.rs
+  s_9982f8c50f6e65::t_379e794dd2cf62 128-130,159-168
+packages/server/src/data/space.rs
+  s_9982f8c50f6e65::t_534badcfec2da3 13
+packages/server/src/data/storage.rs
+  s_9982f8c50f6e65::t_1f386d2a8d7903 5,26,82
+packages/server/src/data/transaction.rs
+  s_9982f8c50f6e65::t_bbe07fee870354 17-19,74,95,223-225
+packages/server/src/data/transaction/indexes.rs
+  s_9982f8c50f6e65::t_fd4158b00e4906 3,17-36,44-46,55-57,217-219,224-235
+packages/server/src/data/transaction/records.rs
+  s_9982f8c50f6e65::t_db611866fbb3b1 121-127,191-192,217-218,220-221,227-234,236,241-259
+packages/server/src/data/transaction/references.rs
+  s_9982f8c50f6e65::t_c6858d57123aa7 1-156
+packages/server/src/plugins/grants.rs
+  s_9982f8c50f6e65::t_13ef20cf99bb49 38-39,59,71,74-81,89,101,111,149,162-183,190-201,203-219,221-241
+packages/server/src/plugins/tests.rs
+  s_9982f8c50f6e65::t_b8caf5b925af3d 216-369
+packages/server/src/schema.rs
+  s_9982f8c50f6e65::t_2a36986ce2915f 1,4,95-99,139,142-144,148-157,162-224,226,233,243,256-261,274-281,288-328
+packages/server/src/service/startup.rs
+  s_9982f8c50f6e65::t_b272f61ce0c2e2 310-324
+packages/server/tests/internal/references.rs
+  s_9982f8c50f6e65::t_2d17c5763e18f4 1-254
+packages/server/tests/refs-driver.mjs
+  s_9982f8c50f6e65::t_a75dc064d35242 1-86
+packages/server/tests/sdk_transport.rs
+  s_9982f8c50f6e65::t_5118bf1cfbcd03 611-623
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "515e201dd4318801442f53388817695b8cf6a01f",
+  "prompts": {},
+  "sessions": {
+    "s_9982f8c50f6e65": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21399-c620-7161-abf7-af78155d4bbc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    },
+    "s_ba25387409099f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-6ecc-7e01-89e8-446bc26db14f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
