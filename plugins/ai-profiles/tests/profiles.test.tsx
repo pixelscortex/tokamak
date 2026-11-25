@@ -53,6 +53,11 @@ function client(local: boolean): TokamakClient {
     mutation: call,
     action: call,
     subscribe(name, _args, onEvent) {
+      // The Profiles section's own list; its tests are in profiles-section.test.tsx.
+      if (name === "ai-profiles/profiles:list") {
+        queueMicrotask(() => onEvent({ value: [] }));
+        return () => {};
+      }
       if (name !== "ai-profiles/subscriptions:list") throw new Error(`Unexpected query ${name}`);
       const send = () => onEvent({ value: structuredClone(listed) as unknown as JsonValue });
       listeners.add(send);

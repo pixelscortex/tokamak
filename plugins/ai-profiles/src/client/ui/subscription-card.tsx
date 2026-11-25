@@ -17,13 +17,21 @@ export function SubscriptionCard(props: {
   now: number;
   onEnabled: (enabled: boolean) => void;
   onSignIn: () => Promise<unknown>;
+  /** Faded: a pointed-at profile does not hold it, or it is the card being dragged. */
+  dimmed?: boolean;
+  /** The end of the model line: the codes of the profiles that use it (TKM-264). */
+  profiles?: JSX.Element;
+  /** Starts dragging the card into a profile. */
+  onPointerDown?: (event: PointerEvent) => void;
 }): JSX.Element {
   const subscription = () => props.subscription;
   const name = () => titleOf(subscription());
   return (
     <article
       aria-label={[name(), subscription().label].filter(Boolean).join(", ")}
-      class="flex flex-col gap-3 rounded-md p-4 surface-tray"
+      class="group/card flex flex-col gap-3 rounded-md p-4 surface-tray transition data-dimmed:opacity-40"
+      data-dimmed={props.dimmed || undefined}
+      onPointerDown={(event: PointerEvent) => props.onPointerDown?.(event)}
     >
       <div class="flex items-center gap-3">
         <CompanyMark company={subscription().company} size={24} />
@@ -66,9 +74,13 @@ export function SubscriptionCard(props: {
           </div>
         </Match>
       </Choose>
-      <span class="truncate text-data text-ink-3">
-        {countOf(subscription().models.length, "model")} · {lastUse(subscription().lastUsedAt, props.now)}
-      </span>
+      {/* 16 tall as before; the 24 px "Add to profile" button overhangs it evenly. */}
+      <div class="flex h-4 items-center gap-2">
+        <span class="min-w-0 flex-1 truncate text-data text-ink-3">
+          {countOf(subscription().models.length, "model")} · {lastUse(subscription().lastUsedAt, props.now)}
+        </span>
+        {props.profiles}
+      </div>
     </article>
   );
 }
@@ -84,12 +96,15 @@ export function AwaitingCard(props: {
   onContinue: () => void;
   onCancel: () => Promise<unknown>;
   onRestart: () => Promise<unknown>;
+  /** Faded while a profile is pointed at: a sign-in is in no profile. */
+  dimmed?: boolean;
 }): JSX.Element {
   const product = () => productOf[props.signIn.company];
   return (
     <article
       aria-label={`${product()}, ${props.signIn.expired ? "sign-in expired" : "awaiting sign-in"}`}
-      class="flex items-start gap-3 rounded-md p-4 inset-ring inset-ring-edge"
+      class="flex items-start gap-3 rounded-md p-4 inset-ring inset-ring-edge transition data-dimmed:opacity-40"
+      data-dimmed={props.dimmed || undefined}
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-sm bg-card">
         <CompanyMark company={props.signIn.company} size={18} />
