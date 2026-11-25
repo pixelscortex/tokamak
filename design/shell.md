@@ -36,7 +36,7 @@ Plugins place content with regions from `@tokamak/sdk/client`, inside a `view`:
 | `Region.Panel`   | A second stage right of the main one (default 600 px, min 320, resizable)                                     | code's review panel                    |
 
 Also from the shell: the rail mark of each `view` (its `icon`, or its first
-letter), tab titles (`usePageTitle`), shortcuts (`useShortcuts`), quit
+letter; `ai-profiles` adds the Profiles page with a person mark under chat's), tab titles (`usePageTitle`), shortcuts (`useShortcuts`), quit
 blockers (`quitBlockers`).
 
 ## What it adds to others
@@ -78,6 +78,10 @@ button with a tooltip and keys) and `Notice`.
 - The Members page's tab reads "New thread" (with the person icon) instead of
   "Members"; `Shell · members` copies that too.
 
+- With `ai-profiles` installed (it is in the starter set) the rail has a
+  second mark, Profiles, under chat's. `Shell · frame` was copied before it
+  existed and shows the rail without it; `App 1:1 · AI profiles plugin` shows
+  it.
 - The test app's rail also shows test-only views (F, P, T, W, O); the Paper
   copy leaves them out.
 - The top strip keeps 76 px (a 64 px spacer and 12 px) for the macOS window

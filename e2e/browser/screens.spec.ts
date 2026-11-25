@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, mkdir, mkdtemp, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { startHostedFixture } from "../hosted-fixture";
+import { startFakeCompanies } from "../../plugins/agent-proxy/tests/fake-companies";
 import { asDesktop } from "./desktop";
 import { screenTree } from "./screen-tree";
 
@@ -285,3 +286,91 @@ async function unlinkGo(folder: string) {
   const { unlink } = await import("node:fs/promises");
   await unlink(join(folder, "go")).catch(() => {});
 }
+
+// The Profiles screen and the add-subscription dialog, signed in against the
+// fake Claude sign-in. They run on a copy of the plugins with agent-proxy,
+// ai-profiles and claude added (browser.ts builds them), so Claude's own mark
+// is the logo and the other screens keep the rail they are drawn with.
+test("profiles screens", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const fake = await startFakeCompanies();
+  fake.addAccount("anthropic", "personal");
+  const shared = process.env.TOKAMAK_PLUGIN_DIR!;
+  const folder = await mkdtemp(join(dirname(shared), "profiles-"));
+  const plugins = join(folder, "plugins");
+  await cp(shared, plugins, { recursive: true });
+  await cp(process.env.TOKAMAK_E2E_EXTRA_PLUGINS!, plugins, { recursive: true });
+  // The server reads the addresses from the installation's .env.local, beside its plugins.
+  await writeFile(
+    join(folder, ".env.local"),
+    `TOKAMAK_AGENT_PROXY_ADDRESSES='${JSON.stringify(fake.addresses)}'\n`,
+  );
+  const context = await browser.newContext(screen);
+  try {
+    process.env.TOKAMAK_PLUGIN_DIR = plugins;
+    try {
+      await asDesktop(context);
+    } finally {
+      process.env.TOKAMAK_PLUGIN_DIR = shared;
+    }
+    const page = await context.newPage();
+    await page.goto("/p/ai-profiles");
+    const subscriptions = page.getByRole("region", { name: "Subscriptions" });
+    await expect(subscriptions.getByRole("button", { name: "Add subscription" })).toBeVisible();
+    // Blur the field typed in last and move the pointer off, so a shot shows no focus or hover.
+    const rest = () =>
+      Promise.all([
+        page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()),
+        page.mouse.move(5, 5),
+      ]);
+
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("button", { name: /Anthropic/ })).toBeVisible();
+    // The logos come from ai's agent list once the Runner answers.
+    await expect(dialog.locator("[data-mark=agent]")).toHaveCount(2);
+    await rest();
+    await shot(page, "profiles-add-company");
+    await dialog.getByRole("button", { name: /Anthropic/ }).click();
+    await expect(dialog.getByRole("button", { name: /Claude subscription/ })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-method");
+    await dialog.getByRole("button", { name: /Claude subscription/ }).click();
+    const open = dialog.getByRole("link", { name: "Open sign-in page" });
+    await expect(open).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-sign-in");
+
+    // The person signs in on Claude's page in their browser and ends on the callback link.
+    const signedIn = await fetch((await open.getAttribute("href"))!, { redirect: "manual" });
+    const callback = signedIn.headers.get("location")!;
+    await dialog.getByRole("button", { name: /Signed in on another device/ }).click();
+    await dialog.getByRole("textbox", { name: /Link or code/ }).fill(callback);
+    await rest();
+    await shot(page, "profiles-add-sign-in-other-device");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connected" })).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Label" }).fill("Personal");
+    await rest();
+    await shot(page, "profiles-add-connected");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(subscriptions.getByRole("article", { name: "Claude Pro, Personal" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-subscriptions");
+
+    // A second sign-in, left waiting: the dialog closes and the card stays.
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    await dialog.getByRole("button", { name: /Anthropic/ }).click();
+    await dialog.getByRole("button", { name: /Claude subscription/ }).click();
+    await expect(dialog.getByRole("link", { name: "Open sign-in page" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close" }).click();
+    await expect(subscriptions.getByRole("article", { name: "Claude, awaiting sign-in" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-awaiting");
+  } finally {
+    await context.close();
+    await fake.stop();
+    await unlink(join(folder, ".env.local"));
+  }
+});

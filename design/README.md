@@ -15,14 +15,16 @@ Each plugin with UI has one file, with the same five sections:
 
 Then **Open questions** for anything the code does not settle.
 
-| File                                 | Plugin                          | Paper page              |
-| ------------------------------------ | ------------------------------- | ----------------------- |
-| [shell.md](shell.md)                 | The app frame (`app/src/shell`) | `App 1:1 · Shell`       |
-| [chat.md](chat.md)                   | `chat`                          | `App 1:1 · Chat plugin` |
-| [ai.md](ai.md)                       | `ai`                            | `App 1:1 · AI plugin`   |
-| [code.md](code.md)                   | `code`                          | `App 1:1 · Code plugin` |
-| [claude-plugin.md](claude-plugin.md) | `claude` (data only, no UI)     | none                    |
-| [codex-plugin.md](codex-plugin.md)   | `codex` (data only, no UI)      | none                    |
+| File                                 | Plugin                           | Paper page                     |
+| ------------------------------------ | -------------------------------- | ------------------------------ |
+| [shell.md](shell.md)                 | The app frame (`app/src/shell`)  | `App 1:1 · Shell`              |
+| [chat.md](chat.md)                   | `chat`                           | `App 1:1 · Chat plugin`        |
+| [ai.md](ai.md)                       | `ai`                             | `App 1:1 · AI plugin`          |
+| [code.md](code.md)                   | `code`                           | `App 1:1 · Code plugin`        |
+| [claude-plugin.md](claude-plugin.md) | `claude` (data only, no UI)      | none                           |
+| [codex-plugin.md](codex-plugin.md)   | `codex` (data only, no UI)       | none                           |
+| [ai-profiles.md](ai-profiles.md)     | `ai-profiles`                    | `App 1:1 · AI profiles plugin` |
+| [agent-proxy.md](agent-proxy.md)     | `agent-proxy` (data only, no UI) | none                           |
 
 `basic-auth` draws nothing; its sign-in fields are drawn by the shell's sign-in dialog.
 
@@ -49,6 +51,8 @@ Rows: the plugin that adds. Columns: whose screen it changes.
 | ai            | —                                                            | Composer: agent row, permission card, Stop. Empty: heading. Message: reply header, work lines, tasks/plan/usage, steers. Thread row: status icon, detail line, helper rows | —                                                                                      |
 | code          | Panel: review panel                                          | Header: branch chip, layout control. Message footer: change card, notices                                                                                                  | Reads turns (`turns:list`); draws nothing in ai                                        |
 | claude, codex | —                                                            | —                                                                                                                                                                          | Name, mark, models, levels, speeds, modes, reports (data through the `agent` contract) |
+| ai-profiles   | Rail, tabs, search: the Profiles page (person mark)          | —                                                                                                                                                                          | Reads ai's agent list (`agents:list`) for company logos; draws nothing in ai           |
+| agent-proxy   | —                                                            | —                                                                                                                                                                          | — (gives ai-profiles its subscriptions and sign-in through plugin-only exports)        |
 
 ## How the Paper pages are made
 
