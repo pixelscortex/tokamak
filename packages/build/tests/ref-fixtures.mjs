@@ -50,7 +50,7 @@ export async function refFixtures(
       export default defineSchema({ leaves: defineTable({ link: v.optional(v.ref(tables.links)) }) });
     `,
         "rows.ts": `
-      import { createFunctions, v } from "@tokamak/sdk";
+      import { createFunctions, v, type HostBridge } from "@tokamak/sdk";
       import { tables } from "plugin:dependent/tables";
       import schema from "./schema";
       const { query, mutation } = createFunctions(schema);
@@ -59,6 +59,14 @@ export async function refFixtures(
         handler: (ctx, { link }) => ctx.db.insert("leaves", { link }),
       });
       export const list = query({ handler: (ctx) => ctx.db.query("leaves").collect() });
+      const probe = query({ handler: () => null });
+      export const hiddenIndex = Object.freeze({
+        ...probe,
+        invoke: (_input: unknown, host: HostBridge) => host.op("db.query", {
+          table: "leaves", where: [], order: "asc", limit: null,
+          index: { name: "$ref:link", eq: [], range: [] },
+        }),
+      });
     `,
       })
     : undefined;
@@ -70,7 +78,8 @@ export function ownerSchema(extra = "") {
   return `
     import { defineSchema, defineTable, v } from "@tokamak/sdk";
     export default defineSchema({
-      items: defineTable({ label: v.string(), ${extra} }),
+      items: defineTable({ label: v.string(), parent: v.optional(v.id("folders")), ${extra} }),
+      folders: defineTable({}),
       others: defineTable({ label: v.string() }),
     });
   `;

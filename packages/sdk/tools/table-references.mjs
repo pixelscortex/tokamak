@@ -19,7 +19,16 @@ export function tableReferences(folder, owner, config) {
   const typeOf = (symbol) => checker.getTypeOfSymbolAtLocation(symbol, source);
 
   function render(type, omitUndefined = false, ancestors = new Set()) {
-    if (type.aliasSymbol?.name === "Id") return `Id<${checker.typeToString(type.aliasTypeArguments[0])}>`;
+    if (type.aliasSymbol?.name === "Id") {
+      const argument = type.aliasTypeArguments[0];
+      const members = argument.isUnion() ? argument.types : [argument];
+      const names = members.map((member) =>
+        member.isStringLiteral() && !member.value.includes(".")
+          ? quote(`${owner}.${member.value}`)
+          : checker.typeToString(member),
+      );
+      return `Id<${names.join(" | ")}>`;
+    }
     if (type.aliasSymbol?.name === "JsonValue") return "JsonValue";
     if (type.isUnion() || type.isIntersection()) {
       const members = type.types.filter(
@@ -64,6 +73,7 @@ export function tableReferences(folder, owner, config) {
 }
 
 export function tableDeclarations(owner, tables, allowed) {
+  // Preserve the owner in missing-property diagnostics, even when it exports no tables.
   return (
     '// Generated table handles. Do not edit.\nimport type { Id, JsonValue, TableReference } from "@tokamak/sdk";\n' +
     `export declare const tables: {\n  readonly [Symbol.toStringTag]?: ${quote(owner)};\n` +

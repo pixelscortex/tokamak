@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "bun:test";
 import { build, built, workspace } from "./plugin-fixtures.mjs";
@@ -17,6 +17,7 @@ test("ref types are inferred and refreshed from the owner's schema on every buil
   const copy = join(dependent, ".tokamak/types/owner/tables.d.ts");
   const before = await readFile(copy, "utf8");
   assert.match(before, /TableReference<"owner.items".*"label": string/);
+  assert.match(before, /"parent"\?: Id<"owner.folders">/);
   assert.doesNotMatch(before, /"rank"/);
 
   await writeFile(join(owner, "src/schema.ts"), ownerSchema("rank: v.optional(v.number())"));
@@ -28,7 +29,7 @@ test("ref types are inferred and refreshed from the owner's schema on every buil
 test("refs require a declared dependency and a real table", async () => {
   for (const [options, error] of [
     [{ depends: 'optional: ["owner"],' }, /Declare owner in depends to reference owner.items/],
-    [{ table: "missing" }, /Property 'missing'.*owner/s],
+    [{ table: "missing" }, /Property 'missing' does not exist on type '[^\n]*owner/],
   ]) {
     const { dependent } = await fixture(options);
     const result = build(dependent);
@@ -58,4 +59,19 @@ test("defineTable rejects refs nested in arrays, objects and unions", async () =
     result.stdout.match(/^schema\.ts[^\n]*error TS[^\n]*A ref must be a top-level field/gm)?.length,
     3,
   );
+}, 30_000);
+
+test("Vite's plugin option supplies dependencies for table imports", async () => {
+  const { dependent } = await fixture();
+  await unlink(join(dependent, "plugin.ts"));
+  await writeFile(
+    join(dependent, "vite.config.ts"),
+    `import { tokamak } from ${JSON.stringify(join(workspace, "packages/build/src/vite.ts"))};
+     export default { plugins: [tokamak({
+       plugin: { id: "dependent", version: "1.0.0", depends: { owner: "*" } },
+     })] };`,
+  );
+  built(dependent);
+  const manifest = JSON.parse(await readFile(join(dependent, "dist/manifest.json"), "utf8"));
+  assert.deepEqual(manifest.plugin.depends, { owner: "*" });
 }, 30_000);

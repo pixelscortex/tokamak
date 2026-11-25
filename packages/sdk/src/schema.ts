@@ -72,12 +72,6 @@ export function defineTable<F extends Fields>(
   if (Object.hasOwn(fields, "_id") || Object.hasOwn(fields, "_creationTime")) {
     throw new Error("Table fields cannot declare _id or _creationTime: the host owns them");
   }
-  for (const { description } of Object.values<Fields[string]>(fields)) {
-    const field = description.kind === "optional" ? description.inner : description;
-    if (field.kind !== "ref" && containsRef(field))
-      throw new Error("A ref must be a top-level field (optional allowed)");
-  }
-
   const snapshot: F = Object.freeze({ ...fields });
   const description = v.object(snapshot).description;
   const table = (indexes: readonly IndexDefinition[]): TableDefinition<F, Indexes> => {
@@ -113,7 +107,15 @@ export function defineTable<F extends Fields>(
 }
 
 export function defineSchema<T extends Record<string, TableDefinition>>(tables: T): SchemaDefinition<T> {
-  for (const table of Object.keys(tables)) assertTable(table);
+  for (const [table, definition] of Object.entries(tables)) {
+    assertTable(table);
+
+    for (const [name, { description }] of Object.entries(definition.fields)) {
+      const field = description.kind === "optional" ? description.inner : description;
+      if (field.kind !== "ref" && containsRef(field))
+        throw new Error(`Ref ${table}.${name} must be a top-level table field`);
+    }
+  }
   return Object.freeze({ tables: Object.freeze({ ...tables }) });
 }
 

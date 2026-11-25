@@ -608,16 +608,20 @@ export default defineSchema({
 
 The field has type `Id<"chat.threads">`. The builder copies the owner's table
 types into `.tokamak/types/` and refreshes the copy each time you build.
-Use `TableDocument<typeof chat.tables.threads>` for the owner's document type. When you import an owner's table handles, its
-generated public function references also use qualified IDs, so you can pass
-IDs between those functions and your ref field directly. You can use the same
-validator for function arguments. The ref works with an index like any other
-field and may be optional with `v.optional`.
+Use `TableDocument<typeof chat.tables.threads>` for the owner's document type.
+You can use the same validator for function arguments. The ref works with an
+index like any other field and may be optional with `v.optional`.
 
 A ref does not give `ctx.db` access to the owner's table. To read a referenced
 row, call the owner's public query. Saving a ref requires an existing row in
 the declared table. Deleting that row automatically deletes all rows that
 reference it as part of the same save. If the save rolls back, all rows remain.
+
+Adding a ref or changing its target does not check existing values. Rows of a
+removed plugin keep their refs, but those refs do not cascade until the plugin
+is installed again. Importing `plugin:owner/tables` anywhere in your plugin
+switches that owner's generated API types to qualified IDs for your whole
+plugin, so you can pass those IDs directly between refs and public functions.
 
 ### Typed contracts between plugins
 

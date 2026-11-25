@@ -220,6 +220,7 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
   }
   const { refs, imports } = publicReferences(target.folder, target.entry);
   const apiTypes = `Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry})> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry})>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>`;
+  // A table import opts the entire consumer into qualified API ids for this owner.
   const api = tableOwners.has(target.id)
     ? `import("@tokamak/sdk").QualifiedPluginApi<${JSON.stringify(target.id)}, ${apiTypes}>`
     : apiTypes;
@@ -241,10 +242,9 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root) {
+export function checkPluginImports(root, depends = readDescriptor(root)?.depends ?? {}) {
   root = resolve(root);
   const declared = new Set();
-  const depends = readDescriptor(root)?.depends ?? {};
   const imports = new Map();
   const tableOwners = new Set();
   function checkFile(path) {
