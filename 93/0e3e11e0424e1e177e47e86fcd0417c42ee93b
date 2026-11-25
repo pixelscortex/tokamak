@@ -1,0 +1,21 @@
+packages/sdk/tools/placement.mjs
+  s_419b7bad57fe38::t_ca84f0d48bdb9e 91-95,132-133
+packages/build/tests/boundary.test.mjs
+  s_419b7bad57fe38::t_ca84f0d48bdb9e 390-393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "930e3e11e0424e1e177e47e86fcd0417c42ee93b",
+  "prompts": {},
+  "sessions": {
+    "s_419b7bad57fe38": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a214b6-b113-7f61-be9c-db88587e132f",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
