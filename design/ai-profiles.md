@@ -75,13 +75,16 @@ None. It publishes no `component`.
   the mark only when it is one path in a 24 × 24 box (Claude's is).
 - The dialog's text column is `Dialog.Content`'s 440 (`max-w-dialog`); the
   step pills and the close button share its header line.
+- The desktop sign-in step uses the shell's return listener (listen and
+  cancel) and HTTPS opener; see `design/shell.md`. Keep the company callback
+  map in `lib/sign-in-return.ts` aligned with the provider redirects.
 - Adding OpenAI (TKM-262): the company row becomes a button, a method step and
   a sign-in title per company; `productOf` and `agentOf` in `lib/api.ts`.
 
 ## Primitives used
 
 `Button` (`sm` ghost "Sign in", "Continue", "Cancel"; `md` ghost "Add
-subscription", "Copy link", "Back"; brand "Open sign-in page" as a link,
+subscription", "Copy link", "Back"; brand "Open sign-in page" (a link in a browser),
 "Done", "Start again"), `Chip` (`sm`), `Collapsible` (`quiet` trigger),
 `Dialog`, `Icon`, `icons`, `Input` (`md` `mono`, `lg`), `Row` (single and
 double), `Switch` (solid-js's `Switch` is imported as `Choose`); its own `CompanyMark`.
@@ -97,24 +100,16 @@ is left out (Paper measures from inside it). Matched to this branch,
 
 ## Open questions
 
-- **The sign-in step differs from the drawing.** The drawing puts the paste
-  field under "Signed in on another device?" and expects Claude's page to show
-  `code#state`. With the redirect as built (`http://localhost:54545/callback`,
-  the Claude Code CLI's own), nothing listens there, so after signing in on
-  this device the browser ends on a page that fails to load. The step says so
-  ("After you sign in, your browser ends on a page that may not load. Copy the
-  whole address…"), shows the field right away, and keeps "Signed in on
-  another device?" only as a note for the other-device case. A pasted
-  `code#state` or bare code is still accepted. Which redirect to use (this one,
-  or Claude's hosted manual-code page) is the owner's call; the drawing can go
-  back to the folded field if the hosted page is chosen.
+- **The sign-in step differs from the drawing.** The address field stays
+  visible. Desktop opens the sign-in page in the system browser and, when
+  the loopback port is free, finishes automatically after the browser
+  returns. In a plain browser, on another device, or if the port is busy,
+  paste the address the browser ended on. Closing stops the desktop
+  listener but leaves the server sign-in waiting; Continue on the card
+  listens again for the time left. Cancel, expiry and completion stop it.
 - The company rows' 2 px gap, the method row's 18 px icon and its band-on-hover
   are not available without restyling `Row` or `Icon` (see above).
 
-- "Open sign-in page" is a link that opens a new window. In a browser it opens
-  a tab; the desktop app has no opener for outside links (no Tauri opener
-  plugin), so it may do nothing there, and "Copy link" is the way. The owner's
-  real check covers it.
 - In the browser test run the dialog sits at the window's top-left corner, as
   the shell's sign-in dialog does (`design/shell.md`); the Paper copies draw
   it there. Check where the desktop app puts it.

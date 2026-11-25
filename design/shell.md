@@ -45,8 +45,18 @@ Nothing inside plugin parts. It frames them: the stage is `surface-stage`
 with radius 12 on the window tone, 8 px from the window's right and bottom
 edges (4 px when the panel is open).
 
+## Subscription sign-in
+
+The main desktop window can call `sign_in_return_listen` with `port`, `path`,
+`requestId` and `timeoutMs`. It waits for one matching GET on IPv4 and, when
+supported, IPv6 loopback (ports 54545 and 1455 only, up to 15 minutes).
+`sign_in_return_cancel` takes `port` and `requestId`, so cleanup cannot cancel
+a replacement listener. `sign_in_open_browser` takes an HTTPS `url` and opens
+it in the system browser.
+
 ## If you change X, check Y
 
+- The subscription sign-in commands: AI Profiles uses them in its sign-in step.
 - Sidebar padding (`pt-1 pe-3 pb-3 ps-2`) or its density: chat's thread rows
   (`px-row`, 32 tall in dense) and ai's detail and helper rows.
 - Stage header height or padding (`h-12 ps-4 pe-2`): chat's thread header

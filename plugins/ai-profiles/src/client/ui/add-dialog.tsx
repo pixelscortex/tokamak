@@ -1,16 +1,18 @@
-import { For, Match, Show, Switch as Choose, createSignal } from "solid-js";
+import { For, Match, Show, Switch as Choose, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { Button, Chip, Collapsible, Dialog, Icon, Input, Row, icons } from "@tokamak/ui";
 import type { SignIn, Subscription } from "../lib/api";
+import { hasDesktopSignIn, openSignInBrowser } from "../lib/desktop";
+import { watchSignInReturn } from "../lib/sign-in-return";
 import { countOf, modelName, titleOf } from "../lib/format";
 import { glyphs, profilesIcon } from "../lib/icons";
 import { CompanyMark, markPath } from "./company-mark";
 
 /**
  * Adding a subscription (Paper "2a" to "2d"): company, then method, then
- * sign-in, then connected. Closing the dialog at any step stops nothing: a
- * sign-in keeps waiting, and the screen shows it as an "Awaiting sign-in" card
- * that opens this dialog at its sign-in step again.
+ * sign-in, then connected. Closing stops the desktop listener. The server
+ * sign-in keeps waiting, so the "Awaiting sign-in" card can reopen this dialog
+ * and start a new listener.
  */
 export type Step =
   | { kind: "company" }
@@ -68,8 +70,14 @@ export function AddDialog(props: AddDialogProps): JSX.Element {
                       signIn={signIn()}
                       copy={props.copy}
                       finish={async (pasted) => {
-                        const added = await props.finish(signIn(), pasted);
-                        if (!failed(added)) props.onStep({ kind: "connected", subscription: added });
+                        const current = signIn();
+                        const added = await props.finish(current, pasted);
+                        if (
+                          !failed(added) &&
+                          props.step?.kind === "sign-in" &&
+                          props.step.signIn.id === current.id
+                        )
+                          props.onStep({ kind: "connected", subscription: added });
                         return added;
                       }}
                       restart={async () => {
@@ -235,6 +243,8 @@ function SignInStep(props: {
   const [copied, setCopied] = createSignal(false);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   const expired = () => props.signIn.expired;
+  const desktop = hasDesktopSignIn();
+  onCleanup(() => clearTimeout(copiedTimer));
 
   async function copyLink() {
     await (props.copy ?? ((text: string) => navigator.clipboard.writeText(text)))(props.signIn.link);
@@ -243,20 +253,32 @@ function SignInStep(props: {
     copiedTimer = setTimeout(() => setCopied(false), 2_000);
   }
   // One finish at a time: the server would answer a second one "already finishing" anyway.
-  async function submit() {
-    if (submitting() || !pasted().trim()) return;
+  async function submit(address: string) {
+    if (submitting() || !address.trim()) return false;
     setSubmitting(true);
     setProblem(undefined);
     try {
-      const result = await props.finish(pasted());
+      const result = await props.finish(address);
       if (failed(result)) {
         setProblem(result.data.message);
         setEnded(ENDED.includes(result.kind));
+        return ENDED.includes(result.kind);
       }
+      return true;
     } catch {
       setProblem("The sign-in could not finish. Try again.");
+      return false;
     } finally {
       setSubmitting(false);
+    }
+  }
+  watchSignInReturn(() => (ended() ? undefined : props.signIn), submit);
+
+  async function openBrowser() {
+    try {
+      await openSignInBrowser(props.signIn.link);
+    } catch {
+      setProblem("The browser could not open. Copy the link to open it yourself.");
     }
   }
   async function restart() {
@@ -264,6 +286,7 @@ function SignInStep(props: {
     try {
       const started = await props.restart();
       if (failed(started)) setProblem(started.data.message);
+      else setEnded(false);
     } catch {
       setProblem("The sign-in could not start. Try again.");
     }
@@ -289,9 +312,14 @@ function SignInStep(props: {
           <Button
             variant="brand"
             icon={glyphs.external}
-            render={(attrs: Record<string, unknown>) => (
-              <a {...attrs} href={props.signIn.link} target="_blank" rel="noopener noreferrer" />
-            )}
+            onClick={desktop ? openBrowser : undefined}
+            render={
+              desktop
+                ? undefined
+                : (attrs: Record<string, unknown>) => (
+                    <a {...attrs} href={props.signIn.link} target="_blank" rel="noopener noreferrer" />
+                  )
+            }
           >
             Open sign-in page
           </Button>
@@ -302,20 +330,19 @@ function SignInStep(props: {
         </div>
         <p class="m-0 flex items-center gap-2 text-label text-ink-3">
           <Icon path={icons.running} size={12} />
-          Waiting for you to sign in · you can close this
+          {desktop ? "Waiting for you to sign in" : "Waiting for you to sign in · you can close this"}
         </p>
-        {/* Nothing listens on the sign-in's redirect, so the browser ends on a page that
-            fails to load; its address holds the code. Say so, and ask for it right here. */}
         <form
           class="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit();
+            void submit(pasted());
           }}
         >
           <p id="paste-help" class="m-0 text-label text-ink-2">
-            After you sign in, your browser ends on a page that may not load. Copy the whole address from its
-            address bar and paste it here.
+            {desktop
+              ? "Tokamak can finish sign-in for you. If it doesn’t, copy the whole address your browser ends on and paste it here."
+              : "After you sign in, your browser ends on a page that may not load. Copy the whole address from its address bar and paste it here."}
           </p>
           <div class="flex items-center gap-2">
             <Input
