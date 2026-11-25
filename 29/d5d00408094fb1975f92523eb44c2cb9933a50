@@ -1,0 +1,84 @@
+packages/server/src/data/storage.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 5,26,82
+packages/build/src/vite.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 48,145
+packages/sdk/tools/table-references.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-98
+packages/server/src/service/startup.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 310-324
+packages/server/src/plugins/grants.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 38-39,59,71,74-81,89,101,111,149,162-183,190-201,203-219,221-241
+packages/server/src/data/query.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 128-130,159-168
+packages/server/src/data/transaction/references.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-156
+packages/server/src/data/transaction.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 17-19,74,95,223-225
+packages/server/tests/sdk_transport.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 611-623
+packages/server/tests/internal/references.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-254
+packages/sdk/tools/plugin-compiler.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 20
+packages/build/tests/ref-fixtures.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-162
+packages/build/README.md
+  s_9982f8c50f6e65::t_2126810c5ca76e 89-93
+packages/sdk/README.md
+  s_9982f8c50f6e65::t_2126810c5ca76e 95-96,618-650
+  s_9982f8c50f6e65::t_77d8ff1455c772 651
+packages/server/tests/refs-driver.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-86
+packages/build/tests/run.sh
+  s_9982f8c50f6e65::t_2126810c5ca76e 3
+packages/sdk/tools/plugin-boundary.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1,23-25,115-116,164-167,194,200-204,222-226,233,241,245,248-249,260-263,343-349
+packages/server/src/data/README.md
+  s_9982f8c50f6e65::t_2126810c5ca76e 36-39,64-75
+packages/sdk/src/api.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 4,49-65
+  s_9982f8c50f6e65::t_80933af915b447 66
+packages/sdk/tools/plugin-descriptor.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-75
+packages/server/src/plugins/tests.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 216-367
+packages/server/src/schema.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1,4,95-99,139,142-144,148-157,162-224,226,233,243,256-261,274-281,288-327
+  s_9982f8c50f6e65::t_5ff2d8b84e79bb 328
+packages/server/src/data/transaction/indexes.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 3,17-36,44-46,55-57,217-219,224-235
+packages/build/src/descriptor.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 3-4
+packages/sdk/tools/bundle.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 7,164,167-169,283,309-316,320,323,344,357,376
+packages/build/tests/refs.test.mjs
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-77
+packages/sdk/src/schema.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 1-2,4-5,69-71,75,110-118
+packages/server/src/data/mod.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 23,215-216
+packages/server/src/data/space.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 13
+packages/sdk/src/index.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 10-18,96
+packages/server/src/data/transaction/records.rs
+  s_9982f8c50f6e65::t_2126810c5ca76e 121-127,191-192,217-218,220-221,227-234,236,241-259
+packages/sdk/src/validators.ts
+  s_9982f8c50f6e65::t_2126810c5ca76e 10,16-24,31-38,90-94,96,100,103,110,114,118,122-138,205-207,217-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "29d5d00408094fb1975f92523eb44c2cb9933a50",
+  "prompts": {},
+  "sessions": {
+    "s_9982f8c50f6e65": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21399-c620-7161-abf7-af78155d4bbc",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
