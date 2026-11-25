@@ -41,7 +41,7 @@ const AWAY_MS = 20_000;
  */
 const RELEASE_MS = BEAT_MS + 5_000;
 
-/** The sign of life. False once the turn has ended, so the local part stops its agent. */
+/** The sign of life. False once the turn has ended, so the Runner stops its agent. */
 export const beat = mutation({
   args: { turnId: v.id("turns") },
   handler: async (ctx, { turnId }) => {
@@ -58,9 +58,9 @@ export const beat = mutation({
 });
 
 /**
- * Called by a window once its local part is up: this device's running or
- * waiting turns that its local part does not run (`running`) belong to an app
- * that quit or crashed, so they end now instead of after the full limit.
+ * Called by a window once it can reach its Runner. Turns on this device
+ * that the window does not own (`running`) are interrupted only once their
+ * last beat goes stale, so a turn in another open window keeps running.
  * Resolves how many such turns beat too recently to end yet; the window asks
  * again after a beat.
  */
@@ -142,7 +142,7 @@ function signOf(db: DatabaseReader<Model>, turnId: Id<"turns">) {
     .first();
 }
 
-/** When the turn's local part last spoke: its last sign, or when the turn began. */
+/** When the turn’s Runner last spoke: its last sign, or when the turn began. */
 async function lastHeard(db: DatabaseReader<Model>, turn: Turn) {
   return Math.max((await signOf(db, turn._id))?.at ?? 0, turn.startedAt);
 }

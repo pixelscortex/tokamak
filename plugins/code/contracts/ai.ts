@@ -77,14 +77,14 @@ export interface Agent {
 
 /**
  * The agent contract. QuickJS adapts the provider's Run to plain data across
- * processes. Agent plugins provide it from their `local` code:
+ * processes. Agent plugins provide it as caller actions:
  *
  * ```ts
  * import * as ai from "plugin:ai/contracts";
  * const info = action({
-  on: "caller", handler: async (ctx): Promise<ai.Info> => ({ ... }) });
+ *   on: "caller", handler: async (ctx): Promise<ai.Info> => ({ ... }) });
  * const start = action({
-  on: "caller", handler: async (ctx, run: ai.Run) => { run.text("Hi"); return { sessionId } } });
+ *   on: "caller", handler: async (ctx, run: ai.Run) => { run.text("Hi"); return { sessionId } } });
  * export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
  * ```
  */

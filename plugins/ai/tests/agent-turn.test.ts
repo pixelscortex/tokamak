@@ -1,14 +1,9 @@
 import { expect, test, vi } from "vitest";
-import type { AuthContext, JsonValue } from "@tokamak/sdk";
+import type { JsonValue } from "@tokamak/sdk";
 import type { AgentTurnStart } from "@tokamak/sdk/agent-turn";
 import type { Agent } from "../src/contracts";
 import { startAgent } from "../src/server/agent-turn";
 import { turnControl } from "../src/server/controls";
-
-const auth: AuthContext = {
-  user: { id: "member", name: "Sam", role: "owner" },
-  device: { id: "device", name: "This computer" },
-};
 
 function linkedTurn(turnId: string) {
   const input: AgentTurnStart = {
@@ -45,7 +40,7 @@ function linkedTurn(turnId: string) {
     usage: vi.fn(),
     sessionChanged: vi.fn(),
   };
-  const control = turnControl(turnId, auth);
+  const control = turnControl(turnId, "window");
   const running = startAgent(
     provider,
     input,

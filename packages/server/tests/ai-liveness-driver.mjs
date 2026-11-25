@@ -11,12 +11,14 @@
 // case alongside. Allow about two minutes in the offline server suite.
 import assert from "node:assert/strict";
 import { isFailure } from "../../sdk/src/index.ts";
-import { BEAT_MS, SILENCE_MS } from "../../../plugins/ai/src/shared/turn-timing.ts";
-import { readFile } from "node:fs/promises";
+import { BEAT_MS, RELOADED, SILENCE_MS } from "../../../plugins/ai/src/shared/turn-timing.ts";
+import { cp, readFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { agentHarness, connect, watchQuery } from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/start-runner.ts";
-import { inspectHosts } from "../../runner/tests/support/routing.mjs";
+import { editBundle, inspectHosts } from "../../runner/tests/support/routing.mjs";
+
+import { runLocalTurn } from "../../../plugins/ai/src/client/lib/local-turn.ts";
 
 const h = await agentHarness({ binary: process.argv[2], name: "ai-liveness" });
 const { ai, chat } = h.api;
@@ -27,7 +29,7 @@ const NOTICED_MS = SILENCE_MS + 30_000;
 
 try {
   // The lost server and a crashed ai host wait out their deadlines alongside.
-  const scenarios = [lostServer(), crashedApp()];
+  const scenarios = [lostServer(), crashedApp(), windowReloadTimeout()];
   const binary = process.env.TOKAMAK_TEST_RUNNER_BIN;
   if (binary) scenarios.push(crashedManager(binary));
   await Promise.all(scenarios);
@@ -36,6 +38,55 @@ try {
   );
 } finally {
   await h.close();
+}
+
+/** A shared server dispatches the action through the caller’s window and attached desktop Runner. */
+async function windowReloadTimeout() {
+  const pluginsDir = join(h.scratch, "window-reload-plugins");
+  await cp(h.plugins, pluginsDir, { recursive: true });
+  const plugin = join(pluginsDir, "ai");
+  const original = await readFile(join(plugin, "local.js"), "utf8");
+  const finish = "state = await ctx.runMutation(api.turns.finish,";
+  assert.ok(original.includes(finish));
+  await editBundle(plugin, "", (code) => code.replace(finish, `await new Promise(() => {}); ${finish}`));
+  const address = await h.serve("window-reload", { shared: true, pluginsDir, windowRouted: true });
+  const desk = await h.connect(address, {
+    token: await h.ownerDevice(address, "Reloading window"),
+    local: true,
+    pluginsDir,
+  });
+  const folder = await h.folder("window-reload");
+  const { threadId, messageId } = await desk.mutation(chat.threads.start, {
+    text: "Wait for permission",
+    folder: { kind: "chosen", path: folder },
+  });
+  const turns = h.watch(desk, ai.turns.list, { threadId });
+  const running = runLocalTurn(desk, {
+    threadId,
+    messageId,
+    folder,
+    agentId: AGENT.id,
+    model: "ask-once",
+    access: "ask",
+  });
+  void running.catch(() => {});
+  await turns.until("window-routed caller action opens a question", (rows) => rows[0]?.state === "waiting");
+
+  await editBundle(plugin, "", () => original);
+  const route = new URL("/plugins/ai/reload", address.replace(/^ws:/, "http:"));
+  const response = await fetch(route, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + h.ownerToken },
+  });
+  assert.equal(response.status, 200, await response.text());
+
+  assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
+  const [row] = await turns.until(
+    "the window settles the timed-out turn",
+    (rows) => rows[0]?.state === "interrupted",
+  );
+  assert.equal(row.error, RELOADED);
+  assert.equal(row.question, undefined);
 }
 
 /** Kill only the manager host. Leave the window attached and let maintenance free its thread. */

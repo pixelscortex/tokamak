@@ -2,7 +2,7 @@ import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { onSent, type Sent } from "plugin:chat/client";
 import { runLocalTurn } from "./local-turn";
 import { errorText } from "../../shared/turn-shared";
-import { connectedClient, machineNotice, notice, reasonLine, unavailable } from "./agents";
+import { connectMachine, connectedClient, machineNotice, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
 import { guardQuit } from "./quit";
 import { watchQueue } from "./queue";
@@ -15,12 +15,8 @@ import { releaseOrphanedTurns } from "./release";
  */
 export async function startTurn(client: TokamakClient, sent: Sent): Promise<void> {
   notice.set(undefined);
+  machineNotice.set(undefined);
   try {
-    const noRunner = machineNotice();
-    if (noRunner) {
-      notice.set(noRunner);
-      return;
-    }
     // Chat gives no folder on any computer but the thread creator's: their Send stays plain chat.
     if (sent.folder === undefined) return;
     const resolved = await threadChoices(client, sent.threadId, sent.first);
@@ -35,9 +31,13 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
       ...settings,
     });
     if (result === undefined) return;
-    // The row was a moment out of date, or the thread is busy: say what the local part found.
+    // The row was a moment out of date, or the thread is busy: say what the Runner found.
     if (isFailure(result)) {
-      if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable") {
+      if (result.kind === "noMachine") {
+        machineNotice.set(connectMachine);
+        return;
+      }
+      if (result.kind === "runnerCapabilityUnavailable") {
         notice.set(reasonLine(result.kind, resolved.agent.name));
         return;
       }
@@ -79,6 +79,7 @@ type Listening = typeof globalThis & { [listening]?: () => void };
 export function listenForSends(): void {
   const scope = globalThis as Listening;
   scope[listening]?.();
+  machineNotice.set(undefined);
   const unlistenSends = onSent((sent) => {
     const client = connectedClient();
     if (client) void startTurn(client, sent);

@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { action, TIMED_OUT, within } from "@tokamak/sdk";
+import { action, TIMED_OUT, v, within } from "@tokamak/sdk";
 import { AGENT_INFO_MAX_AGE_MS, localProviderIdentity, localProviders } from "@tokamak/sdk/agent-turn";
 import { agent, type Agent, type Info } from "../contracts";
 import { MAX_ICON_LENGTH } from "../shared/icon";
@@ -22,6 +22,7 @@ const UNKNOWN: Info = {
  */
 export const list = action({
   on: "caller",
+  args: { windowId: v.string() },
   handler: async (ctx) => {
     const { providers, incompatible } = await localProviders(agent, ctx);
     const available = await Promise.all(

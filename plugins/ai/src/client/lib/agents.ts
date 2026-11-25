@@ -3,6 +3,7 @@ import { state } from "@tokamak/sdk/client";
 import type { Info } from "../../contracts";
 import { setupReason } from "../../shared/turn-shared";
 import { api } from "../../server/_generated/api";
+import { onCallerAction, windowAction } from "./window-actions";
 
 export { api };
 
@@ -14,17 +15,25 @@ export interface AgentEntry {
   readonly info: Info;
 }
 
-/** Installed agents as this computer's local part last answered; empty in a plain browser. */
+/** Installed agents as this computer’s Runner last answered. */
 export const agents = state<readonly AgentEntry[]>([]);
 
 /** A short line the row shows after a turn could not begin; cleared by the next Send. */
 export const notice = state<string | undefined>(undefined);
 
+/** A failed turn start's composer notice, cleared when a caller action succeeds. */
 export const machineNotice = state<string | undefined>(undefined);
+export const connectMachine = "Connect a machine to run this.";
 
+let unlistenActions: (() => void) | undefined;
 let asking: Promise<void> | undefined;
 let queued: Promise<void> | undefined;
 let connected: TokamakClient | undefined;
+
+function clearMachineNotice(): void {
+  machineNotice.set(undefined);
+  notice.set((line) => (line === connectMachine ? undefined : line));
+}
 
 /** This window's connection, as the row or the heading last saw it; turns run through it. */
 export function connectedClient(): TokamakClient | undefined {
@@ -39,23 +48,34 @@ export function connectedClient(): TokamakClient | undefined {
  * it (several such calls share that one).
  */
 export function refreshAgents(client: TokamakClient): Promise<void> {
-  connected = client;
+  if (connected !== client) {
+    const changed = connected !== undefined;
+    connected = client;
+    unlistenActions?.();
+    unlistenActions = onCallerAction(client, clearMachineNotice);
+    queueMicrotask(() => {
+      if (connected !== client) return;
+      if (changed) agents.set([]);
+      clearMachineNotice();
+    });
+  }
   if (asking) {
     queued ??= asking.then(() => {
       queued = undefined;
-      return refreshAgents(client);
+      return refreshAgents(connected ?? client);
     });
     return queued;
   }
-  asking = client
-    .action(api.agents.list, {})
+  asking = windowAction(client, api.agents.list, {})
     .then(
       (list) => {
-        if (connected !== client) return;
-        machineNotice.set(isFailure(list) ? reasonLine(list.kind, "") : undefined);
-        agents.set(isFailure(list) ? [] : list);
+        if (connected !== client || isFailure(list)) return;
+        // Discovery can complete while a menu is open; keep unchanged options mounted.
+        if (JSON.stringify(agents()) !== JSON.stringify(list)) agents.set(list);
       },
-      () => void agents.set([]),
+      () => {
+        if (connected === client) agents.set([]);
+      },
     )
     .finally(() => {
       asking = undefined;
@@ -77,7 +97,7 @@ export type Reason =
 export function reasonLine(reason: Reason, agent: string, updateRequired?: string): string {
   switch (reason) {
     case "noMachine":
-      return "Connect a machine to run this";
+      return connectMachine;
     case "runnerCapabilityUnavailable":
       return "This machine cannot run this action.";
     case "NotInstalled":

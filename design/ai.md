@@ -12,7 +12,9 @@ the table under "What it adds to others" says which artboard shows each part.
 
 All of these are chat screens with ai's parts in them. The client draws them
 when the caller has a Runner. Caller actions discover agents, run turns and handle controls.
-After a Send without a Runner, the row shows “Connect a machine to run this” and chat still works.
+When a Send has a folder and a resolved agent but its turn start returns `noMachine`,
+the status line on the right of the composer’s agent row says “Connect a machine to run this.”
+Plain chat Send does not show this line.
 
 | Screen                                                                                         | Source                                                              | Paper artboard              |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |

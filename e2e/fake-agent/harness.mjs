@@ -20,7 +20,7 @@ import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
+import { functionName, TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
 import { LocalFunctions } from "../../packages/runtime/js/local.ts";
 import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner } from "./local.mjs";
 
@@ -155,6 +155,17 @@ export async function startServer({
   );
 }
 
+/** Drive AI like a desktop composer: every connection owns a distinct window ID. */
+class AgentWindow extends TokamakClient {
+  #windowId = crypto.randomUUID();
+
+  action(reference, args, options) {
+    const name = reference[functionName];
+    if (/^ai\/(run|working|agents):/.test(name)) args = { windowId: this.#windowId, ...args };
+    return super.action(reference, args, options);
+  }
+}
+
 /** A window on `address` with device key `token`; with `launch`, also a local part. */
 export async function connect(
   address,
@@ -171,14 +182,14 @@ export async function connect(
   if (onClose) socket.addEventListener("close", onClose, { once: true });
   const transport = new WebSocketTransport(socket);
   cleanup.push(() => transport.close());
-  if (!launch) return new TokamakClient(transport);
+  if (!launch) return new AgentWindow(transport);
   const url = new URL(address);
   const part = new LocalFunctions(transport, launch, url.origin + url.pathname);
   cleanup.push(() => part.close());
   socket.addEventListener("close", ({ code }) => {
     if (code === 4001) void part.close();
   });
-  return new TokamakClient(transport, part);
+  return new AgentWindow(transport, part);
 }
 
 /** Observe or hold the same worker frames regardless of the wire transport. */

@@ -22,6 +22,7 @@ import {
   managerCrash,
   reloadManager,
   reloadManagerTimeout,
+  windowOwnership,
   separateProcesses,
   stopDuringAfter,
   stopIsolation,
@@ -44,21 +45,7 @@ try {
   const address = await h.serve("snapshots");
   const runner = h.runner(address);
   assert.ok(runner, "Code process tests require the Runner");
-  let sawDeletionHook = false;
-  const desk = await h.connect(address, {
-    local: true,
-    observe(plugin, frame, direction) {
-      if (
-        direction === "fromWorker" &&
-        frame.name === "local.contract.call" &&
-        frame.payload.plugin === "code" &&
-        frame.payload.name === "threadDeletedLocal" &&
-        frame.payload.method === "after"
-      ) {
-        sawDeletionHook = plugin === "chat";
-      }
-    },
-  });
+  const desk = await h.connect(address, { local: true });
   await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
   await changedWorktree(desk);
@@ -67,11 +54,10 @@ try {
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
   await stopDuringAfter(fixture);
   await separateProcesses(fixture);
-  // The turn hooks are checked by the before/after refs in separateProcesses.
-  assert.ok(sawDeletionHook);
   await unavailableProviders(fixture);
   await thirdPartyNotice(desk);
   await cancelledCleanup(fixture);
+  await windowOwnership(fixture);
   await reloadManager(fixture);
   await reloadManagerTimeout(fixture);
   await snapshotReviewCases({

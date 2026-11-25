@@ -1,6 +1,7 @@
 import { isFailure } from "@tokamak/sdk";
 import { onQuit } from "@tokamak/sdk/client";
 import { api, connectedClient } from "./agents";
+import { windowAction } from "./window-actions";
 
 /** "Claude is still working in 1 thread", "Claude and Codex are still working in 3 threads". */
 type Work = { readonly threadId: string; readonly agent: string };
@@ -23,7 +24,7 @@ export function guardQuit(pauseQueue: () => void): () => void {
     const client = connectedClient();
     if (!client) return undefined;
     const [turns, queued] = await Promise.all([
-      client.action(api.working.list, {}),
+      windowAction(client, api.working.list, {}),
       client.query(api.turns.queuedForDevice, {}),
     ]);
     if (isFailure(turns)) return undefined;
@@ -32,7 +33,7 @@ export function guardQuit(pauseQueue: () => void): () => void {
       message: workingLine(turns, queued),
       stop: async () => {
         pauseQueue();
-        await client.action(api.working.stopAll, {});
+        await windowAction(client, api.working.stopAll, {});
       },
     };
   });

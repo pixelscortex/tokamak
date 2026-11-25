@@ -3,8 +3,9 @@ import { auth, state } from "@tokamak/sdk/client";
 import { onDraftSubmit, type DraftSubmission } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
 import { errorText } from "../../shared/turn-shared";
-import { api, machineNotice, notice, reasonLine, unavailable } from "./agents";
+import { api, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
+import { windowAction } from "./window-actions";
 
 export const localActiveTurn = state<TurnView | null>(null);
 
@@ -21,7 +22,7 @@ export function onTurnDraft(
 ) {
   const me = auth.me();
   return onDraftSubmit(async (draft) => {
-    if (machineNotice() || draft.threadId !== threadId()) return false;
+    if (draft.threadId !== threadId()) return false;
     const id = creatorId();
     return id !== undefined && id === me.id && submit(client, draft);
   });
@@ -32,7 +33,7 @@ async function submit(client: TokamakClient, { threadId, text, intent }: DraftSu
   if (!holder) return false;
   notice.set(undefined);
   if (holder.state !== "queued" && intent === "steer") {
-    const result = await client.action(api.run.steer, { turnId: holder._id, text });
+    const result = await windowAction(client, api.run.steer, { turnId: holder._id, text });
     if (isFailure(result)) {
       if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable")
         throw new Error(reasonLine(result.kind, ""));
@@ -62,7 +63,7 @@ async function submit(client: TokamakClient, { threadId, text, intent }: DraftSu
 
 export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
   try {
-    const result = await client.action(api.run.stop, { turnId });
+    const result = await windowAction(client, api.run.stop, { turnId });
     // A turn that is only saving its after work has already finished; Stop has nothing to say.
     if (isFailure(result)) {
       if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable")
@@ -77,7 +78,7 @@ export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
 
 export async function forceStopTurn(client: TokamakClient, turnId: Id<"turns">) {
   try {
-    const result = await client.action(api.run.forceStop, { turnId });
+    const result = await windowAction(client, api.run.forceStop, { turnId });
     if (isFailure(result))
       notice.set(
         result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable"

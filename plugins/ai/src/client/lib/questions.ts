@@ -2,6 +2,7 @@ import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Answer } from "../../contracts";
 import { api } from "./agents";
+import { windowAction } from "./window-actions";
 
 /** A question waiting for this person's answer on this device, as `turns:questions` lists it. */
 export interface Waiting {
@@ -48,21 +49,22 @@ export const answers: readonly { readonly answer: Answer; readonly label: string
 ];
 
 /**
- * Whether this computer's local part still holds the question. False for a
+ * Whether the calling window’s Runner still holds the question. False for a
  * question from before the app quit: the card says it expired straight away.
  */
 export async function stillAsked(client: TokamakClient, question: Waiting): Promise<boolean> {
   return (
-    (await client.action(api.run.pending, { turnId: question.turnId, questionId: question.id })) === true
+    (await windowAction(client, api.run.pending, { turnId: question.turnId, questionId: question.id })) ===
+    true
   );
 }
 
 /**
- * Sends the answer to this computer's local part, which runs the turn. Resolves
+ * Sends the answer to the calling window’s Runner, which runs the turn. Resolves
  * false when the question has expired (the app that asked it has quit).
  */
 export async function sendAnswer(client: TokamakClient, question: Waiting, answer: Answer): Promise<boolean> {
-  const result = await client.action(api.run.answer, {
+  const result = await windowAction(client, api.run.answer, {
     turnId: question.turnId,
     questionId: question.id,
     answer,

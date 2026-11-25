@@ -95,7 +95,15 @@ esac
     assert.ok(threadId && messageId, `Could not start the thread: ${JSON.stringify(started)}`);
     const turn = await client.action(
       ai.run.turn,
-      { threadId, messageId, folder: scratch, agentId: "fake-agent", model: "smoke", access: "full" },
+      {
+        windowId: "no-bun",
+        threadId,
+        messageId,
+        folder: scratch,
+        agentId: "fake-agent",
+        model: "smoke",
+        access: "full",
+      },
       { signal: deadline },
     );
     assert.equal(turn.state, "done", JSON.stringify(turn));

@@ -51,7 +51,7 @@ async function productionHosts() {
       launch: runner.launch,
       cleanup,
     });
-    const row = await client.local(createApi("ai").agents.list, {});
+    const row = await client.action(createApi("ai").agents.list, { windowId: "measure-linux-memory" });
     assert.deepEqual(row.map(({ id }) => id).sort(), ["claude", "codex"]);
     assert.ok(row.every(({ info }) => info.installed && info.signedIn));
     await Bun.sleep(400);

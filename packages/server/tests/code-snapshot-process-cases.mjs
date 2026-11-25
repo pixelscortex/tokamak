@@ -123,6 +123,69 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   console.log("code snapshots: Force stop isolated agent programs; Stop cancelled before");
 }
 
+export async function windowOwnership({ h, desk, project, start }) {
+  const { ai } = h.api;
+  const { folder } = await project("window-ownership");
+  const thread = await start(desk, folder);
+  const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
+  const run = (windowId, messageId) =>
+    desk.action(ai.run.turn, {
+      windowId,
+      threadId: thread.threadId,
+      messageId,
+      folder,
+      agentId: "fake-agent",
+      model: "ask-once",
+      access: "ask",
+    });
+  const waiting = (messageId) =>
+    thread.turns
+      .until("permission question owned by its window", (rows) =>
+        rows.some((row) => row.messageId === messageId && row.state === "waiting"),
+      )
+      .then((rows) => rows.find((row) => row.messageId === messageId));
+
+  const running = run(first, thread.messageId);
+  void running.catch(() => {});
+  const turn = await waiting(thread.messageId);
+  const question = { turnId: turn._id, questionId: turn.question.id };
+  assert.equal(await desk.action(ai.run.pending, { windowId: first, ...question }), true);
+  assert.equal(await desk.action(ai.run.pending, { windowId: second, ...question }), false);
+  assert.equal(
+    (await desk.action(ai.run.answer, { windowId: second, ...question, answer: "approve" })).kind,
+    "Expired",
+  );
+  assert.equal((await desk.action(ai.run.stop, { windowId: second, turnId: turn._id })).kind, "NotRunning");
+  assert.equal(
+    (await desk.action(ai.run.steer, { windowId: second, turnId: turn._id, text: "Other window" })).kind,
+    "NotRunning",
+  );
+  assert.deepEqual(await desk.action(ai.working.list, { windowId: second }), []);
+  assert.equal(await desk.action(ai.working.stopAll, { windowId: second }), 0);
+  assert.equal(
+    await desk.action(ai.run.answer, { windowId: first, ...question, answer: "approveSession" }),
+    null,
+  );
+  assert.equal((await running).state, "done");
+  assert.equal((await run(first, await thread.post())).state, "done");
+
+  const messageId = await thread.post();
+  const afterReload = run(second, messageId);
+  void afterReload.catch(() => {});
+  const askedAgain = await waiting(messageId);
+  assert.equal(
+    await desk.action(ai.run.answer, {
+      windowId: second,
+      turnId: askedAgain._id,
+      questionId: askedAgain.question.id,
+      answer: "approve",
+    }),
+    null,
+  );
+  assert.equal((await afterReload).state, "done");
+}
+
 export async function reloadManager({ h, runner, desk, project, start }) {
   const { ai } = h.api;
   const waiting = await project("reload-during-question");

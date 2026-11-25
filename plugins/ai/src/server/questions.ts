@@ -1,8 +1,6 @@
 /// <reference types="node" />
-// Permission questions in the local part that runs a turn (used by run.ts).
-// Everything here lives in this local part's memory only: a question lives as
-// long as the app that asked it, so quitting expires it, and only this local
-// part holds the token that lets `turns:answer` clear it.
+// The Runner holds questions and their tokens in memory. Only a call scoped
+// to the originating window ID can retrieve the token and answer a question.
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Id, CallerActionContext } from "@tokamak/sdk";
 import type { TurnAnswer } from "@tokamak/sdk/agent-turn";
@@ -11,7 +9,8 @@ import { api } from "./_generated/api";
 
 interface Pending {
   readonly questionId: string;
-  /** The secret `turns:answer` asks for: no other window, even on this device, can answer. */
+  /** The originating window’s ID, scoped to its user and device. */
+  readonly owner: string;
   readonly token: string;
   resolve(answer: TurnAnswer): void;
 }
@@ -21,20 +20,20 @@ const waiting = new Map<string, Pending>();
 
 /**
  * Kinds of question answered "Always allow this session", for the agent
- * session they were given in. A turn that does not carry on that session
+ * session and window ID they were given in. A turn that does not carry on that session
  * (a fresh one, or another agent's in between) starts with none.
  */
 const allowed = new Map<string, { sessionId?: string; kinds: Set<string> }>();
 
-/** Where a thread's allows are kept: one agent's session in one thread. */
-export function sessionKey(threadId: string, agentId: string): string {
-  return `${threadId}\u0000${agentId}`;
+/** Where a thread's allows are kept: one agent's session in one thread and window. */
+export function sessionKey(owner: string, threadId: string, agentId: string): string {
+  return JSON.stringify([owner, threadId, agentId]);
 }
 
-/** The question `questionId` if this local part's turn `turnId` still waits on it. */
-export function pendingQuestion(turnId: string, questionId: string): Pending | undefined {
+/** The question `questionId` if this window's turn `turnId` still waits on it. */
+export function pendingQuestion(owner: string, turnId: string, questionId: string): Pending | undefined {
   const pending = waiting.get(turnId);
-  return pending?.questionId === questionId ? pending : undefined;
+  return pending?.owner === owner && pending.questionId === questionId ? pending : undefined;
 }
 
 /** Hands `answer` to the agent, once: false when the question was answered or cancelled meanwhile. */
@@ -54,9 +53,9 @@ export function settle(turnId: string, pending: Pending, answer: TurnAnswer): bo
  */
 export function asking(
   ctx: CallerActionContext,
-  turn: { turnId: Id<"turns">; access: Access; session: string; carried: string | undefined },
+  turn: { owner: string; turnId: Id<"turns">; access: Access; session: string; carried: string | undefined },
 ) {
-  const { turnId, access, session, carried } = turn;
+  const { owner, turnId, access, session, carried } = turn;
   const kept = allowed.get(session);
   const allows = carried !== undefined && kept?.sessionId === carried ? kept : { kinds: new Set<string>() };
   allowed.set(session, allows);
@@ -81,7 +80,7 @@ export function asking(
     const id = randomUUID();
     const token = randomBytes(32).toString("hex");
     const answered = new Promise<TurnAnswer>((resolve) =>
-      waiting.set(turnId, { questionId: id, token, resolve }),
+      waiting.set(turnId, { owner, questionId: id, token, resolve }),
     );
     try {
       await ctx.runMutation(api.turns.ask, {
