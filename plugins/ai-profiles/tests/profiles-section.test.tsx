@@ -427,3 +427,23 @@ test("a change that cannot reach the server is announced each time, and the list
       .map((item) => item.getAttribute("aria-label")),
   ).toEqual(["1. Claude Max, Work"]);
 });
+
+test("Add to profile sits in the card's action row, always shown, with a tooltip; pressing it starts no drag", async () => {
+  const user = userEvent.setup({ document });
+  await mount([profile("p1", "PERS", "Personal")]);
+  const button = within(article("Claude Pro, Personal")).getByRole("button", {
+    name: "Add Claude Pro, Personal to a profile",
+  });
+  // In the action row beside Remove, not hidden until hover.
+  const row = button.closest("div")!;
+  expect(within(row).getByRole("button", { name: "Remove Claude Pro" })).toBeTruthy();
+  expect(button.closest("[class*='opacity-0']")).toBeNull();
+  // A press on it is not a drag: moved and released over the profile, it adds nothing.
+  document.elementFromPoint = () => box("PERS");
+  pointer("pointerdown", button, 0);
+  pointer("pointermove", box("PERS"), 120);
+  pointer("pointerup", box("PERS"), 120);
+  expect(changes()).toEqual([]);
+  await user.hover(button);
+  expect((await screen.findByRole("tooltip")).textContent).toBe("Add to profile");
+});

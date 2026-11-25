@@ -9,8 +9,10 @@ import { CompanyMark } from "./company-mark";
 /**
  * One subscription (Paper "1 · Profiles · screen", a card): logo, plan and
  * label, the "Enabled" switch, the accounts' emails, the organisation and
- * plan, the status, the model count and the last use, then its action row
- * (`actions`, ui/card-actions.tsx). Its profile codes come with TKM-264.
+ * plan, the status, the model line with the codes of the profiles that use it
+ * (`profiles`), and last its action row (`actions`, ui/card-actions.tsx), where
+ * "Add to profile" sits. A press anywhere but a button, link, field or switch
+ * starts a drag into a profile (`onPointerDown`).
  */
 export function SubscriptionCard(props: {
   subscription: Subscription;
@@ -21,7 +23,7 @@ export function SubscriptionCard(props: {
   actions?: JSX.Element;
   /** Faded: a pointed-at profile does not hold it, or it is the card being dragged. */
   dimmed?: boolean;
-  /** The end of the model line: the codes of the profiles that use it (TKM-264). */
+  /** The end of the model line: the codes of the profiles that use it. */
   profiles?: JSX.Element;
   /** Starts dragging the card into a profile. */
   onPointerDown?: (event: PointerEvent) => void;
@@ -76,7 +78,7 @@ export function SubscriptionCard(props: {
           </div>
         </Match>
       </Choose>
-      {/* 16 tall as before; the 24 px "Add to profile" button overhangs it evenly. */}
+      {/* The model line ends with the profile codes; the action row, last, holds "Add to profile". */}
       <div class="flex h-4 items-center gap-2">
         <span class="min-w-0 flex-1 truncate text-data text-ink-3">
           {countOf(subscription().models.length, "model")} · {lastUse(subscription().lastUsedAt, props.now)}

@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { isFailure } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/client";
@@ -16,7 +16,11 @@ import { manageGlyphs, openSubscription, removing } from "../lib/manage";
  * Each button is 24 px and they sit 2 px apart, as drawn: smaller than the
  * 32 px target rule, an exception the owner has yet to confirm.
  */
-export function CardActions(props: { subscription: Subscription }): JSX.Element {
+export function CardActions(props: {
+  subscription: Subscription;
+  /** "Add to profile" (TKM-264), before Remove. */
+  addToProfile?: JSX.Element;
+}): JSX.Element {
   const client = useClient();
   const [checking, setChecking] = createSignal(false);
   const [problem, setProblem] = createSignal<string>();
@@ -39,47 +43,50 @@ export function CardActions(props: { subscription: Subscription }): JSX.Element 
     props.subscription.models.length
       ? props.subscription.models.map((model) => modelName(model.name)).join(" · ")
       : "No models found";
-  const actions = [
-    { label: () => `${name()} models`, icon: manageGlyphs.models, tip: models, run: open },
-    {
-      label: () => `Check ${name()} again`,
-      icon: manageGlyphs.refresh,
-      tip: () => "Check again",
-      run: check,
-    },
-    { label: () => `${name()} details`, icon: manageGlyphs.details, tip: () => "Details", run: open },
-    {
-      label: () => `Remove ${name()}`,
-      icon: manageGlyphs.remove,
-      tip: () => "Remove",
-      run: () => removing.set(props.subscription.id),
-    },
-  ];
+  type Action = { label: () => string; icon: string; tip: () => string; run: () => unknown };
+  const button = (action: Action) => {
+    const busy = () => action.icon === manageGlyphs.refresh && checking();
+    return (
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          size="sm"
+          variant="ghost"
+          icon={busy() ? icons.running : action.icon}
+          label={action.label()}
+          aria-busy={busy() ? "true" : undefined}
+          onClick={() => void action.run()}
+        />
+        <Tooltip.Content>{action.tip()}</Tooltip.Content>
+      </Tooltip.Root>
+    );
+  };
   return (
     <div class="flex flex-col gap-1">
       <div class="flex items-center gap-hair">
-        <For each={actions}>
-          {(action) => {
-            const busy = () => action.icon === manageGlyphs.refresh && checking();
-            return (
-              <Tooltip.Root>
-                <Tooltip.Trigger
-                  size="sm"
-                  variant="ghost"
-                  icon={busy() ? icons.running : action.icon}
-                  label={action.label()}
-                  aria-busy={busy() ? "true" : undefined}
-                  onClick={() => void action.run()}
-                />
-                <Tooltip.Content>{action.tip()}</Tooltip.Content>
-              </Tooltip.Root>
-            );
-          }}
-        </For>
+        {button({ label: () => `${name()} models`, icon: manageGlyphs.models, tip: models, run: open })}
+        {button({
+          label: () => `Check ${name()} again`,
+          icon: manageGlyphs.refresh,
+          tip: () => "Check again",
+          run: check,
+        })}
         {/* Beside "Check again", which reads it: an unknown plan is never a word in the title. */}
         <Show when={!props.subscription.plan}>
-          <span class="ps-1 text-data text-ink-3">plan unknown</span>
+          <span class="px-1 text-data text-ink-3">plan unknown</span>
         </Show>
+        {button({
+          label: () => `${name()} details`,
+          icon: manageGlyphs.details,
+          tip: () => "Details",
+          run: open,
+        })}
+        {props.addToProfile}
+        {button({
+          label: () => `Remove ${name()}`,
+          icon: manageGlyphs.remove,
+          tip: () => "Remove",
+          run: () => removing.set(props.subscription.id),
+        })}
       </div>
       <Show when={problem()}>
         <p role="alert" class="m-0 text-label text-removed">

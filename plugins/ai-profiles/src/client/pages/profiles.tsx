@@ -14,7 +14,7 @@ import { CardActions } from "../ui/card-actions";
 import { RemoveDialog } from "../ui/remove-dialog";
 import { SubscriptionDetails } from "./subscription";
 import { createBuilder } from "../lib/builder";
-import { CardProfiles } from "../ui/card-profiles";
+import { AddToProfile, CardProfiles } from "../ui/card-profiles";
 import { ProfilesSection } from "../ui/profiles-section";
 
 /**
@@ -239,7 +239,12 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
                   void client.mutation(api.subscriptions.setEnabled, { id: subscription.id, enabled })
                 }
                 onSignIn={() => startAndOpen({ company: subscription.company, repair: subscription.id })}
-                actions={<CardActions subscription={subscription} />}
+                actions={
+                  <CardActions
+                    subscription={subscription}
+                    addToProfile={<AddToProfile subscription={subscription} builder={builder} />}
+                  />
+                }
                 dimmed={builder.dimmed(subscription.id)}
                 profiles={<CardProfiles subscription={subscription} builder={builder} />}
                 onPointerDown={(event) => builder.drag.start(event, { subscription: subscription.id })}
