@@ -1,0 +1,42 @@
+plugins/claude/src/server/turn.ts
+  s_4cc7cf1cc19627::t_bf8fc9b0f5c63a 66,68,80-95,121,128,145,162-163,168,182,194-195,198-199,212
+  s_4cc7cf1cc19627::t_639fcec8ed9f6a 196-197,200-201,203
+e2e/fake-agent/replays/claude-steer.jsonl
+  s_4cc7cf1cc19627::t_27ddc646c78266 1,3,5-11,13-26
+plugins/claude/src/server/permissions.ts
+  s_4cc7cf1cc19627::t_750eb5dcc82157 81-84
+e2e/fake-agent/replays/claude-steer-race.jsonl
+  s_4cc7cf1cc19627::t_9cae4877387772 1-23
+plugins/claude/src/server/events.ts
+  s_4cc7cf1cc19627::t_8f746ff8e887c8 82-83,85-86
+  s_4cc7cf1cc19627::t_cef7fc958089a6 45,48,51,54-56,65-80,84,87-88,92-97,101-102,109,111,114,116,118,125,128-129,151,175,227-241,243-245,267,271,282,287-290
+  s_4cc7cf1cc19627::t_edaecfc18986ee 112-113
+plugins/claude/tests/turns.mjs
+  s_4cc7cf1cc19627::t_f0f0a7a8c3d2cc 356-358
+  s_4cc7cf1cc19627::t_a09df5faf7fb07 317-319,321-324,326-338,345-355,362-372
+  s_4cc7cf1cc19627::t_9c13fe58d80126 339-341,343
+  s_4cc7cf1cc19627::t_fce7487f638e9a 359,373
+e2e/fake-agent/replays/claude-steer-stop.jsonl
+  s_4cc7cf1cc19627::t_27ddc646c78266 1-19
+e2e/fake-agent/replays/claude-steer-twice.jsonl
+  s_4cc7cf1cc19627::t_27ddc646c78266 2-18,22-31
+  s_4cc7cf1cc19627::t_97edb226c6fe1b 1,19-21
+plugins/claude/README.md
+  s_4cc7cf1cc19627::t_bc0f1af3261048 7,9,22,25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8e32e31e321c98ee195ce25fc8281f6168725a58",
+  "prompts": {},
+  "sessions": {
+    "s_4cc7cf1cc19627": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a211fd-5e21-7a32-8c4f-5b06135214ce",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
