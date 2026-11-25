@@ -222,8 +222,8 @@ reconnect. The bootstrap owner key stays available for recovery.
 Owners and admins can also read `GET /devices/machines/live` using the same
 authenticated SSE transport. Each event is an array of plugin machine entries
 with `id`, `name`, `owner: { kind: "plugin", plugin, name }`, `online`, and
-`lastSeen`. Here `owner.name` is the owning plugin's display name recorded at
-creation. Keep this stream separate from member devices: the owning plugin
+`lastSeen`, and optional `member: { id, name }` when bound to a member.
+`owner.name` comes from the installed plugin and `member.name` from the member record. Keep this stream separate from member devices: the owning plugin
 removes its machines through the SDK, and the member device revoke route
 does not accept their ids.
 

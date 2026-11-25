@@ -55,6 +55,7 @@ export type {
   ActionTarget,
   MachineId,
   MachineEntry,
+  MachineCreation,
   ActionOptions,
   MachineFailure,
   LocalContext,

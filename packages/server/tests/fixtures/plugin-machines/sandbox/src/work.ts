@@ -1,6 +1,16 @@
 import { readFile } from "node:fs/promises";
-import { action, createApi, createFunctions, v, type FunctionReference, type MachineId } from "@tokamak/sdk";
+import {
+  action,
+  createApi,
+  createFunctions,
+  internalAction,
+  isFailure,
+  v,
+  type FunctionReference,
+  type MachineId,
+} from "@tokamak/sdk";
 import { api } from "./_generated/api";
+import { internal } from "./_generated/internal";
 import schema from "./schema";
 
 const { query, mutation } = createFunctions(schema);
@@ -9,11 +19,12 @@ const other = createApi<{ work: { where: FunctionReference<"action", {}, { runne
 );
 
 export const create = action({
-  args: { name: v.string() },
-  handler: async (ctx, { name }) => ({
-    ...(await ctx.machines.create({ name })),
-    server: await ctx.server.url(),
-  }),
+  args: { name: v.string(), member: v.optional(v.string()) },
+  handler: async (ctx, { name, member }) => {
+    const machine = await ctx.machines.create({ name, ...(member === undefined ? {} : { member }) });
+    if (isFailure(machine)) return machine;
+    return { ...machine, server: await ctx.server.url() };
+  },
 });
 
 export const remove = action({
@@ -27,6 +38,13 @@ export const waitOnline = action({
 });
 
 export const list = query({ handler: (ctx) => ctx.machines.list() });
+
+export const all = internalAction({ handler: (ctx) => ctx.machines.listAll() });
+
+export const unboundCount = action({
+  handler: async (ctx) =>
+    (await ctx.runAction(internal.work.all, {})).filter((entry) => !entry.member).length,
+});
 
 export const store = mutation({
   args: { text: v.string() },
@@ -47,7 +65,9 @@ export const run = action({
     for await (const line of child.stdout) output.push(line);
     const id = await ctx.runMutation(api.work.store, { text: await readFile(file, "utf8") });
     const { rows, call: queryCall } = await ctx.runQuery(api.work.rows, {});
+    const machines = await ctx.machines.list();
     return {
+      machines,
       output,
       status: await child.exited,
       row: rows.find((row) => row._id === id),
@@ -75,9 +95,10 @@ export const personalDefault = action({
 
 export const interrupted = action({
   on: "caller",
-  handler: async (ctx) => {
-    const child = ctx.proc(["/bin/sh", "-c", "echo waiting; exec /bin/sleep 30"]);
-    for await (const text of child.stdout) await ctx.runMutation(api.work.store, { text });
+  args: { marker: v.optional(v.string()) },
+  handler: async (ctx, { marker = "waiting" }) => {
+    const child = ctx.proc(["/bin/sh", "-c", "echo started; exec /bin/sleep 30"]);
+    for await (const _ of child.stdout) await ctx.runMutation(api.work.store, { text: marker });
     return child.exited;
   },
 });

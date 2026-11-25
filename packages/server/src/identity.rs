@@ -177,7 +177,7 @@ pub struct Identities {
     members: Mutex<Vec<Member>>,
     writer: Mutex<()>,
     anonymous: bool,
-    device_changes: watch::Sender<()>,
+    pub(crate) device_changes: watch::Sender<()>,
 }
 
 fn hash(token: &str) -> String {
@@ -217,7 +217,7 @@ impl Identities {
         } else {
             Ok(Self {
                 plugin_machines: plugin_machines::Store::open(
-                    data.with_extension("machines.json"),
+                    data.with_file_name(plugin_machines::FILE_NAME),
                 )?,
                 ..Self::local(token)
             })
@@ -277,7 +277,7 @@ impl Identities {
         }
         let identities = Self {
             plugin_machines: plugin_machines::Store::open(
-                path.with_file_name("plugin-machines.json"),
+                path.with_file_name(plugin_machines::FILE_NAME),
             )?,
             path: Some(path),
             members: Mutex::new(members),
@@ -375,6 +375,15 @@ impl Identities {
             token.cancel();
         }
         Ok(user)
+    }
+
+    pub(crate) fn member_name(&self, id: &str) -> Option<String> {
+        self.members
+            .lock()
+            .expect("members lock")
+            .iter()
+            .find(|member| member.user.id == id)
+            .map(|member| member.user.name.clone())
     }
 
     pub(crate) fn active_member(&self, id: &str) -> Option<User> {

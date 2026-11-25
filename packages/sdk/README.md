@@ -207,11 +207,17 @@ export const newSandbox = action({
     const server = await ctx.server.url();
     if (!server) return fail("sandboxServerUrlMissing");
 
-    const { id, key } = await ctx.machines.create({ name: "Thread sandbox" });
+    const machine = await ctx.machines.create({
+      name: "Thread sandbox",
+      member: ctx.auth.user.id,
+    });
+    if (isFailure(machine)) return machine;
+    const { id, key } = machine;
     await startSandbox({ server, runnerKey: key }); // Your provider code.
     const ready = await ctx.machines.waitOnline(id);
     if (isFailure(ready)) return ready;
-    return id; // Save the id with the thread. Do not store or return the key.
+    await ctx.runMutation(api.threads.saveMachine, { threadId: ctx.call.threadId, machineId: id });
+    return id; // Save only the id, never the key.
   },
 });
 
@@ -232,25 +238,33 @@ with an actual issued id. The action has the Runner capabilities described
 above. The original caller and call note reach the action, including the
 thread, and queries and mutations still execute on the server.
 
-A window can target a plugin machine only through an action owned by that
-plugin. Server code in the owning plugin can also target it when delegating
-to an action it has permission to call. A person's machine is available
-only to calls started by that person. Unknown, removed and forbidden ids all
-return `machineForbidden`. An authorized machine with no current Runner
-returns `machineOffline` immediately. If its Runner disconnects during the
-action, the result is `machineLost`. Calls are never queued or replayed.
+Only actions owned by a machine's plugin may run on it. A machine bound to
+a member accepts only calls whose original call note identifies that member.
+For thread turns, read the saved machine id and pass it as `{ on: id }`.
+Omitting `member` makes a machine server-only: only the owning plugin's server
+code can dispatch its own actions to it with `ctx.runAction`. A signed-in
+creator does not implicitly bind the machine. Binding is fixed at creation.
+A person's device is available only to calls started by that person.
 
-`ctx.machines.list()` returns the plugin's machines and the signed-in
-person's issued devices, with `owner`, `online` (Runner connection) and
-`lastSeen` (Unix milliseconds or `null`). It is a snapshot in queries,
-mutations and actions; presence changes do not refresh subscriptions.
-`create`, `waitOnline` and `remove` run only in server actions. The credential
-store is separate from plugin database transactions. The key is returned only
-by `create`. `waitOnline` returns `null` when connected and `machineOffline`
-after 30 seconds by default; pass `{ timeoutMs }` for a different limit, up
-to two minutes. When deleting a sandbox, call `ctx.machines.remove(id)` to
-revoke its key and disconnect the Runner, then delete the container with your
-provider. Clean up both resources if provisioning fails.
+Unknown, removed and unauthorized ids all return `machineForbidden`.
+An authorized machine without a Runner returns `machineOffline` immediately.
+If its Runner disconnects or its key is removed during an action, that action
+returns `machineLost`. Calls are never queued or replayed.
+
+`ctx.machines.list()` returns the plugin's machines bound to the caller and
+that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
+milliseconds or `null`). Bound plugin entries also carry the member id in
+`member`. Without a person, the ordinary list is empty. Internal server
+actions can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
+Lists are snapshots; presence does not refresh query subscriptions.
+
+`create`, `waitOnline`, and `remove` run only in server actions. The credential
+store is separate from plugin transactions. `create` returns the key once
+and returns `machineLimit` when the plugin already has 100 active machines.
+`waitOnline` returns `null` when connected and `machineOffline` when it times
+out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
+sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
+container with your provider. Uninstalling a plugin revokes its machine keys.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`

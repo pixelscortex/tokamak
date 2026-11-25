@@ -1,6 +1,6 @@
 // Every marked line must produce a real compiler diagnostic, not an unused
 // suppression. The harness verifies diagnostic lines as well as nonzero exit.
-import { TokamakClient, createFunctions, type Id } from '@tokamak/sdk';
+import { action, TokamakClient, createFunctions, type Id } from '@tokamak/sdk';
 import { api } from '../feature/_generated/api';
 import schema from '../feature/schema';
 declare const client: TokamakClient;
@@ -26,3 +26,15 @@ query({ handler: ctx => ctx.db.query('tasks').where('priority', '>', 1).collect(
 mutation({ handler: ctx => ctx.db.insert('tasks', { title: 'x', done: false }) }); // reject
 mutation({ handler: ctx => ctx.db.patch(taskId, { done: 'yes' }) }); // reject
 mutation({ handler: ctx => ctx.db.replace(taskId, { title: 'x' }) }); // reject
+
+action({
+  on: "caller",
+  handler: async (ctx) => {
+    await ctx.machines.list();
+    await ctx.machines.create({ name: "forbidden" }); // reject
+    await ctx.machines.remove(null as never); // reject
+    await ctx.machines.waitOnline(null as never); // reject
+    await ctx.machines.listAll(); // reject
+    await ctx.server.url(); // reject
+  },
+});

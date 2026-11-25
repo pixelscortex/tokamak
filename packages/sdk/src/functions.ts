@@ -31,6 +31,7 @@ export interface MachineEntry {
   owner: { kind: "plugin"; plugin: string } | { kind: "person"; user: string };
   online: boolean;
   lastSeen: number | null;
+  member?: string;
 }
 
 interface MachineList {
@@ -39,13 +40,19 @@ interface MachineList {
 }
 
 interface MachineManagement extends MachineList {
-  create(options: { name: string }): Promise<{ id: MachineId; key: string }>;
+  create(options: { name: string; member?: string }): Promise<MachineCreation>;
+  /** Available in an internal server action. Lists all machines owned by this plugin. */
+  listAll(): Promise<MachineEntry[]>;
   remove(id: MachineId): Promise<null | Failure<"machineForbidden", null>>;
   waitOnline(
     id: MachineId,
     options?: { timeoutMs?: number },
   ): Promise<null | Failure<"machineForbidden" | "machineOffline", null>>;
 }
+
+export type MachineCreation =
+  | { id: MachineId; key: string }
+  | Failure<"machineLimit" | "machineForbidden", null>;
 
 const machineList = (host: HostBridge): MachineList => ({
   list: () => callHost(host, "machines.list", {}),
@@ -55,6 +62,7 @@ export type MachineFailure =
   | Failure<"machineLost", null>
   | Failure<"machineOffline", null>
   | Failure<"machineForbidden", null>
+  | Failure<"machineLimit", null>
   | Failure<"runnerArtifactMismatch", { plugin: string; message: string }>
   | Failure<"runnerCapabilityUnavailable", RunnerCapability>;
 export interface ActionOptions {
@@ -232,7 +240,8 @@ interface RunAction {
   ): Promise<R | MachineFailure>;
 }
 
-export interface CallerActionContext extends ActionContext {
+export interface CallerActionContext extends Omit<ActionContext, "machines" | "server"> {
+  readonly machines: MachineList;
   readonly signal: LocalContext["signal"];
   readonly retiring?: LocalContext["retiring"];
   readonly proc: LocalProcess;
@@ -329,17 +338,23 @@ function actionContext(bridge: HostBridge, auth: AuthContext | null, call: CallC
       });
   return Object.freeze({
     call,
-    machines: Object.freeze({
-      ...machineList(bridge),
-      create: (options: { name: string }) => callHost(bridge, "machines.create", options),
-      remove: (id: MachineId) => callHost(bridge, "machines.remove", { id }),
-      waitOnline: (id: MachineId, options?: { timeoutMs?: number }) =>
-        callHost(bridge, "machines.waitOnline", {
-          id,
-          ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(bridge.proc
+      ? { machines: Object.freeze(machineList(bridge)) }
+      : {
+          machines: Object.freeze({
+            ...machineList(bridge),
+            create: (options: { name: string; member?: string }) =>
+              callHost(bridge, "machines.create", options),
+            listAll: () => callHost(bridge, "machines.listAll", {}),
+            remove: (id: MachineId) => callHost(bridge, "machines.remove", { id }),
+            waitOnline: (id: MachineId, options?: { timeoutMs?: number }) =>
+              callHost(bridge, "machines.waitOnline", {
+                id,
+                ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+              }),
+          }),
+          server: Object.freeze({ url: () => callHost(bridge, "server.url", {}) }),
         }),
-    }),
-    server: Object.freeze({ url: () => callHost(bridge, "server.url", {}) }),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
       return auth;

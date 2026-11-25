@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, symlink, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { build, connect, watchQuery, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
-import { authCaller } from "../../sdk/src/index.ts";
+import { authCaller, WebSocketTransport } from "../../sdk/src/index.ts";
 
 const [server, runner] = process.argv.slice(2);
 const scratch = await mkdtemp(join(tmpdir(), "tokamak-plugin-machines-"));
@@ -142,7 +142,8 @@ try {
   });
   const alice = await connect(address, { token: aliceKey, cleanup });
 
-  const created = await window.action(own.create, { name: "Sandbox" });
+  const caller = await window.query(authCaller, {});
+  const created = await window.action(own.create, { name: "Sandbox", member: caller.user.id });
   const { id, key } = created;
   assert.match(id, /^machine:/);
   assert.equal(created.server, publicUrl);
@@ -157,6 +158,7 @@ try {
   assert.deepEqual(await readOwn(), {
     id,
     name: "Sandbox",
+    member: caller.user.id,
     owner: { kind: "plugin", plugin: "sandbox-test" },
     online: false,
     lastSeen: null,
@@ -180,8 +182,31 @@ try {
     false,
   );
   assert.deepEqual(await window.action(other.where, {}, { on: id }), forbidden);
-  assert.deepEqual(await window.action(own.delegateOther, { id }), { runner: true });
+  assert.deepEqual(await window.action(own.delegateOther, { id }), forbidden);
+  assert.deepEqual(await alice.action(own.interrupted, {}, { on: id }), forbidden);
+  assert.equal(
+    (await alice.query(own.list, {})).some((entry) => entry.id === id),
+    false,
+  );
   assert.deepEqual(await window.action(other.where, {}, { on: "device:alice" }), forbidden);
+
+  const socket = new WebSocket(address, ["tokamak", `tokamak.bearer.${ownerDeviceKey}`]);
+  await within(
+    new Promise((resolve, reject) => {
+      socket.addEventListener("open", resolve, { once: true });
+      socket.addEventListener("error", reject, { once: true });
+    }),
+    "connect window action transport",
+  );
+  const bridge = new WebSocketTransport(socket);
+  cleanup.push(() => bridge.close());
+  const local = await bridge.dispatchWindowAction("sandbox-test/work:interrupted", {});
+  assert.equal(local.destination, "callerWindowRunner");
+  const localList = (plugin) =>
+    bridge.continueLocalCall("query", "tokamak:callerMachines", { plugin }, local.note);
+  assert.ok((await localList("sandbox-test")).some((entry) => entry.id === id));
+  await assert.rejects(localList("machine-outsider"), /matching window action continuation/);
+  bridge.finishWindowAction(local.requestId);
 
   const account = await fetch(new URL("/account", http), { headers: { authorization: `Bearer ${key}` } });
   assert.equal(account.status, 401);
@@ -209,16 +234,17 @@ try {
   assert.deepEqual(entry, {
     ...(await readOwn()),
     owner: { kind: "plugin", plugin: "sandbox-test", name: "Test sandbox" },
+    member: { id: caller.user.id, name: caller.user.name },
   });
 
   const file = join(scratch, "input");
   await writeFile(file, "sandbox machine file");
   const args = { file, thread: "chat/threads:sandbox" };
-  const caller = await window.query(authCaller, {});
   for (const [depth, result] of [
     [0, await window.action(own.run, args, { on: id })],
     [1, await window.action(own.delegate, { ...args, id })],
   ]) {
+    assert.ok(result.machines.some((entry) => entry.id === id));
     assert.deepEqual(result.output, ["from the Runner"]);
     assert.equal(result.status, 0);
     assert.equal(result.row.text, "sandbox machine file");
@@ -245,7 +271,13 @@ try {
 
   const replacement = startMachine(http, keyFile);
   assert.equal(await window.action(own.waitOnline, { id, timeoutMs: 5000 }), null);
+  const revoking = window.action(own.interrupted, { marker: "revoking" }, { on: id });
+  void revoking.catch(() => {});
+  await watched.until("start action before revoking its machine", ({ rows }) =>
+    rows.some(({ text }) => text === "revoking"),
+  );
   assert.equal(await window.action(own.remove, { id }), null);
+  assert.deepEqual(await within(revoking, "lose the revoked machine"), failure("machineLost"));
   assert.notEqual(await within(replacement.child.exited, "revocation closes live Runner"), 0);
   assert.equal(await readOwn(), undefined);
   assert.deepEqual(await window.action(own.interrupted, {}, { on: id }), forbidden);
@@ -267,6 +299,48 @@ try {
   });
   personal.child.kill();
   await personal.child.exited;
+
+  const unbound = await window.action(own.create, { name: "Server sandbox" });
+  assert.equal(await window.action(own.unboundCount, {}), 1);
+  assert.equal(
+    (await window.query(own.list, {})).some((entry) => entry.id === unbound.id),
+    false,
+  );
+  assert.equal(
+    (await alice.query(own.list, {})).some((entry) => entry.id === unbound.id),
+    false,
+  );
+  const unboundFile = join(scratch, "unbound.key");
+  await writeFile(unboundFile, unbound.key + "\n", { mode: 0o600 });
+  const unboundRunner = startMachine(http, unboundFile);
+  assert.equal(await window.action(own.waitOnline, { id: unbound.id, timeoutMs: 5000 }), null);
+  assert.deepEqual(await window.action(own.run, args, { on: unbound.id }), forbidden);
+  assert.deepEqual(await window.action(own.delegateOther, { id: unbound.id }), forbidden);
+  const serverCall = await window.action(own.delegate, { ...args, id: unbound.id });
+  assert.equal(serverCall.status, 0);
+
+  async function reloadSandbox() {
+    const response = await fetch(new URL("/plugins/sandbox-test/reload", http), {
+      method: "POST",
+      headers: { authorization: `Bearer ${ownerKey}` },
+    });
+    assert.equal(response.status, 200, await response.text());
+  }
+
+  const installed = join(plugins, "sandbox-test");
+  const removed = join(scratch, "removed-sandbox");
+  await rename(installed, removed);
+  await reloadSandbox();
+  assert.notEqual(await within(unboundRunner.child.exited, "uninstall revokes live Runner"), 0);
+  const revoked = JSON.parse(await readFile(store, "utf8")).find((entry) => entry.id === unbound.id);
+  assert.equal(revoked.key_hash, null);
+  assert.ok(revoked.removed_at);
+  await rename(removed, installed);
+  await reloadSandbox();
+  const afterReinstall = startMachine(http, unboundFile);
+  assert.notEqual(await within(afterReinstall.child.exited, "reinstall cannot reuse the old key"), 0);
+  assert.match((await afterReinstall.logs).join(""), /invalid or revoked/i);
+  assert.deepEqual(await window.action(own.delegate, { ...args, id: unbound.id }), forbidden);
 
   serverProcess.kill();
   await serverProcess.exited;

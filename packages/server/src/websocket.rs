@@ -238,7 +238,7 @@ async fn serve_inner(
     server.machines().configure(
         identities.clone(),
         crate::web::configured_public_url().map_err(|error| io::Error::other(error.to_string()))?,
-    );
+    )?;
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
     let hosted = web.is_some();
@@ -589,7 +589,9 @@ async fn devices_live(
     State(adapter): State<Adapter>,
     Extension(caller): Extension<AuthContext>,
 ) -> Response {
-    snapshots(adapter, caller, Identities::devices)
+    snapshots(adapter, caller, |adapter, caller| {
+        adapter.identities.devices(caller)
+    })
 }
 
 async fn plugin_machines_live(
@@ -599,9 +601,10 @@ async fn plugin_machines_live(
     if !members::can_manage(caller.user.role) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    snapshots(adapter, caller, |identities, caller| {
-        let (caller, _) = identities.active_caller(caller)?;
-        members::can_manage(caller.user.role).then(|| identities.plugin_machine_entries(None))
+    snapshots(adapter, caller, |adapter, caller| {
+        let (caller, _) = adapter.identities.active_caller(caller)?;
+        members::can_manage(caller.user.role)
+            .then(|| adapter.server.machines().snapshots(&adapter.identities))
     })
 }
 

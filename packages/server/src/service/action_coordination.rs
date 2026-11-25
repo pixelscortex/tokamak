@@ -116,11 +116,18 @@ impl Coordinator {
             .spawn(async move { (session, id, action_job(cancel, output, invocation).await) });
     }
 
-    fn respond_window_action(&mut self, session: u64, id: u64, mut reply: Json, note: CallNote) {
+    fn respond_window_action(
+        &mut self,
+        session: u64,
+        id: u64,
+        mut reply: Json,
+        mut note: CallNote,
+    ) {
         let Some(client) = self.sessions.get_mut(&session) else {
             return;
         };
         let proof = uuid::Uuid::new_v4().to_string();
+        note.window_plugin = reply["artifact"]["id"].as_str().map(str::to_owned);
         client.window_notes.insert(proof.clone(), (id, note));
         reply["requestId"] = serde_json::json!(id);
         reply["note"]["proof"] = serde_json::json!(proof);

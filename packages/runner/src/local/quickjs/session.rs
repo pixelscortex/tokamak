@@ -937,7 +937,13 @@ impl<'a> CallRoute<'a> {
 
         if matches!(
             fields.get("name").and_then(Value::as_str),
-            Some("local.runQuery" | "local.runMutation" | "local.runAction" | "plugin.call")
+            Some(
+                "local.runQuery"
+                    | "local.runMutation"
+                    | "local.runAction"
+                    | "plugin.call"
+                    | "machines.list"
+            )
         ) {
             let mut continuation = json!({
                 "depth": self.action_depth + self.ancestors.len() - 1,

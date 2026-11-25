@@ -82,6 +82,7 @@ pub(crate) enum MachineFailure {
     MachineLost,
     Offline,
     Forbidden,
+    Limit,
 }
 
 impl MachineFailure {
@@ -91,6 +92,7 @@ impl MachineFailure {
             Self::MachineLost => "machineLost",
             Self::Offline => "machineOffline",
             Self::Forbidden => "machineForbidden",
+            Self::Limit => "machineLimit",
         };
         serde_json::json!({"failed":true,"kind":kind,"data":null})
     }
@@ -100,7 +102,7 @@ pub(crate) fn resolve(
     loaded: Option<&Loaded>,
     target: Option<&crate::plugins::Target>,
     placement: &Placement,
-    caller: Option<&str>,
+    caller: Option<(&str, bool)>,
     runner: &Machines,
     note: &CallNote,
 ) -> Destination {
@@ -114,10 +116,13 @@ pub(crate) fn resolve(
     }
 
     let named = if let ActionTarget::Machine(id) = selected {
-        let Some(plugin) = caller.or_else(|| target.map(|target| target.owner.as_str())) else {
+        let Some(plugin) = target.map(|target| target.owner.as_str()) else {
             return Destination::Failed(MachineFailure::Forbidden);
         };
-        match runner.named(id, plugin, note) {
+        if id.starts_with("machine:") && caller.is_some_and(|(caller, _)| caller != plugin) {
+            return Destination::Failed(MachineFailure::Forbidden);
+        }
+        match runner.named(id, plugin, note, caller.is_some_and(|(_, server)| server)) {
             Ok(dispatch) => Some(dispatch),
             Err(error) => return Destination::Failed(error),
         }
@@ -175,6 +180,7 @@ impl Destination {
                 note,
                 runner,
                 lifetime,
+                internal: false,
             },
             guard,
         )
@@ -248,6 +254,7 @@ pub(crate) struct ActionContext {
     pub note: CallNote,
     pub runner: Arc<Machines>,
     pub lifetime: Option<CancellationToken>,
+    pub internal: bool,
 }
 
 pub(crate) struct NestedCall {
@@ -287,11 +294,11 @@ pub(crate) fn operations(
             .runner
             .register_list(&mut ops, owner.clone(), &context.note)?;
         if context.lifetime.is_none() {
-            let plugin = &loaded.catalog.plugins[owner].manifest.plugin;
             context.runner.register_management(
                 &mut ops,
                 owner.clone(),
-                plugin.name.clone().unwrap_or_else(|| owner.clone()),
+                loaded.clone(),
+                context.internal,
                 context.note.clone(),
             )?;
         }
@@ -420,6 +427,7 @@ fn register_plugin_call(
         note,
         runner,
         lifetime,
+        ..
     } = context.clone();
     ops.register_call("plugin.call", move |payload| {
         let loaded = catalog.clone();
@@ -480,6 +488,7 @@ fn register_plugin_call(
                     note,
                     runner,
                     lifetime,
+                    internal: false,
                 },
                 args,
                 (owner, on),
@@ -504,7 +513,7 @@ async fn run_nested_action(
         Some(&loaded),
         Some(&target),
         &Placement::new(on, None),
-        Some(&caller),
+        Some((&caller, parent.lifetime.is_none())),
         &parent.runner,
         &parent.note,
     );
@@ -517,7 +526,9 @@ async fn run_nested_action(
         Some(&target.owner),
     ));
     let source = loaded.action_sources.get(&target.owner).cloned();
-    let (context, _guard) = destination.context(parent.note, parent.runner);
+    let (mut context, _guard) = destination.context(parent.note, parent.runner);
+    context.internal =
+        caller == target.owner && target.visibility == crate::service::Visibility::Internal;
     let ops = operations(
         commands,
         Some(loaded),

@@ -51,7 +51,8 @@ async fn live(
     State(adapter): State<Adapter>,
     Extension(caller): Extension<AuthContext>,
 ) -> Response {
-    snapshots(adapter, caller, |identities, caller| {
+    snapshots(adapter, caller, |adapter, caller| {
+        let identities = &adapter.identities;
         let (current, _) = identities.active_caller(caller)?;
         can_manage(current.user.role).then(|| Snapshot {
             viewer: current.user,

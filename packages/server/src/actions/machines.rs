@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct Machines {
     connections: Mutex<HashMap<String, Machine>>,
     identities: OnceLock<Arc<Identities>>,
+    plugins: Mutex<Option<Arc<super::Loaded>>>,
     url: OnceLock<Option<String>>,
     changed: tokio::sync::watch::Sender<()>,
 }
@@ -52,9 +53,43 @@ impl Machines {
         true
     }
 
-    pub fn configure(&self, identities: Arc<Identities>, url: Option<String>) {
+    pub fn configure(
+        &self,
+        identities: Arc<Identities>,
+        url: Option<String>,
+    ) -> std::io::Result<()> {
+        let plugins = self.plugins.lock().expect("machine plugins");
+        identities.revoke_plugin_machines(|id, _| {
+            plugins
+                .as_ref()
+                .is_none_or(|loaded| !loaded.catalog.plugins.contains_key(id))
+        })?;
         let _ = self.identities.set(identities);
         let _ = self.url.set(url);
+        Ok(())
+    }
+
+    pub fn update_plugins(&self, next: Option<Arc<super::Loaded>>) -> std::io::Result<()> {
+        let mut plugins = self.plugins.lock().expect("machine plugins");
+        if let Some(identities) = self.identities.get() {
+            identities.revoke_plugin_machines(|id, _| {
+                next.as_ref()
+                    .is_none_or(|loaded| !loaded.catalog.plugins.contains_key(id))
+            })?;
+        }
+        *plugins = next;
+        if let Some(identities) = self.identities.get() {
+            identities.device_changes.send_replace(());
+        }
+        Ok(())
+    }
+
+    pub fn snapshots(&self, identities: &Identities) -> Vec<Value> {
+        let plugins = self.plugins.lock().expect("machine plugins");
+        identities.plugin_machine_snapshots(|id| {
+            let plugin = &plugins.as_ref()?.catalog.plugins.get(id)?.manifest.plugin;
+            Some(plugin.name.clone().unwrap_or_else(|| id.to_owned()))
+        })
     }
 
     pub fn connect(
@@ -94,16 +129,13 @@ impl Machines {
         id: &str,
         plugin: &str,
         note: &CallNote,
+        server: bool,
     ) -> Result<RunnerDispatch, MachineFailure> {
         let identities = self.identities.get().ok_or(MachineFailure::Forbidden)?;
-        let user = note
-            .auth
-            .as_ref()
-            .filter(|auth| auth.is_person())
-            .map(|auth| auth.user.id.as_str());
+        let user = member(note);
         let plugin_owned = id.starts_with("machine:");
         let allowed = if plugin_owned {
-            identities.plugin_owns_machine(plugin, id)
+            identities.plugin_machine_allowed(plugin, id, user, server)
         } else {
             user.is_some_and(|user| identities.owns_machine(user, id))
         };
@@ -137,40 +169,39 @@ impl Machines {
         note: &CallNote,
     ) -> Result<(), engine::Error> {
         let machines = self.clone();
-        let user = note
-            .auth
-            .as_ref()
-            .filter(|auth| auth.is_person())
-            .map(|auth| auth.user.id.clone());
+        let user = member(note).map(str::to_owned);
         ops.register_async("machines.list", move |_| {
-            let mut entries = machines
-                .identities
-                .get()
-                .map_or_else(Vec::new, |identities| {
-                    let mut entries = identities.plugin_machine_entries(Some(&plugin));
-                    if let Some(user) = &user {
-                        entries.extend(identities.personal_machines(user));
-                    }
-                    entries
-                });
-            let connections = machines.connections.lock().expect("machine registry");
-            for entry in &mut entries {
-                entry["online"] = json!(
-                    entry["id"]
-                        .as_str()
-                        .and_then(|id| connections.get(id))
-                        .is_some_and(|machine| !machine.revoked.is_cancelled())
-                );
-            }
-            async move { Ok(Value::Array(entries)) }
+            let entries = machines.list(&plugin, user.as_deref(), false);
+            async move { Ok(entries) }
         })
+    }
+
+    pub(crate) fn list(&self, plugin: &str, user: Option<&str>, all: bool) -> Value {
+        let Some(identities) = self.identities.get() else {
+            return json!([]);
+        };
+        let mut entries = identities.plugin_machine_entries(plugin, user, all);
+        if let Some(user) = user {
+            entries.extend(identities.personal_machines(user));
+        }
+        let connections = self.connections.lock().expect("machine registry");
+        for entry in &mut entries {
+            entry["online"] = json!(
+                entry["id"]
+                    .as_str()
+                    .and_then(|id| connections.get(id))
+                    .is_some_and(|machine| !machine.revoked.is_cancelled())
+            );
+        }
+        Value::Array(entries)
     }
 
     pub(super) fn register_management(
         self: &Arc<Self>,
         ops: &mut OpRegistry,
         plugin: String,
-        plugin_name: String,
+        generation: Arc<super::Loaded>,
+        internal: bool,
         note: CallNote,
     ) -> Result<(), engine::Error> {
         let url = self.url.get().cloned().flatten();
@@ -179,22 +210,24 @@ impl Machines {
             async move { Ok(json!(url)) }
         })?;
 
+        if internal {
+            let machines = self.clone();
+            let owner = plugin.clone();
+            ops.register_call("machines.listAll", move |_| {
+                let entries = machines.list(&owner, None, true);
+                async move { Ok(entries) }
+            })?;
+        }
+
         let machines = self.clone();
         let owner = plugin.clone();
         ops.register_call("machines.create", move |payload| {
-            let (machines, owner, plugin_name) =
-                (machines.clone(), owner.clone(), plugin_name.clone());
+            let (machines, owner, generation) =
+                (machines.clone(), owner.clone(), generation.clone());
             async move {
-                let label = payload["name"]
-                    .as_str()
-                    .ok_or("Missing machine name")?
-                    .to_owned();
+                let (label, member) = creation_args(&payload)?;
                 Ok(tokio::task::spawn_blocking(move || {
-                    let identities = machines
-                        .identities
-                        .get()
-                        .ok_or("Machine storage unavailable")?;
-                    identities.create_plugin_machine(&owner, &plugin_name, &label)
+                    machines.create(&generation, &owner, &label, member)
                 })
                 .await
                 .map_err(|error| error.to_string())??)
@@ -246,6 +279,26 @@ impl Machines {
         })
     }
 
+    fn create(
+        &self,
+        generation: &Arc<super::Loaded>,
+        owner: &str,
+        label: &str,
+        member: Option<String>,
+    ) -> Result<Value, String> {
+        let plugins = self.plugins.lock().expect("machine plugins");
+        if !plugins
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, generation))
+        {
+            return Ok(MachineFailure::Forbidden.value());
+        }
+        self.identities
+            .get()
+            .ok_or("Machine storage unavailable")?
+            .create_plugin_machine(owner, label, member)
+    }
+
     async fn wait_online(&self, id: &str, plugin: &str, note: &CallNote, limit: Duration) -> Value {
         let Some(identities) = self.identities.get() else {
             return MachineFailure::Forbidden.value();
@@ -254,7 +307,7 @@ impl Machines {
         let mut credentials = identities.device_updates();
         let wait = async {
             loop {
-                match self.named(id, plugin, note) {
+                match self.named(id, plugin, note, true) {
                     Ok(_) => return Value::Null,
                     Err(MachineFailure::Offline) => {}
                     Err(error) => return error.value(),
@@ -308,4 +361,25 @@ impl Drop for Connection<'_> {
 
 fn machine_id(payload: &Value) -> Result<&str, &'static str> {
     payload["id"].as_str().ok_or("Missing machine id")
+}
+
+fn member(note: &CallNote) -> Option<&str> {
+    note.auth
+        .as_ref()
+        .filter(|auth| auth.is_person())
+        .map(|auth| auth.user.id.as_str())
+}
+
+fn creation_args(payload: &Value) -> Result<(String, Option<String>), String> {
+    let name = payload["name"].as_str().ok_or("Missing machine name")?;
+    let member = payload
+        .get("member")
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or("Invalid machine member")
+        })
+        .transpose()?;
+    Ok((name.to_owned(), member))
 }

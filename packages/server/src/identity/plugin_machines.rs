@@ -1,16 +1,22 @@
 use super::{Identities, devices::generate_key, hash, name, now};
+use crate::actions::MachineFailure;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{io, io::Write, path::PathBuf, sync::Mutex};
 use subtle::ConstantTimeEq;
 use tokio_util::sync::CancellationToken;
 
+pub(super) const FILE_NAME: &str = "plugin-machines.json";
+const MAX_ACTIVE_MACHINES_PER_PLUGIN: usize = 100;
+const REMOVED_RETENTION_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
 #[derive(Clone, Deserialize, Serialize)]
 struct Record {
     id: String,
     name: String,
     plugin: String,
-    plugin_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    member: Option<String>,
     created_at: u64,
     removed_at: Option<u64>,
     key_hash: Option<String>,
@@ -25,13 +31,17 @@ struct Record {
 
 impl Record {
     fn entry(&self) -> Value {
-        json!({
+        let mut entry = json!({
             "id": self.id,
             "name": self.name,
             "owner": {"kind":"plugin", "plugin":self.plugin},
             "online": self.sockets > 0,
             "lastSeen": self.last_seen.max(self.live_last_seen),
-        })
+        });
+        if let Some(member) = &self.member {
+            entry["member"] = json!(member);
+        }
+        entry
     }
 }
 
@@ -39,6 +49,7 @@ impl Record {
 pub(super) struct Store {
     path: Option<PathBuf>,
     records: Mutex<Vec<Record>>,
+    writer: Mutex<()>,
 }
 
 impl Store {
@@ -51,6 +62,7 @@ impl Store {
         Ok(Self {
             path: Some(path),
             records: Mutex::new(records),
+            writer: Mutex::new(()),
         })
     }
 
@@ -67,6 +79,34 @@ impl Store {
         file.as_file().sync_all()?;
         file.persist(path).map_err(|error| error.error)?;
         Ok(())
+    }
+    fn edit<T>(&self, change: impl FnOnce(&mut Vec<Record>) -> Option<T>) -> io::Result<Option<T>> {
+        let _writer = self.writer.lock().expect("plugin machines writer");
+        let mut next = self.records.lock().expect("plugin machines").clone();
+        let Some(result) = change(&mut next) else {
+            return Ok(None);
+        };
+        let cutoff = now().saturating_sub(REMOVED_RETENTION_MS);
+        next.retain(|record| record.removed_at.is_none_or(|removed| removed >= cutoff));
+        self.save(&next)?;
+
+        let mut records = self.records.lock().expect("plugin machines");
+        // Socket updates can proceed during fsync; keep their newer live state.
+        let current: std::collections::HashMap<_, _> = records
+            .iter()
+            .map(|record| (record.id.as_str(), record))
+            .collect();
+        for record in &mut next {
+            if let Some(old) = current.get(record.id.as_str()) {
+                record.live_last_seen = old.live_last_seen;
+                record.sockets = old.sockets;
+                if record.key_hash.is_none() && old.key_hash.is_some() {
+                    old.revoked.cancel();
+                }
+            }
+        }
+        *records = next;
+        Ok(Some(result))
     }
 }
 
@@ -96,93 +136,150 @@ impl Identities {
         found
     }
 
-    pub(crate) fn plugin_owns_machine(&self, plugin: &str, id: &str) -> bool {
+    pub(crate) fn plugin_machine_allowed(
+        &self,
+        plugin: &str,
+        id: &str,
+        user: Option<&str>,
+        server: bool,
+    ) -> bool {
         self.plugin_machines
             .records
             .lock()
             .expect("plugin machines")
             .iter()
-            .any(|record| record.id == id && record.plugin == plugin && record.key_hash.is_some())
+            .any(|record| {
+                record.id == id
+                    && record.plugin == plugin
+                    && record.key_hash.is_some()
+                    && match record.member.as_deref() {
+                        Some(member) => Some(member) == user,
+                        None => server,
+                    }
+            })
     }
 
     pub(crate) fn create_plugin_machine(
         &self,
         plugin: &str,
-        plugin_name: &str,
         label: &str,
+        member: Option<String>,
     ) -> Result<Value, String> {
+        if member
+            .as_deref()
+            .is_some_and(|id| self.active_member(id).is_none())
+        {
+            return Ok(MachineFailure::Forbidden.value());
+        }
         let name = name(label)?;
         let key = generate_key()?;
-        let mut records = self
+        let id = format!("machine:{}", uuid::Uuid::new_v4());
+        let created = self
             .plugin_machines
-            .records
-            .lock()
-            .expect("plugin machines");
-        let id = loop {
-            let id = format!("machine:{}", uuid::Uuid::new_v4());
-            if records.iter().all(|record| record.id != id) {
-                break id;
-            }
-        };
-        records.push(Record {
-            id: id.clone(),
-            name,
-            plugin: plugin.into(),
-            plugin_name: plugin_name.into(),
-            created_at: now(),
-            removed_at: None,
-            key_hash: Some(hash(&key)),
-            last_seen: None,
-            live_last_seen: None,
-            revoked: CancellationToken::new(),
-            sockets: 0,
-        });
-        if let Err(error) = self.plugin_machines.save(&records) {
-            records.pop();
-            return Err(error.to_string());
+            .edit(|records| {
+                if records
+                    .iter()
+                    .filter(|record| record.plugin == plugin && record.key_hash.is_some())
+                    .count()
+                    >= MAX_ACTIVE_MACHINES_PER_PLUGIN
+                {
+                    return None;
+                }
+                records.push(Record {
+                    id: id.clone(),
+                    name,
+                    plugin: plugin.into(),
+                    member,
+                    created_at: now(),
+                    removed_at: None,
+                    key_hash: Some(hash(&key)),
+                    last_seen: None,
+                    live_last_seen: None,
+                    revoked: CancellationToken::new(),
+                    sockets: 0,
+                });
+                Some(())
+            })
+            .map_err(|error| error.to_string())?;
+        if created.is_none() {
+            return Ok(MachineFailure::Limit.value());
         }
         self.device_changes.send_replace(());
         Ok(json!({"id":id,"key":key}))
     }
 
     pub(crate) fn remove_plugin_machine(&self, plugin: &str, id: &str) -> Result<bool, String> {
-        let mut records = self
-            .plugin_machines
-            .records
-            .lock()
-            .expect("plugin machines");
-        let Some(index) = records.iter().position(|record| {
-            record.id == id && record.plugin == plugin && record.key_hash.is_some()
-        }) else {
-            return Ok(false);
-        };
-        let digest = records[index].key_hash.take();
-        records[index].removed_at = Some(now());
-        if let Err(error) = self.plugin_machines.save(&records) {
-            records[index].key_hash = digest;
-            records[index].removed_at = None;
-            return Err(error.to_string());
-        }
-        records[index].revoked.cancel();
-        self.device_changes.send_replace(());
-        Ok(true)
+        self.revoke_plugin_machines(|owner, machine| plugin == owner && id == machine)
+            .map_err(|error| error.to_string())
     }
 
-    pub(crate) fn plugin_machine_entries(&self, plugin: Option<&str>) -> Vec<Value> {
+    pub(crate) fn revoke_plugin_machines(
+        &self,
+        revoke: impl Fn(&str, &str) -> bool,
+    ) -> io::Result<bool> {
+        let removed = self
+            .plugin_machines
+            .edit(|records| {
+                let mut changed = false;
+                for record in records {
+                    if record.key_hash.is_some() && revoke(&record.plugin, &record.id) {
+                        record.key_hash = None;
+                        record.removed_at = Some(now());
+                        changed = true;
+                    }
+                }
+                changed.then_some(())
+            })?
+            .is_some();
+        if removed {
+            self.device_changes.send_replace(());
+        }
+        Ok(removed)
+    }
+
+    pub(crate) fn plugin_machine_entries(
+        &self,
+        plugin: &str,
+        user: Option<&str>,
+        all: bool,
+    ) -> Vec<Value> {
         self.plugin_machines
             .records
             .lock()
             .expect("plugin machines")
             .iter()
             .filter(|record| {
-                record.key_hash.is_some() && plugin.is_none_or(|id| record.plugin == id)
+                record.key_hash.is_some()
+                    && record.plugin == plugin
+                    && (all || user.is_some_and(|user| record.member.as_deref() == Some(user)))
             })
-            .map(|record| {
-                let mut entry = record.entry();
-                if plugin.is_none() {
-                    entry["owner"]["name"] = json!(record.plugin_name);
+            .map(Record::entry)
+            .collect()
+    }
+
+    pub(crate) fn plugin_machine_snapshots(
+        &self,
+        name: impl Fn(&str) -> Option<String>,
+    ) -> Vec<Value> {
+        let records: Vec<_> = self
+            .plugin_machines
+            .records
+            .lock()
+            .expect("plugin machines")
+            .iter()
+            .filter(|record| record.key_hash.is_some())
+            .map(Record::entry)
+            .collect();
+        records
+            .into_iter()
+            .filter_map(|mut entry| {
+                let plugin = entry["owner"]["plugin"].as_str()?;
+                entry["owner"]["name"] = json!(name(plugin)?);
+                if let Some(id) = entry["member"].as_str() {
+                    let display_name = self.member_name(id).unwrap_or_else(|| id.to_owned());
+                    entry["member"] = json!({"id":id,"name":display_name});
                 }
-                entry
+                Some(entry)
             })
             .collect()
     }
@@ -219,22 +316,16 @@ impl Identities {
     }
 
     pub(crate) fn flush_plugin_machine_presence(&self) -> io::Result<()> {
-        let mut records = self
-            .plugin_machines
-            .records
-            .lock()
-            .expect("plugin machines");
-        if records
-            .iter()
-            .any(|record| record.live_last_seen > record.last_seen)
-        {
-            let mut snapshot = records.clone();
-            for record in &mut snapshot {
+        self.plugin_machines.edit(|records| {
+            let cutoff = now().saturating_sub(REMOVED_RETENTION_MS);
+            let mut changed = false;
+            for record in records {
+                changed |= record.live_last_seen > record.last_seen
+                    || record.removed_at.is_some_and(|removed| removed < cutoff);
                 record.last_seen = record.last_seen.max(record.live_last_seen);
             }
-            self.plugin_machines.save(&snapshot)?;
-            *records = snapshot;
-        }
+            changed.then_some(())
+        })?;
         Ok(())
     }
 }
@@ -242,9 +333,57 @@ impl Identities {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::actions::Machines;
-    use crate::identity::{CallNote, DeviceSocket};
-    use std::sync::Arc;
+    use crate::identity::DeviceSocket;
+
+    #[test]
+    fn active_machine_limit_is_per_plugin_and_expired_tombstones_are_pruned() {
+        let dir = tempfile::tempdir().unwrap();
+        let identities =
+            Identities::hosted(dir.path().join("members.json"), "owner-key", "Owner").unwrap();
+        let mut first = None;
+        for n in 0..MAX_ACTIVE_MACHINES_PER_PLUGIN {
+            let result = identities
+                .create_plugin_machine("sandbox", "Sandbox", None)
+                .unwrap();
+            assert!(result["key"].is_string());
+            if n == 0 {
+                first = result["id"].as_str().map(str::to_owned);
+            }
+        }
+        assert_eq!(
+            identities
+                .create_plugin_machine("sandbox", "Overflow", None)
+                .unwrap(),
+            MachineFailure::Limit.value(),
+        );
+        assert!(
+            identities
+                .create_plugin_machine("other", "Other", None)
+                .unwrap()["key"]
+                .is_string()
+        );
+
+        let first = first.unwrap();
+        assert!(identities.remove_plugin_machine("sandbox", &first).unwrap());
+        let replacement = identities
+            .create_plugin_machine("sandbox", "Replacement", None)
+            .unwrap();
+        assert_ne!(replacement["id"], first);
+        for record in identities
+            .plugin_machines
+            .records
+            .lock()
+            .unwrap()
+            .iter_mut()
+        {
+            if record.id == first {
+                record.removed_at = Some(0);
+            }
+        }
+        identities.flush_plugin_machine_presence().unwrap();
+        let stored = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(!stored.contains(&first));
+    }
 
     #[test]
     fn plugin_machine_credentials_and_presence_survive_restart_until_revoked() {
@@ -253,7 +392,7 @@ mod tests {
         let open = || Identities::hosted(path.clone(), "owner-key", "Owner").unwrap();
         let identities = open();
         let result = identities
-            .create_plugin_machine("sandbox", "Sandbox", "Test machine")
+            .create_plugin_machine("sandbox", "Test machine", None)
             .unwrap();
         let id = result["id"].as_str().unwrap();
         let key = result["key"].as_str().unwrap();
@@ -261,24 +400,16 @@ mod tests {
         identities.flush_plugin_machine_presence().unwrap();
         drop(identities);
 
-        let identities = Arc::new(open());
+        let identities = open();
         let (_, _, revoked) = identities.authenticate_plugin_machine(key).unwrap();
         assert!(identities.authenticate(key).is_none());
-        let entries = identities.plugin_machine_entries(Some("sandbox"));
+        let entries = identities.plugin_machine_entries("sandbox", None, true);
         assert_eq!(entries[0]["online"], false);
         assert!(entries[0]["lastSeen"].is_u64());
 
-        let machines = Machines::default();
-        machines.configure(identities.clone(), None);
-        let note = CallNote::from(None);
-        assert!(matches!(
-            machines.named(id, "sandbox", &note),
-            Err(crate::actions::MachineFailure::Offline)
-        ));
-        assert!(matches!(
-            machines.named(id, "outsider", &note),
-            Err(crate::actions::MachineFailure::Forbidden)
-        ));
+        assert!(identities.plugin_machine_allowed("sandbox", id, None, true));
+        assert!(!identities.plugin_machine_allowed("sandbox", id, None, false));
+        assert!(!identities.plugin_machine_allowed("outsider", id, None, true));
         assert!(identities.remove_plugin_machine("sandbox", id).unwrap());
         assert!(revoked.is_cancelled());
         assert!(open().authenticate_plugin_machine(key).is_none());

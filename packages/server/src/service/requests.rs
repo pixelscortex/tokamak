@@ -141,6 +141,20 @@ impl Coordinator {
             placement,
         }: RequestCaller,
     ) {
+        if name == "tokamak:callerMachines" {
+            let result = match (
+                expected,
+                note.window_plugin.as_deref(),
+                args["plugin"].as_str(),
+            ) {
+                (Some(FunctionKind::Query), Some(owner), Some(plugin)) if owner == plugin => {
+                    Ok(self.runner.list(owner, Some(&auth.user.id), false))
+                }
+                _ => Err("A matching window action continuation is required".into()),
+            };
+            self.respond(session, id, result);
+            return;
+        }
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
                 query.map(|read| read(&auth)).map_err(str::to_owned)

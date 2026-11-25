@@ -27,6 +27,7 @@ pub(crate) struct CallNote {
     thread_id: Option<String>,
     depth: usize,
     window_continuation: bool,
+    pub(crate) window_plugin: Option<String>,
 }
 
 impl From<Option<AuthContext>> for CallNote {
@@ -58,6 +59,7 @@ impl CallNote {
             thread_id,
             depth,
             window_continuation: true,
+            window_plugin: None,
         })
     }
 

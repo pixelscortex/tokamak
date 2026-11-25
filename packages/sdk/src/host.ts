@@ -57,9 +57,10 @@ export interface HostOperations {
   "db.delete": { args: { id: string }; result: null };
   "db.query": { args: QueryRequest; result: StoredDocument[] };
   "machines.list": { args: {}; result: import("./functions").MachineEntry[] };
+  "machines.listAll": { args: {}; result: import("./functions").MachineEntry[] };
   "machines.create": {
-    args: { name: string };
-    result: { id: import("./functions").MachineId; key: string };
+    args: { name: string; member?: string };
+    result: import("./functions").MachineCreation;
   };
   "machines.remove": {
     args: { id: import("./functions").MachineId };

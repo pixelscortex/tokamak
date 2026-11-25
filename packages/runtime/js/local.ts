@@ -401,6 +401,16 @@ export class LocalFunctions implements LocalTransport {
         this.authRead = undefined;
       }));
     }
+    if (action && operation === "machines.list") {
+      if (!continuation || !this.server.continueLocalCall)
+        throw new Error("Server transport cannot continue a Runner call");
+      return this.server.continueLocalCall(
+        "query",
+        "tokamak:callerMachines",
+        { plugin: callerId },
+        continuation,
+      );
+    }
     if (action && operation === "contract.list") unavailable("serverContracts");
     const {
       name,

@@ -108,7 +108,12 @@ async fn dispatch(peer: Peer, scopes: Scopes, action: RunnerAction) -> Result<Va
     result.map_err(|error| upstream.redact(error))
 }
 
-async fn operation(scopes: Scopes, peer: Peer, request: Request) -> Result<Value, String> {
+async fn operation(
+    scopes: Scopes,
+    peer: Peer,
+    plugin: Option<Arc<str>>,
+    request: Request,
+) -> Result<Value, String> {
     let Request::Operation {
         root,
         scope,
@@ -134,7 +139,7 @@ async fn operation(scopes: Scopes, peer: Peer, request: Request) -> Result<Value
     tokio::select! {
         biased;
         () = scopes.ended.cancelled() => Err("Machine invocation has ended".into()),
-        result = invoke_operation(&scopes, upstream, &peer, &name, payload) => result,
+        result = invoke_operation(&scopes, upstream, &peer, plugin.as_deref(), &name, payload) => result,
     }
 }
 
@@ -142,15 +147,26 @@ async fn invoke_operation(
     scopes: &Scope,
     upstream: Arc<RunnerActionUpstream>,
     peer: &Peer,
+    plugin: Option<&str>,
     name: &str,
     payload: Value,
 ) -> Result<Value, String> {
     match name {
         "action.env" => Err("Connected Runner actions use their local environment".into()),
-        "local.contracts" => upstream.local_contracts(&payload).await,
+        "local.contracts" => {
+            let mut providers = upstream.local_contracts(&payload).await?;
+            if let (Some(owner), Some(routes)) = (plugin, providers.as_array_mut()) {
+                routes.retain(|route| owns_contract(Some(owner), route));
+            }
+            Ok(providers)
+        }
         "local.contract.route" => {
             let label = payload["label"].as_str().ok_or("Missing contract label")?;
-            let route = upstream.local_contract(label, &payload["args"]).await?;
+            let args = &payload["args"];
+            if !owns_contract(plugin, args) {
+                return Err("Contract provider does not own this machine".into());
+            }
+            let route = upstream.local_contract(label, args).await?;
             let mut scopes = scopes.upstreams.lock().expect("machine invocation scopes");
             if scopes.len() >= machine_wire::CAPACITY {
                 return Err("Machine contract scope capacity exceeded".into());
@@ -171,6 +187,10 @@ async fn invoke_operation(
     }
 }
 
+fn owns_contract(owner: Option<&str>, route: &Value) -> bool {
+    owner.is_none_or(|owner| route["plugin"].as_str() == Some(owner))
+}
+
 fn dispatch_to(peer: Peer, scopes: Scopes) -> crate::actions::RunnerDispatch {
     Arc::new(move |action| Box::pin(dispatch(peer.clone(), scopes.clone(), action)))
 }
@@ -181,11 +201,19 @@ enum Identity {
 }
 
 impl Identity {
-    fn machine(&self) -> (&str, crate::actions::MachineOwner) {
+    fn machine(&self) -> (&str, crate::actions::MachineOwner, Option<Arc<str>>) {
         use crate::actions::MachineOwner;
         match self {
-            Self::Person(auth) => (&auth.device.id, MachineOwner::Person(auth.user.id.clone())),
-            Self::Plugin { id, plugin } => (id, MachineOwner::Plugin(plugin.clone())),
+            Self::Person(auth) => (
+                &auth.device.id,
+                MachineOwner::Person(auth.user.id.clone()),
+                None,
+            ),
+            Self::Plugin { id, plugin } => (
+                id,
+                MachineOwner::Plugin(plugin.clone()),
+                Some(Arc::from(plugin.as_str())),
+            ),
         }
     }
 
@@ -210,7 +238,7 @@ async fn connection(
     let scopes = Scopes::default();
     let replaced = CancellationToken::new();
     identity.seen(&adapter.identities, DeviceSocket::MachineOpened);
-    let (id, owner) = identity.machine();
+    let (id, owner, plugin) = identity.machine();
     let Some(registration) = adapter.server.machines().connect(
         id,
         owner,
@@ -238,8 +266,8 @@ async fn connection(
                 Some(Ok(Message::Text(text))) => {
                     let Ok(packet) = serde_json::from_str::<Packet>(&text) else { break };
                     let scopes = scopes.clone();
-                    let operation_peer = peer.clone();
-                    incoming.receive(&peer, packet, move |_, request, _| operation(scopes, operation_peer, request));
+                    let (operation_peer, plugin) = (peer.clone(), plugin.clone());
+                    incoming.receive(&peer, packet, move |_, request, _| operation(scopes, operation_peer, plugin, request));
                     continue;
                 }
                 Some(Ok(Message::Pong(_))) => {
@@ -289,4 +317,18 @@ async fn close(socket: &mut WebSocket, code: u16, reason: &'static str) {
         reason: reason.into(),
     }));
     let _ = tokio::time::timeout(Duration::from_millis(250), socket.send(close)).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_machine_contracts_stay_with_the_owner() {
+        let other = json!({"plugin": "other"});
+        assert!(owns_contract(None, &other));
+        assert!(!owns_contract(Some("owner"), &other));
+        assert!(!owns_contract(Some("owner"), &json!({})));
+        assert!(owns_contract(Some("owner"), &json!({"plugin": "owner"})));
+    }
 }

@@ -233,6 +233,7 @@ impl RunnerActionUpstream {
                 note,
                 runner: scope.runner.clone(),
                 lifetime: scope.lifetime.clone(),
+                internal: false,
             },
         )
         .map_err(|error| error.to_string())?;
