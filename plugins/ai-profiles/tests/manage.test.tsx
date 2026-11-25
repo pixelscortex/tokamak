@@ -311,10 +311,12 @@ test("a sign out that fails on the way says so", async () => {
   expect((await within(details).findByRole("alert")).textContent).toMatch(/could not be signed out/);
 });
 
-test("a subscription whose plan is unknown is titled by its product and says so", async () => {
+test("a subscription whose plan is unknown is titled by its product and says so beside Check again", async () => {
   listed = { subscriptions: [{ ...team, plan: "", label: "" }], signIns: [] };
   mount();
   const card = await screen.findByRole("article", { name: "Claude" });
-  expect(card.textContent).toMatch(/acme inc · plan unknown/);
-  expect(within(card).getByRole("button", { name: "Check Claude again" })).toBeTruthy();
+  // The line under the emails names the organisation alone; the hint sits by the action that reads the plan.
+  expect(within(card).getByText("acme inc")).toBeTruthy();
+  const check = within(card).getByRole("button", { name: "Check Claude again" });
+  expect(check.parentElement?.parentElement?.textContent).toMatch(/plan unknown/);
 });

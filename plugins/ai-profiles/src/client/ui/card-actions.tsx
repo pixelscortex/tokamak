@@ -76,6 +76,10 @@ export function CardActions(props: { subscription: Subscription }): JSX.Element 
             );
           }}
         </For>
+        {/* Beside "Check again", which reads it: an unknown plan is never a word in the title. */}
+        <Show when={!props.subscription.plan}>
+          <span class="ps-1 text-data text-ink-3">plan unknown</span>
+        </Show>
       </div>
       <Show when={problem()}>
         <p role="alert" class="m-0 text-label text-removed">
