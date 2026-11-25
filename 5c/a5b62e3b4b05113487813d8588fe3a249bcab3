@@ -1,0 +1,21 @@
+packages/server/tests/fixtures/query-hooks/moderation/src/server/bench.ts
+  s_040e9b5fc04cd5::t_641e93fffe7e8d 23-24
+packages/server/tests/fixtures/query-hooks/moderation/src/server/schema.ts
+  s_040e9b5fc04cd5::t_cb21a83bd8015d 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ca5b62e3b4b05113487813d8588fe3a249bcab3",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
