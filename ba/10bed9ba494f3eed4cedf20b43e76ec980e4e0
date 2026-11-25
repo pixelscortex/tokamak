@@ -1,0 +1,23 @@
+app/src/shell/devices.tsx
+  s_d06dc84af7b6dd::t_30946b7c3c10e4 21-30,33-45,164,180,184-255
+app/tests/devices.test.tsx
+  s_d06dc84af7b6dd::t_99e83f09c8d55a 10-15,46-49,65-148
+design/shell.md
+  s_d06dc84af7b6dd::t_40e8ee4ba5c066 11-20,24-45,81-86,98-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba10bed9ba494f3eed4cedf20b43e76ec980e4e0",
+  "prompts": {},
+  "sessions": {
+    "s_d06dc84af7b6dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4009d523-3b3d-460d-882b-a4e3397b8e16",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
