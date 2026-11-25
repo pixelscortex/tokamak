@@ -1,21 +1,32 @@
 use std::{
     collections::{HashMap, VecDeque},
-    io::{self, Read, Write},
-    net::{Ipv4Addr, Ipv6Addr, TcpListener, TcpStream},
+    io,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     process::{Command, Stdio},
     sync::{Mutex, MutexGuard},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use serde_json::{Value, json};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpSocket, TcpStream},
+    sync::{Mutex as AsyncMutex, oneshot},
+    time::timeout,
+};
 
 const LIFETIME: Duration = Duration::from_secs(15 * 60);
-const POLL: Duration = Duration::from_millis(20);
 const REQUEST_LIMIT: Duration = Duration::from_secs(1);
+const HEADER_LIMIT: usize = 8192;
 const PAGE: &str = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Tokamak</title><p>Signed in. You can close this tab and go back to Tokamak.</p></html>";
 
 #[derive(Default)]
-pub struct Returns(Mutex<Active>);
+pub struct Returns {
+    active: Mutex<Active>,
+    // Wait for the previous listener to drop its sockets before rebinding.
+    claude: AsyncMutex<()>,
+    openai: AsyncMutex<()>,
+}
 
 #[derive(Default)]
 struct Active {
@@ -26,7 +37,8 @@ struct Active {
 
 struct Listener {
     request_id: String,
-    sockets: Vec<TcpListener>,
+    // Dropping the sender wakes the command on cancellation or replacement.
+    _cancel: oneshot::Sender<()>,
 }
 
 fn allowed_port(port: u16) -> bool {
@@ -35,136 +47,103 @@ fn allowed_port(port: u16) -> bool {
 
 impl Returns {
     fn active(&self) -> MutexGuard<'_, Active> {
-        self.0
+        self.active
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn start(&self, port: u16, request_id: String) -> io::Result<bool> {
+    fn register(&self, port: u16, request_id: &str) -> Option<oneshot::Receiver<()>> {
         let mut active = self.active();
         if let Some(index) = active
             .early_cancels
             .iter()
-            .position(|(p, id)| *p == port && *id == request_id)
+            .position(|(p, id)| *p == port && id == request_id)
         {
             active.early_cancels.remove(index);
-            return Ok(false);
+            return None;
         }
-        active.listeners.remove(&port);
-        let ipv4 = bind((Ipv4Addr::LOCALHOST, port).into())?;
-        ipv4.set_nonblocking(true)?;
-        let mut sockets = vec![ipv4];
-        // Browsers may try ::1 first for localhost. An unavailable IPv6
-        // stack is fine; an occupied IPv6 port is not ours to receive on.
-        match bind((Ipv6Addr::LOCALHOST, port).into()) {
-            Ok(ipv6) => {
-                ipv6.set_nonblocking(true)?;
-                sockets.push(ipv6);
-            }
-            Err(err)
-                if matches!(
-                    err.kind(),
-                    io::ErrorKind::AddrNotAvailable | io::ErrorKind::Unsupported
-                ) || matches!(err.raw_os_error(), Some(IPV6_NOT_SUPPORTED)) => {}
-            Err(err) => return Err(err),
-        }
+        let (cancel, cancelled) = oneshot::channel();
         active.listeners.insert(
             port,
             Listener {
-                request_id,
-                sockets,
+                request_id: request_id.into(),
+                _cancel: cancel,
             },
         );
-        Ok(true)
+        Some(cancelled)
     }
 
     fn stop(&self, port: u16, request_id: String) {
         let mut active = self.active();
-        if active
-            .listeners
-            .get(&port)
-            .is_some_and(|entry| entry.request_id == request_id)
-        {
-            active.listeners.remove(&port);
+        if remove_matching(&mut active, port, &request_id) {
             return;
         }
-        // Retain only recent cancels, including ones for a return just delivered.
         if active.early_cancels.len() == 32 {
             active.early_cancels.pop_front();
         }
         active.early_cancels.push_back((port, request_id));
     }
 
-    async fn wait(&self, port: u16, path: &str, request_id: &str, timeout: Duration) -> Value {
-        let deadline = Instant::now() + timeout;
-        let mut request = None;
-        loop {
-            if let Some(result) = self.poll(port, path, request_id, deadline, &mut request) {
-                return result;
-            }
-            tokio::time::sleep(POLL).await;
-        }
-    }
-
-    fn poll(
+    async fn listen(
         &self,
         port: u16,
         path: &str,
+        expected_state: &str,
         request_id: &str,
-        deadline: Instant,
-        request: &mut Option<Request>,
-    ) -> Option<Value> {
-        let mut active = self.active();
-        let Some(listener) = active
-            .listeners
-            .get(&port)
-            .filter(|entry| entry.request_id == request_id)
-        else {
-            return Some(json!({ "status": "cancelled" }));
+        lifetime: Duration,
+    ) -> Result<Value, &'static str> {
+        let Some(cancelled) = self.register(port, request_id) else {
+            return Ok(json!({ "status": "cancelled" }));
         };
-        if Instant::now() >= deadline {
-            active.listeners.remove(&port);
-            return Some(json!({ "status": "expired" }));
-        }
-        if request.is_none() {
-            *request = listener.sockets.iter().find_map(accept);
-        }
-        let incoming = request.as_mut()?;
-        match incoming.poll(path) {
-            RequestState::Matched(target) => {
-                active.listeners.remove(&port);
-                Some(json!({
-                    "status": "returned",
-                    "address": format!("http://localhost:{port}{target}")
-                }))
-            }
-            RequestState::Done => {
-                *request = None;
-                None
-            }
-            RequestState::Waiting => None,
-        }
+        let lease = if port == 1455 {
+            &self.openai
+        } else {
+            &self.claude
+        };
+        let result = tokio::select! {
+            biased;
+            _ = cancelled => Ok(json!({ "status": "cancelled" })),
+            result = timeout(lifetime, async {
+                let _lease = lease.lock().await;
+                listen_once(port, path, expected_state).await
+            }) => result.unwrap_or_else(|_| Ok(json!({ "status": "expired" }))),
+        };
+        remove_matching(&mut self.active(), port, request_id);
+        result
     }
 }
 
-fn accept(socket: &TcpListener) -> Option<Request> {
-    let (stream, _) = socket.accept().ok()?;
-    stream.set_nonblocking(true).ok()?;
-    Some(Request::new(stream))
+fn remove_matching(active: &mut Active, port: u16, request_id: &str) -> bool {
+    let std::collections::hash_map::Entry::Occupied(entry) = active.listeners.entry(port) else {
+        return false;
+    };
+    if entry.get().request_id != request_id {
+        return false;
+    }
+    entry.remove();
+    true
 }
 
-fn bind(address: std::net::SocketAddr) -> io::Result<TcpListener> {
+fn bind(address: SocketAddr) -> io::Result<TcpListener> {
     let socket = if address.is_ipv4() {
-        tokio::net::TcpSocket::new_v4()?
+        TcpSocket::new_v4()?
     } else {
-        tokio::net::TcpSocket::new_v6()?
+        TcpSocket::new_v6()?
     };
-    // On Unix, allow rearming after a completed HTTP connection is in TIME_WAIT.
-    // On Windows SO_REUSEADDR can let two processes bind the same address.
-    #[cfg(unix)]
-    socket.set_reuseaddr(true)?;
+    // Use a fresh socket without SO_REUSEADDR. In particular, on macOS a
+    // specific address with reuse can steal traffic from a wildcard listener.
     socket.bind(address)?;
-    socket.listen(16)?.into_std()
+    socket.listen(16)
+}
+
+fn bind_loopback(port: u16) -> io::Result<(TcpListener, Option<TcpListener>)> {
+    let ipv4 = bind((Ipv4Addr::LOCALHOST, port).into())?;
+    let ipv6 = match bind((Ipv6Addr::LOCALHOST, port).into()) {
+        Ok(socket) => Some(socket),
+        Err(err) if ipv6_unavailable(&err) => None,
+        Err(err) => return Err(err),
+    };
+    Ok((ipv4, ipv6))
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -174,81 +153,126 @@ const IPV6_NOT_SUPPORTED: i32 = 10047;
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
 const IPV6_NOT_SUPPORTED: i32 = 97;
 
-enum RequestState {
-    Waiting,
-    Done,
-    Matched(String),
+fn ipv6_unavailable(err: &io::Error) -> bool {
+    matches!(
+        err.kind(),
+        io::ErrorKind::AddrNotAvailable | io::ErrorKind::Unsupported
+    ) || err.raw_os_error() == Some(IPV6_NOT_SUPPORTED)
 }
 
-struct Request {
-    stream: TcpStream,
-    bytes: Vec<u8>,
-    deadline: Instant,
+async fn accept(ipv4: &TcpListener, ipv6: Option<&TcpListener>) -> io::Result<TcpStream> {
+    let connection = match ipv6 {
+        Some(ipv6) => tokio::select! {
+            connection = ipv4.accept() => connection,
+            connection = ipv6.accept() => connection,
+        },
+        None => ipv4.accept().await,
+    }?;
+    Ok(connection.0)
 }
 
-impl Request {
-    fn new(stream: TcpStream) -> Self {
-        Self {
-            stream,
-            bytes: Vec::new(),
-            deadline: Instant::now() + REQUEST_LIMIT,
+async fn listen_once(port: u16, path: &str, state: &str) -> Result<Value, &'static str> {
+    let (ipv4, ipv6) = match bind_loopback(port) {
+        Ok(sockets) => sockets,
+        Err(err) if err.kind() == io::ErrorKind::AddrInUse => {
+            return Ok(json!({ "status": "busy" }));
         }
-    }
+        Err(_) => return Err("Could not listen for sign-in"),
+    };
+    let (mut stream, target) = receive(&ipv4, ipv6.as_ref(), path, state)
+        .await
+        .map_err(|_| "Could not accept sign-in return")?;
+    drop((ipv4, ipv6));
+    reply(&mut stream, true).await;
+    Ok(json!({ "status": "returned", "address": format!("http://localhost:{port}{target}") }))
+}
 
-    fn poll(&mut self, path: &str) -> RequestState {
-        if Instant::now() >= self.deadline {
-            return RequestState::Done;
-        }
-        let mut buf = [0; 2048];
-        match self.stream.read(&mut buf) {
-            Ok(0) => return RequestState::Done,
-            Ok(n) => self.bytes.extend_from_slice(&buf[..n]),
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => return RequestState::Waiting,
-            Err(_) => return RequestState::Done,
-        }
-        if self.bytes.len() > 8192 {
-            return RequestState::Done;
-        }
-        // Drain the headers before replying so the browser sees a clean close.
-        if !self.bytes.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
-            return RequestState::Waiting;
-        }
-        let target = self
-            .bytes
-            .split(|&byte| byte == b'\r')
-            .next()
-            .and_then(|line| std::str::from_utf8(line).ok())
-            .and_then(|line| matching_target(line, path));
-        let (status, body) = if target.is_some() {
-            ("200 OK", PAGE)
-        } else {
-            ("404 Not Found", "")
+async fn receive(
+    ipv4: &TcpListener,
+    ipv6: Option<&TcpListener>,
+    path: &str,
+    state: &str,
+) -> io::Result<(TcpStream, String)> {
+    loop {
+        let mut stream = accept(ipv4, ipv6).await?;
+        let Ok(Ok(line)) = timeout(REQUEST_LIMIT, request_line(&mut stream)).await else {
+            continue;
         };
-        let _ = write!(
-            self.stream,
-            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        target.map_or(RequestState::Done, |target| {
-            RequestState::Matched(target.to_owned())
-        })
+        if let Some(target) = matching_target(&line, path, state) {
+            return Ok((stream, target.to_owned()));
+        }
+        reply(&mut stream, false).await;
     }
 }
 
-fn matching_target<'a>(line: &'a str, path: &str) -> Option<&'a str> {
+async fn request_line(stream: &mut TcpStream) -> io::Result<String> {
+    let mut bytes = [0; HEADER_LIMIT];
+    let mut len = 0;
+    while len < bytes.len() {
+        let size = stream.read(&mut bytes[len..]).await?;
+        if size == 0 {
+            break;
+        }
+        let start = len.saturating_sub(3);
+        len += size;
+        if bytes[start..len].windows(4).any(|part| part == b"\r\n\r\n") {
+            let line = bytes[..len]
+                .split(|&byte| byte == b'\r')
+                .next()
+                .unwrap_or_default();
+            return String::from_utf8(line.to_vec()).map_err(io::Error::other);
+        }
+    }
+    Err(io::Error::other("Incomplete or oversized HTTP headers"))
+}
+
+async fn reply(stream: &mut TcpStream, matched: bool) {
+    let (status, body) = if matched {
+        ("200 OK", PAGE)
+    } else {
+        ("404 Not Found", "")
+    };
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _ = timeout(REQUEST_LIMIT, async {
+        stream.write_all(response.as_bytes()).await?;
+        // Let the browser close first so the local port can be reused without SO_REUSEADDR.
+        tokio::io::copy(stream, &mut tokio::io::sink()).await
+    })
+    .await;
+}
+
+fn matching_target<'a>(line: &'a str, path: &str, state: &str) -> Option<&'a str> {
     let mut parts = line.split(' ');
     if parts.next()? != "GET" {
         return None;
     }
     let target = parts.next()?;
     let version = parts.next()?;
-    let request_path = target.split_once('?').map_or(target, |(path, _)| path);
-    (matches!(version, "HTTP/1.0" | "HTTP/1.1")
-        && parts.next().is_none()
-        && !target.contains(['#', '\\'])
-        && !target.bytes().any(|byte| byte.is_ascii_control())
-        && request_path.starts_with(path))
-    .then_some(target)
+    let (request_path, query) = target.split_once('?')?;
+    if request_path != path
+        || !matches!(version, "HTTP/1.0" | "HTTP/1.1")
+        || parts.next().is_some()
+        || target.contains(['#', '\\'])
+        || target.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return None;
+    }
+    let url = tauri::Url::parse(&format!("http://localhost/?{query}")).ok()?;
+    let mut states = url.query_pairs().filter(|(key, _)| key == "state");
+    (states.next().is_some_and(|(_, value)| value == state) && states.next().is_none())
+        .then_some(target)
+}
+
+fn valid_path(path: &str) -> bool {
+    path.len() > 1
+        && path.starts_with('/')
+        && !path.starts_with("//")
+        && !path.contains(['?', '#', '\\'])
+        && !path.bytes().any(|byte| byte.is_ascii_control())
+        && tauri::Url::parse(&format!("http://localhost{path}")).is_ok_and(|url| url.path() == path)
 }
 
 #[tauri::command]
@@ -256,6 +280,7 @@ pub async fn sign_in_return_listen(
     returns: tauri::State<'_, Returns>,
     port: u16,
     path: String,
+    expected_state: String,
     request_id: String,
     timeout_ms: u64,
 ) -> Result<Value, &'static str> {
@@ -265,22 +290,19 @@ pub async fn sign_in_return_listen(
     if !valid_request_id(&request_id) {
         return Err("Invalid sign-in return request id");
     }
-    if !path.starts_with('/') || path.starts_with("//") || path.contains(['?', '#', '\\']) {
+    if !valid_path(&path) {
         return Err("Invalid sign-in return path");
     }
-    let timeout = Duration::from_millis(timeout_ms).min(LIFETIME);
-    if timeout.is_zero() {
+    if expected_state.is_empty() || expected_state.len() > HEADER_LIMIT {
+        return Err("Invalid sign-in return state");
+    }
+    let lifetime = Duration::from_millis(timeout_ms).min(LIFETIME);
+    if lifetime.is_zero() {
         return Ok(json!({ "status": "expired" }));
     }
-    match returns.start(port, request_id.clone()) {
-        Ok(true) => {}
-        Ok(false) => return Ok(json!({ "status": "cancelled" })),
-        Err(err) if err.kind() == io::ErrorKind::AddrInUse => {
-            return Ok(json!({ "status": "busy" }));
-        }
-        Err(_) => return Err("Could not listen for sign-in"),
-    }
-    Ok(returns.wait(port, &path, &request_id, timeout).await)
+    returns
+        .listen(port, &path, &expected_state, &request_id, lifetime)
+        .await
 }
 
 #[tauri::command]
@@ -297,7 +319,7 @@ fn valid_request_id(request_id: &str) -> bool {
 #[tauri::command]
 pub async fn sign_in_open_browser(url: String) -> Result<(), &'static str> {
     let parsed = tauri::Url::parse(&url).map_err(|_| "Invalid sign-in URL")?;
-    if !url.starts_with("https://") || parsed.scheme() != "https" || !parsed.has_host() {
+    if parsed.scheme() != "https" || !parsed.has_host() {
         return Err("Sign-in URLs must use HTTPS");
     }
     tauri::async_runtime::spawn_blocking(move || open_browser(parsed.as_str()))
@@ -328,121 +350,252 @@ fn open_browser(url: &str) -> Result<(), &'static str> {
         Err("Could not open the browser")
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use tokio::{
+        io::{AsyncBufReadExt, BufReader},
+        time::sleep,
+    };
+
+    const PATH: &str = "/callback";
+    const STATE: &str = "test+state";
+    const TARGET: &str = "/callback?code=synthetic&%73tate=test%2Bstate";
+    const WAIT: Duration = Duration::from_secs(10);
 
     fn available_port() -> u16 {
-        TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
             .unwrap()
             .local_addr()
             .unwrap()
             .port()
     }
 
-    fn get(address: impl std::net::ToSocketAddrs, target: &str) -> String {
-        let mut stream = TcpStream::connect(address).unwrap();
+    async fn connect_when_ready(port: u16) -> TcpStream {
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if let Ok(stream) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await {
+                    return stream;
+                }
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn request(address: SocketAddr, method: &str, target: &str) -> String {
+        let mut stream = TcpStream::connect(address).await.unwrap();
         stream
-            .set_read_timeout(Some(Duration::from_secs(3)))
+            .write_all(format!("{method} {target} HTTP/1.1\r\nHost: localhost\r\n\r\n").as_bytes())
+            .await
             .unwrap();
-        write!(stream, "GET {target} HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let mut answer = String::new();
-        stream.read_to_string(&mut answer).unwrap();
-        answer
+        let mut reader = BufReader::new(stream);
+        timeout(Duration::from_secs(3), async {
+            let mut answer = String::new();
+            loop {
+                let mut line = String::new();
+                assert_ne!(reader.read_line(&mut line).await.unwrap(), 0);
+                answer.push_str(&line);
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            let length: usize = answer
+                .lines()
+                .find_map(|line| line.strip_prefix("Content-Length: "))
+                .unwrap()
+                .parse()
+                .unwrap();
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).await.unwrap();
+            answer.push_str(&String::from_utf8(body).unwrap());
+            // Like a browser, close after reading the advertised body, without waiting for FIN.
+            answer
+        })
+        .await
+        .unwrap()
     }
 
     #[test]
-    fn offers_only_the_provider_ports() {
+    fn validates_ports_and_paths() {
         assert!(allowed_port(54545));
         assert!(allowed_port(1455));
         assert!(!allowed_port(0));
         assert!(!allowed_port(54546));
+        assert!(valid_path("/auth/callback"));
+        for path in [
+            "/",
+            "callback",
+            "//callback",
+            "/callback?",
+            "/callback#x",
+            "/a/../callback",
+            "/./callback",
+            "/a/%2e%2E/callback",
+            "/callback/.",
+        ] {
+            assert!(!valid_path(path), "accepted {path}");
+        }
     }
 
-    #[test]
-    fn accepts_one_matching_request_on_loopback_and_can_rearm() {
-        tauri::async_runtime::block_on(async {
-            let returns = Arc::new(Returns::default());
-            let port = available_port();
-            returns.start(port, "one".into()).unwrap();
-            let addresses: Vec<_> = returns.active().listeners[&port]
-                .sockets
-                .iter()
-                .map(|socket| socket.local_addr().unwrap())
-                .collect();
-            assert_eq!(addresses[0].ip(), Ipv4Addr::LOCALHOST);
-            assert!(addresses.iter().all(|address| address.ip().is_loopback()));
-
-            let waiting = Arc::clone(&returns);
-            let task = tauri::async_runtime::spawn(async move {
-                waiting
-                    .wait(port, "/callback", "one", Duration::from_secs(5))
+    #[tokio::test]
+    async fn wildcard_listeners_are_busy_on_both_families() {
+        let returns = Returns::default();
+        let addr4 = SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0));
+        let addr6 = SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0));
+        for address in [addr4, addr6] {
+            // Simulate an external program that enabled reuse, as std and Tokio
+            // listeners do by default on Unix.
+            let occupied = match TcpListener::bind(address).await {
+                Ok(socket) => socket,
+                Err(err) if address.is_ipv6() && ipv6_unavailable(&err) => continue,
+                Err(err) => panic!("wildcard fixture could not bind: {err}"),
+            };
+            let port = occupied.local_addr().unwrap().port();
+            assert_eq!(
+                returns
+                    .listen(port, PATH, STATE, "one", WAIT)
                     .await
-            });
-            let response = tauri::async_runtime::spawn_blocking(move || {
+                    .unwrap()["status"],
+                "busy"
+            );
+            let loopback = if address.is_ipv4() {
+                SocketAddr::from((Ipv4Addr::LOCALHOST, port))
+            } else {
+                SocketAddr::from((Ipv6Addr::LOCALHOST, port))
+            };
+            assert_eq!(bind(loopback).unwrap_err().kind(), io::ErrorKind::AddrInUse);
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_forged_requests_and_accepts_only_one_exact_return() {
+        let returns = Returns::default();
+        let port = available_port();
+        let ipv4 = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+        let ipv6 = SocketAddr::from((Ipv6Addr::LOCALHOST, port));
+        let clients = async {
+            drop(connect_when_ready(port).await);
+            for target in [
+                "/favicon.ico",
+                "/callback?code=x",
+                "/callback?code=x&state=wrong",
+                "/callback?code=x&state=test%2Bstate&%73tate=test%2Bstate",
+                "/callbackX?state=test%2Bstate",
+            ] {
                 assert!(
-                    get(addresses[0], "/favicon.ico?next=/callback").starts_with("HTTP/1.1 404")
+                    request(ipv4, "GET", target)
+                        .await
+                        .starts_with("HTTP/1.1 404")
                 );
-                // Exercise ::1 when the platform supports it. Browsers can prefer it.
-                get(
-                    *addresses.last().unwrap(),
-                    "/callback?code=synthetic&state=test",
-                )
-            })
-            .await
-            .unwrap();
+            }
+            assert!(
+                request(ipv4, "POST", TARGET)
+                    .await
+                    .starts_with("HTTP/1.1 404")
+            );
+            let address = match bind((Ipv6Addr::LOCALHOST, 0).into()) {
+                Ok(_) => ipv6,
+                Err(err) if ipv6_unavailable(&err) => ipv4,
+                Err(err) => panic!("could not reach IPv6 loopback: {err}"),
+            };
+            let response = request(address, "GET", TARGET).await;
             assert!(response.starts_with("HTTP/1.1 200"));
             assert!(response.contains("You can close this tab"));
             assert!(!response.contains("synthetic"));
-            assert_eq!(
-                task.await.unwrap(),
-                json!({
-                    "status": "returned",
-                    "address": format!("http://localhost:{port}/callback?code=synthetic&state=test"),
-                })
-            );
-            assert!(!returns.active().listeners.contains_key(&port));
-            #[cfg(unix)]
-            returns.start(port, "retry".into()).unwrap();
-        });
+            for header in [
+                "Content-Type: text/html; charset=utf-8",
+                "Cache-Control: no-store",
+                "X-Content-Type-Options: nosniff",
+                "Content-Security-Policy: default-src 'none'",
+            ] {
+                assert!(response.contains(header));
+            }
+            assert!(TcpStream::connect(ipv4).await.is_err());
+        };
+        let (result, ()) = tokio::join!(returns.listen(port, PATH, STATE, "one", WAIT), clients);
+        assert_eq!(
+            result.unwrap(),
+            json!({
+                "status": "returned",
+                "address": format!("http://localhost:{port}{TARGET}"),
+            })
+        );
+        // The completed listener must not keep the port in use.
+        assert!(bind_loopback(port).is_ok());
     }
 
-    #[test]
-    fn busy_replacement_cancel_and_timeout_release_the_port() {
-        tauri::async_runtime::block_on(async {
-            let returns = Returns::default();
-            let occupied = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-            let port = occupied.local_addr().unwrap().port();
-            assert_eq!(
-                returns.start(port, "one".into()).unwrap_err().kind(),
-                io::ErrorKind::AddrInUse
+    #[tokio::test]
+    async fn oversized_and_slow_requests_do_not_consume_the_return() {
+        let returns = Returns::default();
+        let port = available_port();
+        let clients = async {
+            let mut oversized = connect_when_ready(port).await;
+            let payload = format!(
+                "GET {TARGET} HTTP/1.1\r\nPadding: {}\r\n\r\n",
+                "x".repeat(HEADER_LIMIT)
             );
-            drop(occupied);
+            oversized.write_all(payload.as_bytes()).await.unwrap();
+            assert_dropped(oversized).await;
 
-            returns.start(port, "one".into()).unwrap();
-            returns.start(port, "two".into()).unwrap();
-            returns.stop(port, "never-started".into());
-            assert!(!returns.start(port, "never-started".into()).unwrap());
-            // Cleanup from an older dialog must never cancel a newer one.
-            returns.stop(port, "one".into());
-            let timeout = Duration::from_millis(35);
-            assert_eq!(
-                returns.wait(port, "/callback", "one", timeout).await["status"],
-                "cancelled"
+            let mut slow = TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+                .await
+                .unwrap();
+            slow.write_all(b"GET /callback").await.unwrap();
+            assert_dropped(slow).await;
+
+            let address = (Ipv4Addr::LOCALHOST, port).into();
+            assert!(
+                request(address, "GET", TARGET)
+                    .await
+                    .starts_with("HTTP/1.1 200")
             );
-            assert_eq!(
-                returns.wait(port, "/callback", "two", timeout).await["status"],
-                "expired"
-            );
-            returns.start(port, "three".into()).unwrap();
-            returns.stop(port, "three".into());
-            assert_eq!(
-                returns.wait(port, "/callback", "three", timeout).await["status"],
-                "cancelled"
-            );
-            assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
-        });
+        };
+        let (result, ()) = tokio::join!(returns.listen(port, PATH, STATE, "one", WAIT), clients);
+        assert_eq!(result.unwrap()["status"], "returned");
+    }
+
+    async fn assert_dropped(mut stream: TcpStream) {
+        let read = timeout(Duration::from_secs(3), stream.read(&mut [0]))
+            .await
+            .unwrap();
+        assert!(matches!(read, Ok(0)) || read.is_err());
+    }
+
+    #[tokio::test]
+    async fn replacement_cancel_and_timeout_release_the_port() {
+        let returns = Returns::default();
+        let port = available_port();
+        returns.stop(port, "early".into());
+        assert_eq!(
+            returns
+                .listen(port, PATH, STATE, "early", WAIT)
+                .await
+                .unwrap()["status"],
+            "cancelled"
+        );
+        let replace = async {
+            drop(connect_when_ready(port).await);
+            let cancel = async {
+                // The newer request waits for the old one to release its binds.
+                tokio::task::yield_now().await;
+                returns.stop(port, "one".into());
+                returns.stop(port, "two".into());
+            };
+            let (result, ()) = tokio::join!(returns.listen(port, PATH, STATE, "two", WAIT), cancel);
+            assert_eq!(result.unwrap()["status"], "cancelled");
+        };
+        let (result, ()) = tokio::join!(returns.listen(port, PATH, STATE, "one", WAIT), replace);
+        assert_eq!(result.unwrap()["status"], "cancelled");
+        let short = Duration::from_millis(20);
+        assert_eq!(
+            returns
+                .listen(port, PATH, STATE, "three", short)
+                .await
+                .unwrap()["status"],
+            "expired"
+        );
+        assert!(bind_loopback(port).is_ok());
     }
 }
