@@ -123,11 +123,13 @@ packages/runner/src/local/quickjs/session.rs
   s_6bd43a2c58496b::t_5a78e24f27c366 350,463-507,682,736-745
   s_6bd43a2c58496b::t_04b4568f459685 994
   s_6bd43a2c58496b::t_27cd815f94f86e 115,123,351
+  s_6bd43a2c58496b::t_209248d788e5fc 392,395,527,685-714,803
 packages/server/tests/fixtures/action-placement/package.json
   s_6bd43a2c58496b::t_7760f6e0ed1775 1-2,5
   s_6bd43a2c58496b::t_8d27034f9bad6d 3-4
 packages/server/src/service/requests.rs
   s_6bd43a2c58496b::t_f77b86553e3767 40,70,139
+  s_6bd43a2c58496b::t_209248d788e5fc 69,93,97
 packages/sdk/src/index.ts
   s_6bd43a2c58496b::t_ec9cd9d2273b0d 53-56
 packages/sdk/tools/plugin-compiler.mjs
