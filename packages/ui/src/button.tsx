@@ -8,6 +8,9 @@
   actions. An icon-only button needs a label; it becomes its name.
   quiet: ink text on a soft fill that strengthens on hover, for notice actions.
   bare: colour-only hover for chrome icons, with a 12 px glyph in the usual target.
+
+  size: md (32) is the default. sm (24) is for quiet actions in dense rows and
+  dialogs, with 12 px text and a 14 px icon. lg (48) only matches a roomy row.
 */
 import { Button as Base } from "@ui-sdk/solid/button";
 import { omit } from "solid-js";
