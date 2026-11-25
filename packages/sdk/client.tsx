@@ -13,7 +13,7 @@ export {
   type ComponentPart,
   type ComponentActionOptions,
 } from "./component-actions";
-import { PartActions, type LoadedPartAction, type PartRegistry } from "./component-parts";
+import { PartActions, type LoadedPartAction, type PartObserver, type PartRegistry } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
 export { state, derived, type StateOptions, type WindowDerived, type WindowState } from "./window-state";
@@ -30,9 +30,12 @@ export interface ExtensionHost {
   contributions(kind: "component-action"): ExtensionContribution[];
   version(id: string): number;
   load(id: string): Promise<Record<string, unknown>>;
+  partOwner?(id: string): Promise<Record<string, unknown> | undefined>;
   onError(id: string, listener: (cause: unknown) => void): () => void;
 }
-type CatalogExtension = ExtensionContribution & { version: number };
+type CatalogExtension = ExtensionContribution & { version: number; ownerVersion: number };
+
+const partOwner = (target: unknown) => String(target).split(".")[0]!;
 
 /** Catalog discovery loads only extension contributors. Removing a plugin clears
  * its layers synchronously; late loads cannot publish into a retired owner. */
@@ -43,7 +46,7 @@ export function ExtensionProvider(props: {
 }) {
   const slots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
   const current = new Map<string, readonly LoadedPartAction[]>();
-  const observers = new Map<string, Set<(actions: readonly LoadedPartAction[]) => void>>();
+  const observers = new Map<string, Set<PartObserver>>();
   function slot(target: string) {
     let signal = slots.get(target);
     if (!signal)
@@ -51,18 +54,35 @@ export function ExtensionProvider(props: {
     return signal;
   }
 
+  let reported = new Set<string>();
+  const stale = new Map<string, string>();
+  function alerts() {
+    props.onAlerts?.([...reported, ...stale.values()]);
+  }
+
+  function warnStale(plugin: string, target: string, reason: string) {
+    const key = JSON.stringify([plugin, target]);
+    if (stale.has(key)) return;
+    const message = `Plugin "${plugin}": ${reason} ${target}; skipping this addition`;
+    stale.set(key, message);
+    console.warn(message);
+    alerts();
+  }
+
   const registry: PartRegistry = {
+    mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
     read: (target) => slot(target)[0],
-    observe(target, callback) {
+    observe(target, observer) {
       let listeners = observers.get(target);
       if (!listeners) observers.set(target, (listeners = new Set()));
-      listeners.add(callback);
+      listeners.add(observer);
       const actions = current.get(target);
-      if (actions?.length) callback(actions);
-      return () => {
-        listeners.delete(callback);
-        if (!listeners.size) observers.delete(target);
-      };
+      if (actions?.length) observer.update(actions);
+    },
+    unobserve(target, observer) {
+      const listeners = observers.get(target);
+      listeners?.delete(observer);
+      if (!listeners?.size) observers.delete(target);
     },
   };
   function update(
@@ -73,12 +93,11 @@ export function ExtensionProvider(props: {
     if (next.length) current.set(target, next);
     else current.delete(target);
     slot(target)[1](next);
-    for (const notify of observers.get(target) ?? []) notify(next);
+    for (const observer of observers.get(target) ?? []) observer.update(next);
   }
 
   const plugins = new Map<string, { signature: string; stop(): void }>();
   const targets = new Map<string, Set<string>>();
-  let reported = new Set<string>();
   function clear(id: string) {
     for (const target of targets.get(id) ?? [])
       update(target, (items) => items.filter((c) => c.plugin !== id));
@@ -110,14 +129,15 @@ export function ExtensionProvider(props: {
       props.host.contributions("component-action").map((contribution) => ({
         ...contribution,
         version: props.host.version(contribution.plugin),
+        ownerVersion: props.host.version(partOwner(contribution.options.target)),
       })),
     (contributions) => {
       const { accepted, refused } = resolveReplacements(contributions);
       for (const message of refused) if (!reported.has(message)) console.warn(message);
-      if (refused.size !== reported.size || [...refused].some((message) => !reported.has(message))) {
-        props.onAlerts?.([...refused]);
-      }
+      const changed =
+        refused.size !== reported.size || [...refused].some((message) => !reported.has(message));
       reported = refused;
+      if (changed) alerts();
 
       const groups = new Map<string, CatalogExtension[]>();
       for (const c of accepted) {
@@ -148,7 +168,7 @@ export function ExtensionProvider(props: {
         };
         plugins.set(id, plugin);
         void props.host.load(id).then(
-          (exports) => {
+          async (exports) => {
             if (plugins.get(id) !== plugin || failed) return;
             const parts: LoadedPartAction[] = [];
             for (const c of group) {
@@ -165,7 +185,42 @@ export function ExtensionProvider(props: {
                 );
               }
             }
-            if (parts.length) publish(id, parts);
+            let valid = parts;
+            if (props.host.partOwner) {
+              const owners = new Map(
+                await Promise.all(
+                  [...new Set(parts.map(({ action }) => partOwner(action.target)))].map(async (owner) => {
+                    try {
+                      return [owner, (await props.host.partOwner!(owner))?.parts] as const;
+                    } catch {
+                      // A retired generation will be checked again by the next catalog update.
+                      return [owner, null] as const;
+                    }
+                  }),
+                ),
+              );
+              if (plugins.get(id) !== plugin || failed) return;
+              valid = parts.filter(({ action, fingerprint }) => {
+                let node: unknown = owners.get(partOwner(action.target));
+                if (node === null) return true;
+                for (const key of action.target.split(".").slice(1))
+                  node =
+                    node && typeof node === "object" && Object.hasOwn(node, key)
+                      ? (node as Record<string, unknown>)[key]
+                      : undefined;
+                const part = node as { target?: string; fingerprint?: string } | undefined;
+                if (part?.target !== action.target) {
+                  warnStale(id, action.target, "targets missing screen part");
+                  return false;
+                }
+                if (fingerprint && part.fingerprint && fingerprint !== part.fingerprint) {
+                  registry.mismatch(id, action.target);
+                  return false;
+                }
+                return true;
+              });
+            }
+            if (valid.length) publish(id, valid);
           },
           (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
         );
@@ -203,13 +258,13 @@ function resolveReplacements(contributions: CatalogExtension[]) {
   // Resolve from the catalog, before any module loads or when accessors run.
   for (const c of contributions) {
     if (!isReplacement(c)) continue;
-    const target = JSON.stringify([c.options.target, c.options.fingerprint]);
+    const target = String(c.options.target);
     const first = winners.get(target);
     if (!first || (c.installOrder ?? Infinity) < (first.installOrder ?? Infinity)) winners.set(target, c);
   }
   const accepted = contributions.filter((c) => {
     if (!isReplacement(c)) return true;
-    const winner = winners.get(JSON.stringify([c.options.target, c.options.fingerprint]))!;
+    const winner = winners.get(String(c.options.target))!;
     if (winner === c) return true;
     refused.add(
       `Replacement from ${c.plugin} (${c.id}) refused for ${c.options.target}: ${winner.plugin} (${winner.id}) installed first`,
@@ -245,3 +300,23 @@ export {
 } from "./regions";
 
 export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";
+
+type ScreenShape = { "": string | null } | { [name: string]: ScreenShape | string | null };
+
+/** Materialize the public tree once without repeating complete paths in the bundle. */
+export function __defineScreenParts(prefix: string, shape: ScreenShape) {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(shape)) {
+    if (key === "") {
+      result.target = prefix;
+      if (value) result.fingerprint = value;
+    } else if (value && typeof value === "object") {
+      result[key] = __defineScreenParts(`${prefix}.${key}`, value);
+    }
+  }
+  return result;
+}
+
+export function __partPaths(prefix: string, suffixes: readonly string[]) {
+  return suffixes.map((suffix) => (suffix ? `${prefix}.${suffix}` : prefix));
+}

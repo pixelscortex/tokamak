@@ -4,7 +4,8 @@ import { expect, test, vi } from "vitest";
 import { createPluginLoader, type PluginModuleHost } from "../../../runtime/js/plugins";
 import { ExtensionProvider } from "../../client";
 import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
-import { loadActions, manifest, RenamedComposer } from "virtual:built-component-addon";
+import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
+import { loadActions, manifest, RenamedComposer, renamedParts } from "virtual:built-component-addon";
 
 test.each([
   {
@@ -50,11 +51,15 @@ test.each([
     onPluginsChanged: () => () => {},
   });
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const alerts = vi.fn();
   const root = document.createElement("div");
   await loader.connect();
   const dispose = render(
     () => (
-      <ExtensionProvider host={loader}>
+      <ExtensionProvider
+        host={{ ...loader, partOwner: async () => ({ parts: matches ? parts : renamedParts }) }}
+        onAlerts={alerts}
+      >
         <Screen label="Send" lifecycle={() => {}} />
         <Labels labels={["work", "quick"]} />
       </ExtensionProvider>
@@ -71,6 +76,18 @@ test.each([
       "Profile 1: work of 2",
       "Profile 2: quick of 2",
     ]);
+    expect([...root.querySelectorAll("em + small")].map((row) => row.textContent)).toEqual([
+      "Group 1: work / 0: WORK",
+      "Group 2: quick / 0: QUICK",
+    ]);
+    if (!matches) {
+      const missing = expect.stringMatching(/addon.*missing screen part owner.Composer.section.SendButton/);
+      const shifted = expect.stringMatching(/addon.*different element.*owner.Composer.section.div/);
+      expect(alerts).toHaveBeenLastCalledWith(expect.arrayContaining([missing, shifted]));
+      expect(
+        warn.mock.calls.filter(([message]) => /missing screen part|different element/.test(message)),
+      ).toHaveLength(2);
+    }
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/addon.*MissingBadge.*manifest/));
   } finally {
     dispose();

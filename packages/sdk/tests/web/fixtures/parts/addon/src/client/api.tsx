@@ -13,3 +13,9 @@ export const Profile = after(parts.Labels.section.span, ({ labels, $row }) => (
 ));
 
 export const Body = replace(parts.Composer.section.div, () => <div aria-label="replacement" />);
+
+export const Nested = after(parts.Labels.section.groups.em, ({ $row }) => (
+  <small>
+    Group {$row.parent.index() + 1}: {$row.parent.item} / {$row.index}: {$row.item()}
+  </small>
+));

@@ -3,6 +3,7 @@ import {
   createContext,
   createMemo,
   createRoot,
+  createSignal,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -32,14 +33,41 @@ type Contents = {
   spread(props: { readonly children?: JSX.Element }): object;
 };
 
+export interface PartObserver {
+  update(actions: readonly LoadedPartAction[]): void;
+}
+
 export interface PartRegistry {
+  mismatch(plugin: string, target: string): void;
   read(target: string): () => readonly LoadedPartAction[];
-  observe(target: string, notify: (actions: readonly LoadedPartAction[]) => void): () => void;
+  observe(target: string, observer: PartObserver): void;
+  unobserve(target: string, observer: PartObserver): void;
 }
 
 export const PartActions = createContext<PartRegistry | null>(null);
 
-type NativeSite = readonly [target: string, fingerprint: string, children: readonly NativeSite[]];
+type NativeSite = readonly [
+  target: string,
+  fingerprint: string | null | undefined,
+  children: readonly NativeSite[],
+  ref?: number | null,
+  hole?: number | null,
+];
+type RenderHole = (
+  id: number,
+  render: () => JSX.Element | (() => JSX.Element),
+) => () => JSX.Element | (() => JSX.Element);
+
+function matches(
+  registry: PartRegistry,
+  target: string,
+  fingerprint: string | null | undefined,
+  item: LoadedPartAction,
+) {
+  if (!item.fingerprint || !fingerprint || item.fingerprint === fingerprint) return true;
+  registry.mismatch(item.plugin, target);
+  return false;
+}
 
 // Native templates own their DOM nodes. Additions get their own insertion
 // ranges, so changing one path leaves the other nodes and observers alone.
@@ -65,93 +93,163 @@ function nativeContents(element: Element, { prepend, append }: Contents) {
 
 export function renderNativePart(
   target: string,
-  fingerprint: string,
+  fingerprint: string | null | undefined,
   props: object,
   row: (() => object) | undefined,
-  create: () => JSX.Element,
+  create: (refs: Element[], hole: RenderHole) => JSX.Element,
   children: readonly NativeSite[],
 ) {
   const registry = useContext(PartActions);
-  if (!registry) return create();
-
-  function register(node: Element, sites: readonly NativeSite[], owner: ReturnType<typeof getOwner>) {
-    let child = node.firstElementChild;
-    const cleanups: (() => void)[] = [];
-    for (const [target, fingerprint, children] of sites) {
-      if (!child) break;
-      const element = child;
-      child = element.nextElementSibling;
-      let dispose: (() => void) | undefined;
-      let inner: (() => void) | undefined;
-      const stop = registry!.observe(target, (installed) => {
-        dispose?.();
-        dispose = undefined;
-        const actions = installed.filter((item) => !item.fingerprint || item.fingerprint === fingerprint);
-        if (!actions.length) {
-          if (children.length) inner ??= register(element, children, owner);
-          return;
-        }
-        const destructive = actions.some(({ action }) => {
-          const kind = componentActionKind(action);
-          return kind === "hide" || kind === "replace";
-        });
-        if (destructive) {
-          inner?.();
-          inner = undefined;
-        }
-        const parent = element.parentElement!;
-        const next = element.nextSibling;
-        const placementProps = row ? merge(props, { $row: row() }) : props;
-        runWithOwner(owner, () =>
-          createRoot((cleanup) => {
-            dispose = cleanup;
-            const end = nativeRange(parent, next, element);
-            const decorated = renderActions(actions, placementProps, (contents) => {
-              if (children.length) inner ??= register(element, children, owner);
-              if (destructive)
-                onCleanup(() => {
-                  inner?.();
-                  inner = undefined;
-                });
-              nativeContents(element, contents);
-              return element;
-            });
-            insert(parent, decorated, end, [element]);
-          }),
-        );
-      });
-      if (!dispose && children.length) inner ??= register(element, children, owner);
-      cleanups.push(() => {
-        stop();
-        dispose?.();
-        inner?.();
-      });
-    }
-    return () => {
-      for (const cleanup of cleanups) cleanup();
-    };
-  }
+  if (!registry) return create([], (_id, render) => render);
 
   return renderPart(target, fingerprint, props, row, (contents) => {
-    const element = create() as Element;
-    const owner = getOwner();
-    if (children.length) onCleanup(register(element, children, owner));
+    const refs: Element[] = [];
+    const active: ReturnType<typeof createSignal<boolean>>[] = [];
+
+    const hole: RenderHole = (id, render) => {
+      let state = active[id];
+      if (!state) active[id] = state = createSignal(true, { ownedWrite: true });
+      const [shown] = state;
+      return createMemo(() => (shown() ? untrack(render) : undefined));
+    };
+
+    function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean) {
+      if (typeof id === "number") {
+        const state = active[id];
+        if (!state) active[id] = createSignal(enabled, { ownedWrite: true });
+        else state[1](enabled);
+      }
+      for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled);
+    }
+
+    const element = create(refs, hole) as Element;
+    if (children.length) {
+      const bindings = registerNative(element, children, {
+        registry,
+        refs,
+        owner: getOwner(),
+        props,
+        row,
+        setHoles,
+      });
+      onCleanup(() => stopNative(bindings));
+    }
     nativeContents(element, contents);
     return element;
   });
+}
+
+type NativeScope = {
+  registry: PartRegistry;
+  refs: Element[];
+  owner: ReturnType<typeof getOwner>;
+  props: object;
+  row: (() => object) | undefined;
+  setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean): void;
+};
+
+function registerNative(node: Element, sites: readonly NativeSite[], scope: NativeScope) {
+  let child = node.firstElementChild;
+  const bindings: NativeBinding[] = [];
+  for (let i = 0; i < sites.length; i++) {
+    const site = sites[i]!;
+    const ref = site[3];
+    const element = typeof ref === "number" ? scope.refs[ref] : child;
+    if (!element || (typeof ref === "number" && element.parentElement !== node)) continue;
+    if (i + 1 < sites.length && typeof sites[i + 1]![3] !== "number") child = element.nextElementSibling;
+    const binding = new NativeBinding(scope, element, site);
+    bindings.push(binding);
+    binding.start();
+  }
+  return bindings;
+}
+
+function stopNative(bindings: NativeBinding[] | undefined) {
+  if (bindings) for (const binding of bindings) binding.stop();
+}
+
+class NativeBinding implements PartObserver {
+  private dispose?: () => void;
+  private inner?: NativeBinding[];
+
+  constructor(
+    private scope: NativeScope,
+    private element: Element,
+    private site: NativeSite,
+  ) {}
+
+  start() {
+    this.scope.registry.observe(this.site[0], this);
+    if (!this.dispose) this.registerChildren();
+  }
+
+  stop() {
+    this.scope.registry.unobserve(this.site[0], this);
+    this.dispose?.();
+    stopNative(this.inner);
+  }
+
+  private registerChildren() {
+    if (this.site[2].length) this.inner ??= registerNative(this.element, this.site[2], this.scope);
+  }
+
+  update(installed: readonly LoadedPartAction[]) {
+    this.dispose?.();
+    this.dispose = undefined;
+    const { registry, owner, props, row, setHoles } = this.scope;
+    const [target, fingerprint, children, , hole] = this.site;
+    const actions = installed.filter((item) => matches(registry, target, fingerprint, item));
+    if (!actions.length) {
+      if (typeof hole === "number" || children.length) setHoles(hole, children, true);
+      this.registerChildren();
+      return;
+    }
+    const destructive = actions.some(({ action }) => {
+      const kind = componentActionKind(action);
+      return kind === "hide" || kind === "replace";
+    });
+    const deactivate = () => {
+      setHoles(hole, children, false);
+      stopNative(this.inner);
+      this.inner = undefined;
+    };
+    if (destructive) deactivate();
+
+    const element = this.element;
+    const parent = element.parentElement!;
+    const next = element.nextSibling;
+    const placementProps = row ? merge(props, { $row: row() }) : props;
+    runWithOwner(owner, () =>
+      createRoot((cleanup) => {
+        this.dispose = cleanup;
+        const end = nativeRange(parent, next, element);
+        const decorated = renderActions(actions, placementProps, (contents) => {
+          this.registerChildren();
+          if (destructive) {
+            setHoles(hole, children, true);
+            onCleanup(deactivate);
+          }
+          nativeContents(element, contents);
+          return element;
+        });
+        insert(parent, decorated, end, [element]);
+      }),
+    );
+  }
 }
 
 /** Compiler entry point. Keep the original element and contents lazy so hiding
  * or replacing the element disposes its entire Solid owner. */
 export function renderPart(
   target: string,
-  fingerprint: string,
+  fingerprint: string | null | undefined,
   props: object,
   row: (() => object) | undefined,
   render: (contents: Contents) => JSX.Element,
   original?: () => JSX.Element,
 ): JSX.Element | (() => JSX.Element) {
-  const read = useContext(PartActions)?.read(target);
+  const registry = useContext(PartActions);
+  const read = registry?.read(target);
   const plain = (override = original) => override?.();
   plain.spread = (props: object) => props;
   if (!read) return render(plain);
@@ -188,7 +286,7 @@ export function renderPart(
     return untrack(() => {
       disposeActions?.();
       disposeActions = undefined;
-      const actions = installed.filter((item) => !item.fingerprint || item.fingerprint === fingerprint);
+      const actions = installed.filter((item) => matches(registry!, target, fingerprint, item));
       if (!actions.length) return (decorated = renderOriginal());
       const outside = actions.every(({ action }) => {
         const kind = componentActionKind(action);

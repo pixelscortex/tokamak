@@ -131,7 +131,7 @@ test("same-tag insertions keep named parts and warn when a positional part chang
       export function Message(props: { text: string }) {
         const helper = () => <i>{props.text}</i>;
         const items = [props.text].map(text => <li>{text}</li>);
-        return <article><div class="body"/><div data-part="footer" id="bar"/><div id="123"/>{helper()}{items}</article>;
+        return <article><div class="body" aria-label="body"/><div aria-label="detail"/><div data-part="footer" id="bar"/><footer/><div id="123"/><li/><li/>{helper()}{items}</article>;
       }
     `,
     );
@@ -147,17 +147,23 @@ test("same-tag insertions keep named parts and warn when a positional part chang
       export const Title = append(parts.Message.article["123"], () => "title");
       export const Helper = append(parts.Message.helper.i, ({ text }) => text);
       export const Row = append(parts.Message.li, ({ text }) => text);
+      export const Ambiguous = append(parts.Message.article.li, () => "row");
+      export const Tag = append(parts.Message.article.footer$2, () => "plain footer");
     `,
     );
-    built(addon);
+    const compiled = build(addon);
+    expect(compiled.status, compiled.stderr).toBe(0);
+    expect(compiled.stderr).toContain(
+      "owner.Message.article.li: ambiguous positional target; ask the owner for a data-part or id",
+    );
 
     const entry = resolve(owner, "src/main.tsx");
     const original = await readFile(entry, "utf8");
     await writeFile(
       entry,
       original.replace(
-        '<div class="body"/>',
-        '<div class="notice"/><Show when={true}><div class="body"/></Show>',
+        '<div class="body" aria-label="body"/>',
+        '<div aria-label="notice"/><Show when={true}><div class="body" aria-label="body"/></Show>',
       ),
     );
     const result = build(owner);
@@ -186,5 +192,59 @@ test("duplicate top-level render names report both files", async () => {
     const result = build(owner);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/main\.tsx.*Duplicate screen segment "Message".*a-helpers\.tsx/);
+  });
+}, 30_000);
+
+test("style and prop expression edits keep composer placements valid", async () => {
+  await scratch(async (root) => {
+    const composer = `
+      const SendButton = (props: { disabled: boolean }) => <button disabled={props.disabled} />;
+      export const Composer = (props: { draft: string }) =>
+        <div class="flex gap-1"><div data-part="top"/><div data-part="box"><SendButton disabled={!props.draft}/></div></div>;
+    `;
+    const owner = await source(root, "owner", composer);
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      `
+      import { after, prepend, replace } from "@tokamak/sdk/client";
+      import { parts } from "plugin:owner/client";
+      export const Agent = after(parts.Composer.div.box, () => "Agent");
+      export const Permission = prepend(parts.Composer.div.top, () => "Permission");
+      export const Cleanup = prepend(parts.Composer.div.top, () => "Cleanup");
+      export const Stop = replace(parts.Composer.div.box.SendButton, () => "Stop");
+    `,
+    );
+    built(addon);
+    const actions = (await manifest(addon)).plugin.contributes["component-action"];
+    expect(actions).toHaveLength(4);
+    expect(actions.every((action) => !("fingerprint" in action))).toBe(true);
+
+    await writeFile(
+      resolve(owner, "src/main.tsx"),
+      composer.replace("gap-1", "gap-2").replace("!props.draft", "props.draft.length === 0"),
+    );
+    const rebuilt = build(owner);
+    expect(rebuilt.status, rebuilt.stderr).toBe(0);
+    expect(rebuilt.stderr).not.toContain("skipping this addition");
+  });
+}, 30_000);
+
+test("an Index callback exposes its accessor item and numeric index", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      import { Index } from "solid-js";
+      export const Labels = (props: { labels: string[] }) =>
+        <Index each={props.labels}>{(label: () => string) => <span>{label()}</span>}</Index>;
+    `,
+    );
+    built(owner);
+    const types = await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8");
+    expect(types).toContain("owner.Labels.span");
+    expect(types).toContain("readonly item: () => string; readonly index: number");
   });
 }, 30_000);

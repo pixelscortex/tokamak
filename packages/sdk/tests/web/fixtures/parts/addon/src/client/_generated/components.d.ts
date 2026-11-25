@@ -5,4 +5,5 @@ export declare const parts: {
   readonly "p": import("@tokamak/sdk/client").ComponentPart<"addon.p", {}>;
   readonly "small$2": import("@tokamak/sdk/client").ComponentPart<"addon.small$2", {}>;
   readonly "div": import("@tokamak/sdk/client").ComponentPart<"addon.div", {}>;
+  readonly "small$3": import("@tokamak/sdk/client").ComponentPart<"addon.small$3", {}>;
 };

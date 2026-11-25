@@ -248,7 +248,10 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  lookup: (owner: string, names: string[]) => string | false | undefined,
+  lookup: (
+    owner: string,
+    names: string[],
+  ) => { fingerprint?: string; ambiguous?: boolean } | false | undefined,
   checkAction: (call: ts.CallExpression) => void,
   edit: (node: ts.Node, replacement: string) => void,
   warn: (message: string) => void,
@@ -271,7 +274,12 @@ function componentActionOptions(
   if (!exists || !brand(type, "componentPartBrand"))
     throw problem(path, `Screen element is not a typed path: ${path.getText()}; build its owner first`);
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
-  const values: Record<string, string | number> = { action, target, fingerprint: exists };
+  const values: Record<string, string | number> = { action, target };
+  if (exists.fingerprint) values.fingerprint = exists.fingerprint;
+  if (exists.ambiguous)
+    warn(
+      `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
+    );
   if (options) {
     if (!ts.isObjectLiteralExpression(options))
       throw problem(options, "Use literal component action options");

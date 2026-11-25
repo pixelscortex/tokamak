@@ -3,7 +3,7 @@ import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
 import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
-import { BenchmarkRow, Composer, Labels } from "./fixtures/parts/owner/src/client/api";
+import { BenchmarkRow, Composer, Labels, RealisticRow } from "./fixtures/parts/owner/src/client/api";
 import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
 
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
@@ -238,7 +238,9 @@ test("render props, forwarded and explicit children, and void elements keep thei
     root,
   );
   try {
-    await waitFor(() => expect(root.textContent).toBe("1: one!2: two!FilterBody!Forwarded?"));
+    await waitFor(() =>
+      expect(root.textContent).toBe("1: one!2: two!" + "0:0:ONE1:0:TWOFilterBody!Forwarded?"),
+    );
     expect(root.querySelector("b + input")?.getAttribute("aria-label")).toBe("Search");
   } finally {
     dispose();
@@ -413,6 +415,48 @@ test("a cloned native subtree supports live placements and restores its original
     flush();
     expect(root.textContent).toBe("Person10:00messageSent");
     expect(root.querySelector("header")).toBe(original);
+  } finally {
+    dispose();
+  }
+});
+
+test("a child component is a hole in the native template and unloads when its containing part hides", async () => {
+  const [hidden, setHidden] = createSignal(false);
+  const unloaded = vi.fn();
+  const header = parts.RealisticRow.article.header;
+  const person = header.b;
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={host([
+          layer(
+            "Label",
+            after(person, () => <i>Added</i>),
+            "after",
+            person,
+          ),
+          layer("Hide", hide(header, { when: hidden }), "hide", header),
+        ])}
+      >
+        <RealisticRow text="test" unloaded={unloaded} />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    await waitFor(() => expect(root.querySelector("b + i")?.textContent).toBe("Added"));
+    const headerNode = root.querySelector("header");
+    expect(root.querySelector("header small")?.textContent).toBe("Ready");
+    setHidden(true);
+    flush();
+    expect(root.querySelector("header")).toBeNull();
+    expect(unloaded).toHaveBeenCalledTimes(1);
+    setHidden(false);
+    flush();
+    expect(root.querySelector("header")).toBe(headerNode);
+    expect(root.querySelector("b + i")?.textContent).toBe("Added");
+    expect(root.querySelector("header small")?.textContent).toBe("Ready");
   } finally {
     dispose();
   }

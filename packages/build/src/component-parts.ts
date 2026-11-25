@@ -6,51 +6,115 @@ import ts from "typescript";
 import { brand, importModule, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
 import { partProps } from "./part-props.ts";
 
-type Part = { target: string; props: string; type: string; fingerprint: string; row?: string };
+type Part = {
+  target: string;
+  props: string;
+  type: string;
+  fingerprint?: string;
+  ambiguous?: boolean;
+  row?: string;
+};
 type Tree = {
   part?: Part;
+  opening?: ts.JsxOpeningLikeElement;
   children: Map<string, Tree>;
-  names: Map<string, { count: number; node: ts.Node; fixed: boolean }>;
+  entries: { name: string; node: ts.Node; fixed: boolean; tree: Tree }[];
 };
-type Scope = {
-  path: string;
-  tree: Tree;
-  props: string;
-  type: () => string;
-  fingerprint?: string;
-  row?: { item: string; index: string; type: () => string };
-};
+type Row = { item: string; index: string; type: () => string; value: () => string };
+type Scope = { tree: Tree; props: string; type: () => string; row?: Row };
 type Binding = { node: ts.ConciseBody; parameter: ts.ParameterDeclaration };
 
-const branch = (): Tree => ({ children: new Map(), names: new Map() });
-const inlineTags = new Set("b code em i kbd s small span strong sub sup time u".split(" "));
-const nativeTags = new Set(
-  "article aside blockquote div dl figcaption figure footer header h1 h2 h3 h4 h5 h6 main nav ol p pre section ul".split(
-    " ",
-  ),
-);
+const branch = (): Tree => ({ children: new Map(), entries: [] });
 const voidTags = new Set("area base br col embed hr img input link meta param source track wbr".split(" "));
 
 function child(parent: Tree, name: string, node: ts.Node, fixed = false) {
-  const previous = parent.names.get(name);
-  if (previous && (fixed || previous.fixed)) {
-    throw problem(
-      node,
-      `Duplicate screen segment "${name}" (first declared in ${previous.node.getSourceFile().fileName})`,
-    );
-  }
-  const count = (previous?.count ?? 0) + 1;
-  parent.names.set(name, { count, node: previous?.node ?? node, fixed });
-  const key = count === 1 ? name : `${name}$${count}`;
   const tree = branch();
-  parent.children.set(key, tree);
-  return { tree, key };
+  parent.entries.push({ name, node, fixed, tree });
+  return tree;
+}
+
+function tagIdentity(opening: ts.JsxOpeningLikeElement) {
+  const attributes = opening.attributes.properties
+    .flatMap((attribute) => {
+      if (!ts.isJsxAttribute(attribute)) return [];
+      const name = attribute.name.getText();
+      if (/^(class|classList|style|ref)$|^on[A-Z:]/.test(name)) return [];
+      const value = attribute.initializer;
+      const expression = value && ts.isJsxExpression(value) ? value.expression : value;
+      return [
+        [
+          name,
+          /^(role|aria-.+|type|name|for|href)$/.test(name) && expression && ts.isStringLiteralLike(expression)
+            ? expression.text
+            : null,
+        ],
+      ];
+    })
+    .sort(([a], [b]) => String(a).localeCompare(String(b)));
+  return [opening.tagName.getText(), attributes];
+}
+
+function assignParts(
+  tree: Tree,
+  prefix: string,
+  paths: Map<string, Part>,
+  inherited?: string,
+  ambiguous = false,
+) {
+  const fixed = new Map<string, ts.Node>();
+  const counts = new Map<string, number>();
+  const identities = new Map<Tree, string>();
+  const times = new Map<string, number>();
+  for (const entry of tree.entries) {
+    const { name, node } = entry;
+    if (entry.fixed) {
+      const previous = fixed.get(name);
+      if (previous)
+        throw problem(
+          node,
+          `Duplicate screen segment "${name}" (first declared in ${previous.getSourceFile().fileName})`,
+        );
+      fixed.set(name, node);
+    } else {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+      const identity = JSON.stringify(tagIdentity(entry.tree.opening!));
+      identities.set(entry.tree, identity);
+      const key = name + ":" + identity;
+      times.set(key, (times.get(key) ?? 0) + 1);
+    }
+  }
+  const positions = new Map<string, number>();
+  for (const { name, fixed: named, tree: node } of tree.entries) {
+    const position = (positions.get(name) ?? (fixed.has(name) ? 1 : 0)) + 1;
+    if (!named) positions.set(name, position);
+    const key = named || position === 1 ? name : `${name}$${position}`;
+    const target = `${prefix}.${key}`;
+    tree.children.set(key, node);
+    const positional = !named && (fixed.has(name) || counts.get(name)! > 1);
+    const component = node.opening && !/^[a-z][\w-]*$/.test(node.opening.tagName.getText());
+    const anchor = named || (!positional && component);
+    let fingerprint = anchor ? undefined : inherited;
+    let uncertain = !anchor && ambiguous;
+    if (positional) {
+      const identity = identities.get(node)!;
+      fingerprint = createHash("sha256")
+        .update(JSON.stringify([inherited, identity]))
+        .digest("base64url")
+        .slice(0, 12);
+      uncertain ||= times.get(name + ":" + identity)! > 1;
+    }
+    if (node.part) {
+      Object.assign(node.part, { target, fingerprint, ambiguous: uncertain });
+      paths.set(target, node.part);
+    }
+    assignParts(node, target, paths, fingerprint, uncertain);
+  }
 }
 
 function segment(name: string) {
   return name
     .replace(/[^\w]/g, (c) => `$${c.charCodeAt(0).toString(16)}$`)
-    .replace(/^(target|__proto__|constructor|prototype)$/, (name) => "$" + name);
+    .replace(/^(target|fingerprint|__proto__|constructor|prototype)$/, (name) => "$" + name);
 }
 
 export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin: string, root: string) {
@@ -60,7 +124,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     ts.SourceFile,
     { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[]
   >();
-  const paths = new Map<string, string>();
+  const paths = new Map<string, Part>();
   const tree = branch();
   const checker = program.getTypeChecker();
   const module = checker.getSymbolAtLocation(entry);
@@ -118,7 +182,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     const elements = new Map<Element, Part>();
     const pending: (Binding & { name: string })[] = [];
     const rowBindings: { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[] = [];
-    const base: Scope = { tree, path: plugin, props: "{}", type: () => "{}" };
+    const base: Scope = { tree, props: "{}", type: () => "{}" };
 
     function visit(node: ts.Node, scope: Scope) {
       if (ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
@@ -147,13 +211,9 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           let type: string;
           scope = {
             get tree() {
-              return identity().tree;
-            },
-            get path() {
-              return `${outer.path}.${identity().key}`;
+              return identity();
             },
             props,
-            fingerprint: outer.fingerprint,
             row: outer.row,
             type: () => {
               if (type) return type;
@@ -177,14 +237,16 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         const tag = opening.tagName;
         const builtin = solidTag(tag);
         if (builtin && solidBuiltins.has(builtin)) {
-          const callback = builtin === "For" ? childCallback(node) : undefined;
+          const callback = builtin === "For" || builtin === "Index" ? childCallback(node) : undefined;
           if (callback && !callback.parameters.some((p) => p.dotDotDotToken)) {
             const item = `__tokamakItem${++captures}`;
             const index = `__tokamakIndex${captures}`;
             let rowType: string | undefined;
-            const row = {
+            const parent = scope.row;
+            const row: Row = {
               item,
               index,
+              value: () => `{ item: ${item}, index: ${index}${parent ? `, parent: ${parent.value()}` : ""} }`,
               type: () => {
                 if (rowType) return rowType;
                 rowBindings.push({ node: callback, item, index });
@@ -203,8 +265,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                 )?.initializer;
                 const positional =
                   keyed && ts.isJsxExpression(keyed) && keyed.expression?.kind === ts.SyntaxKind.FalseKeyword;
-                const indexType = second ? propsType(second) : positional ? "number" : "() => number";
-                return (rowType = `{ readonly $row: { readonly item: ${itemType}; readonly index: ${indexType} } }`);
+                const indexType = second
+                  ? propsType(second)
+                  : positional || builtin === "Index"
+                    ? "number"
+                    : "() => number";
+                return (rowType = `{ readonly item: ${itemType}; readonly index: ${indexType}${parent ? `; readonly parent: ${parent.type()}` : ""} }`);
               },
             };
             function visitRow(child: ts.Node) {
@@ -218,25 +284,17 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         }
         const tagName = tag.getText(source);
         const named = staticName(opening, "data-part") ?? staticName(opening, "id");
-        const { tree: group, key } = child(scope.tree, segment(named ?? tagName), node, named !== undefined);
-        const target = `${scope.path}.${key}`;
-        const identity =
-          named === undefined ? opening.attributes.properties.map((p) => p.getText(source)) : [];
-        const fingerprint = createHash("sha256")
-          .update(JSON.stringify([scope.fingerprint, tagName, identity]))
-          .digest("base64url")
-          .slice(0, 12);
+        const group = child(scope.tree, segment(named ?? tagName), node, named !== undefined);
         const type = scope.type();
-        const part = {
-          target,
-          fingerprint,
+        const part: Part = {
+          target: "",
           props: scope.props,
-          type: scope.row ? alias(`${type} & ${scope.row.type()}`) : type,
-          row: scope.row && `{ item: ${scope.row.item}, index: ${scope.row.index} }`,
+          type: scope.row ? alias(`${type} & { readonly $row: ${scope.row.type()} }`) : type,
+          row: scope.row?.value(),
         };
         group.part = part;
-        paths.set(target, fingerprint);
-        scope = { ...scope, tree: group, path: target, fingerprint };
+        group.opening = opening;
+        scope = { ...scope, tree: group };
         ts.forEachChild(node, (child) => visit(child, scope));
         elements.set(node, part);
       } else ts.forEachChild(node, (child) => visit(child, scope));
@@ -246,6 +304,8 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     if (pending.length) bindings.set(source, pending);
     if (rowBindings.length) rows.set(source, rowBindings);
   }
+
+  assignParts(tree, plugin, paths);
 
   function describe(node: Tree, value: (part: Part) => string, indent = ""): string {
     const next = indent + "  ";
@@ -259,12 +319,10 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     return parts.length ? `{\n${parts.join("\n")}\n${indent}}` : "";
   }
 
-  function values(node: Tree): object {
+  function compactParts(node: Tree): object {
     return Object.fromEntries([
-      ...(node.part ? [["target", node.part.target]] : []),
-      ...[...node.children].flatMap(([name, child]) =>
-        child.part || child.children.size ? [[name, values(child)]] : [],
-      ),
+      ...(node.part ? [["", node.part.fingerprint ?? null]] : []),
+      ...[...node.children].map(([name, child]) => [name, compactParts(child)]),
     ]);
   }
 
@@ -292,30 +350,38 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (erased(node)) continue;
           output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
         }
+        type Site = { node: Element; part: Part; children: Site[]; holes: Element[] };
         const native = new Set<Element>();
         const nativeRoots = new Map<Element, string>();
-        let island = 0;
+        const holes = new Map<Element, number>();
+        const addresses = new Map<string, { variable: string; suffixes: string[] }>();
+        function address({ target }: Part) {
+          const segments = target.split(".");
+          const prefix = segments.slice(0, 2).join(".");
+          let group = addresses.get(prefix);
+          if (!group) {
+            group = { variable: `__tokamakAddresses${addresses.size + 1}`, suffixes: [] };
+            addresses.set(prefix, group);
+          }
+          const index = group.suffixes.push(segments.slice(2).join(".")) - 1;
+          return `${group.variable}[${index}]`;
+        }
         const tables: string[] = [];
-        function collect(
-          node: Element,
-          inline = false,
-        ): readonly [string, string, readonly unknown[]] | undefined {
+        function collect(node: Element): Site | undefined {
           const opening = ts.isJsxElement(node) ? node.openingElement : node;
           const part = elements!.get(node);
           const tag = opening.tagName.getText(source);
-          if (!part || !(inlineTags.has(tag) || (!inline && nativeTags.has(tag))) || mounts?.has(node))
-            return;
-          const inlineChildren = inline || inlineTags.has(tag) || /^(p|h[1-6])$/.test(tag);
+          if (!part || !/^[a-z][\w-]*$/.test(tag) || mounts?.has(node)) return;
           if (
             opening.attributes.properties.some(
               (attr) =>
                 !ts.isJsxAttribute(attr) ||
-                /^(ref|children|on|inner|outer|textContent|use:)/.test(attr.name.getText(source)) ||
-                (attr.initializer && !ts.isStringLiteral(attr.initializer)),
+                /^(children|innerHTML|outerHTML|textContent)$/.test(attr.name.getText(source)),
             )
           )
             return;
-          const children: unknown[] = [];
+          const children: Site[] = [];
+          const holes: Element[] = [];
           if (ts.isJsxElement(node))
             for (const child of node.children) {
               if (ts.isJsxText(child)) continue;
@@ -326,29 +392,63 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                 return;
               }
               if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) return;
-              const site = collect(child, inlineChildren);
-              if (!site) return;
-              children.push(site);
+              const site = collect(child);
+              if (site) children.push(site);
+              else {
+                const tag = (ts.isJsxElement(child) ? child.openingElement : child).tagName.getText(source);
+                if (!elements!.has(child) || /^[a-z][\w-]*$/.test(tag)) return;
+                holes.push(child);
+              }
             }
-          return [part.target, part.fingerprint, children];
+          // A mixed child list uses compiler refs to avoid inferring DOM positions
+          // from a child component's variable number of rendered elements.
+          if (
+            holes.length &&
+            children.some(
+              ({ node }) =>
+                holes.some((hole) => hole.end <= node.pos) &&
+                (ts.isJsxElement(node) ? node.openingElement : node).attributes.properties.some(
+                  (attr) => ts.isJsxAttribute(attr) && attr.name.getText(source) === "ref",
+                ),
+            )
+          )
+            return;
+          return { node, part, children, holes };
         }
-        function skipChildren(node: Element) {
-          if (ts.isJsxElement(node))
-            for (const child of node.children) {
-              if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) continue;
-              native.add(child);
-              skipChildren(child);
-            }
-        }
-        // Parent before child: consume closed DOM trees as a single Solid template.
         for (const node of [...elements.keys()].reverse()) {
           if (erased(node) || native.has(node)) continue;
           const site = collect(node);
-          if (!site?.[2].length) continue;
-          skipChildren(node);
-          native.add(node);
-          const name = `__tokamakIsland${++island}`;
-          tables.push(`const ${name} = ${JSON.stringify(site[2])};`);
+          if (
+            !site ||
+            (!site.children.length &&
+              !site.holes.length &&
+              !(ts.isJsxElement(node) && node.children.some(ts.isJsxExpression)))
+          )
+            continue;
+          let nextRef = 0;
+          let nextHole = 0;
+          function serialize(site: Site, ref: number | null = null, root = false): string {
+            native.add(site.node);
+            const grouped = site.holes.length ? nextHole++ : null;
+            for (const hole of site.holes) holes.set(hole, grouped!);
+            const children = site.children.map((child) => {
+              let ref: number | null = null;
+              if (site.holes.some((hole) => hole.end <= child.node.pos)) {
+                ref = nextRef++;
+                const opening = ts.isJsxElement(child.node) ? child.node.openingElement : child.node;
+                output.appendLeft(
+                  opening.attributes.end,
+                  ` ref={(__el) => { __tokamakRefs[${ref}] = __el; }}`,
+                );
+              }
+              return serialize(child, ref);
+            });
+            if (root) return `[${children.join(",")}]`;
+            return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null ? `,${ref},${grouped}` : ""}]`;
+          }
+          const name = `__tokamakIsland${nativeRoots.size + 1}`;
+          const data = serialize(site, null, true);
+          tables.push(`const ${name} = ${data};`);
           nativeRoots.set(node, name);
         }
         // Edit in JSX postorder so adjacent boundaries at the same offset
@@ -357,17 +457,26 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (erased(node)) continue;
           const island = nativeRoots.get(node);
           if (!island) {
-            if (!native.has(node)) transformElement(node, part, output, source, mounts?.get(node));
+            if (!native.has(node))
+              transformElement(node, part, address(part), output, source, mounts?.get(node), holes.get(node));
             continue;
           }
           const container = ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
           output.appendLeft(
             node.getStart(source),
-            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part)}, () => `,
+            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole) => `,
           );
           output.appendLeft(node.end, `, ${island})${container ? "}" : ""}`);
         }
         if (tables.length) output.prepend(tables.join("\n") + "\n");
+        output.prepend(
+          [...addresses]
+            .map(
+              ([prefix, { variable, suffixes }]) =>
+                `const ${variable} = __tokamakPartPaths(${JSON.stringify(prefix)}, ${JSON.stringify(suffixes)});\n`,
+            )
+            .join(""),
+        );
         for (const { node } of bindings.get(source) ?? []) {
           if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
         }
@@ -375,12 +484,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
         }
         output.prepend(
-          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart } from "@tokamak/sdk/client";\n',
+          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
         );
       }
       if (source === entry && paths.size)
         output.append(
-          `\nconst __tokamakParts = ${JSON.stringify(values(tree))};\nexport { __tokamakParts as parts };\n`,
+          `\nimport { __defineScreenParts } from "@tokamak/sdk/client";\nconst __tokamakParts = __defineScreenParts(${JSON.stringify(plugin)}, ${JSON.stringify(compactParts(tree))});\nexport { __tokamakParts as parts };\n`,
         );
       return !!elements || (source === entry && paths.size > 0);
     },
@@ -426,7 +535,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             const current = paths.get(target);
             const reason = !current
               ? `targets missing screen part ${target}`
-              : fingerprint && current !== fingerprint
+              : fingerprint && current.fingerprint && current.fingerprint !== fingerprint
                 ? `targets a changed screen part: path ${target} now names a different element`
                 : "";
             if (!reason) continue;
@@ -485,24 +594,26 @@ function childCallback(node: Element) {
   );
 }
 
-function partArguments(part: Part) {
+function partArguments(part: Part, target: string) {
   const row = part.row ? `() => (${part.row})` : "undefined";
-  return `${JSON.stringify(part.target)}, ${JSON.stringify(part.fingerprint)}, ${part.props} ?? {}, ${row}`;
+  return `${target}, ${JSON.stringify(part.fingerprint)}, ${part.props} ?? {}, ${row}`;
 }
 
 function transformElement(
   node: Element,
   part: Part,
+  target: string,
   output: MagicString,
   source: ts.SourceFile,
   mount?: ElementMount,
+  hole?: number,
 ) {
   const parent = node.parent;
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const prefix = `${child ? "{" : ""}__tokamakRenderPart(${partArguments(part)}, (__tokamakContents) => `;
-  const suffix = `)${child ? "}" : ""}`;
+  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}__tokamakRenderPart(${partArguments(part, target)}, (__tokamakContents) => `;
+  const suffix = `)${hole === undefined ? "" : ")"}${child ? "}" : ""}`;
   output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
   const endMount = mount?.suffix ?? "";
 

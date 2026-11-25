@@ -41,7 +41,7 @@ export default defineConfig({
         build(renamedOwner);
         return `
           export { default as manifest } from ${JSON.stringify(resolve(addon, "dist/manifest.json"))};
-          export { Composer as RenamedComposer } from ${JSON.stringify(resolve(renamedOwner, "dist/ui.js"))};
+          export { Composer as RenamedComposer, parts as renamedParts } from ${JSON.stringify(resolve(renamedOwner, "dist/ui.js"))};
           export const loadActions = () => import(${JSON.stringify(resolve(addon, "dist/ui.js"))});
         `;
       },

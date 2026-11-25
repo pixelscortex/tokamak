@@ -507,7 +507,8 @@ Use `before` and `after` for siblings, `prepend` and `append` for children,
 `wrap` to surround an element, `replace` to substitute another element, or
 `hide` to remove it. A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
-`$row.index` in a Solid `For` row. If a path disappears or identifies a
+`$row.index` in a Solid list row. Nested rows expose the enclosing row
+as `$row.parent`. If a path disappears or identifies a
 different element, the build warns and the window skips that placement. See the
 [builder guide](../build/README.md#extending-a-screen) for the naming rule.
 

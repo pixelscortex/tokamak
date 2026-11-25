@@ -132,13 +132,13 @@ duplicate render name in the same scope fails the build with both locations
 rather than assigning file-order suffixes.
 
 Each element's segment is its nonempty static `data-part`, then its static
-`id`, then its tag or component name. An explicit name cannot collide with another
-segment in the same parent. Unnamed siblings with the same name use source order:
+`id`, then its tag or component name. A static name keeps its segment if a plain tag shares the name; the plain tag
+gets a positional suffix. Two explicit names cannot collide. Unnamed siblings with the same name use source order:
 `div`, `div$2`, `div$3`. Inserting another tag or editing another branch
 does not renumber them. Adding an earlier unnamed sibling with the same name
 can change a positional path; static names keep their paths. Names retain
 case. Punctuation is escaped as a dollar sign, its hex code, and a closing
-dollar sign (`Menu.Root` becomes `Menu$2e$Root`). The names `target`,
+dollar sign (`Menu.Root` becomes `Menu$2e$Root`). The names `target`, `fingerprint`,
 `constructor`, `prototype`, and `__proto__` are prefixed with `$`.
 
 For example, Chat's message body is `chat.parts.Message.article.body` and
@@ -159,20 +159,31 @@ elements that accept children. `wrap` receives the element as `props.children`.
 `replace` substitutes another element; `hide` also removes the sibling
 additions. `replace` and `hide` dispose the original element and its
 descendants while active. Actions and their live `when` option receive the
-props of the render function that owns the tag. Parts within a `For` row
-also get `props.$row.item` and `props.$row.index`, typed as Solid passes
-them to that callback. Layers at one position are
+props of the render function that owns the tag. Parts inside an inline list
+callback get `props.$row.item` and `props.$row.index`, typed as Solid passes
+them to that callback. Nested rows expose the enclosing row as `$row.parent`.
+With `Index` (or Solid 2’s `For keyed={false}`), the item is an accessor and
+the index is a number. Layers at one position are
 ordered by `order` (default 0) and then plugin ID. The first installed
 replacement owns the position even while its condition is false.
 
 If an installed plugin targets a path that is renamed or removed, the build
-warns with the contributing plugin's ID. The add-on manifest also stores
-a fingerprint of the target and its ancestors: tags and source attributes for
-positional segments, tags alone for elements with a static name. If a path
-now names a different fingerprint, the build warns and the window skips
-only that placement. An insertion between identical opening tags cannot
-be distinguished automatically; use existing stable names for elements
-that need to survive such edits.
+warns with the contributing plugin's ID. The window also warns once per
+add-on and path when a missing or changed target is skipped.
+
+Only positional segments carry a fingerprint: a shared tag or component
+name disambiguated by position. Fingerprints chain from the nearest named
+ancestor. A static `data-part` or `id`, a named render scope, or a component
+name unique among its siblings starts a new chain. Paths with no positional
+segment in that chain carry no fingerprint and are never skipped for a
+fingerprint mismatch.
+
+A positional segment hashes the tag, sorted attribute names, and the static
+string values of `role`, `aria-*`, `type`, `name`, `for`, and `href`.
+It ignores `class`, `classList`, `style`, event handlers, `ref`, spread
+attributes, and the source text of expressions. If two positional siblings
+still have the same identity, the add-on build warns that the target is
+ambiguous and asks the owner for a `data-part` or `id`.
 
 ### Contract registrations
 
