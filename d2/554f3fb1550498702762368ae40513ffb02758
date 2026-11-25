@@ -1,0 +1,98 @@
+plugins/chat/src/client/lib/sent.ts
+  s_467911d521291f::t_5ae33fb5b6f012 10
+plugins/chat/src/client/lib/send.ts
+  s_467911d521291f::t_5ae33fb5b6f012 2,53-56
+plugins/code/src/local/snapshots.ts
+  s_467911d521291f::t_5ae33fb5b6f012 5,17-22,29,40,44,49,65,117
+plugins/chat/src/server/schema.ts
+  s_467911d521291f::t_5ae33fb5b6f012 23
+plugins/code/src/local/changes.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1,69,102,137,166,189-193,210,222,251,299
+plugins/code/src/local/git.ts
+  s_467911d521291f::t_5ae33fb5b6f012 5,34,65-70,94,104,140,295-296,338-339,356,375
+plugins/chat/src/client/ui/empty.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 48,54-56,59-63
+plugins/chat/src/server/folders/folders.ts
+  s_467911d521291f::t_5ae33fb5b6f012 2,17-18,46-47,73
+plugins/code/src/client/ui/thread-header.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 6-7,14,17
+plugins/code/tests/window-state.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1-5
+plugins/code/src/server/hooks.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1,5,13-14,33-34,54-55,64-66,76-77
+plugins/code/src/client/lib/runner.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1-85
+plugins/chat/src/server/threads/threads.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1,16,40,69,104,138-139,148
+design/chat.md
+  s_467911d521291f::t_5ae33fb5b6f012 7-10
+.ci/check.sh
+  s_467911d521291f::t_5ae33fb5b6f012 92
+plugins/chat/tests/extensions.test.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 2,22,296-363
+moon.yml
+  s_467911d521291f::t_5ae33fb5b6f012 54
+plugins/chat/src/client/pages/chat.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 3,82-86,88
+plugins/code/tests/tsconfig.json
+  s_467911d521291f::t_5ae33fb5b6f012 1-5
+packages/server/tests/code-snapshot-process-cases.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 49,65,84,405,412,464,524
+packages/server/tests/code-snapshot-review-cases.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 113,196
+plugins/chat/tests/send.test.ts
+  s_467911d521291f::t_5ae33fb5b6f012 11,18,20,22-23,76,78
+plugins/code/src/server/notices.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1,5-7
+plugins/code/package.json
+  s_467911d521291f::t_5ae33fb5b6f012 6-8,17-19
+plugins/chat/src/contracts.ts
+  s_467911d521291f::t_5ae33fb5b6f012 28
+plugins/code/src/server/changes.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1,20,44-45,52-53,60-61
+plugins/code/tests/runner.test.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 1-142
+plugins/code/README.md
+  s_467911d521291f::t_5ae33fb5b6f012 33,46,49
+plugins/code/src/client/lib/changes.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1-9,14,39,108-109,134-140,143-146,149-150,156,160,162,191-192,219-235,237-239,242-243
+packages/server/tests/chat-threads-driver.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 118-119,135,194,203,233-237,253,263
+plugins/chat/src/server/_generated/api.ts
+  s_467911d521291f::t_5ae33fb5b6f012 4-7,25-26
+packages/server/tests/ai-threads-driver.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 66
+plugins/chat/README.md
+  s_467911d521291f::t_5ae33fb5b6f012 14,31,49-50,54,108
+plugins/code/src/client/ui/review-panel.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 3,11,20,30,35,42-43,47-52
+  s_467911d521291f::t_63114271fbee56 53-54
+packages/server/tests/code-changes-driver.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 136,144,177,184,199,205,220,260,286,296,306,316,332,334,336,341,343,346
+plugins/code/src/client/api.tsx
+  s_467911d521291f::t_5ae33fb5b6f012 1-2,6-7,13,18,25-29,32,34-36,44-48,53-62,64,104-115
+plugins/code/tests/vitest.config.ts
+  s_467911d521291f::t_5ae33fb5b6f012 1-16
+packages/server/tests/ai-turns-driver.mjs
+  s_467911d521291f::t_5ae33fb5b6f012 750
+design/code.md
+  s_467911d521291f::t_5ae33fb5b6f012 6-7
+bun.lock
+  s_467911d521291f::t_3bbdaddc1e60ae 183,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2554f3fb1550498702762368ae40513ffb02758",
+  "prompts": {},
+  "sessions": {
+    "s_467911d521291f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21439-c6af-76f3-b7f1-72ea8b30d1b6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
