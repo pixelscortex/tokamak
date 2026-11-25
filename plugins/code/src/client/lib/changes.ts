@@ -1,4 +1,12 @@
-import { createApi, type FunctionReference, type Id, type ResultOf, type TokamakClient } from "@tokamak/sdk";
+import {
+  createApi,
+  isFailure,
+  type MachineFailure,
+  type FunctionReference,
+  type Id,
+  type ResultOf,
+  type TokamakClient,
+} from "@tokamak/sdk";
 import { untrack } from "solid-js";
 import { state } from "@tokamak/sdk/client";
 import type { MessageProps } from "plugin:chat/client";
@@ -28,25 +36,23 @@ export interface NumberedTurn {
 }
 
 /** What the turn ending at one reply changed, with the turn it belongs to. */
-export type ReplyChange = NonNullable<ResultOf<typeof api.changes.forTurn>> & {
+export type ReplyChange = Exclude<ResultOf<typeof api.changes.forTurn>, MachineFailure | null> & {
   readonly turnId: string;
   readonly number: number;
 };
 
 /**
- * The window's client once a `code` component has mounted with a local part.
+ * The window's client once a `code` component has mounted.
  * Change cards decide in `when` whether to show, before any card mounts, so
- * they read this instead of `useClient`. A plain browser never sets it: no
- * card, chip or panel there.
+ * they read this instead of `useClient`. Without a Runner the action
+ * returns `noMachine` and there is no card.
  */
-const localClient = state<TokamakClient | undefined>(undefined);
+const windowClient = state<TokamakClient | undefined>(undefined);
 
-/** Records `client` for the cards' `when` if it has a local part; returns whether it has one. */
-export function rememberLocalClient(client: TokamakClient): boolean {
-  if (!client.hasLocal) return false;
+/** Records `client` for the cards' `when`. */
+export function rememberClient(client: TokamakClient): void {
   // Set after this render: a component body must not write window state.
-  if (untrack(localClient) !== client) queueMicrotask(() => localClient.set(client));
-  return true;
+  if (untrack(windowClient) !== client) queueMicrotask(() => windowClient.set(client));
 }
 
 /**
@@ -139,7 +145,7 @@ async function load(client: TokamakClient, key: string, threadId: Id<"threads">,
   const turn = await turnOf(client, threadId, replyId).catch(() => undefined);
   const change = turn
     ? await oneAtATime(() =>
-        client.local(api.changes.forTurn, {
+        client.action(api.changes.forTurn, {
           threadId,
           turnId: turn.turnId,
           ranEarlier: [...turn.ranEarlier],
@@ -148,7 +154,8 @@ async function load(client: TokamakClient, key: string, threadId: Id<"threads">,
     : null;
   changes.set((all) => ({
     ...all,
-    [key]: change && turn ? { ...change, turnId: turn.turnId, number: turn.number } : null,
+    [key]:
+      change && !isFailure(change) && turn ? { ...change, turnId: turn.turnId, number: turn.number } : null,
   }));
 }
 
@@ -158,7 +165,7 @@ async function load(client: TokamakClient, key: string, threadId: Id<"threads">,
  * Reactive: the first read starts the lookup.
  */
 export function changeOf(props: MessageProps): ReplyChange | null | undefined {
-  const client = localClient();
+  const client = windowClient();
   if (!client || props.message.status === "streaming" || props.message.status === "queued") return undefined;
   const key = `${props.message._id}:${props.message.status}`;
   if (!requested.has(key)) {
@@ -217,8 +224,9 @@ function startFollowing(client: TokamakClient, threadId: Id<"threads">): () => v
   let active = true;
   const read = () => {
     if (document.hidden) return;
-    void client.local(api.changes.branch, { threadId }).then(
-      (branch) => {
+    void client.action(api.changes.branch, { threadId }).then(
+      (result) => {
+        const branch = isFailure(result) ? null : result;
         if (active && branches()[threadId] !== branch)
           branches.set((all) => ({ ...all, [threadId]: branch }));
       },

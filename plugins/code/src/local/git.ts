@@ -2,7 +2,7 @@
 import { cp, lstat, mkdtemp, realpath, rm, unlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { Id, CallerActionContext } from "@tokamak/sdk";
 
 export type Repository = { root: string; prefix: string };
 type TurnSnapshot = { root: string; threadId: Id<"threads">; turnId: string };
@@ -31,7 +31,7 @@ async function lines(stream: AsyncIterable<string>): Promise<string[]> {
 }
 
 function startGit(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   cwd: string,
   args: string[],
   override: Record<string, string> = {},
@@ -62,7 +62,12 @@ function startGit(
   );
 }
 
-function gitAt(ctx: LocalContext, cwd: string, override: Record<string, string> = {}, signal = ctx.signal) {
+function gitAt(
+  ctx: CallerActionContext,
+  cwd: string,
+  override: Record<string, string> = {},
+  signal = ctx.signal,
+) {
   return async (args: string[], input?: string) => {
     if (signal.aborted) throw new Error("Snapshot cancelled");
     // An interrupted ref transaction can leave a lock in the user's repository.
@@ -86,7 +91,7 @@ function gitAt(ctx: LocalContext, cwd: string, override: Record<string, string> 
 }
 
 /** Runs a read-only Git command in `root` and resolves its output lines; fails on a non-zero exit. */
-export async function readGit(ctx: LocalContext, root: string, args: string[]): Promise<string[]> {
+export async function readGit(ctx: CallerActionContext, root: string, args: string[]): Promise<string[]> {
   return checked(gitAt(ctx, root), args);
 }
 
@@ -96,7 +101,7 @@ export async function readGit(ctx: LocalContext, root: string, args: string[]): 
  * false when Git was stopped early.
  */
 export async function readGitUntil(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   root: string,
   args: string[],
   take: (line: string) => boolean,
@@ -132,7 +137,7 @@ async function checked(git: Git, args: string[], stdin?: string): Promise<string
 
 /** Finds the worktree and the selected folder's path within it. Plain folders have no worktree. */
 export async function repository(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   folder: string,
   signal = ctx.signal,
 ): Promise<Repository | undefined> {
@@ -287,8 +292,8 @@ async function latest(git: Git, threadId: string): Promise<string | undefined> {
  * (or a root commit in an unborn worktree).
  */
 export async function snapshot(
-  ctx: LocalContext,
-  target: TurnSnapshot & Repository & { signal: LocalContext["signal"] },
+  ctx: CallerActionContext,
+  target: TurnSnapshot & Repository & { signal: CallerActionContext["signal"] },
   phase: "before" | "after",
   before?: string,
 ): Promise<string> {
@@ -330,8 +335,8 @@ export async function snapshot(
 
 /** Finds the persisted before snapshot for this exact turn, even after a restart. */
 export async function beforeSnapshot(
-  ctx: LocalContext,
-  { root, threadId, turnId, signal }: TurnSnapshot & { signal: LocalContext["signal"] },
+  ctx: CallerActionContext,
+  { root, threadId, turnId, signal }: TurnSnapshot & { signal: CallerActionContext["signal"] },
 ) {
   const result = await gitAt(
     ctx,
@@ -348,7 +353,7 @@ export const AFTER_SNAPSHOT_WARNING = "Couldn't save this turn's code";
 
 /** Removes this thread's snapshot refs, leaving other Git refs in place. */
 export async function deleteSnapshots(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   { root, threadId }: Omit<TurnSnapshot, "turnId">,
   signal = ctx.signal,
 ): Promise<void> {
@@ -367,7 +372,7 @@ export async function deleteSnapshots(
 }
 
 /** Reads omitted filenames and detects a missing after ref, without storing server data. */
-export async function snapshotNotice(ctx: LocalContext, { root, threadId, turnId }: TurnSnapshot) {
+export async function snapshotNotice(ctx: CallerActionContext, { root, threadId, turnId }: TurnSnapshot) {
   const git = gitAt(ctx, root);
   const prefix = turnRefs(threadId, turnId);
   const messages = await checked(git, [

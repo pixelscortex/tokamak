@@ -46,12 +46,12 @@ that is not stored.
   `replies:write({ messageId, token, text, done?, outcome?, error? })` replaces its
   text, and only with that token. A finished reply can be cancelled or failed.
   Exported from `src/server/api.ts` as `startReply` / `writeReply`.
-- Local: `folders:resolve`, `folders:check`, `threads:removeLocal`. Use them only when
-  `client.hasLocal` (a `TokamakClient` getter, true in the desktop client).
+- Caller actions: `folders:resolve`, `folders:check`, `threads:removeLocal`. Call them
+  with `client.action`; a window without a Runner receives `noMachine`.
   Only the creator can rename or delete a thread. The server calls the
   `threadDeletedServer` providers in the deletion transaction.
   `threads:removeLocal({ threadId })` deletes the thread on the server, then calls
-  `threadDeletedLocal` providers from `plugin:chat/contracts` in the local part. Their
+  `threadDeletedLocal` providers from `plugin:chat/contracts` in the caller’s Runner. Their
   `after({ threadId, folder })` can clean up local data; `folder` may be absent.
 
 Agent runs and permission questions belong to `ai`. Chat stores the thread

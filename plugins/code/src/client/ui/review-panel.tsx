@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createEffect, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import type { Id, ResultOf, TokamakClient } from "@tokamak/sdk";
+import { isFailure, type Id, type MachineFailure, type ResultOf, type TokamakClient } from "@tokamak/sdk";
 import { useClient } from "@tokamak/sdk/client";
 import { FileName, Icon, Row, ScrollArea } from "@tokamak/ui";
 import { api } from "../../server/_generated/api";
@@ -8,7 +8,7 @@ import { turnsOf } from "../lib/changes";
 import { fileCodeIcon } from "../lib/icons";
 import { Counts, filesLabel, minus, plus } from "./counts";
 
-type Diff = NonNullable<ResultOf<typeof api.changes.diff>>;
+type Diff = Exclude<ResultOf<typeof api.changes.diff>, MachineFailure | null>;
 type FileDiff = Diff["files"][number];
 type Loaded =
   | { readonly state: "loading" }
@@ -27,19 +27,29 @@ async function load(client: TokamakClient, threadId: Id<"threads">, turnId?: str
   // From the header's control: the counts are cheap to read, so find the turn with them first.
   for (let index = turns.length - 1; !turnId && index >= 0; index--) {
     const candidate = turns[index]!;
-    const change = await client.local(api.changes.forTurn, {
+    const change = await client.action(api.changes.forTurn, {
       threadId,
       turnId: candidate.turnId,
       ranEarlier: [],
     });
+    if (isFailure(change)) return unavailable(change);
     if (change?.files) {
       turn = candidate;
       break;
     }
   }
   if (!turn) return { state: "none" };
-  const diff = await client.local(api.changes.diff, { threadId, turnId: turn.turnId });
+  const diff = await client.action(api.changes.diff, { threadId, turnId: turn.turnId });
+  if (isFailure(diff)) return unavailable(diff);
   return diff ? { state: "ready", number: turn.number, diff } : { state: "unsaved", number: turn.number };
+}
+
+function unavailable(failure: MachineFailure): Loaded {
+  return {
+    state: "failed",
+    reason:
+      failure.kind === "noMachine" ? "Connect a machine to run this." : "The Runner cannot read the changes.",
+  };
 }
 
 /**

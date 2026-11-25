@@ -51,12 +51,16 @@ function FolderPicker(props: EmptyProps): JSX.Element {
     if (!valid()) return;
     setProblem(undefined);
     try {
-      const result = client.hasLocal
-        ? await client.local(api.folders.check, { path: typed() })
-        : typed().trim();
+      const path = typed();
+      const checked = await client.action(api.folders.check, { path });
+      const result = isFailure(checked) && checked.kind === "noMachine" ? path.trim() : checked;
       if (isFailure(result)) {
         setProblem(
-          result.kind === "NotAFolder" ? `There is no folder at ${result.data.path}.` : "Use a full path.",
+          result.kind === "NotAFolder"
+            ? `There is no folder at ${result.data.path}.`
+            : result.kind === "NotFullPath"
+              ? "Use a full path."
+              : "The Runner cannot check this folder.",
         );
         return;
       }

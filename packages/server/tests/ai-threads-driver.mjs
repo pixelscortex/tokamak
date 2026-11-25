@@ -63,7 +63,7 @@ async function installAndSignIn() {
   assert.deepEqual(other.models.find((model) => model.id === "context")?.efforts, ["low", "high"]);
 
   const sent = await desk.mutation(chat.threads.start, { text: "Hello", folder: { kind: "own" } });
-  const folder = await desk.local(chat.folders.resolve, { threadId: sent.threadId });
+  const folder = await desk.action(chat.folders.resolve, { threadId: sent.threadId });
   const run = () =>
     desk.local(ai.run.turn, {
       threadId: sent.threadId,

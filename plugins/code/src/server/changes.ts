@@ -1,4 +1,4 @@
-import { local, v, type Id, type LocalContext } from "@tokamak/sdk";
+import { action, v, type Id, type CallerActionContext } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import { currentBranch, turnChange, turnDiff } from "../local/changes";
 import { repository, type Repository } from "../local/git";
@@ -17,7 +17,7 @@ import { repository, type Repository } from "../local/git";
 const repositories = new Map<Id<"threads">, Repository>();
 
 async function withRepository<T>(
-  ctx: LocalContext,
+  ctx: CallerActionContext,
   threadId: Id<"threads">,
   read: (repo: Repository) => Promise<T>,
 ): Promise<T | null> {
@@ -41,21 +41,24 @@ async function withRepository<T>(
  * `ranEarlier` lists the thread's earlier turns whose agent ran, so a turn
  * after one that ran without Git can say tracking started.
  */
-export const forTurn = local({
+export const forTurn = action({
+  on: "caller",
   args: { threadId: v.id("threads"), turnId: v.string(), ranEarlier: v.array(v.string()) },
   handler: (ctx, { threadId, turnId, ranEarlier }) =>
     withRepository(ctx, threadId, (repo) => turnChange(ctx, { ...repo, threadId, turnId }, ranEarlier)),
 });
 
 /** The review panel: the turn's files with counts and plain diffs, cut at a line budget. */
-export const diff = local({
+export const diff = action({
+  on: "caller",
   args: { threadId: v.id("threads"), turnId: v.string() },
   handler: (ctx, { threadId, turnId }) =>
     withRepository(ctx, threadId, (repo) => turnDiff(ctx, { ...repo, threadId, turnId })),
 });
 
 /** The branch for the thread header's chip; null without Git. */
-export const branch = local({
+export const branch = action({
+  on: "caller",
   args: { threadId: v.id("threads") },
   handler: (ctx, { threadId }) =>
     withRepository(ctx, threadId, (repo) => currentBranch(ctx, repo)).catch(() => null),

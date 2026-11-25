@@ -1,4 +1,4 @@
-import { local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
+import { action, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
 import { threadDeletedLocal, threadDeletedServer } from "../../contracts";
 import { api } from "../_generated/api";
 import { folder } from "../folders/folder";
@@ -135,7 +135,8 @@ export const remove = mutation({
 });
 
 /** Desktop deletion can also clean up things plugins kept on this computer. */
-export const removeLocal = local({
+export const removeLocal = action({
+  on: "caller",
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
     const current = await ctx.runQuery(api.threads.get, { threadId });

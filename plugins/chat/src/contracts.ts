@@ -25,6 +25,6 @@ export const threadDeletedServer = contract<ThreadDeletedServer>("threadDeletedS
 
 /** Runs on the client that deleted a thread, once the server has accepted the delete. */
 export const threadDeletedLocal = contract<ThreadDeletedLocal>("threadDeletedLocal", {
-  place: "local",
+  on: "caller",
   dataMethods: true,
 });
