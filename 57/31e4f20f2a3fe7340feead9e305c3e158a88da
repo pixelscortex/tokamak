@@ -1,0 +1,120 @@
+packages/sdk/src/index.ts
+  s_a318c7bdadc5bd::t_0f16edbce7fe0a 1
+packages/server/tests/fixtures/query-hooks/z-extra/plugin.ts
+  s_a318c7bdadc5bd::t_e584d7102a7aa9 1-3
+packages/sdk/src/hooks.ts
+  s_a318c7bdadc5bd::t_0f16edbce7fe0a 1-7,9-40,44-104
+  s_a318c7bdadc5bd::t_b9384ef34e87a0 8,41-43
+packages/server/tests/fixtures/query-hooks/team/plugin.ts
+  s_a318c7bdadc5bd::t_d6d633319d6153 1-3
+packages/server/src/host.rs
+  s_549dee89b200e8::t_90c2d741bc4536 146-147
+  s_a318c7bdadc5bd::t_5661593340ad8c 18-49,136,149-150,156,159,245,264-266,277,306,314-315,318,322
+  s_a318c7bdadc5bd::t_9edeed85c0cfbc 108,127,129-131,135,144-145,299-301,305,335
+  s_a318c7bdadc5bd::t_7c761d78823a0d 161
+packages/server/src/plugins/mod.rs
+  s_a318c7bdadc5bd::t_2ea7baacb764f8 37,43,52,60-65
+  s_a318c7bdadc5bd::t_bfe3b5974a57e1 66-69
+packages/server/src/host/hook_pipeline.js
+  s_a318c7bdadc5bd::t_de8543c2e2cb4f 3,15
+  s_a318c7bdadc5bd::t_9edeed85c0cfbc 1-2,6-9,17-19
+  s_a318c7bdadc5bd::t_7c761d78823a0d 4-5,10-14,16
+packages/sdk/tools/placement.mjs
+  s_a318c7bdadc5bd::t_e5311cf61cee11 14,35,63,74-89,125-126,188-194,196-198,261,315,327-330
+  s_a318c7bdadc5bd::t_9b3c7d16f41fb7 195
+packages/sdk/src/functions.ts
+  s_a318c7bdadc5bd::t_0f16edbce7fe0a 104-106
+packages/server/src/host/hooks.rs
+  s_a318c7bdadc5bd::t_7c761d78823a0d 85,120,142,144,151,197-201,257-262
+  s_a318c7bdadc5bd::t_9edeed85c0cfbc 1-84,86-89,91-115,117-119,121-141,143,145-146,150,152-196,202-210,213-256,263-322,328-354
+  s_a318c7bdadc5bd::t_51f65770474235 90,116,147-149,211-212,323-327
+packages/server/tests/fixtures/query-hooks/moderation/src/server/schema.ts
+  s_a318c7bdadc5bd::t_84188303fa9557 1-3
+packages/server/tests/fixtures/query-hooks/team/src/server/users.ts
+  s_a318c7bdadc5bd::t_5a38cf021a8215 1-19
+packages/server/tests/query_hooks.rs
+  s_a318c7bdadc5bd::t_051a8d361c08ef 1-3,5-82,89-96,98-123,126-145
+  s_a318c7bdadc5bd::t_ca8addcbd0005e 4,83-88,97,124-125
+packages/sdk/tools/plugin-boundary.mjs
+  s_a318c7bdadc5bd::t_e5311cf61cee11 214
+packages/sdk/tools/worker.mjs
+  s_a318c7bdadc5bd::t_d8bbbe0ba5f2dc 17
+  s_a318c7bdadc5bd::t_e5311cf61cee11 1,9-16,18,20,56
+packages/server/src/plugins/loading.rs
+  s_a318c7bdadc5bd::t_9edeed85c0cfbc 318-319,355-357,366-377,382-384,387-389,396-400
+  s_a318c7bdadc5bd::t_2ea7baacb764f8 76-77,131,273-275,287,299,348-354,358-365,379-381,385-386,390-395,401-415
+  s_a318c7bdadc5bd::t_dbe29cc423186b 378,416-417
+packages/sdk/src/api.ts
+  s_a318c7bdadc5bd::t_0f16edbce7fe0a 10-14,16,18,21,24,27-30,32-46
+  s_a318c7bdadc5bd::t_05211d8b8f12dc 15
+packages/sdk/tools/bundle.mjs
+  s_a318c7bdadc5bd::t_1dd704c1cb7eee 203
+  s_a318c7bdadc5bd::t_e5311cf61cee11 199-202,204-206,211,284-285
+packages/server/tests/fixtures/query-hooks/z-extra/package.json
+  s_a318c7bdadc5bd::t_7c83944f0f9851 1-6
+packages/server/tests/fixtures/query-hooks/moderation/vite.config.ts
+  s_a318c7bdadc5bd::t_b6b9b7bf70989f 1-4
+packages/server/tests/fixtures/query-hooks/z-extra/vite.config.ts
+  s_a318c7bdadc5bd::t_cf5dd3c2e0b0a7 1-4
+packages/server/tests/query-hooks-driver.ts
+  s_a318c7bdadc5bd::t_b0ca5add39788c 68
+  s_a318c7bdadc5bd::t_5ba43d82d9c3a7 49
+  s_a318c7bdadc5bd::t_051a8d361c08ef 1-2,4-48,51-67,69-113
+  s_a318c7bdadc5bd::t_858da5bdaba4ae 3,50
+packages/sdk/tools/result-validator.mjs
+  s_a318c7bdadc5bd::t_7c761d78823a0d 33-38,40
+  s_a318c7bdadc5bd::t_e5311cf61cee11 1-32,39,41-56
+packages/server/tests/fixtures/query-hooks/team/src/server/schema.ts
+  s_a318c7bdadc5bd::t_cef6c524267882 1-3
+packages/server/tests/fixtures/query-hooks/team/vite.config.ts
+  s_a318c7bdadc5bd::t_0615f436cf2a8c 1-4
+packages/server/tests/fixtures/query-hooks/team/src/server/api.ts
+  s_a318c7bdadc5bd::t_ee752b54b563c1 1
+packages/server/tests/fixtures/query-hooks/z-extra/src/server/extra.ts
+  s_a318c7bdadc5bd::t_b0ca5add39788c 1
+  s_a318c7bdadc5bd::t_e320d1c63783cf 2-11
+packages/server/tests/fixtures/query-hooks/team/package.json
+  s_a318c7bdadc5bd::t_3be77f318d71fd 1-6
+packages/engine/src/bridge.rs
+  s_a318c7bdadc5bd::t_9edeed85c0cfbc 112-114,303,305,393
+  s_a318c7bdadc5bd::t_2ea7baacb764f8 40-41,59-60,84-101,302,306-307,368,392,394
+packages/server/tests/fixtures/query-hooks/setup.mjs
+  s_a318c7bdadc5bd::t_26941700389f65 1-13
+packages/sdk/README.md
+  s_a318c7bdadc5bd::t_530bd7ce34aeb8 750-793
+packages/server/tests/fixtures/query-hooks/moderation/src/server/policy.ts
+  s_a318c7bdadc5bd::t_b0ca5add39788c 5-44
+  s_a318c7bdadc5bd::t_d521ce9c617dd6 1-4
+packages/server/tests/fixtures/query-hooks/moderation/plugin.ts
+  s_a318c7bdadc5bd::t_7d35f16c09051b 1-3
+packages/build/tests/boundary.test.mjs
+  s_a318c7bdadc5bd::t_b169e54d291e41 303-342
+packages/server/tests/fixtures/query-hooks/.gitignore
+  s_a318c7bdadc5bd::t_047a52be1bfecd 1
+packages/server/tests/fixtures/query-hooks/moderation/package.json
+  s_a318c7bdadc5bd::t_a572f18b1c8139 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5731e4f20f2a3fe7340feead9e305c3e158a88da",
+  "prompts": {},
+  "sessions": {
+    "s_549dee89b200e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "36a2ca2b-1b6a-4464-b4db-74f354b84168",
+        "model": "unknown"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_a318c7bdadc5bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-45f3-77a0-b99b-dd5e3ad3243d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
