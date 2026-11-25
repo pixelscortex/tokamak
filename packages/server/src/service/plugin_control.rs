@@ -10,6 +10,7 @@ impl Coordinator {
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
+        metadata["triggers"] = plugins.descriptor["triggers"].clone();
         metadata["skipped"] = serde_json::json!(plugins.skipped);
 
         Ok(metadata)
@@ -83,6 +84,7 @@ impl Coordinator {
                 let _ = reply.send(result);
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::CurrentPlugins(reply) => drop(reply.send(self.plugins.clone())),
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -162,7 +164,7 @@ impl Coordinator {
                 &target,
                 args.clone(),
                 true,
-                None,
+                Default::default(),
             ))
             .await;
             if !matches!(result, Ok(value) if crate::protocol::failure_kind(&value).is_none()) {

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { isBuiltin } from "node:module";
 import { isAbsolute, relative } from "node:path";
 
@@ -6,17 +7,19 @@ const action = ["node:path", "node:os", "node:crypto", "node:url"];
 // The QuickJS host must supply exactly this list.
 export const suppliedNodeModules = { action, local: [...action, "node:fs/promises"] };
 
-function nodeModule(path) {
+export function nodeModule(path) {
   if (path.startsWith("node:") || path === "bun" || path.startsWith("bun:")) return path;
   if (isBuiltin(path)) return `node:${path}`;
 }
 
 function unavailable(pluginRoot, importer, module, lane) {
   const file = isAbsolute(importer) ? relative(pluginRoot, importer) : importer;
-  const advice = module === "node:fs/promises" ? " Move it into a local function." : "";
+  const advice = suppliedNodeModules.local.includes(module)
+    ? ' Move it into a local function or an action with on: "caller".'
+    : "";
 
   return new Error(
-    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function.`,
+    `Plugin import boundary: ${file} imports ${JSON.stringify(module)}, which is unavailable in ${lane}.${advice} A plugin that needs real Node can start it through proc in a local function or caller action.`,
   );
 }
 
@@ -39,7 +42,7 @@ export function workerBuiltins(pluginRoot) {
   };
 }
 
-export function serverBuiltins(name, pluginRoot, lane) {
+export function serverBuiltins(name, pluginRoot, lane, { callerFiles, onStub } = {}) {
   return {
     name,
     setup(build) {
@@ -47,7 +50,32 @@ export function serverBuiltins(name, pluginRoot, lane) {
         if (!importer) return;
 
         const module = nodeModule(path);
+        if (suppliedNodeModules.local.includes(module) && callerFiles?.has(importer)) {
+          onStub?.(importer);
+          return { path: module, namespace: "unavailable-machine-module" };
+        }
+
         if (module) throw unavailable(pluginRoot, importer, module, lane);
+      });
+      build.onLoad({ filter: /.*/, namespace: "unavailable-machine-module" }, async ({ path }) => {
+        const names = Object.keys(await import(path)).filter(
+          (name) => /^[a-zA-Z_$][\w$]*$/.test(name) && name !== "default",
+        );
+        const bindings = names.map(
+          (name, i) => `const binding${i} = unavailable; export {binding${i} as ${name}};`,
+        );
+        return {
+          contents: `import { requireActionMachine } from ${JSON.stringify(fileURLToPath(new URL("../src/functions.ts", import.meta.url)))};
+            const fail = () => requireActionMachine(${JSON.stringify(`This needs a machine: ${path} is not available on the server`)});
+            const unavailable = new Proxy(function () {}, {
+              apply: fail,
+              construct: fail,
+              get: fail,
+            });
+            ${bindings.join("\n")}
+            export default unavailable;`,
+          loader: "ts",
+        };
       });
     },
   };

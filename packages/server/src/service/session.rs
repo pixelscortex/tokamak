@@ -19,6 +19,8 @@ impl SessionSender {
             name: name.into(),
             args,
             kind: None,
+            local_parent: None,
+            placement: Default::default(),
         })
     }
 
@@ -61,6 +63,7 @@ impl SessionSender {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "exhaustive wire request mapping")]
 fn request_action(request: Request) -> Result<Action, Error> {
     if request.id() > 9_007_199_254_740_991 {
         return Err(Error::Invalid(
@@ -74,19 +77,64 @@ fn request_action(request: Request) -> Result<Action, Error> {
             name,
             args,
             kind: Some(FunctionKind::Query),
+            local_parent: None,
+            placement: Default::default(),
         },
         Request::Mutation { id, name, args } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Mutation),
+            local_parent: None,
+            placement: Default::default(),
         },
-        Request::Action { id, name, args } => Action::Call {
+        Request::Action {
+            id,
+            name,
+            args,
+            on,
+            window,
+            hook_plans,
+            point_plans,
+        } => Action::Call {
             id,
             name,
             args,
             kind: Some(FunctionKind::Action),
+            local_parent: None,
+            placement: crate::actions::Placement::new(on, window, hook_plans, point_plans),
         },
+        // TKM-286 will restrict LocalCall to authenticated Runner sessions.
+        Request::LocalCall {
+            id,
+            name,
+            args,
+            kind,
+            depth,
+            thread,
+            hook_scope,
+            on,
+            window,
+            hook_plans,
+            point_plans,
+        } => Action::Call {
+            id,
+            name,
+            args,
+            kind: Some(kind),
+            local_parent: Some(LocalParent {
+                depth,
+                thread,
+                hook_scope,
+            }),
+            placement: crate::actions::Placement::new(on, window, hook_plans, point_plans),
+        },
+        Request::HookStage { id, scope, done } => Action::HookStage {
+            id,
+            scope,
+            done: done.unwrap_or_default(),
+        },
+        Request::CancelAction { id } => Action::Cancel(id),
         Request::Subscribe { id, name, args } => Action::Subscribe { id, name, args },
         Request::Unsubscribe { id } => Action::Unsubscribe(id),
         Request::Plugins { id } => Action::Plugins(id),

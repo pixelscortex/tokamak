@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
+pub const LOCAL_RELOAD_GRACE_MS: u64 = 5_000;
+
 // Keep this wire shape in sync with the SDK's isFailure guard.
 pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
     if value.get("failed")?.as_bool()? && value.get("data").is_some() {
@@ -11,6 +13,138 @@ pub(crate) fn failure_kind(value: &Json) -> Option<&str> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CallError {
+    Message(String),
+    Structured(Box<StructuredCallError>),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StructuredCallError {
+    pub message: String,
+    #[serde(flatten)]
+    pub details: CallErrorDetails,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "protocol-codegen", derive(ts_rs::TS))]
+pub struct CallErrorDetails {
+    pub plugin: String,
+    pub hook: String,
+    pub stage: String,
+    pub kind: String,
+    #[cfg_attr(feature = "protocol-codegen", ts(type = "JsonValue"))]
+    pub data: Json,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+    pub table: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+    pub point: Option<String>,
+}
+
+impl CallError {
+    pub(crate) fn hook(
+        plugin: &str,
+        hook: &str,
+        stage: &str,
+        kind: &str,
+        data: Json,
+        target: &str,
+    ) -> engine::CallError {
+        let reason = data.as_str().unwrap_or(kind);
+        let message = format!("Hook {plugin}/{hook} ({target} {stage}): {reason}");
+        let mut details = serde_json::json!({ "message":message, "plugin":plugin, "hook":hook, "stage":stage, "kind":kind, "data":data });
+        if let Some((_, point)) = target.split_once('#') {
+            details["point"] = serde_json::json!(point);
+            details["stage"] = serde_json::json!(match stage {
+                "before" => "pointBefore",
+                "after" => "pointAfter",
+                _ => stage,
+            });
+        }
+        engine::CallError {
+            message,
+            details: Some(details),
+            limit: None,
+            kind: None,
+        }
+    }
+
+    pub(crate) fn map_text(self, mut map: impl FnMut(String) -> String) -> Self {
+        match self {
+            Self::Message(message) => Self::Message(map(message)),
+            Self::Structured(mut error) => {
+                error.message = map(error.message);
+                if let Json::String(data) = &mut error.details.data {
+                    *data = map(std::mem::take(data));
+                }
+                Self::Structured(error)
+            }
+        }
+    }
+}
+
+impl From<CallError> for engine::CallError {
+    fn from(error: CallError) -> Self {
+        match error {
+            CallError::Message(message) => message.into(),
+            CallError::Structured(error) => Self {
+                message: error.message.clone(),
+                details: Some(serde_json::json!(error)),
+                limit: None,
+                kind: None,
+            },
+        }
+    }
+}
+
+impl From<engine::CallError> for CallError {
+    fn from(error: engine::CallError) -> Self {
+        error
+            .details
+            .and_then(|details| serde_json::from_value(details).ok())
+            .map_or_else(|| Self::Message(error.message), Self::Structured)
+    }
+}
+
+impl From<String> for CallError {
+    fn from(error: String) -> Self {
+        Self::Message(error)
+    }
+}
+
+impl From<&str> for CallError {
+    fn from(error: &str) -> Self {
+        error.to_owned().into()
+    }
+}
+
+impl std::ops::Deref for CallError {
+    type Target = str;
+    fn deref(&self) -> &str {
+        match self {
+            Self::Message(message) => message,
+            Self::Structured(error) => &error.message,
+        }
+    }
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ActionTarget {
+    #[default]
+    Server,
+    Caller,
 }
 
 /// IDs fit JavaScript's exact integer range. They share one session-local space;
@@ -41,6 +175,89 @@ pub enum Request {
         id: u64,
         name: String,
         args: Json,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(optional, type = "\"server\" | \"caller\"")
+        )]
+        on: Option<ActionTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        window: Option<bool>,
+        #[serde(default, rename = "hookPlans", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookPlans", optional, type = "boolean")
+        )]
+        hook_plans: Option<bool>,
+        #[serde(
+            default,
+            rename = "pointPlans",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "pointPlans", optional, type = "boolean")
+        )]
+        point_plans: Option<bool>,
+    },
+    LocalCall {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        name: String,
+        args: Json,
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(type = "\"query\" | \"mutation\" | \"action\"")
+        )]
+        kind: crate::service::FunctionKind,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        depth: usize,
+        thread: Option<String>,
+        #[serde(default, rename = "hookScope", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookScope", optional, type = "number")
+        )]
+        hook_scope: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(optional, type = "\"server\" | \"caller\"")
+        )]
+        on: Option<ActionTarget>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        window: Option<bool>,
+        #[serde(default, rename = "hookPlans", skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "hookPlans", optional, type = "boolean")
+        )]
+        hook_plans: Option<bool>,
+        #[serde(
+            default,
+            rename = "pointPlans",
+            skip_serializing_if = "Option::is_none"
+        )]
+        #[cfg_attr(
+            feature = "protocol-codegen",
+            ts(rename = "pointPlans", optional, type = "boolean")
+        )]
+        point_plans: Option<bool>,
+    },
+    HookStage {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        scope: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional, type = "boolean"))]
+        done: Option<bool>,
+    },
+    CancelAction {
+        #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
+        id: u64,
     },
     Subscribe {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
@@ -80,6 +297,9 @@ impl Request {
             Self::Query { id, .. }
             | Self::Mutation { id, .. }
             | Self::Action { id, .. }
+            | Self::LocalCall { id, .. }
+            | Self::HookStage { id, .. }
+            | Self::CancelAction { id }
             | Self::Subscribe { id, .. }
             | Self::Unsubscribe { id }
             | Self::Plugins { id }
@@ -108,14 +328,42 @@ pub enum Event {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
         result: Result<Json, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        error: Option<CallErrorDetails>,
     },
     Subscription {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
         result: Result<Json, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "protocol-codegen", ts(optional))]
+        error: Option<CallErrorDetails>,
     },
     Unsubscribed {
         #[cfg_attr(feature = "protocol-codegen", ts(type = "number"))]
         id: u64,
     },
+}
+
+impl Event {
+    pub(crate) fn response(id: u64, result: Result<Json, CallError>) -> Self {
+        let (result, error) = Self::outcome(result);
+        Self::Response { id, result, error }
+    }
+
+    pub(crate) fn subscription(id: u64, result: Result<Json, CallError>) -> Self {
+        let (result, error) = Self::outcome(result);
+        Self::Subscription { id, result, error }
+    }
+
+    fn outcome(
+        result: Result<Json, CallError>,
+    ) -> (Result<Json, String>, Option<CallErrorDetails>) {
+        match result {
+            Ok(value) => (Ok(value), None),
+            Err(CallError::Message(message)) => (Err(message), None),
+            Err(CallError::Structured(error)) => (Err(error.message), Some(error.details)),
+        }
+    }
 }

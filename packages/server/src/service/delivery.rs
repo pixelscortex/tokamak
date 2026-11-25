@@ -3,7 +3,11 @@ use crate::identity::Role;
 
 impl Coordinator {
     pub(super) fn respond(&mut self, session: u64, id: u64, result: Result<Json, String>) {
-        self.emit(session, Event::Response { id, result });
+        self.respond_call(session, id, result.map_err(Into::into));
+    }
+
+    pub(super) fn respond_call(&mut self, session: u64, id: u64, result: Result<Json, CallError>) {
+        self.emit(session, Event::response(id, result));
     }
 
     pub(super) fn emit(&mut self, session: u64, mut event: Event) {
@@ -45,6 +49,7 @@ impl Coordinator {
                 Event::Response { id, .. } => Event::Response {
                     id,
                     result: Err("result too large (1 MiB limit)".into()),
+                    error: None,
                 },
                 Event::Subscription { id, .. } => {
                     if let Some(client) = self.sessions.get_mut(&session) {
@@ -55,6 +60,7 @@ impl Coordinator {
                     Event::Response {
                         id,
                         result: Err("result too large (1 MiB limit); subscription ended".into()),
+                        error: None,
                     }
                 }
                 Event::PluginChanged { catalog, .. } => {

@@ -138,7 +138,7 @@ test("server and transaction bundles contain only host references and public typ
       }
     }
     const code = await output(path, "bundle.js");
-    expect(code).toContain('createApi("other")');
+    expect(code).toContain('createApi("other", ["x:read"]');
     expect(code).toContain('["x"]["read"]');
   });
 }, 60_000);
@@ -298,5 +298,364 @@ test("client rejects erased peer source imports and internal module spelling", a
       expect(result.status).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("Plugin import boundary");
     }
+  });
+}, 30_000);
+
+test("hook stages use the target's argument and result types", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `import {query, mutation, v} from "@tokamak/sdk";
+       export const read = query({args: {text: v.string()}, handler: (_ctx, {text}) => text.length});
+       export const write = mutation({handler: () => null});`,
+    );
+    await file(owner, "src/server/api.ts", 'export {read, write} from "./functions";');
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {hook} from "@tokamak/sdk";
+       import * as owner from "plugin:owner/server";
+       export const badBefore = hook(owner.api.read, {before: (_ctx, args) => ({text: args.text.length})});
+       export const badAfter = hook(owner.api.read, {after: (_ctx, result, args) => args.text + result});
+       export const write = hook(owner.api.write, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    const diagnostics = result.stdout + result.stderr;
+    expect(diagnostics).toContain("Type 'number' is not assignable to type 'string'");
+    expect(diagnostics).toContain("Type 'string' is not assignable to type 'MaybePromise<number>'");
+  });
+}, 30_000);
+
+test("dependency internal references can be hooked but cannot be called", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `import { internalMutation, query, v } from "@tokamak/sdk";
+      export const hidden = internalMutation({args: { id: v.id("items") }, handler: () => null});
+      export const read = query({args: { id: v.id("items") }, handler: () => null});`,
+    );
+    await file(owner, "src/server/api.ts", 'export {read} from "./functions";');
+    await file(
+      owner,
+      "src/server/schema.ts",
+      `import { defineSchema, defineTable } from "@tokamak/sdk";
+      export default defineSchema({ items: defineTable({}) });`,
+    );
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    const policy = `import { hook, mutation, type Id } from "@tokamak/sdk";
+      import { internal, read } from "plugin:owner/server";
+      import { tables } from "plugin:owner/tables";
+      export const table = tables.items;
+      const before = (_ctx: unknown, args: { id: Id<"owner.items"> }) => args;
+      export const accepted = hook(internal.functions.hidden, { before });
+      export const publicHook = hook(read, { before });`;
+    await file(consumer, "src/server/policy.ts", policy);
+    const allowed = build(consumer);
+    expect(allowed.status, allowed.stdout + allowed.stderr).toBe(0);
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      policy +
+        `
+      export const rejected = mutation({handler: (ctx) => ctx.runMutation(internal.functions.hidden, { id: "id" as Id<"owner.items"> })});`,
+    );
+    const rejected = build(consumer);
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stdout + rejected.stderr).toContain("callableReference");
+  });
+}, 30_000);
+
+test("build rejects local functions as hook targets", async () => {
+  await scratch(async (root) => {
+    const consumer = await backend(root, "consumer");
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
+       const refs = createApi<{functions: {run: FunctionReference<"local", {}, null, never, "owner">}}>("owner");
+       export const invalid = hook(refs.functions.run, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Only queries, mutations and actions can be hooked");
+  });
+}, 30_000);
+
+test("build reports an unresolved hook reference separately from non-hookable kinds", async () => {
+  await scratch(async (root) => {
+    const consumer = await backend(root, "consumer");
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {createApi, hook, type FunctionReference} from "@tokamak/sdk";
+       const refs = createApi<{functions: {run: FunctionReference<"query" | "mutation", {}, null, "public", "owner">}}>("owner");
+       export const invalid = hook(refs.functions.run, {});`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain("Hook target reference could not be resolved");
+  });
+}, 30_000);
+
+test("owner build names an installed plugin that hooks a removed function", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    const definition =
+      'import {mutation} from "@tokamak/sdk"; export const save = mutation({handler: () => null});';
+    await file(owner, "src/server/functions.ts", definition);
+    await file(owner, "src/server/api.ts", 'export {save} from "./functions";');
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `
+      import {hook} from "@tokamak/sdk";
+      import {save} from "plugin:owner/server";
+      export const policy = hook(save, {before: (_ctx, args) => args});
+    `,
+    );
+    built(consumer);
+    const manifest = JSON.parse(await readFile(resolve(consumer, "dist/manifest.json"), "utf8"));
+    expect(manifest.hookTargets).toEqual(["owner/functions:save"]);
+
+    await file(owner, "src/server/functions.ts", definition.replace("const save", "const update"));
+    await file(owner, "src/server/api.ts", 'export {update} from "./functions";');
+    const result = build(owner);
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      'Plugin "consumer" hooks owner/functions:save, which no longer exists',
+    );
+  });
+}, 30_000);
+
+test("publishes typed points and warns the owner when a hooked point is renamed", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    const ownerSource = `import { mutation } from "@tokamak/sdk";
+      interface PrivateItem { weight: number; next?: PrivateItem }
+      type Input = { name: string; nested?: PrivateItem; labels: readonly string[] };
+      export const save = mutation({
+        async handler(ctx) {
+          const input: Input = { name: "owner", labels: [] };
+          return ctx.point("prepare", input, ({ name }) => name.length);
+        },
+      });`;
+    await file(owner, "src/server/functions.ts", ownerSource);
+    await file(owner, "src/server/api.ts", 'export {save} from "./functions";');
+    built(owner);
+    const api = await readFile(resolve(owner, "src/server/_generated/api.ts"), "utf8");
+    expect(api).toMatch(/PointReference<"mutation",\s*\{\s*name: string;/);
+    expect(api).toContain("owner/functions:save#prepare");
+
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    const policy = `import {hook} from "@tokamak/sdk";
+      import {api} from "plugin:owner/server";
+      export const policy = hook(api.save.points.prepare, {
+        before: (_ctx, input) => ({ ...input, name: input.name.trim() }),
+        after: (_ctx, result, input) => result + input.name.length + (input.nested?.next?.weight ?? 0),
+      });`;
+    await file(consumer, "src/server/policy.ts", policy);
+    built(consumer);
+    expect(JSON.parse(await output(consumer, "manifest.json")).hookTargets).toEqual([
+      "owner/functions:save#prepare",
+    ]);
+
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      policy.replace("result + input.name.length + (input.nested?.next?.weight ?? 0)", "input.name"),
+    );
+    const wrong = build(consumer);
+    expect(wrong.status).not.toBe(0);
+    expect(wrong.stdout + wrong.stderr).toContain("not assignable to type 'MaybePromise<number>'");
+
+    await file(owner, "src/server/functions.ts", ownerSource.replace('"prepare"', '"renamed"'));
+    const result = build(owner);
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      'Plugin "consumer" hooks owner/functions:save#prepare, which no longer exists',
+    );
+  });
+}, 60_000);
+
+test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    for (const [body, diagnostic] of [
+      ['return ctx.point("name", { fn: () => 1 });', "describe it as data, or use `after`"],
+      [
+        'return ctx.point("name", 1, async () => ({ nested: [() => 1] }));',
+        "describe it as data, or use `after`",
+      ],
+      ['return ctx.point("name", { date: new Date() });', "describe it as data, or use `after`"],
+      ['return ctx.point("name", { promise: Promise.resolve(1) });', "describe it as data, or use `after`"],
+      ['return ctx.point("name", { token: Symbol() });', "describe it as data, or use `after`"],
+      ['const name = "name"; return ctx.point(name, 1);', "pass a literal name"],
+      ['await ctx.point("name", 1); return ctx.point("name", 2);', 'Duplicate point name "name"'],
+    ]) {
+      await file(
+        owner,
+        "src/server/functions.ts",
+        `
+        import { query } from "@tokamak/sdk";
+        export const read = query({ async handler(ctx) { ${body} } });
+      `,
+      );
+      const result = build(owner);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(diagnostic);
+    }
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `
+      import { query, type QueryContext } from "@tokamak/sdk";
+      const load = (ctx: Pick<QueryContext<{}>, "point">) => ctx.point("shared", 1);
+      export const a = query({ handler: (ctx) => load(ctx) });
+      export const b = query({ handler: (ctx) => load(ctx) });
+    `,
+    );
+    const shared = build(owner);
+    expect(shared.status).not.toBe(0);
+    expect(shared.stdout + shared.stderr).toContain('Cannot attribute point "shared"');
+
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `
+      import { createTrigger, defineSchema, defineTable } from "@tokamak/sdk";
+      export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
+        await ctx.point("trigger", 1);
+      });
+    `,
+    );
+    const trigger = build(owner);
+    expect(trigger.status).not.toBe(0);
+    expect(trigger.stdout + trigger.stderr).toContain('Cannot attribute point "trigger"');
+
+    const ownerWithHelper = `
+      import { createTrigger, defineSchema, defineTable, query, type QueryContext } from "@tokamak/sdk";
+      export const load = (ctx: Pick<QueryContext<{}>, "point">) => ctx.point("shared", 1);
+      export const a = query({ handler: (ctx) => load(ctx) });
+    `;
+    const invalidUsers = [
+      [`export const plain = (ctx: Pick<QueryContext<{}>, "point">) => load(ctx);`, "functions.ts"],
+      [
+        `export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
+        await load(ctx);
+      });`,
+        "functions.ts",
+      ],
+      ["", "other.ts"],
+    ];
+    for (const [otherUse, fileName] of invalidUsers) {
+      await file(owner, "src/server/functions.ts", ownerWithHelper + otherUse);
+      if (fileName === "other.ts")
+        await file(
+          owner,
+          "src/server/other.ts",
+          `
+          import { query } from "@tokamak/sdk";
+          import { load as imported } from "./functions";
+          export const b = query({ handler: (ctx) => imported(ctx) });
+        `,
+        );
+      const result = build(owner);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toMatch(
+        new RegExp(
+          `Cannot attribute point "shared".*owner at .*functions.ts:.*other use at .*${fileName}:.*helper in the same module`,
+        ),
+      );
+    }
+  });
+}, 90_000);
+
+test("publishes independent helper methods, null results, and optional point fields", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `
+      import { mutation, type MutationContext } from "@tokamak/sdk";
+      type Context = Pick<MutationContext<{}>, "point">;
+      const helpers = {
+        save(ctx: Context) {
+          const input: { search: string | undefined } = { search: undefined };
+          return ctx.point("save", input, async () => {});
+        },
+        launch(ctx: Context) {
+          return ctx.point("launch", { env: {}, args: [] });
+        },
+      };
+      export const save = mutation({ handler: (ctx) => helpers.save(ctx) });
+      export const launch = mutation({ handler: (ctx) => helpers.launch(ctx) });
+    `,
+    );
+    const result = build(owner);
+    expect(result.status).toBe(0);
+    expect(result.stdout + result.stderr).toContain('Point "launch" infers an empty object or never[]');
+    const types = await readFile(resolve(owner, "src/server/_generated/api.ts"), "utf8");
+    expect(types).toMatch(/PointReference<"mutation", \{ search\?: .* \}, null,/);
+    expect(types).toContain("functions:save#save");
+    expect(types).toContain("functions:launch#launch");
+  });
+}, 90_000);
+
+test("value points do not accept an after hook", async () => {
+  await scratch(async (root) => {
+    const owner = await backend(root, "owner");
+    await file(
+      owner,
+      "src/server/functions.ts",
+      `import {query} from "@tokamak/sdk";
+      export const read = query({ handler: (ctx) => ctx.point("value", 1) });`,
+    );
+    await file(owner, "src/server/api.ts", 'export {read} from "./functions";');
+    const consumer = await backend(root, "consumer");
+    const descriptor = resolve(consumer, "plugin.ts");
+    await writeFile(
+      descriptor,
+      (await readFile(descriptor, "utf8")).replace("depends:[]", 'depends:["owner"]'),
+    );
+    await file(
+      consumer,
+      "src/server/policy.ts",
+      `import {hook} from "@tokamak/sdk";
+      import {read} from "plugin:owner/server";
+      export const policy = hook(read.points.value, { after: () => 1 });`,
+    );
+    const result = build(consumer);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      "Type '() => number' is not assignable to type 'undefined'",
+    );
   });
 }, 30_000);

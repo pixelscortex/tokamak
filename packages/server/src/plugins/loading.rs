@@ -38,6 +38,31 @@ pub(crate) enum StartupPolicy {
     Recover,
 }
 
+fn hook_matches_target(
+    hook: &Value,
+    function: FunctionKind,
+    owner: &str,
+    name: &str,
+    target: &str,
+) -> bool {
+    let kind = hook
+        .get("kind")
+        .map_or(Some(FunctionKind::Query), FunctionKind::from_wire);
+    if !matches!(
+        kind,
+        Some(FunctionKind::Query | FunctionKind::Mutation | FunctionKind::Action)
+    ) {
+        eprintln!(
+            "Skipping hook {owner}/{name}: target {target} is not a query, mutation or action"
+        );
+    } else if kind != Some(function) {
+        eprintln!("Skipping hook {owner}/{name}: target {target} has a different function kind");
+    } else {
+        return true;
+    }
+    false
+}
+
 impl Loaded {
     pub async fn load(
         catalog: Catalog,
@@ -73,6 +98,9 @@ impl Loaded {
         let mut loaded = Self {
             catalog,
             targets: BTreeMap::new(),
+            triggers: Default::default(),
+            hooks: BTreeMap::new(),
+            transaction_bundles: BTreeMap::new(),
             descriptor: Value::Null,
             catalog_text: String::new(),
             inspected: BTreeMap::new(),
@@ -126,6 +154,7 @@ impl Loaded {
                 }
             }
         };
+        loaded.register_hooks()?;
         loaded.update_metadata()?;
         Ok(loaded)
     }
@@ -191,6 +220,7 @@ impl Loaded {
                 .kinds
                 .values()
                 .any(|kind| *kind == FunctionKind::Action)
+                || inspected.descriptor["actionHooks"] == true
             {
                 let prior = unchanged
                     .filter(|_| !reloaded)
@@ -248,16 +278,48 @@ impl Loaded {
             ..
         }) = server
         {
-            for (local_name, kind) in &inspected.kinds {
+            for function in inspected.descriptor["functions"]
+                .as_array()
+                .expect("inspected")
+            {
+                let local_name = function["name"].as_str().expect("inspected");
+                let kind = inspected.kinds[local_name];
                 let name = format!("{id}/{local_name}");
+                let declared_result = source
+                    .as_ref()
+                    .and_then(|source| source.result_validator(local_name))
+                    .or_else(|| function.get("returns"));
                 self.targets.insert(
                     name,
                     Target {
                         owner: id.clone(),
-                        local_name: local_name.clone(),
-                        mutation: *kind == FunctionKind::Mutation,
+                        local_name: local_name.to_owned(),
+                        args: Arc::new(
+                            source
+                                .as_ref()
+                                .and_then(|source| source.validator(local_name))
+                                .unwrap_or(&function["args"])
+                                .clone(),
+                        ),
+                        result: declared_result
+                            .or_else(|| inspected.descriptor["results"].get(local_name))
+                            .map(|validator| Arc::new(validator.clone())),
+                        derived_result_warning: declared_result.is_none().then(Arc::default),
+                        points: Arc::new(
+                            inspected.descriptor["points"]
+                                .get(local_name)
+                                .cloned()
+                                .map(serde_json::from_value)
+                                .transpose()
+                                .map_err(|error| {
+                                    invalid(format!("Invalid points for {local_name}: {error}"))
+                                })?
+                                .unwrap_or_default(),
+                        ),
+                        mutation: kind == FunctionKind::Mutation,
                         visibility: inspected.visibility[local_name],
-                        kind: *kind,
+                        kind,
+                        on: serde_json::from_value(function["on"].clone()).unwrap_or_default(),
                         bundle: bundle.clone(),
                         space: space.clone(),
                     },
@@ -266,6 +328,7 @@ impl Loaded {
             if let Some(source) = source {
                 self.action_sources.insert(id.clone(), source);
             }
+            self.transaction_bundles.insert(id.clone(), bundle);
             self.inspected.insert(id.clone(), inspected);
         }
         Ok(())
@@ -277,6 +340,7 @@ impl Loaded {
         }
         self.remove_skipped()?;
         self.contracts = self.load_contracts().map_err(|failure| failure.error)?;
+        self.register_hooks()?;
         self.update_metadata()
     }
 
@@ -295,6 +359,8 @@ impl Loaded {
         self.action_sources
             .retain(|id, _| !skipped.contains_key(id));
         self.inspected.retain(|id, _| !skipped.contains_key(id));
+        self.transaction_bundles
+            .retain(|id, _| !skipped.contains_key(id));
         Ok(())
     }
 
@@ -323,7 +389,177 @@ impl Loaded {
         self.skipped.insert(id, reason);
     }
 
+    fn register_hooks(&mut self) -> Result<(), Error> {
+        let mut registry = BTreeMap::<String, Vec<Hook>>::new();
+
+        for (owner, inspected) in &self.inspected {
+            let mut registrations = Vec::new();
+            for hooks in [
+                inspected.descriptor.get("hooks"),
+                self.action_sources
+                    .get(owner)
+                    .and_then(|source| source.hooks()),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                registrations.extend(
+                    hooks
+                        .as_array()
+                        .ok_or_else(|| invalid("Expected a list of hooks"))?,
+                );
+            }
+
+            for hook in registrations {
+                let name = hook["name"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing hook name"))?;
+                let target = hook["target"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing hook target"))?;
+                let before = hook["before"]
+                    .as_bool()
+                    .ok_or_else(|| invalid("Invalid before stage"))?;
+                let after = hook["after"]
+                    .as_bool()
+                    .ok_or_else(|| invalid("Invalid after stage"))?;
+                if !before && !after {
+                    continue;
+                }
+                if !target
+                    .split_once('/')
+                    .is_some_and(|(target_owner, _)| target_owner != owner)
+                {
+                    eprintln!("Skipping hook {owner}/{name}: must target another plugin");
+                    continue;
+                }
+                let Some((function, after)) = self.hook_target(target, owner, name, after) else {
+                    eprintln!("Skipping hook {owner}/{name}: target {target} is missing");
+                    continue;
+                };
+
+                if !(before || after)
+                    || !hook_matches_target(hook, function.kind, owner, name, target)
+                {
+                    continue;
+                }
+
+                if after
+                    && !target.contains('#')
+                    && function.result.is_none()
+                    && !registry
+                        .get(target)
+                        .is_some_and(|hooks| hooks.iter().any(|hook| hook.after))
+                {
+                    eprintln!(
+                        "Hook target {target} has no result validator; accepting its after-hook results"
+                    );
+                }
+                registry.entry(target.to_owned()).or_default().push(Hook {
+                    owner: owner.clone(),
+                    name: name.to_owned(),
+                    before,
+                    after,
+                });
+            }
+        }
+
+        self.hooks = registry
+            .into_iter()
+            .map(|(name, chain)| (name, chain.into()))
+            .collect();
+        Ok(())
+    }
+
+    fn hook_target(
+        &self,
+        target: &str,
+        owner: &str,
+        name: &str,
+        after: bool,
+    ) -> Option<(&Target, bool)> {
+        let Some((function, point)) = target.split_once('#') else {
+            return Some((self.targets.get(target)?, after));
+        };
+        let function = self.targets.get(function)?;
+        let point = function.points.get(point)?;
+        if after && point.result.is_none() {
+            eprintln!("Skipping after stage of hook {owner}/{name}: point {target} is before-only");
+        }
+        Some((function, after && point.result.is_some()))
+    }
+
+    fn register_triggers(&mut self) -> Result<(), Error> {
+        use crate::{
+            data::Table,
+            host::triggers::{TableTriggers, Trigger, TriggerRegistry},
+        };
+
+        let mut registry = std::collections::HashMap::new();
+        for (owner, inspected) in &self.inspected {
+            let Some(triggers) = inspected.descriptor.get("triggers") else {
+                continue;
+            };
+            let triggers = triggers
+                .as_array()
+                .ok_or_else(|| invalid("Expected a list of triggers"))?;
+            for trigger in triggers {
+                let name = trigger["name"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing trigger name"))?;
+                let table = trigger["table"]
+                    .as_str()
+                    .ok_or_else(|| invalid("Missing trigger table"))?;
+                let (target, table) = table.rsplit_once('.').unwrap_or((owner, table));
+                let qualified = format!("{target}.{table}");
+                if target != owner
+                    && !self.catalog.plugins[owner]
+                        .manifest
+                        .plugin
+                        .depends
+                        .contains_key(target)
+                {
+                    eprintln!("Skipping trigger {owner}/{name}: {target} is not in depends");
+                    continue;
+                }
+                if !self
+                    .inspected
+                    .get(target)
+                    .is_some_and(|entry| entry.descriptor["schema"]["tables"].get(table).is_some())
+                {
+                    eprintln!("Skipping trigger {owner}/{name}: table {qualified} is missing");
+                    continue;
+                }
+
+                let space =
+                    DataSpace::plugin(target).map_err(|error| invalid(error.to_string()))?;
+                let physical = Table::new(table)
+                    .and_then(|table| space.table(&table))
+                    .map_err(|error| invalid(error.to_string()))?;
+                registry
+                    .entry(physical)
+                    .or_insert_with(|| TableTriggers {
+                        name: qualified,
+                        space,
+                        handlers: Vec::new(),
+                    })
+                    .handlers
+                    .push(Trigger {
+                        owner: owner.clone(),
+                        name: name.to_owned(),
+                    });
+            }
+        }
+
+        self.triggers = registry
+            .into_iter()
+            .map(|(table, triggers)| (table, Arc::new(triggers)))
+            .collect::<TriggerRegistry>();
+        Ok(())
+    }
+
     fn update_metadata(&mut self) -> Result<(), Error> {
+        self.register_triggers()?;
         // Keep logical table names scoped by plugin in the aggregate metadata.
         let schemas: BTreeMap<_, _> = self
             .inspected
@@ -347,10 +583,16 @@ impl Loaded {
                 )
             })
             .collect();
-        self.descriptor = json!({"schema":schemas,"functions":functions});
+        let triggers: BTreeMap<_, _> = self
+            .triggers
+            .values()
+            .map(|table| (&table.name, table.list()))
+            .collect();
+        self.descriptor = json!({"schema":schemas,"functions":functions,"triggers":triggers});
         let mut metadata = self.catalog.metadata();
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
+        metadata["triggers"] = self.descriptor["triggers"].clone();
         self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
         Ok(())
     }
@@ -397,10 +639,9 @@ impl Loaded {
         caller: &str,
         name: &str,
         writable: bool,
-        path: &[String],
         contract: Option<&str>,
     ) -> Result<Target, String> {
-        let target = self.action_target(caller, name, path, contract)?;
+        let target = self.action_target(caller, name, contract)?;
         if target.kind == crate::service::FunctionKind::Action {
             return Err("Queries and mutations cannot call actions".into());
         }
@@ -415,7 +656,6 @@ impl Loaded {
         &self,
         caller: &str,
         name: &str,
-        path: &[String],
         contract: Option<&str>,
     ) -> Result<Target, String> {
         let target = self
@@ -458,10 +698,6 @@ impl Loaded {
                     target.local_name, target.owner
                 ));
             }
-        }
-
-        if path.len() >= 16 || path.iter().any(|entry| entry == name) {
-            return Err("Plugin call cycle".into());
         }
 
         Ok(target.clone())

@@ -17,6 +17,7 @@ export function pluginCompilerOptions(root, options) {
     ...options,
     paths: {
       ...paths,
+      "plugin:*/tables": [resolve(generated(root), "*/tables.d.ts")],
       "plugin:*/contracts": [resolve(generated(root), "*/contracts.d.ts")],
       "plugin:*/server": [resolve(generated(root), "*/server.d.ts")],
       "plugin:*/client": [resolve(generated(root), "*/client.d.ts")],
@@ -67,6 +68,7 @@ export function definitionTypeInfo(checker, type, source) {
   const visibility = property && checker.getTypeOfSymbolAtLocation(property, source).value;
   return {
     kind: kind && checker.getTypeOfSymbolAtLocation(kind, source).value,
+    on: type.getProperty("on") && checker.getTypeOfSymbolAtLocation(type.getProperty("on"), source).value,
     visibility: Object.values(Visibility).includes(visibility) ? visibility : undefined,
   };
 }

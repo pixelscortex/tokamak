@@ -9,7 +9,13 @@ import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { contractDeclarations, contractEntry } from "../../sdk/tools/contracts.mjs";
 import { serverDirectory } from "../../sdk/tools/server-files.mjs";
-import { functionPlacement, lanes } from "../../sdk/tools/placement.mjs";
+import {
+  functionPlacement,
+  lanes,
+  moduleName,
+  runnerFunction,
+  runnerProvider,
+} from "../../sdk/tools/placement.mjs";
 import { pluginBoundary } from "./plugin-boundary.ts";
 import { artifactBundle, stripSourcesContent } from "./artifact-bundle.ts";
 import solid from "@solidjs/vite-plugin";
@@ -17,6 +23,7 @@ import { clientSurface } from "./client-surface.ts";
 import { uiBuildConfig, clientAssets } from "./ui-build-config.ts";
 import { exportedFunctions } from "./exports.ts";
 import { readDescriptor, clientEntry } from "./descriptor.ts";
+import { warnMissingHookTargets } from "./hook-targets.ts";
 import { signInDependency } from "./auth-dependencies.ts";
 
 export const PLUGIN_UI_BUILD_ENABLED = true;
@@ -45,7 +52,7 @@ export function tokamak(
             ? dirname(resolve(configFile))
             : resolve(config.root ?? process.cwd());
         root = realpathSync(root);
-        checkPluginImports(root);
+        checkPluginImports(root, (options.plugin ?? readDescriptor(root))?.depends ?? {});
         placement = functionPlacement(root);
         stripClientSources = false;
         const server = serverDirectory(root);
@@ -87,11 +94,11 @@ export function tokamak(
       },
       async buildStart() {
         hasLocal =
-          (!!placement &&
-            [...placement.modules.values()].some((exports) =>
-              [...exports.values()].some((definition) => definition.kind === "local"),
-            )) ||
-          Boolean(placement?.providers.some((p) => p.place === "local"));
+          !!placement &&
+          ([...placement.modules.values()].some((exports) =>
+            [...exports.values()].some((definition) => runnerFunction(definition.kind)),
+          ) ||
+            placement.providers.some(runnerProvider));
         const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
         plugin = definePlugin(
           options.plugin ??
@@ -142,6 +149,7 @@ export function tokamak(
               server,
               "--plugin",
               plugin.id,
+              ...(options.plugin ? ["--depends", JSON.stringify(plugin.depends ?? {})] : []),
             ],
             { stdio: "inherit" },
           );
@@ -184,6 +192,7 @@ export function tokamak(
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {
               let source = await readFile(resolve(server, "dist", name), "utf8");
               if (name.endsWith(".map")) {
+                // Original mixed modules can contain handlers from the other lanes.
                 const map = JSON.parse(source);
                 stripSourcesContent(map);
                 source = JSON.stringify(map);
@@ -194,6 +203,22 @@ export function tokamak(
           }
         }
         const functions = exportedFunctions(root, plugin.exports);
+        const hookTargets = new Set<string>();
+        const hookable = new Set<string>();
+        for (const [path, definitions] of placement?.modules ?? []) {
+          const module = moduleName(server, path, server === resolve(root, "src/server"));
+          for (const [name, definition] of definitions) {
+            if (definition.target) hookTargets.add(definition.target);
+            if (["query", "mutation", "action"].includes(definition.kind)) {
+              const key = `${plugin.id}/${module}:${name}`;
+              hookable.add(key);
+              for (const point of definition.points?.keys() ?? []) hookable.add(`${key}#${point}`);
+            }
+          }
+        }
+        warnMissingHookTargets(root, plugin.id, hookable, options.pluginCatalog, (message) =>
+          this.warn(message),
+        );
         this.emitFile({
           type: "asset",
           fileName: "manifest.json",
@@ -205,6 +230,7 @@ export function tokamak(
                 entries,
                 publicFunctions: functions.publicFunctions,
                 ...(functions.pluginFunctions.length ? { pluginFunctions: functions.pluginFunctions } : {}),
+                ...(hookTargets.size ? { hookTargets: [...hookTargets].sort() } : {}),
                 ...contracts,
               },
               null,

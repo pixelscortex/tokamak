@@ -37,6 +37,7 @@ try {
                 ? { depends: { b: "^1" }, permissions: ["net:127.0.0.1", "env:ACTION_TEST_SECRET"] }
                 : {
                     exports: "./api.ts",
+                    depends: { record: "^1" },
                     permissions: [
                       "net:localhost",
                       "net:loopback.tkm.test",
@@ -76,6 +77,8 @@ export default { plugins: [tokamak(${JSON.stringify(options)})] };`,
         allowImportingTsExtensions: true,
         paths: {
           "plugin:b/server": [join(root, "a/.tokamak/types/b/server.d.ts")],
+          "plugin:b/contracts": [join(root, "a/.tokamak/types/b/contracts.d.ts")],
+          "plugin:record/server": [join(root, "b/.tokamak/types/record/server.d.ts")],
           "@tokamak/sdk": [join(workspace, "packages/sdk/src/index.ts")],
           "@tokamak/sdk/web": [join(workspace, "packages/sdk/web.d.ts")],
         },

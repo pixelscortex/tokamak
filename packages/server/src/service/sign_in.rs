@@ -1,5 +1,5 @@
 use super::*;
-use crate::identity::{AccountBinding, Identities, Role, User, register_caller};
+use crate::identity::{AccountBinding, CallNote, Identities, Role, User};
 use crate::protocol::failure_kind;
 use std::{future::Future, pin::Pin};
 
@@ -313,7 +313,9 @@ impl Coordinator {
             None
         };
         let mut ops = OpRegistry::new();
-        register_caller(None, &mut ops).map_err(|_| SignInError::Unavailable)?;
+        let note = CallNote::default().with_root_args(&target.args, &call.arguments);
+        note.register(&mut ops)
+            .map_err(|_| SignInError::Unavailable)?;
         engine::register_password_crypto(&mut ops).map_err(|_| SignInError::Unavailable)?;
         crate::actions::register_nested_calls(
             &mut ops,
@@ -321,6 +323,7 @@ impl Coordinator {
             Some(loaded.clone()),
             Some(target.owner.clone()),
             Arc::new(crate::environment::Snapshot::new(None, None)),
+            note,
             None,
         )
         .map_err(|_| SignInError::Unavailable)?;

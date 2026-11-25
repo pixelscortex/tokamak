@@ -180,6 +180,10 @@ acceptance: try {
         return Promise.all([read(child.stdout), read(child.stderr), child.exited]);
       },
     });
+    export const callNote = local({
+      args: { id: v.optional(v.id("threads")) },
+      handler: (ctx) => ctx.call,
+    });
     export const identity = local({ handler: (ctx) => ({ auth: ctx.auth }) });
     export const stop = local({
       handler: () => {
@@ -291,6 +295,9 @@ acceptance: try {
   assert.equal(Object.hasOwn(api.turn, "format"), false);
   const auth = await client.query(authCaller, {});
   assert.deepEqual(await client.local(api.turn.identity, {}), { auth });
+  const threadId = "chat/threads:local-test";
+  assert.deepEqual(await client.local(api.turn.callNote, { id: threadId }), { ...auth, threadId, depth: 0 });
+  assert.deepEqual(await client.local(api.turn.callNote, {}), { ...auth, depth: 0 });
   assert.deepEqual(await client.local(api.turn.inspect, {}), {
     summary: "private",
     report: { failed: true, kind: "NoReport", data: { count: 0 } },

@@ -7,8 +7,8 @@ impl Coordinator {
         args: Json,
         mutation: bool,
         auth: Option<crate::identity::AuthContext>,
-    ) -> Result<Json, String> {
-        self.invoke_function_in(self.plugins.clone(), name, args, mutation, auth)
+    ) -> Result<Json, CallError> {
+        self.invoke_function_in(self.plugins.clone(), name, args, mutation, auth.into())
             .await
     }
 
@@ -18,13 +18,18 @@ impl Coordinator {
         name: &str,
         args: Json,
         mutation: bool,
-        auth: Option<crate::identity::AuthContext>,
-    ) -> Result<Json, String> {
+        note: crate::identity::CallNote,
+    ) -> Result<Json, CallError> {
         let mut result = Err("mutation conflict retry limit exceeded".into());
 
         let determinism = engine::Determinism::default();
 
         for attempt in 0..ATTEMPTS {
+            let note = if mutation {
+                note.mutation_attempt()
+            } else {
+                note.clone()
+            };
             let call = host::invoke(
                 &self.database,
                 &self.pool,
@@ -36,12 +41,13 @@ impl Coordinator {
                     space: &self.space,
                     plugins: plugins.clone(),
                     determinism,
-                    auth: auth.clone(),
+                    note: note.clone(),
                 },
             )
             .await;
 
             if mutation && call.conflict {
+                note.retry_hooks();
                 if attempt + 1 == ATTEMPTS {
                     break;
                 }

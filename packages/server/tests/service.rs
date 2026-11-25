@@ -317,7 +317,9 @@ async fn next(session: &mut Session) -> Event {
 
 async fn response(session: &mut Session, id: u64) -> Result<Json, String> {
     match next(session).await {
-        Event::Response { id: actual, result } => {
+        Event::Response {
+            id: actual, result, ..
+        } => {
             assert_eq!(actual, id);
             result
         }
@@ -327,7 +329,9 @@ async fn response(session: &mut Session, id: u64) -> Result<Json, String> {
 
 async fn update(session: &mut Session, id: u64) -> Json {
     match next(session).await {
-        Event::Subscription { id: actual, result } => {
+        Event::Subscription {
+            id: actual, result, ..
+        } => {
             assert_eq!(actual, id);
             result.unwrap()
         }
@@ -631,7 +635,8 @@ fn bounded_admission_slow_consumer_and_cancelled_receiver() {
                                 event,
                                 Event::Response {
                                     id: 1,
-                                    result: Ok(_)
+                                    result: Ok(_),
+                                    ..
                                 }
                             ),
                             "the accepted write's response must remain first"

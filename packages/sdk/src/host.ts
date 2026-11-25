@@ -43,7 +43,14 @@ export interface QueryRequest {
  */
 export interface HostOperations {
   "user.current": { args: {}; result: import("./functions").User };
-  "auth.current": { args: {}; result: import("./functions").AuthContext | null };
+  "auth.current": {
+    args: { call?: true };
+    result: (import("./functions").CallContext & { hookPoints?: readonly string[] }) | null;
+  };
+  "point.stage": {
+    args: { name: string; stage: "before" | "after"; args: JsonValue; result?: JsonValue };
+    result: JsonValue;
+  };
   "crypto.hashPassword": { args: { password: string }; result: string };
   "crypto.verifyPassword": { args: { password: string; hash: string }; result: boolean };
   "crypto.verifyAndRehashPassword": {
@@ -106,6 +113,7 @@ export interface HostOperations {
       args: JsonValue;
       kind?: import("./functions").ServerFunctionKind;
       contract?: string;
+      on?: import("./functions").ActionTarget;
     };
     result: JsonValue;
   };
@@ -125,6 +133,9 @@ export interface ActionSignal {
 }
 
 export interface HostBridge {
+  readonly hookPoints?: readonly string[];
+  readonly pointOwner?: { name: string; declared?: readonly string[] };
+  readonly call?: import("./functions").CallContext | null;
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
@@ -150,6 +161,8 @@ export interface LocalChannel {
   close(): Promise<void>;
   stopPrograms(): Promise<void>;
 }
+
+export type RunnerCapability = "serverContracts" | "privateFunctions";
 
 /** Keep operation call sites tied to the contract even though the bridge is erased. */
 export async function callHost<K extends HostOperation>(

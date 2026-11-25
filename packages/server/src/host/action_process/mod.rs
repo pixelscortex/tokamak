@@ -43,6 +43,7 @@ pub(crate) struct Source {
     code: Snapshot,
     bundle: Arc<Bundle>,
     worker_entry: bool,
+    validators: std::sync::OnceLock<Value>,
     retired: CancellationToken,
     calls: Arc<Semaphore>,
     operations: Arc<Semaphore>,
@@ -79,6 +80,7 @@ impl Source {
             code,
             bundle,
             worker_entry,
+            validators: Default::default(),
             retired: CancellationToken::new(),
             calls: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
             operations: Arc::new(Semaphore::new(PLUGIN_CAPACITY)),
@@ -90,9 +92,31 @@ impl Source {
         if tokamak_worker::require_plugin_platform(std::env::consts::OS).is_err() {
             return Ok(());
         }
-        inspection::inspect_action(self.path(), self.worker_entry)
+        let validators = inspection::inspect_action(self.path(), self.worker_entry)
             .await
-            .map_err(crate::Error::Invalid)
+            .map_err(crate::Error::Invalid)?;
+        let _ = self.validators.set(validators);
+        Ok(())
+    }
+
+    pub(crate) fn hooks(&self) -> Option<&Value> {
+        self.validators.get()?.get("hooks")
+    }
+
+    pub(crate) fn result_validator(&self, name: &str) -> Option<&Value> {
+        self.validators
+            .get()?
+            .get("functions")?
+            .get(name)?
+            .get("returns")
+    }
+
+    pub(crate) fn validator(&self, name: &str) -> Option<&Value> {
+        self.validators
+            .get()?
+            .get("functions")?
+            .get(name)?
+            .get("args")
     }
 
     fn path(&self) -> &Path {
@@ -114,7 +138,7 @@ struct Call {
     source: Arc<Source>,
     frame: Value,
     ops: Arc<OpRegistry>,
-    reply: oneshot::Sender<Result<Value, String>>,
+    reply: oneshot::Sender<Result<Value, engine::CallError>>,
     active: CancellationToken,
     _permit: OwnedSemaphorePermit,
     _plugin_permit: Option<OwnedSemaphorePermit>,
@@ -248,6 +272,7 @@ impl Supervisor {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn invoke(
         &self,
         source: Arc<Source>,
@@ -259,12 +284,82 @@ impl Supervisor {
             .await
     }
 
+    pub(crate) async fn invoke_typed(
+        &self,
+        source: Arc<Source>,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+    ) -> Result<Value, engine::CallError> {
+        self.invoke_typed_with(source, name, args, ops, InvocationOptions::default())
+            .await
+    }
+
     pub(crate) fn try_sign_in(&self, timeout: Duration) -> Option<InvocationOptions> {
         let permit = self.anonymous_slots.clone().try_acquire_owned().ok()?;
         Some(InvocationOptions {
             timeout,
             anonymous: Some(permit),
         })
+    }
+
+    fn admit(
+        &self,
+        source: &Source,
+        anonymous: bool,
+    ) -> Result<(OwnedSemaphorePermit, Option<OwnedSemaphorePermit>), String> {
+        let plugin = if anonymous {
+            None
+        } else {
+            Some(source.calls.clone().try_acquire_owned().map_err(|_| {
+                format!(
+                    "Plugin {} reached its action call limit ({PLUGIN_CAPACITY})",
+                    source.name
+                )
+            })?)
+        };
+        let slot = self
+            .slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| "Action process invocation capacity exceeded")?;
+        Ok((slot, plugin))
+    }
+
+    pub(crate) async fn invoke_runner<
+        F: std::future::Future<Output = Result<Value, engine::CallError>>,
+    >(
+        &self,
+        source: &Source,
+        run: impl FnOnce(CancellationToken) -> F,
+    ) -> Result<Value, engine::CallError> {
+        use crate::protocol::{
+            CallError, CallErrorDetails, LOCAL_RELOAD_GRACE_MS, StructuredCallError,
+        };
+        if source.retired.is_cancelled() {
+            return Err("Plugin action cancelled by reload".into());
+        }
+        let reload_deadline = async {
+            source.retired.cancelled().await;
+            tokio::time::sleep(Duration::from_millis(LOCAL_RELOAD_GRACE_MS)).await;
+        };
+        tokio::select! {
+            biased;
+            () = self.closed.cancelled() => Err("Server closed".into()),
+            () = reload_deadline => Err(CallError::Structured(Box::new(StructuredCallError {
+                message: "Local plugin build retired".into(),
+                details: CallErrorDetails {
+                    plugin: source.name.clone(),
+                    hook: String::new(),
+                    stage: "runner".into(),
+                    kind: "LocalReloadTimeout".into(),
+                    table: None,
+                    point: None,
+                    data: Value::Null,
+                },
+            })).into()),
+            result = run(source.retired.clone()) => result,
+        }
     }
 
     pub(crate) async fn invoke_with(
@@ -275,21 +370,20 @@ impl Supervisor {
         ops: Arc<OpRegistry>,
         options: InvocationOptions,
     ) -> Result<Value, String> {
-        let plugin_permit = if options.anonymous.is_some() {
-            None
-        } else {
-            Some(source.calls.clone().try_acquire_owned().map_err(|_| {
-                format!(
-                    "Plugin {} reached its action call limit ({PLUGIN_CAPACITY})",
-                    source.name
-                )
-            })?)
-        };
-        let permit = self
-            .slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| "Action process invocation capacity exceeded")?;
+        self.invoke_typed_with(source, name, args, ops, options)
+            .await
+            .map_err(|error| error.message)
+    }
+
+    async fn invoke_typed_with(
+        &self,
+        source: Arc<Source>,
+        name: String,
+        args: Value,
+        ops: Arc<OpRegistry>,
+        options: InvocationOptions,
+    ) -> Result<Value, engine::CallError> {
+        let (permit, plugin_permit) = self.admit(&source, options.anonymous.is_some())?;
         let end = Instant::now() + options.timeout;
         let process = tokio::select! {
             biased;

@@ -1,3 +1,6 @@
+import { LocalReloadTimeout } from "./client";
+import type { ActionSignal } from "./host";
+import type { ActionTarget } from "./functions";
 // Correlation and subscription lifecycle are shared by both transports. Hosts
 // provide an ordered native message connection or an already-open WebSocket;
 // this module installs no browser/Node globals. Only immutable catalog transfers
@@ -6,6 +9,7 @@ import { webSocketConnection, type ClientWebSocket } from "./websocket-transport
 import type { ClientTransport, SubscriptionEvent } from "./client";
 import type { Event, Request } from "./protocol";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
+import { RemoteFunctionError } from "./call-error";
 import type { JsonValue } from "./values";
 
 export interface MessageConnection {
@@ -14,7 +18,7 @@ export interface MessageConnection {
   close(): void;
 }
 
-export class RemoteFunctionError extends Error {}
+export { RemoteFunctionError } from "./call-error";
 
 type Pending = { resolve(value: JsonValue): void; reject(error: Error): void };
 type Observer = (event: SubscriptionEvent<JsonValue>) => void;
@@ -69,8 +73,66 @@ export class InProcessTransport implements ClientTransport {
     return this.call("mutation", name, args);
   }
 
-  action(name: string, args: JsonValue): Promise<JsonValue> {
-    return this.call("action", name, args);
+  action(name: string, args: JsonValue, on?: ActionTarget, signal?: ActionSignal): Promise<JsonValue> {
+    return this.sendAction(name, args, on, signal);
+  }
+
+  dispatchWindowAction(
+    name: string,
+    args: JsonValue,
+    on?: ActionTarget,
+    signal?: ActionSignal,
+  ): Promise<JsonValue> {
+    return this.sendAction(name, args, on, signal, true);
+  }
+
+  private async sendAction(
+    name: string,
+    args: JsonValue,
+    on?: ActionTarget,
+    signal?: ActionSignal,
+    window?: true,
+  ): Promise<JsonValue> {
+    return this.control(
+      (id) => ({
+        type: "action",
+        id,
+        name,
+        args,
+        ...(window && { window, hookPlans: true, pointPlans: true }),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
+  }
+
+  /** Forward the continuation supplied by the Runner on its private socket. */
+  async continueLocalCall(
+    kind: "query" | "mutation" | "action",
+    name: string,
+    args: JsonValue,
+    parent: { depth: number; thread: string | null; hookScope?: number },
+    on?: ActionTarget,
+    window?: boolean,
+    signal?: ActionSignal,
+  ): Promise<JsonValue> {
+    return this.control(
+      (id) => ({
+        type: "localcall",
+        id,
+        name,
+        args,
+        kind,
+        ...parent,
+        ...(window ? { window, hookPlans: true, pointPlans: true } : {}),
+        ...(on === undefined ? {} : { on }),
+      }),
+      signal,
+    );
+  }
+
+  hookStage(scope: number, done?: boolean): Promise<JsonValue> {
+    return this.control((id) => ({ type: "hookstage", id, scope, done }));
   }
 
   async plugins(): Promise<JsonValue> {
@@ -158,12 +220,37 @@ export class InProcessTransport implements ClientTransport {
     };
   }
 
-  private control(request: (id: number) => Request): Promise<JsonValue> {
+  private control(request: (id: number) => Request, signal?: ActionSignal): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) throw new Error("Action cancelled");
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
-      this.pending.set(id, { resolve, reject });
-      this.send(request(id));
+      const cancel = () => {
+        try {
+          this.send({ type: "cancelaction", id });
+        } catch {
+          // send already rejects outstanding requests when the connection closes.
+        }
+      };
+      const cleanup = () => signal?.removeEventListener("abort", cancel);
+      this.pending.set(id, {
+        resolve(value) {
+          cleanup();
+          resolve(value);
+        },
+        reject(error) {
+          cleanup();
+          reject(error);
+        },
+      });
+      signal?.addEventListener("abort", cancel, { once: true });
+      try {
+        this.send(request(id));
+      } catch (error) {
+        this.pending.delete(id);
+        cleanup();
+        throw error;
+      }
     });
   }
 
@@ -204,7 +291,7 @@ export class InProcessTransport implements ClientTransport {
     }
   }
 
-  private call(type: "query" | "mutation" | "action", name: string, args: JsonValue): Promise<JsonValue> {
+  private call(type: "query" | "mutation", name: string, args: JsonValue): Promise<JsonValue> {
     return new Promise((resolve, reject) => {
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
@@ -259,7 +346,12 @@ export class InProcessTransport implements ClientTransport {
       if (pending) {
         this.pending.delete(event.id);
         if ("Ok" in result) pending.resolve(result.Ok);
-        else pending.reject(new RemoteFunctionError(result.Err));
+        else
+          pending.reject(
+            event.error?.kind === "LocalReloadTimeout" && event.error.stage === "runner"
+              ? new LocalReloadTimeout()
+              : new RemoteFunctionError(event.error ? { ...event.error, message: result.Err } : result.Err),
+          );
         return;
       }
     }
@@ -271,7 +363,12 @@ export class InProcessTransport implements ClientTransport {
         observer,
         "Ok" in result
           ? { value: result.Ok }
-          : { error: new Error(result.Err), terminal: event.type === "response" },
+          : {
+              error: new RemoteFunctionError(
+                event.error ? { ...event.error, message: result.Err } : result.Err,
+              ),
+              terminal: event.type === "response",
+            },
       );
     }
   }

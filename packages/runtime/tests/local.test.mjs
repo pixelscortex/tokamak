@@ -150,3 +150,27 @@ test("a plugin installed before its notice arrives is found, and a missing one c
     await functions.close();
   }
 });
+
+test("window server actions do not need the plugin catalog", async () => {
+  let reads = 0;
+  const server = {
+    async plugins() {
+      reads++;
+      throw new Error("catalog unavailable");
+    },
+    async dispatchWindowAction(_name, _args, on) {
+      return { destination: "result", value: on ?? "server" };
+    },
+    onPluginsChanged: () => () => {},
+  };
+  const local = new LocalFunctions(server, async () => {
+    throw new Error("unexpected Runner launch");
+  });
+  try {
+    expect(await local.action("fixture/run:work", {}, { on: "server" })).toBe("server");
+    expect(await local.action("fixture/run:work", {})).toBe("server");
+    expect(reads).toBe(0);
+  } finally {
+    await local.close();
+  }
+});

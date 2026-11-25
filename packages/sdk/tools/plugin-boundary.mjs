@@ -1,6 +1,8 @@
+import { readDescriptor } from "./plugin-descriptor.ts";
 import { Visibility } from "../src/visibility.ts";
 // One import policy for the SDK's Bun bundles and the public Vite builder.
 // Provider source is read by TypeScript for types/metadata, never evaluated or bundled.
+import { discoverPoints, pointReferenceTypes } from "./points.mjs";
 import ts from "typescript";
 import {
   existsSync,
@@ -19,7 +21,9 @@ import { generated, definitionInfo, pluginCompilerOptions, runtimeExportNames } 
 
 import { contractDeclarations, importedContractEntry } from "./contracts.mjs";
 
-const specifier = /^plugin:([a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)(?:\/(server|client|contracts))?$/;
+import { tableDeclarations, tableReferences, tableReferenceSource } from "./table-references.mjs";
+
+const specifier = /^plugin:([a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)(?:\/(server|client|contracts|tables))?$/;
 export function parsePluginSpecifier(text) {
   const match = specifier.exec(text);
   if (!match) return;
@@ -109,41 +113,63 @@ function provider(root, id) {
             folder,
             existsSync(resolve(folder, "src/client/api.ts")) ? "src/client/api.ts" : "src/client/api.tsx",
           );
+  if (side === "tables")
+    return { folder, entry: resolve(serverDirectory(folder), "schema.ts"), side, id: reference.id };
   if (!existsSync(entry)) throw new Error(`Plugin import ${id}: missing public API ${entry}`);
   return { folder, entry, side, id: reference.id };
 }
 
 function publicReferences(folder, entry) {
   const options = pluginCompilerOptions(folder, configuration(entry).options);
-  const program = ts.createProgram([entry], options);
+  const backend = serverDirectory(folder);
+  const authored = ts.sys
+    .readDirectory(backend, [".ts"])
+    .filter((file) => isServerModule(backend, relative(backend, file).split(sep).join("/")));
+  const program = ts.createProgram([entry, ...authored], options);
   const checker = program.getTypeChecker();
   const file = program.getSourceFile(entry);
   const module = checker.getSymbolAtLocation(file);
   const original = (symbol) =>
     symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const targets = new Map();
-  const backend = serverDirectory(folder);
+  const sources = [];
   for (const source of program.getSourceFiles()) {
     const local = relative(backend, source.fileName).split(sep).join("/");
     if (!isServerModule(backend, local)) continue;
+    sources.push(source);
     const symbol = checker.getSymbolAtLocation(source);
     const runtime = symbol && runtimeExportNames(checker, symbol);
     for (const exported of symbol ? checker.getExportsOfModule(symbol) : []) {
       if (!runtime.has(exported.name)) continue;
       const target = original(exported);
       const definition = definitionInfo(checker, target, source);
-      if (!definition || definition.visibility === Visibility.Internal || definition.kind === "local")
-        continue;
+      if (!definition) continue;
       const moduleName = isServerRoot(backend) ? basename(local, ".ts") : local.slice(0, -3);
       if (!targets.has(target) || target.valueDeclaration?.getSourceFile() === source)
-        targets.set(target, [moduleName, exported.name, definition.visibility]);
+        targets.set(target, [
+          moduleName,
+          exported.name,
+          definition.visibility,
+          definition.kind,
+          source.fileName,
+        ]);
     }
   }
+  const points = discoverPoints(
+    sources,
+    checker,
+    [...targets]
+      .filter(([, [, , , kind]]) => ["query", "mutation", "action"].includes(kind))
+      .map(([symbol]) => symbol),
+  );
+  for (const [symbol, target] of targets) target.push(points.get(symbol));
   const runtime = module ? runtimeExportNames(checker, module) : new Set();
   const refs = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
     if (!runtime.has(exported.name)) return [];
     const target = targets.get(original(exported));
-    return target ? [[exported.name, target]] : [];
+    return target && target[2] !== Visibility.Internal && target[3] !== "local"
+      ? [[exported.name, target]]
+      : [];
   });
   const imports = new Set();
   for (const source of program.getSourceFiles()) {
@@ -151,11 +177,16 @@ function publicReferences(folder, entry) {
     for (const imported of ts.preProcessFile(source.text, true, true).importedFiles)
       if (imported.fileName.startsWith("plugin:")) imports.add(imported.fileName);
   }
-  return { refs, imports };
+  const internal = [...targets.values()].filter(([, , visibility]) => visibility === Visibility.Internal);
+  return { refs, imports, internal };
 }
 
 export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   const target = provider(root, id);
+  if (target.side === "tables")
+    return tableReferenceSource(
+      tableReferences(target.folder, target.id, configuration(target.entry).options),
+    );
   if (target.side === "contracts")
     return (
       'import { contractReference } from "@tokamak/sdk/internal/contracts";\n' +
@@ -167,11 +198,24 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
         .join("\n")
     );
   if (target.side === "client") throw new Error(`Use ${id} in a client bundle through the client registry`);
-  const { refs: all } = publicReferences(target.folder, target.entry);
+  const { refs: all, internal } = publicReferences(target.folder, target.entry);
   const refs = publicOnly ? all.filter(([, [, , visibility]]) => visibility === Visibility.Public) : all;
+  const internalRefs = publicOnly ? [] : internal;
+  const kinds = Object.fromEntries(
+    [...refs.map(([, target]) => target), ...internalRefs].map(([module, method, , kind]) => [
+      `${module}:${method}`,
+      kind,
+    ]),
+  );
+  const points = Object.fromEntries(
+    [...refs.map(([, ref]) => ref), ...internalRefs].flatMap(([module, method, , , , named]) =>
+      named?.size ? [[`${module}:${method}`, [...named.keys()]]] : [],
+    ),
+  );
   return (
     'import { createApi } from "@tokamak/sdk";\n' +
-    `const references = createApi(${JSON.stringify(target.id)});\n` +
+    `const references = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(Object.keys(kinds))}, ${JSON.stringify(kinds)}, ${JSON.stringify(points)});\n` +
+    `export const internal = createApi(${JSON.stringify(target.id)}, ${JSON.stringify(internalRefs.map(([module, method]) => `${module}:${method}`))}, ${JSON.stringify(kinds)}, ${JSON.stringify(points)});\n` +
     refs
       .map(
         ([name, [module, method]]) =>
@@ -182,12 +226,17 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   );
 }
 
-function declarePlugin(root, id, declared) {
+function declarePlugin(root, id, declared, depends, tableOwners) {
   if (declared.has(id)) return;
   declared.add(id);
   const target = provider(root, id);
   const path = resolve(generated(root), target.id, `${target.side}.d.ts`);
   mkdirSync(dirname(path), { recursive: true });
+  if (target.side === "tables") {
+    const tables = tableReferences(target.folder, target.id, configuration(target.entry).options);
+    writeFileSync(path, tableDeclarations(target.id, tables, Object.hasOwn(depends ?? {}, target.id)));
+    return;
+  }
   const parts = resolve(dirname(target.entry), "_generated/components.d.ts");
   const entry = JSON.stringify(target.side === "client" && existsSync(parts) ? parts : target.entry);
   if (target.side === "contracts") {
@@ -204,14 +253,40 @@ function declarePlugin(root, id, declared) {
     );
     return;
   }
-  const { refs, imports } = publicReferences(target.folder, target.entry);
+  const { refs, imports, internal } = publicReferences(target.folder, target.entry);
+  const aliases = [];
+  const referenceType = ([module, method, , kind, source, points], type = "ReferenceFromDefinition") =>
+    `import("@tokamak/sdk").${type}<typeof import(${JSON.stringify(source)})[${JSON.stringify(method)}], ${JSON.stringify(target.id)}> & { readonly [functionName]: ${JSON.stringify(`${target.id}/${module}:${method}`)} }${pointReferenceTypes(points, kind, target.id, `${target.id}/${module}:${method}`, aliases)}`;
+  const qualify = (type) =>
+    tableOwners.has(target.id)
+      ? `import("@tokamak/sdk").QualifiedPluginApi<${JSON.stringify(target.id)}, ${type}>`
+      : type;
+  const internalTree = {};
+  for (const ref of internal) {
+    let branch = internalTree;
+    for (const segment of ref[0].split("/")) branch = branch[segment] ??= Object.create(null);
+    branch[ref[1]] = `${qualify(`{ref: ${referenceType(ref, "HookReferenceFromDefinition")}}`)}["ref"]`;
+  }
+  const declaration = (tree) =>
+    `{${Object.entries(tree)
+      .map(
+        ([key, value]) =>
+          `readonly ${JSON.stringify(key)}: ${typeof value === "string" ? value : declaration(value)};`,
+      )
+      .join("")}}`;
+  const publicApi =
+    target.side === "server" &&
+    qualify(declaration(Object.fromEntries(refs.map(([name, ref]) => [name, referenceType(ref)]))));
   writeFileSync(
     path,
     `// Generated public plugin types. Runtime imports use references or the client registry.\n` +
       (target.side === "client"
         ? `export * from ${entry};\n`
-        : `export type * from ${entry};\n` +
-          `type PublicApi = Pick<import("@tokamak/sdk").ApiFromModule<typeof import(${entry})> & import("@tokamak/sdk").PluginFunctionsFromModule<typeof import(${entry})>, ${refs.map(([name]) => JSON.stringify(name)).join(" | ") || "never"}>;\n` +
+        : 'import { functionName } from "@tokamak/sdk";\n' +
+          `export type * from ${entry};\n` +
+          aliases.join("") +
+          `type PublicApi = ${publicApi};\n` +
+          `export declare const internal: ${declaration(internalTree)};\n` +
           `export declare const api: PublicApi;\n` +
           refs
             .map(([name]) => `export declare const ${name}: PublicApi[${JSON.stringify(name)}];\n`)
@@ -219,13 +294,15 @@ function declarePlugin(root, id, declared) {
   );
   // Public API types can themselves depend on other sanctioned public types.
   // Materialize that type graph in the consumer; no provider code is emitted.
-  for (const dependency of imports) declarePlugin(root, dependency, declared);
+  for (const dependency of imports) declarePlugin(root, dependency, declared, depends, tableOwners);
 }
 
 /** Check even erased type imports and unused source modules; tests are separate. */
-export function checkPluginImports(root) {
+export function checkPluginImports(root, depends = readDescriptor(root)?.depends ?? {}) {
   root = resolve(root);
   const declared = new Set();
+  const imports = new Map();
+  const tableOwners = new Set();
   function checkFile(path) {
     const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
     const options = configuration(path).options;
@@ -236,11 +313,10 @@ export function checkPluginImports(root) {
       if (/^src\/(?:server|local)\//.test(relative(root, path).split(sep).join("/")))
         assertWindowSide(path, id);
       if (id.startsWith("plugin:")) {
-        try {
-          declarePlugin(root, id, declared);
-        } catch (error) {
-          throw new Error(`${diagnostic(path, id).message} ${error.message}`);
-        }
+        if (!imports.has(id)) imports.set(id, path);
+        const reference = parsePluginSpecifier(id);
+        if (reference?.side === "tables" && Object.hasOwn(depends, reference.id))
+          tableOwners.add(reference.id);
         return;
       }
       if (id.startsWith("@plugins/")) throw diagnostic(path, id);
@@ -320,6 +396,13 @@ export function checkPluginImports(root) {
     }
   }
   walk(root);
+  for (const [id, path] of imports) {
+    try {
+      declarePlugin(root, id, declared, depends, tableOwners);
+    } catch (error) {
+      throw new Error(`${diagnostic(path, id).message} ${error.message}`);
+    }
+  }
 }
 
 export function bunPluginReferences(root, options) {
@@ -329,12 +412,19 @@ export function bunPluginReferences(root, options) {
       build.onResolve({ filter: /^@tokamak\/sdk$/ }, ({ importer }) => {
         if (importer.startsWith("plugin:")) return { path: Bun.resolveSync("@tokamak/sdk", root) };
       });
-      build.onResolve({ filter: /^plugin:/ }, ({ path }) => ({ path, namespace: "plugin-reference" }));
-      build.onLoad({ filter: /.*/, namespace: "plugin-reference" }, ({ path }) => ({
-        contents: pluginReferenceSource(root, path, options),
-        loader: "js",
-        resolveDir: root,
-      }));
+      build.onResolve({ filter: /^plugin:/ }, ({ path, importer }) => {
+        const restricted =
+          typeof options?.publicOnly === "function" ? options.publicOnly(importer) : options?.publicOnly;
+        return { path, namespace: restricted ? "public-plugin-reference" : "plugin-reference" };
+      });
+      for (const namespace of ["plugin-reference", "public-plugin-reference"])
+        build.onLoad({ filter: /.*/, namespace }, ({ path }) => ({
+          contents: pluginReferenceSource(root, path, {
+            publicOnly: namespace === "public-plugin-reference",
+          }),
+          loader: "js",
+          resolveDir: root,
+        }));
     },
   };
 }
@@ -348,7 +438,10 @@ export function bunPluginBoundary(root, { publicOnly = false } = {}) {
         if (!importer || !isAbsolute(importer) || path.startsWith("node:") || isBuiltin(path)) return;
         assertWindowSide(importer, path);
         const target = Bun.resolveSync(path, dirname(importer));
-        if (publicOnly && isInternalReferenceModule(canonical(target)))
+        if (
+          (typeof publicOnly === "function" ? publicOnly(importer) : publicOnly) &&
+          isInternalReferenceModule(canonical(target))
+        )
           throw new Error(
             `Local code cannot import internal references: ${path}. Import the generated public api instead.`,
           );

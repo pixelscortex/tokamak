@@ -1,4 +1,15 @@
+use super::action_coordination::ActionCall;
 use super::*;
+use crate::{
+    actions::Placement,
+    identity::{AuthContext, CallNote},
+};
+
+struct RequestCaller {
+    auth: AuthContext,
+    note: CallNote,
+    placement: Placement,
+}
 
 impl Coordinator {
     pub(super) async fn action(&mut self, session: u64, auth: SessionAuth, action: Action) {
@@ -10,6 +21,25 @@ impl Coordinator {
         }
 
         match action {
+            Action::Cancel(id) => {
+                if let Some((cancel, _)) = self.action_cancellations.get(&(session, id)) {
+                    cancel.cancel();
+                }
+            }
+
+            Action::HookStage { id, scope, done } => {
+                let client = self.sessions.get_mut(&session).expect("checked session");
+                let allowed = if done {
+                    client.hook_scopes.remove(&scope).is_some()
+                } else {
+                    client
+                        .hook_scopes
+                        .get(&scope)
+                        .is_some_and(|budget| budget.take())
+                };
+                self.respond(session, id, Ok(serde_json::json!(allowed)));
+            }
+
             Action::Plugins(id) => {
                 let result = self.catalog_page(None, 0);
                 self.respond(session, id, result);
@@ -36,16 +66,12 @@ impl Coordinator {
                 name,
                 args,
                 kind: expected,
-            } => {
-                // A socket may already have admitted a write when its member
-                // was revoked. It must not recreate rows after cleanup.
-                if name == window_state::WRITE && auth.revoked.is_cancelled() {
-                    self.respond(session, id, Err("Session has been revoked".into()));
-                    return;
-                }
-                let auth = auth.caller.read().expect("auth lock").clone();
-                self.call(session, auth, id, name, args, expected).await;
-            }
+                local_parent,
+                placement,
+            } => match self.request_caller(session, auth, &name, &args, local_parent, placement) {
+                Ok(caller) => self.call(session, id, name, args, expected, caller).await,
+                Err(error) => self.respond(session, id, Err(error)),
+            },
             Action::Subscribe { id, name, args } => {
                 self.subscribe(session, id, name, args).await;
             }
@@ -60,14 +86,65 @@ impl Coordinator {
         }
     }
 
+    fn request_caller(
+        &self,
+        session_id: u64,
+        session: SessionAuth,
+        name: &str,
+        args: &Json,
+        local_parent: Option<LocalParent>,
+        placement: Placement,
+    ) -> Result<RequestCaller, String> {
+        // A socket may already have admitted a write when its member
+        // was revoked. It must not recreate rows after cleanup.
+        if name == window_state::WRITE && session.revoked.is_cancelled() {
+            return Err("Session has been revoked".into());
+        }
+        let auth = session.caller.read().expect("auth lock").clone();
+        let note = if let Some(LocalParent {
+            depth,
+            thread,
+            hook_scope,
+        }) = local_parent
+        {
+            let validator = self
+                .plugins
+                .as_ref()
+                .and_then(|loaded| loaded.targets.get(name))
+                .map(|target| target.args.as_ref());
+            let mut note = CallNote::from_local_parent(&auth, depth, thread)?;
+            if let Some(scope) = hook_scope {
+                let budget = self
+                    .sessions
+                    .get(&session_id)
+                    .and_then(|client| client.hook_scopes.get(&scope))
+                    .ok_or("Runner hook scope is no longer active")?;
+                note.scope_hooks(scope, budget.clone());
+            }
+            note.enter(name, validator, args)
+                .map_err(|error| error.to_string())?
+        } else {
+            Some(auth.clone()).into()
+        };
+        Ok(RequestCaller {
+            auth,
+            note,
+            placement,
+        })
+    }
+
     async fn call(
         &mut self,
         session: u64,
-        auth: crate::identity::AuthContext,
         id: u64,
         name: String,
         args: Json,
         expected: Option<FunctionKind>,
+        RequestCaller {
+            auth,
+            note,
+            placement,
+        }: RequestCaller,
     ) {
         if let Some(query) = builtin_queries::resolve(&name, &args) {
             let result = if expected.is_none_or(|kind| kind == FunctionKind::Query) {
@@ -104,21 +181,27 @@ impl Coordinator {
             return;
         }
         let result = match self.client_kind(&name) {
-            None => Err(format!("unknown function: {name}")),
+            None => Err(format!("unknown function: {name}").into()),
             Some(kind) if expected.is_some_and(|expected| expected != kind) => {
                 Err("function kind does not match request".into())
             }
             Some(FunctionKind::Action) => {
-                self.start_action(session, auth, id, name, args);
+                self.start_action(session, id, name, args, ActionCall { note, placement });
                 return;
             }
             Some(kind) => {
-                self.invoke_function(&name, args, kind == FunctionKind::Mutation, Some(auth))
-                    .await
+                self.invoke_function_in(
+                    self.plugins.clone(),
+                    &name,
+                    args,
+                    kind == FunctionKind::Mutation,
+                    note,
+                )
+                .await
             }
         };
         self.drain_changes();
         self.refresh().await; // Writer barrier precedes response on the SAME queue.
-        self.respond(session, id, result);
+        self.respond_call(session, id, result);
     }
 }

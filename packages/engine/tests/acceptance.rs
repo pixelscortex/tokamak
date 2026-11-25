@@ -803,3 +803,85 @@ async fn wait_for_host_release(
     .map_err(|e| e.to_string())?;
     Ok(json!("must not resolve"))
 }
+
+#[test]
+fn stage_bundles_share_state_within_a_call_and_replay_from_a_fresh_world() {
+    use engine::{CallFuture, CallTransforms, Determinism, ModuleCall, StageExecutor};
+
+    struct Stages(Arc<Bundle>);
+
+    impl CallTransforms for Stages {
+        fn before<'a>(&'a self, executor: &'a dyn StageExecutor, _: Json) -> CallFuture<'a> {
+            Box::pin(async move {
+                let call = || {
+                    ModuleCall::new(
+                        self.0.clone(),
+                        "stage",
+                        Json::Null,
+                        Arc::new(OpRegistry::new()),
+                        drop,
+                    )
+                };
+                let first = executor.run(call(), engine::HookBudget::default()).await?;
+                let second = executor.run(call(), engine::HookBudget::default()).await?;
+                Ok(json!([first, second]))
+            })
+        }
+
+        fn after<'a>(&'a self, _: &'a dyn StageExecutor, _: Json, value: Json) -> CallFuture<'a> {
+            Box::pin(async move { Ok(value) })
+        }
+    }
+
+    run(async {
+        let pool = pool(1, 4, Limits::default());
+        let stage = bundle(
+            "let n = 0; export function stage() { return [++n, Date.now(), Math.random()]; }",
+        );
+        let mut ops = OpRegistry::new();
+        ops.set_determinism(Determinism {
+            timestamp_ms: 42,
+            seed: 123,
+        });
+        let ops = Arc::new(ops.with_transforms(Stages(stage)));
+        let call = || {
+            invoke(
+                &pool,
+                "export function read(value) { return value; }",
+                "read",
+                Json::Null,
+                ops.clone(),
+            )
+        };
+
+        let first = call().await.unwrap();
+        assert_eq!(first[0][0], 1);
+        assert_eq!(first[1][0], 2);
+        assert_eq!(first[0][1], 42);
+        assert_eq!(first[1][1], 42);
+        assert_ne!(first[0][2], first[1][2]);
+        assert_eq!(call().await.unwrap(), first);
+
+        let parent = "export async function read(_, host) {
+            return [await host.op('delegate', null), await host.op('delegate', null)];
+        }";
+        let delegated = bundle("export function read(value) { return value; }");
+        let mut parent_ops = OpRegistry::new();
+        parent_ops
+            .register_module("delegate", move |args| {
+                Ok(ModuleCall::new(
+                    delegated.clone(),
+                    "read",
+                    args,
+                    ops.clone(),
+                    drop,
+                ))
+            })
+            .unwrap();
+        let nested = invoke(&pool, parent, "read", Json::Null, Arc::new(parent_ops))
+            .await
+            .unwrap();
+        assert_eq!(nested[0][0][0], 1);
+        assert_eq!(nested[1][1][0], 4);
+    });
+}

@@ -72,6 +72,10 @@ impl Fixture {
         self.session
             .sender()
             .request(Request::Action {
+                on: None,
+                window: None,
+                hook_plans: None,
+                point_plans: None,
                 id: self.next,
                 name: format!("worker-test/actions:{name}"),
                 args,
@@ -83,7 +87,9 @@ impl Fixture {
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 match self.session.recv().await.unwrap().unwrap() {
-                    Event::Response { id, result } => return (id, result),
+                    Event::Response { id, result, .. } => {
+                        return (id, result);
+                    }
                     Event::PluginChanged { .. } => {}
                     event => panic!("{event:?}"),
                 }

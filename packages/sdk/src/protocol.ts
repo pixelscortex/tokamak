@@ -3,11 +3,47 @@
 import type { JsonValue } from "./values";
 
 export const MAX_WIRE_MESSAGE_BYTES = 1048576;
+export const LOCAL_RELOAD_GRACE_MS = 5000;
+
+export type CallErrorDetails = {
+  plugin: string;
+  hook: string;
+  stage: string;
+  kind: string;
+  data: JsonValue;
+  table?: string;
+  point?: string;
+};
 
 export type Request =
   | { type: "query"; id: number; name: string; args: JsonValue }
   | { type: "mutation"; id: number; name: string; args: JsonValue }
-  | { type: "action"; id: number; name: string; args: JsonValue }
+  | {
+      type: "action";
+      id: number;
+      name: string;
+      args: JsonValue;
+      on?: "server" | "caller";
+      window?: boolean;
+      hookPlans?: boolean;
+      pointPlans?: boolean;
+    }
+  | {
+      type: "localcall";
+      id: number;
+      name: string;
+      args: JsonValue;
+      kind: "query" | "mutation" | "action";
+      depth: number;
+      thread: string | null;
+      hookScope?: number;
+      on?: "server" | "caller";
+      window?: boolean;
+      hookPlans?: boolean;
+      pointPlans?: boolean;
+    }
+  | { type: "hookstage"; id: number; scope: number; done?: boolean }
+  | { type: "cancelaction"; id: number }
   | { type: "subscribe"; id: number; name: string; args: JsonValue }
   | { type: "plugins"; id: number }
   | { type: "pluginspage"; id: number; revision: string; offset: number }
@@ -16,6 +52,11 @@ export type Request =
 
 export type Event =
   | { type: "pluginchanged"; plugins: Array<string>; catalog: JsonValue }
-  | { type: "response"; id: number; result: { Ok: JsonValue } | { Err: string } }
-  | { type: "subscription"; id: number; result: { Ok: JsonValue } | { Err: string } }
+  | { type: "response"; id: number; result: { Ok: JsonValue } | { Err: string }; error?: CallErrorDetails }
+  | {
+      type: "subscription";
+      id: number;
+      result: { Ok: JsonValue } | { Err: string };
+      error?: CallErrorDetails;
+    }
   | { type: "unsubscribed"; id: number };

@@ -42,7 +42,8 @@ impl Coordinator {
                 }
                 Some(completion) = self.action_jobs.join_next() => {
                     if let Ok((session, id, result)) = completion {
-                        self.emit(session, Event::Response { id, result });
+                        self.action_cancellations.remove(&(session, id));
+                        self.respond_call(session, id, result);
                     }
                 }
                 _ = self.cleanup.notified() => {},
@@ -75,6 +76,7 @@ impl Coordinator {
                             output,
                             slow: slow.clone(),
                             subscriptions: BTreeMap::new(),
+                            hook_scopes: BTreeMap::new(),
                         });
 
                         if reply.send(Ok((id, receiver, slow, alive))).is_err() {

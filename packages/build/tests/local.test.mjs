@@ -233,7 +233,7 @@ test("a query importing bare fs gets proc advice only", async () => {
     const result = build(folder);
     assert.match(
       result.stderr + result.stdout,
-      /imports "node:fs", which is unavailable in queries, mutations and server actions\. A plugin that needs real Node can start it through proc in a local function\./,
+      /imports "node:fs", which is unavailable in queries, mutations and server actions\. A plugin that needs real Node can start it through proc in a local function or caller action\./,
     );
   });
 }, 30_000);
@@ -268,6 +268,117 @@ test("the server part's Node module check does not apply to the window", async (
     await writeFile(
       join(folder, "src/window.ts"),
       'export const Window = () => import("node:child_process");',
+    );
+    built(folder);
+  });
+}, 30_000);
+
+test("caller action placement must be literal in the definition", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      export function Window() {}
+      const target = "caller";
+      const settings = { on: target, handler: () => true } as const;
+      export const run = action(settings);
+    `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /Action placement.*must use on: "caller" or on: "server" as a literal/,
+    );
+  });
+}, 30_000);
+
+test("caller-only Node bindings cannot be used while loading an action module", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import { homedir as getHome } from "node:os";
+      export function Window() {}
+      const home = getHome();
+      export const run = action({ on: "caller", handler: () => home });
+      `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/mixed\.ts uses getHome at module load\. Move it inside the handler/,
+    );
+  });
+}, 30_000);
+
+test("caller contracts reject server definitions as methods", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/contracts.ts"),
+      `import { contract } from "@tokamak/sdk";
+      export const runner = contract<{ run(): string }>("runner", { on: "caller" });`,
+    );
+    for (const definition of ["action", "query", "mutation"]) {
+      await writeFile(
+        join(folder, "src/mixed.ts"),
+        `
+        import { ${definition}, provide } from "@tokamak/sdk";
+        import { runner } from "./contracts";
+        export function Window() {}
+        export const provider = provide(runner, { run: ${definition}({ handler: () => "server" }) });
+        `,
+      );
+      const result = build(folder);
+      assert.notEqual(result.status, 0, definition);
+      assert.match(
+        result.stderr + result.stdout,
+        /contract "runner" method "run" requires local\(\) or action/,
+      );
+    }
+  });
+}, 30_000);
+
+test("caller action builds reject a helper invoked at module load", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/helper.ts"),
+      'import { homedir } from "node:os"; export function home() { return homedir(); }',
+    );
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import { home } from "./helper";
+      export function Window() {}
+      const value = home();
+      export const run = action({ on: "caller", handler: () => value });
+      `,
+    );
+    const result = build(folder);
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr + result.stdout,
+      /src\/helper\.ts.*used at module load\. Move it inside the handler/,
+    );
+  });
+}, 30_000);
+
+test("caller action builds allow types and instance fields to reference Runner imports", async () => {
+  await fixture(async (folder) => {
+    await writeFile(
+      join(folder, "src/mixed.ts"),
+      `
+      import { action } from "@tokamak/sdk";
+      import * as os from "node:os";
+      export function Window() {}
+      type Home = ReturnType<typeof os.homedir>;
+      class Project { home: Home = os.homedir(); }
+      export const run = action({ on: "caller", handler: () => new Project().home });
+      `,
     );
     built(folder);
   });
