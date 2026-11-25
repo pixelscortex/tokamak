@@ -679,10 +679,8 @@ impl CallRoute<'_> {
             target.remove("channel");
         }
         let artifact = lease.map_or(&here.host.build, |lease| &lease.build);
-        next_call_depth(
-            ancestors.len() - 1,
-            &contract_target_name(&artifact.id, &target),
-        )?;
+        let name = contract_target_name(&artifact.id, &target);
+        next_call_depth(ancestors.len() - 1, &name)?;
         if lease.is_some() && ancestors.contains(&artifact.id) {
             return Err(format!(
                 "Local contract call cycle or depth limit at plugin {}",
