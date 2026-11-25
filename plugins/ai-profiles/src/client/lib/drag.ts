@@ -58,18 +58,33 @@ export function createDrag(onDrop: (carry: Carry, over: Over) => void) {
   }
   onCleanup(end);
 
-  /** Call from a card's or a row's pointerdown; the drag starts once the pointer moves. */
+  /**
+   * Call from a card's or a row's pointerdown; the drag starts once the
+   * pointer moves. It ends, adding nothing, on Escape, on pointercancel, when
+   * the window loses focus or is hidden, and on a move with no button down (a
+   * release the window never saw, such as one outside it).
+   */
   function start(event: PointerEvent, what: Carry) {
     if (event.button !== 0 || event.pointerType === "touch") return;
     if ((event.target as Element | null)?.closest(INTERACTIVE)) return;
     end();
+    const source = event.currentTarget as Element | null;
     const origin = { x: event.clientX, y: event.clientY };
     let moving = false;
     const move = (next: PointerEvent) => {
+      if (next.buttons === 0) return end();
       if (!moving) {
         if (Math.hypot(next.clientX - origin.x, next.clientY - origin.y) < SLOP) return;
         moving = true;
         setCarry(what);
+        // The release then reaches this window even when it happens outside
+        // it. Targets come from the pointer's position (overAt), not from the
+        // element under it, so capture changes no drop.
+        try {
+          source?.setPointerCapture?.(event.pointerId);
+        } catch {
+          // A pointer that is already gone cannot be captured; the checks above still end the drag.
+        }
       }
       // A drag selects no text on its way.
       next.preventDefault();
@@ -87,15 +102,21 @@ export function createDrag(onDrop: (carry: Carry, over: Over) => void) {
       next.preventDefault();
       end();
     };
+    const hidden = () => document.visibilityState === "hidden" && end();
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", end);
     window.addEventListener("keydown", key, true);
+    window.addEventListener("blur", end);
+    document.addEventListener("visibilitychange", hidden);
     stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", end);
       window.removeEventListener("keydown", key, true);
+      window.removeEventListener("blur", end);
+      document.removeEventListener("visibilitychange", hidden);
+      if (source?.hasPointerCapture?.(event.pointerId)) source.releasePointerCapture(event.pointerId);
     };
   }
 

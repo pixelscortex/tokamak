@@ -144,8 +144,15 @@ const article = (name: string) => screen.getByRole("article", { name });
 const changes = () => calls.filter(([name]) => !name.endsWith(":list") && !name.endsWith(":renew"));
 
 /** A pointer event as a mouse sends it; jsdom has no PointerEvent, so a MouseEvent carries the fields. */
-function pointer(type: string, target: EventTarget, y = 0) {
-  const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY: y });
+function pointer(type: string, target: EventTarget, y = 0, buttons = type === "pointerup" ? 0 : 1) {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    buttons,
+    clientX: 10,
+    clientY: y,
+  });
   Object.defineProperty(event, "pointerType", { value: "mouse" });
   target.dispatchEvent(event);
 }
@@ -239,6 +246,33 @@ test("while a card is dragged, a profile that holds it fades and says added, and
   await new Promise((done) => setTimeout(done, 20));
   expect(changes()).toEqual([]);
   expect(pers.hasAttribute("data-added")).toBe(false);
+});
+
+test("a drag that is cancelled, interrupted, or dropped outside every profile adds nothing", async () => {
+  await mount([profile("p1", "PERS", "Personal")]);
+  const pers = box("PERS");
+  const card = article("Claude Pro, Personal");
+  const carried = () => card.hasAttribute("data-dimmed");
+  const endings: [string, () => void][] = [
+    ["Escape", () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))],
+    ["pointercancel", () => pointer("pointercancel", window, 50)],
+    ["the window losing focus", () => window.dispatchEvent(new Event("blur"))],
+    // A release outside the window: the next move arrives with no button down.
+    ["a move with no button", () => pointer("pointermove", window, 50, 0)],
+  ];
+  for (const [how, ending] of endings) {
+    drag(card, pers, 50);
+    await waitFor(() => expect(carried(), how).toBe(true));
+    ending();
+    await waitFor(() => expect(carried(), how).toBe(false));
+    // Letting go afterwards over the profile still adds nothing.
+    pointer("pointerup", window, 50);
+  }
+  // Dropped where no profile is.
+  drag(card, document.body, 50).drop();
+  await new Promise((done) => setTimeout(done, 20));
+  expect(changes()).toEqual([]);
+  expect(pers.hasAttribute("data-target")).toBe(false);
 });
 
 test("a row dragged inside its profile is reordered; its menu moves and removes it from the keyboard", async () => {
