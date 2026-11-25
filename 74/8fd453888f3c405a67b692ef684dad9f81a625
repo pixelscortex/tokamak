@@ -1,0 +1,155 @@
+packages/server/src/service/startup.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 321-335
+packages/server/src/plugins/tests.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 216-242,244-370
+  s_040e9b5fc04cd5::t_68bc857fb89c38 243
+packages/server/tests/README.md
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 284-302
+packages/server/src/data/space.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 13
+packages/sdk/tools/plugin-compiler.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 20
+packages/engine/tests/acceptance.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 806-824,827-887
+  s_040e9b5fc04cd5::t_4ec6e686ea06a7 825-826
+packages/server/src/data/transaction/records.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 8,78-85,93-95,98,128,132-138,152,159,163,166-171,197,207-208,225,233-234,236-237,243-250,252,257-275
+packages/build/tests/run.sh
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 3
+packages/build/tests/refs.test.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-77
+packages/server/src/host.rs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 182-184
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 16,24-25,35-36,48-55,65-69,71,286-288,376
+packages/server/src/protocol.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 41-43
+packages/server/src/host/action_process/mod.rs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 357
+packages/sdk/src/schema.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-2,4-5,69-71,75,110-118
+packages/server/src/data/transaction.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 17-19,74,95,223-225
+packages/sdk/src/index.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 4-5,12-20,102
+packages/build/src/descriptor.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 3-4
+packages/sdk/src/call-error.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 17
+packages/server/src/plugins/mod.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 37
+packages/server/src/host/database_operations.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-5,9-10,13,15,23-55,57-64,66-80,82-93,95-124,141,147-148,166-171,173,175,177-181,184-194
+packages/server/src/schema.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1,4,95-99,139,142-144,148-157,162-224,226,233,243,256-261,274-281,288-327
+  s_040e9b5fc04cd5::t_3761428fb6bb0f 328
+packages/build/src/vite.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 55,152
+packages/sdk/src/validators.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 10,16-24,31-38,90-94,96,100,103,110,114,118,122-138,205-207,217-229
+packages/sdk/src/api.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 4,66-78,80-85
+  s_040e9b5fc04cd5::t_a2e9cb980611db 79,86-87
+packages/build/README.md
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 89-93
+packages/server/tests/internal/references.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-254
+packages/server/src/data/mod.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 23,215-216
+packages/engine/src/engine.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 153
+packages/sdk/src/protocol.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 8-15
+packages/server/tests/triggers-driver.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-238
+packages/server/src/actions.rs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 379
+packages/server/tests/refs-driver.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-86
+packages/server/src/data/README.md
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 36-39,64-75
+packages/server/src/host/triggers.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-204
+packages/server/src/service/plugin_control.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 13
+packages/server/src/plugins/grants.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 38-39,59,71,74-81,89,101,111,149,162-183,190-201,203-219,221-241
+packages/sdk/tools/bundle.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 173,179,327,353-360,364,367,388,401,420
+packages/server/src/data/query.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 128-130,159-168
+e2e/fake-agent/harness.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 124,132
+packages/server/tests/triggers.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-19
+packages/build/tests/triggers.test.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-54
+packages/engine/src/bridge.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 11-12,15,90,97,104,129-130,136,273-287,394,420-430,434,441-447,459,463,492-497,516,542,544,551-562,586-587,618-635,642,661-696,715,742-758
+  s_040e9b5fc04cd5::t_25f7c3795edcd5 18,69-89,91-96,98-103,105-106,108-109,401,412,438,440,591,759-760
+packages/sdk/tools/table-references.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-98
+packages/sdk/tools/placement.mjs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 85-88,171-172
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 116-121,481-482
+  s_040e9b5fc04cd5::t_46b196386bee39 173-175,468,484-485
+packages/build/tests/ref-fixtures.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-162
+packages/build/tests/trigger-fixtures.mjs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-208
+packages/sdk/tools/plugin-boundary.mjs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 243-245
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1,23-25,115-116,175-178,213,219-223,251,283-284,295-298,378-383
+  s_040e9b5fc04cd5::t_b0a67f6af61dd9 246,267,276,280,384
+packages/sdk/README.md
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 95-96,689-722,928-956,958-973,975-988
+  s_040e9b5fc04cd5::t_a2e9cb980611db 957
+  s_040e9b5fc04cd5::t_b2c1e0f87ff136 974
+packages/server/src/data/transaction/references.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-156
+packages/server/src/host/hooks.rs
+  s_040e9b5fc04cd5::t_a2e9cb980611db 256-260,280,300,308,326-332
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 235-255,262-263,265-266,278-279,281-299,301-307,309-325,334-352
+  s_040e9b5fc04cd5::t_738c7e1b9a9ac0 333,353
+packages/server/src/plugins/loading.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 76,450-518,520,544-549,553
+packages/sdk/tools/plugin-descriptor.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-75
+packages/sdk/src/triggers.ts
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 1-87
+packages/server/src/data/storage.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 5,26,82
+packages/server/tests/sdk_transport.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 611-623
+packages/server/src/data/transaction/indexes.rs
+  s_040e9b5fc04cd5::t_dfd791c5ba497b 3,17-36,44-46,55-57,217-219,224-235
+packages/engine/src/lib.rs
+  s_040e9b5fc04cd5::t_2b443ac3705fad 17-18
+packages/server/src/identity/call.rs
+  s_040e9b5fc04cd5::t_ad178c99256606 3,33,91-103,105,110,116
+packages/server/tests/fixtures/query-hooks/z-extra/plugin.ts
+  s_040e9b5fc04cd5::t_d5ad658c7a4962 3
+packages/server/tests/fixtures/query-hooks/z-extra/src/server/extra.ts
+  s_040e9b5fc04cd5::t_000d6259b88e50 1,3-14
+packages/server/tests/fixtures/query-hooks/z-extra/src/server/schema.ts
+  s_040e9b5fc04cd5::t_852946d43f6d66 1-3
+packages/server/tests/query-hooks-driver.ts
+  s_040e9b5fc04cd5::t_9334cdc55d317b 1,200-202,230
+packages/server/tests/query_hooks.rs
+  s_040e9b5fc04cd5::t_9bdfae275eaab7 179-180,183,186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "748fd453888f3c405a67b692ef684dad9f81a625",
+  "prompts": {},
+  "sessions": {
+    "s_040e9b5fc04cd5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a213c1-116b-76a2-86bc-8fc9cad06ab0",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
