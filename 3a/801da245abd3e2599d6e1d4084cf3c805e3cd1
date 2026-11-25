@@ -1,0 +1,80 @@
+packages/server/src/identity.rs
+  s_204cb7957e43da::t_ceaaac382b4cd8 220,280,380-386
+  s_204cb7957e43da::t_22d8d04406641d 180
+  s_204cb7957e43da::t_e6735a1d79a70c 387-388
+packages/sdk/src/functions.ts
+  s_204cb7957e43da::t_23ba6d493208ac 341-356
+  s_204cb7957e43da::t_3e444d683d8e85 34,43-45,53-56,65,243-244
+packages/server/src/websocket.rs
+  s_204cb7957e43da::t_22d8d04406641d 241,593,604-607
+  s_204cb7957e43da::t_94eaf80c3b7c9f 592,594
+packages/sdk/tests/fixtures/types/negative.ts.txt
+  s_204cb7957e43da::t_1b17cc8cb8ca43 3
+  s_204cb7957e43da::t_bfadbd6067ff96 29-40
+packages/server/src/service/startup.rs
+  s_204cb7957e43da::t_22d8d04406641d 203-204
+  s_204cb7957e43da::t_49f3840684192e 205
+packages/server/src/websocket/response.rs
+  s_204cb7957e43da::t_22d8d04406641d 1,36,48
+.ci/check.sh
+  s_204cb7957e43da::t_f265cff4a705b9 131
+packages/server/tests/plugin-machines.mjs
+  s_204cb7957e43da::t_f265cff4a705b9 3,145-146,161,185-188,190,237,247,274-278,280,303-306,308-310,312-343
+  s_204cb7957e43da::t_23ba6d493208ac 9,193-209
+  s_204cb7957e43da::t_4eecf2618bca09 189,210,307,311,344
+packages/server/src/websocket/members.rs
+  s_204cb7957e43da::t_22d8d04406641d 54-55
+packages/server/src/identity/plugin_machines.rs
+  s_204cb7957e43da::t_ceaaac382b4cd8 9-12,18-19,34,40-44,52,65,83-110,139-145,151-159,166,168-173,176-177,179-205,212-220,222-235,237,240-245,252-254,256-261,263-280,282,319-324,327-328,336-386,395,403,406
+  s_204cb7957e43da::t_c246fa1213ac75 2,262,410-412
+packages/server/tests/fixtures/plugin-machines/sandbox/src/work.ts
+  s_204cb7957e43da::t_f265cff4a705b9 2-9,11,13,22-27,42-48,68,70,98-101
+  s_204cb7957e43da::t_34609646736dc4 10
+packages/server/src/websocket/machine.rs
+  s_204cb7957e43da::t_b1bce529313338 111-116,142,150,156-162,165-169,190-191,270,321-333
+  s_204cb7957e43da::t_efa517d4b9cf94 192-193,204,207-216,241,269,334
+packages/server/src/actions/machines.rs
+  s_204cb7957e43da::t_22d8d04406641d 17,56-58,60-66,69-92,132,135,138,172,174-175,180-198,203-204,213-221,225-226,283,289,294-295,300,310,365-370
+  s_204cb7957e43da::t_e42482a279ce2d 59,179,228,230,282,284-288,290-293,296-299,301,371-385
+packages/server/src/service/plugin_control.rs
+  s_204cb7957e43da::t_22d8d04406641d 212-214,222
+  s_204cb7957e43da::t_1d30776ecb7f9a 215
+packages/runner/src/local/quickjs/session.rs
+  s_204cb7957e43da::t_a8d2c4e21e9f7e 940-946
+packages/runtime/js/local.ts
+  s_204cb7957e43da::t_dfef78ca5bb655 404-413
+packages/sdk/README.md
+  s_204cb7957e43da::t_35b0eb15bebaff 210-215,219-220,241-267
+packages/sdk/src/host.ts
+  s_204cb7957e43da::t_ee44d178c7b7a4 60,62-63
+packages/sdk/src/index.ts
+  s_204cb7957e43da::t_19f677d12f1e80 58
+packages/server/PLUGINS.md
+  s_204cb7957e43da::t_c67eb842b46dd7 225-226
+packages/server/src/actions.rs
+  s_204cb7957e43da::t_f371d8b47c8775 85,95,105,119,122-125,183,257,300-301,430,491,516,529-531
+packages/server/src/actions/runner_upstream.rs
+  s_204cb7957e43da::t_2f7947708d4d4e 236
+packages/server/src/identity/call.rs
+  s_204cb7957e43da::t_9a0a4df1700d0c 30,62
+packages/server/src/service/action_coordination.rs
+  s_204cb7957e43da::t_56f00372c0fb6d 119-125,130
+packages/server/src/service/requests.rs
+  s_204cb7957e43da::t_ff38f301e72f6a 144-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a801da245abd3e2599d6e1d4084cf3c805e3cd1",
+  "prompts": {},
+  "sessions": {
+    "s_204cb7957e43da": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21420-ac2f-7793-83d7-7adcb3a9f53b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
