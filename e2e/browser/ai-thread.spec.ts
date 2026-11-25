@@ -140,6 +140,8 @@ test("a long model list stays inside a short window and scrolls to its last mode
   await pickAgentOption(page, "Fake agent", "echo");
   await agentChip(page).click();
   const menu = page.getByRole("menu");
+  // Opening the picker refreshes its options and can replace rows during the entrance.
+  await expect(menu).toHaveCSS("opacity", "1");
   const models = menu.getByRole("group", { name: "Fake agent", exact: true }).getByRole("menuitemradio");
   // Every replay is a model of the fake agent: far more than 720 px of rows.
   expect(await models.count()).toBeGreaterThan(15);
@@ -149,7 +151,7 @@ test("a long model list stays inside a short window and scrolls to its last mode
   // The columns scroll; the settings bar under them stays in view.
   await expect(menu.getByRole("group", { name: "Access level" })).toBeInViewport();
   const last = (await models.last().textContent())!.trim();
-  await models.last().scrollIntoViewIfNeeded();
+  // Clicking scrolls the row into view inside the columns.
   await models.last().click();
   await expect(agentChip(page)).toHaveAccessibleName(`Agent: Fake agent · ${last}`);
   await context.close();
