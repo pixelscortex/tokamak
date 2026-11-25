@@ -1,0 +1,19 @@
+design/agent-proxy.md
+  s_b2ce2444f775e6::t_dd725286017f12 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a8edb8f0bb847ecff2a35f0161d0e6108852d80e",
+  "prompts": {},
+  "sessions": {
+    "s_b2ce2444f775e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbee511c-645a-4eb2-b398-9e791117eb81",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
