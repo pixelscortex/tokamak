@@ -152,8 +152,13 @@ screens") takes each screen; `e2e/paper-html.ts` turns the page with
 the converter clips the dialog to the stage while the browser draws it in the
 top layer. The dialog screens share the shell of `Profiles · subscriptions`
 and swap only the Subscriptions section. The Switch's transparent 2 px border
-is left out (Paper measures from inside it). Matched to this branch,
-`feature/tkm-261`.
+is left out (Paper measures from inside it). The TKM-265 artboards
+(`Profiles · subscription`, `· two accounts`, `· one signed out`,
+`Profiles · remove`) share that shell too and swap the page header and the
+content; `PAPER_DROP` leaves out the fixture plugins' rail marks
+(`FixtureView,PanelView,ThrowingView,WindowStateView,OtherDraftView`).
+`Profiles · subscriptions` was refreshed by swapping its Subscriptions section
+for the card with the action row. Matched to `feature/tkm-265`.
 
 ## Open questions
 
