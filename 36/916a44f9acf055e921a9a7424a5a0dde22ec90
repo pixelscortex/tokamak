@@ -1,0 +1,19 @@
+packages/server/src/actions/runner_upstream.rs
+  s_6bd43a2c58496b::t_2eb4cc60628e2a 68-97,117-122,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "36916a44f9acf055e921a9a7424a5a0dde22ec90",
+  "prompts": {},
+  "sessions": {
+    "s_6bd43a2c58496b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-b624-7543-af8b-6d738e892f5a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

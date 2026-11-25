@@ -1,0 +1,28 @@
+packages/sdk/src/functions.ts
+  s_6bd43a2c58496b::t_a064eed89eb6d8 279-302
+  s_6bd43a2c58496b::t_23a06c1c3b8122 303-333,350,356-358,403,541-545
+packages/sdk/src/internal/contracts.ts
+  s_6bd43a2c58496b::t_3d34425dc7f33d 1,116-118,129-137,147-153
+packages/sdk/tools/placement.mjs
+  s_6bd43a2c58496b::t_7f6dafc110fc91 367
+packages/sdk/worker/contracts.ts
+  s_6bd43a2c58496b::t_8a1393a841ef4c 59-61,66,317-318
+packages/sdk/tools/contracts.mjs
+  s_6bd43a2c58496b::t_fd01f18f7e8e9a 76,79,82-83,88-91,94,97,104,108,110,178,186-187,189,193-202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "95b9309f0fa2b09f6447fa23ca6b907d5b70a9a7",
+  "prompts": {},
+  "sessions": {
+    "s_6bd43a2c58496b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2134c-b624-7543-af8b-6d738e892f5a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
