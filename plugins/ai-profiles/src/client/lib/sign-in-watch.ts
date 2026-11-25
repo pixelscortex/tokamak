@@ -44,13 +44,16 @@ export function endedAs(
  * there (go on to "Connected", or close when there is nothing to label) or
  * cancelled there (close and say so). Sign-ins this window is finishing or
  * cancelling, and ones it ended, are left to the call that answers for them:
- * wrap those calls in `local`. The Profiles page and the details use one each.
+ * wrap those calls in `local`. The Profiles page and the details use one each;
+ * the page's also feeds the desktop app's return watch (`sign-in-return.ts`).
  */
 export function createSignInWatch(options: {
   data: () => Listed | undefined;
   step: () => Step | undefined;
   setStep: (step: Step | undefined) => void;
   onCancelled: (message: string) => void;
+  /** A sign-in this window ended (finished, cancelled, or one that cannot finish). */
+  onEnded?: (id: string) => void;
 }) {
   const busy = new Set<string>();
   const endedHere = new Set<string>();
@@ -61,7 +64,10 @@ export function createSignInWatch(options: {
     busy.add(id);
     try {
       const result = await call();
-      if (ended(result)) endedHere.add(id);
+      if (ended(result)) {
+        endedHere.add(id);
+        options.onEnded?.(id);
+      }
       return result;
     } finally {
       busy.delete(id);
@@ -98,5 +104,11 @@ export function createSignInWatch(options: {
     },
   );
 
-  return { local };
+  return {
+    local,
+    /** Being finished or cancelled by a call of this window right now. */
+    busy: (id: string) => busy.has(id),
+    /** Ended by this window, or seen to end while its dialog was open. */
+    ended: (id: string) => endedHere.has(id),
+  };
 }

@@ -23,7 +23,18 @@ type Listed = { subscriptions: readonly Subscription[]; signIns: readonly SignIn
  * subscription, in the same dialog at its sign-in step; it closes when the
  * account is in, since there is nothing to label.
  */
-export function SubscriptionDetails(props: { data: Listed | undefined }): JSX.Element {
+/**
+ * The Profiles page's view of the desktop app's return listener: whether it
+ * listens for a sign-in, the address it caught, and a way to tell it about a
+ * sign-in started here before the list shows it.
+ */
+export interface Returns {
+  listening: (id: string) => boolean;
+  returned: (id: string) => { address: string; problem?: string } | undefined;
+  started: (signIn: SignIn) => void;
+}
+
+export function SubscriptionDetails(props: { data: Listed | undefined; returns: Returns }): JSX.Element {
   const subscription = () => props.data?.subscriptions.find((item) => item.id === openSubscription());
   // Removed here or in another window while open: back to the cards.
   createEffect(
@@ -33,7 +44,9 @@ export function SubscriptionDetails(props: { data: Listed | undefined }): JSX.El
     },
   );
   return (
-    <Show when={subscription()}>{(item) => <Details subscription={item()} data={() => props.data} />}</Show>
+    <Show when={subscription()}>
+      {(item) => <Details subscription={item()} data={() => props.data} returns={props.returns} />}
+    </Show>
   );
 }
 
@@ -53,7 +66,11 @@ function SectionHeader(props: { title: string; count?: number; children?: JSX.El
   );
 }
 
-function Details(props: { subscription: Subscription; data: () => Listed | undefined }): JSX.Element {
+function Details(props: {
+  subscription: Subscription;
+  data: () => Listed | undefined;
+  returns: Returns;
+}): JSX.Element {
   const client = useClient();
   const [step, setStep] = createSignal<Step>();
   const [problem, setProblem] = createSignal<string>();
@@ -64,10 +81,14 @@ function Details(props: { subscription: Subscription; data: () => Listed | undef
   const { local } = createSignInWatch({ data: props.data, step, setStep: show, onCancelled: setProblem });
 
   /** "Add account" without an account; an account's own "Sign in" signs that one account in again. */
-  const start = (account?: string) =>
-    account === undefined
+  const start = async (account?: string) => {
+    const started = await (account === undefined
       ? client.action(api.manage.addAccount, { id: id() })
-      : client.action(api.manage.signInAccount, { id: account });
+      : client.action(api.manage.signInAccount, { id: account }));
+    // The page's return listener takes it at once, before the list shows it.
+    if (!isFailure(started)) props.returns.started(started as SignIn);
+    return started;
+  };
   async function open(account?: string) {
     setProblem(undefined);
     try {
@@ -148,6 +169,8 @@ function Details(props: { subscription: Subscription; data: () => Listed | undef
             (result) => !isFailure(result) || ENDING.includes(result.kind),
           )
         }
+        listening={props.returns.listening}
+        returned={props.returns.returned}
         setLabel={(subscription, label) =>
           client.mutation(api.subscriptions.setLabel, { id: subscription.id, label })
         }

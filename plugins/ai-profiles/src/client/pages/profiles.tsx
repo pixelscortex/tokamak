@@ -1,9 +1,10 @@
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { isFailure } from "@tokamak/sdk";
 import { useClient, useQuery, view } from "@tokamak/sdk/client";
 import { Button, icons } from "@tokamak/ui";
-import { api, type SignIn } from "../lib/api";
+import { api, type SignIn, type Subscription } from "../lib/api";
 import { profilesIcon } from "../lib/icons";
+import { watchSignInReturns } from "../lib/sign-in-return";
 import { AddDialog, type Step } from "../ui/add-dialog";
 import { loadMarks } from "../ui/company-mark";
 import { AwaitingCard, SubscriptionCard } from "../ui/subscription-card";
@@ -46,12 +47,14 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
   }, RENEW_EVERY_MS);
   onCleanup(() => clearInterval(timer));
 
+  /** A sign-in started here that the list may not show yet: the return watch takes it at once. */
+  const [startedHere, setStartedHere] = createSignal<SignIn>();
   /**
    * A sign-in of the same kind as `like`, with its company: a new
    * subscription, a repair, one account, or another account.
    */
-  const start = (like: Target) =>
-    like.addTo !== undefined
+  const start = async (like: Target) => {
+    const result = await (like.addTo !== undefined
       ? client.action(api.manage.addAccount, { id: like.addTo })
       : like.repairAccount !== undefined
         ? client.action(api.manage.signInAccount, { id: like.repairAccount })
@@ -59,7 +62,10 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
             company: like.company,
             method: "subscription",
             ...(like.repair !== undefined && { repair: like.repair }),
-          });
+          }));
+    if (!isFailure(result)) setStartedHere(result as SignIn);
+    return result;
+  };
   /** "Sign in" on a signed-out card, and "Start again" on an expired one. */
   async function startAndOpen(like: Target) {
     setProblem(undefined);
@@ -72,16 +78,116 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
     }
   }
 
-  const { local } = createSignInWatch({
+  // Bumped when this window ends a sign-in, so the return watch lets go of it.
+  const [completion, setCompletion] = createSignal(0);
+  /** Addresses the desktop app caught for each waiting sign-in, and why one could not finish. */
+  const [returned, setReturned] = createSignal<ReadonlyMap<string, { address: string; problem?: string }>>(
+    new Map(),
+  );
+  const watch = createSignInWatch({
     data: () => listed.data(),
     step,
     setStep,
     onCancelled: setProblem,
+    onEnded: (id) => {
+      setCompletion((n) => n + 1);
+      discardReturn(id);
+    },
   });
+  const { local } = watch;
 
   const subscriptions = () => listed.data()?.subscriptions ?? [];
   const signIns = () => listed.data()?.signIns ?? [];
   const builder = createBuilder(client, subscriptions);
+
+  function discardReturn(id: string) {
+    if (!returned().has(id)) return;
+    setReturned((entries) => {
+      const next = new Map(entries);
+      next.delete(id);
+      return next;
+    });
+  }
+  // A listed sign-in is the list's from now on; a caught return of one that stopped waiting is dropped.
+  const listedOnce = new Set<string>();
+  createEffect(
+    () => listed.data(),
+    (data) =>
+      untrack(() => {
+        if (!data) return;
+        for (const signIn of data.signIns) listedOnce.add(signIn.id);
+        const fresh = startedHere();
+        if (fresh && listedOnce.has(fresh.id)) setStartedHere(undefined);
+        const waiting = new Set(data.signIns.filter((signIn) => !signIn.expired).map((signIn) => signIn.id));
+        for (const id of returned().keys()) if (listedOnce.has(id) && !waiting.has(id)) discardReturn(id);
+      }),
+  );
+
+  const finish = (signIn: SignIn, pasted: string) => {
+    if (watch.busy(signIn.id))
+      return Promise.resolve({
+        failed: true as const,
+        kind: "Busy",
+        data: { message: "This sign-in is already finishing." },
+      });
+    return local(
+      signIn.id,
+      () => client.action(api.subscriptions.finishSignIn, { id: signIn.id, pasted }),
+      (result) => !isFailure(result) || ENDING.includes(result.kind),
+    );
+  };
+
+  /**
+   * The desktop app's listener, for every sign-in of the member that waits:
+   * a new subscription, a repair, another account or one account's sign-in,
+   * whichever dialog (this page's or the details') started it. A return is
+   * finished here; the dialog that waits for it sees it end through its own
+   * watch (`sign-in-watch.ts`).
+   */
+  const listening = watchSignInReturns(
+    () => {
+      const fresh = startedHere();
+      completion();
+      const waiting = signIns().filter(({ id }) => !watch.ended(id));
+      return fresh && !watch.ended(fresh.id) && !waiting.some(({ id }) => id === fresh.id)
+        ? [...waiting, fresh]
+        : waiting;
+    },
+    async (signIn, address) => {
+      const remember = (problem?: string) => {
+        if (!watch.ended(signIn.id))
+          setReturned((entries) => new Map(entries).set(signIn.id, { address, problem }));
+      };
+      remember();
+      if (watch.busy(signIn.id)) return true;
+      try {
+        const added = await finish(signIn, address);
+        const open = step();
+        const sameDialog = open?.kind === "sign-in" && open.signIn.id === signIn.id;
+        if (!isFailure(added)) {
+          if (sameDialog) setStep({ kind: "connected", subscription: added as Subscription });
+          return false;
+        }
+        if (ENDING.includes(added.kind)) {
+          if (sameDialog) {
+            setStep(undefined);
+            setProblem(added.data.message);
+          }
+          return false;
+        }
+        remember(added.data.message);
+      } catch {
+        remember("The sign-in could not finish. Try again.");
+      }
+      return !watch.ended(signIn.id);
+    },
+  );
+  /** What the dialogs show of the desktop app's listener, the page's and the details'. */
+  const returns = {
+    listening,
+    returned: (id: string) => returned().get(id),
+    started: (signIn: SignIn) => setStartedHere(signIn),
+  };
   async function cancel(signIn: SignIn) {
     await local(
       signIn.id,
@@ -94,7 +200,7 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
 
   return (
     <div class="flex flex-col px-8 pb-12">
-      <SubscriptionDetails data={listed.data()} />
+      <SubscriptionDetails data={listed.data()} returns={returns} />
       <section
         aria-label="Subscriptions"
         hidden={openSubscription() !== undefined}
@@ -171,13 +277,9 @@ export const Profiles = view({ route: "/", title: "Profiles", icon: profilesIcon
           const open = step();
           return start(open?.kind === "sign-in" ? open.signIn : { company });
         }}
-        finish={(signIn, pasted) =>
-          local(
-            signIn.id,
-            () => client.action(api.subscriptions.finishSignIn, { id: signIn.id, pasted }),
-            (result) => !isFailure(result) || ENDING.includes(result.kind),
-          )
-        }
+        finish={finish}
+        listening={returns.listening}
+        returned={returns.returned}
         setLabel={(subscription, label) =>
           client.mutation(api.subscriptions.setLabel, { id: subscription.id, label })
         }
