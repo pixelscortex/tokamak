@@ -171,7 +171,6 @@ pub(crate) struct SessionIdentity {
     caller: std::sync::RwLock<crate::identity::AuthContext>,
     revoked: tokio_util::sync::CancellationToken,
     local_continuations: bool,
-    window_notes: std::sync::Mutex<std::collections::VecDeque<(String, crate::identity::CallNote)>>,
 }
 
 type SessionAuth = Arc<SessionIdentity>;
@@ -274,6 +273,7 @@ struct Client {
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
+    window_notes: std::collections::HashMap<String, (u64, crate::identity::CallNote)>,
 }
 
 struct Coordinator {

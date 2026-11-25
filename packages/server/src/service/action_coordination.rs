@@ -116,20 +116,12 @@ impl Coordinator {
     }
 
     fn respond_window_action(&mut self, session: u64, id: u64, mut reply: Json, note: CallNote) {
-        let Some(client) = self.sessions.get(&session) else {
+        let Some(client) = self.sessions.get_mut(&session) else {
             return;
         };
         let proof = uuid::Uuid::new_v4().to_string();
-        let mut notes = client
-            .auth
-            .window_notes
-            .lock()
-            .expect("window continuation notes");
-        if notes.len() == 128 {
-            notes.pop_front();
-        }
-        notes.push_back((proof.clone(), note));
-        drop(notes);
+        client.window_notes.insert(proof.clone(), (id, note));
+        reply["requestId"] = serde_json::json!(id);
         reply["note"]["proof"] = serde_json::json!(proof);
         self.respond(session, id, Ok(reply));
     }

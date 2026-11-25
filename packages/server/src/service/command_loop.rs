@@ -76,6 +76,7 @@ impl Coordinator {
                             output,
                             slow: slow.clone(),
                             subscriptions: BTreeMap::new(),
+                            window_notes: Default::default(),
                         });
 
                         if reply.send(Ok((id, receiver, slow, alive))).is_err() {

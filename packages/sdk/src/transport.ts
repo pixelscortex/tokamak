@@ -86,6 +86,14 @@ export class InProcessTransport implements ClientTransport {
     return this.sendAction(name, args, on, signal, true);
   }
 
+  finishWindowAction(id: number): void {
+    try {
+      this.send({ type: "cancelaction", id });
+    } catch {
+      // Closing the session also releases its continuation.
+    }
+  }
+
   private async sendAction(
     name: string,
     args: JsonValue,
@@ -223,13 +231,7 @@ export class InProcessTransport implements ClientTransport {
       if (signal?.aborted) throw new Error("Action cancelled");
       if (this.pending.size >= CAPACITY) throw new Error("client call capacity exceeded");
       const id = this.id();
-      const cancel = () => {
-        try {
-          this.send({ type: "cancelaction", id });
-        } catch {
-          // send already rejects outstanding requests when the connection closes.
-        }
-      };
+      const cancel = () => this.finishWindowAction(id);
       const cleanup = () => signal?.removeEventListener("abort", cancel);
       this.pending.set(id, {
         resolve(value) {

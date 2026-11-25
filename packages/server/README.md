@@ -493,3 +493,8 @@ Owned-probe measured release executable SHA-256:
 
 See [Plugin host](../host/README.md) for the action process and the Runner's
 plugin process. Local functions and server actions are unavailable on Windows.
+
+Connected Runner heartbeat timing can be tuned on both processes with
+`TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS` (default 5000) and
+`TOKAMAK_MACHINE_HEARTBEAT_LIMIT_MS` (default 15000). Use positive values
+with the interval below the limit.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,6 +18,7 @@ const scratch = await mkdtemp(join(tmpdir(), "tokamak-connected-runner-"));
 const cleanup = [];
 const servers = [];
 const runners = [];
+const serverLogs = [];
 const ownerKey = "connected-runner-test-owner-bootstrap-key";
 const heartbeat = {
   TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS: "200",
@@ -60,6 +62,7 @@ try {
     servers,
     cleanup,
     env: { ...heartbeat, FIXTURE_ACTION_PLACEMENT: "on the server" },
+    log: (text) => serverLogs.push(text),
   });
   const http = new URL(address);
   http.protocol = "http:";
@@ -82,12 +85,36 @@ try {
   await writeFile(keyFile, key + "\n", { mode: 0o600 });
   await writeFile(wrongFile, wrongKey + "\n", { mode: 0o600 });
 
-  function startMachine(path) {
+  const links = [];
+  const proxy = createServer((downstream) => {
+    const upstream = createConnection({ host: "127.0.0.1", port: Number(http.port) });
+    const link = { downstream, upstream, detached: false };
+    links.push(link);
+    downstream.pipe(upstream);
+    upstream.pipe(downstream);
+    downstream.on("error", () => {});
+    upstream.on("error", () => {});
+    downstream.on("close", () => {
+      if (!link.detached) upstream.destroy();
+    });
+    upstream.on("close", () => downstream.destroy());
+  });
+  await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => {
+    for (const { upstream, downstream } of links) {
+      upstream.destroy();
+      downstream.destroy();
+    }
+    proxy.close();
+  });
+  const proxyAddress = `http://127.0.0.1:${proxy.address().port}`;
+
+  function startMachine(path, origin = http.href) {
     const child = Bun.spawn(
       [
         runner,
         "--server",
-        http.href,
+        origin,
         "--key-file",
         path,
         "--data",
@@ -100,7 +127,6 @@ try {
           ...process.env,
           ...heartbeat,
           FIXTURE_ACTION_PLACEMENT: "on this machine",
-          RUST_LOG: "trace",
           ...(process.env.TOKAMAK_TEST_RUNNER_HOST && {
             TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST,
           }),
@@ -171,17 +197,29 @@ try {
     untrusted.continueLocalCall("query", "ai/work:rows", {}, { ...forged, proof: "forged" }),
     /unknown window action continuation/i,
   );
+  const long = await untrusted.dispatchWindowAction("ai/work:callerDefault", {});
+  assert.equal(long.destination, "callerWindowRunner");
+  async function continueWindow() {
+    return untrusted.continueLocalCall("query", "ai/work:rows", {}, long.note);
+  }
+  for (let index = 0; index < 200; index++) {
+    const short = await untrusted.dispatchWindowAction("ai/work:callerDefault", {});
+    assert.equal(short.destination, "callerWindowRunner");
+  }
+  assert.equal((await continueWindow()).call.depth, 1);
+  untrusted.finishWindowAction(long.requestId);
+  await assert.rejects(continueWindow(), /unknown window action continuation/i);
+
   const watched = watchQuery(browser, api.work.rows, {}, cleanup);
   assert.deepEqual(await browser.action(api.work.callerDefault, {}), noMachine);
   await assertRefused(wrongFile, /refused the device key/i);
 
-  const { child: machine } = startMachine(keyFile);
+  const { child: machine, logs: machineLogs } = startMachine(keyFile, proxyAddress);
   const ps = Bun.spawnSync(["ps", "-p", String(machine.pid), "-o", "args="]);
   const args = ps.stdout.toString();
   assert.ok(args.includes("--key-file"));
   assert.ok(!args.includes(key), "The persisted key is absent from process arguments");
   assert.ok((await presence(true)).lastSeen);
-  await assertRefused(keyFile, /already connected/i);
 
   let launches = 0;
   const window = await connect(address, {
@@ -218,10 +256,8 @@ try {
   });
   assert.deepEqual(await window.action(api.work.run, argsWithThread), expected(identity, 0));
   assert.equal(await window.action(api.work.callPrivate, {}), 1);
-  assert.deepEqual(
-    await browser.action(api.delegate.program, argsWithThread),
-    expected(await browser.query(authCaller, {}), 1),
-  );
+  assert.deepEqual(await window.action(api.delegate.program, argsWithThread), expected(identity, 1));
+  assert.deepEqual(await browser.action(api.delegate.program, argsWithThread), noMachine);
   assert.deepEqual(await window.action(api.channel.stream, {}), {
     result: { sessionId: "fixture", stopped: true },
     received: ["started", "steered"],
@@ -242,7 +278,7 @@ try {
 
   async function startWaiting(signal) {
     const { rows: before } = await browser.query(api.work.rows, {});
-    const action = browser.action(api.work.connectedProgress, {}, { signal });
+    const action = window.action(api.work.connectedProgress, {}, { signal });
     // Progress arrives from the Runner while its action is still running.
     void action.catch(() => {});
     const { rows } = await watched.until(
@@ -285,10 +321,31 @@ try {
   }
   await presence(true);
   await reaped(interrupted.pid);
-  assert.deepEqual(await browser.action(api.work.callerDefault, {}), { runner: true, depth: 0 });
+  assert.deepEqual(await window.action(api.work.callerDefault, {}), { runner: true, depth: 0 });
 
-  machine.kill("SIGKILL");
-  await within(machine.exited, "Runner exit", 2000);
+  const interruptedByNetwork = await startWaiting();
+  const link = links.at(-1);
+  link.detached = true;
+  link.downstream.unpipe(link.upstream);
+  link.upstream.unpipe(link.downstream);
+  link.downstream.resetAndDestroy();
+  await waitFor(() => links.at(-1) !== link, "Runner reconnects before the old heartbeat expires", 2500);
+  assert.deepEqual(
+    await within(interruptedByNetwork.action, "takeover cancels the old invocation", 2500),
+    machineLost,
+  );
+  await presence(true, 2500);
+  assert.deepEqual(await window.action(api.work.callerDefault, {}), { runner: true, depth: 0 });
+  await reaped(interruptedByNetwork.pid);
+
+  const duplicate = startMachine(keyFile);
+  assert.notEqual(await within(machine.exited, "old Runner exits after takeover", 2500), 0);
+  assert.match((await machineLogs).join(""), /already connected/i);
+  await presence(true);
+  assert.deepEqual(await window.action(api.work.callerDefault, {}), { runner: true, depth: 0 });
+
+  duplicate.child.kill("SIGKILL");
+  await within(duplicate.child.exited, "Runner exit", 2000);
   await presence(false, 2000);
 
   const replacement = startMachine(keyFile);
@@ -301,6 +358,13 @@ try {
   assert.notEqual(await within(replacement.child.exited, "stop after revocation", 5000), 0);
   assert.match((await replacement.logs).join(""), /revoked the device key|refused the device key/i);
   await assertRefused(keyFile, /invalid or revoked/i);
+
+  servers[0].kill();
+  await servers[0].exited;
+  assert.ok(
+    [key, wrongKey, browserKey, other.key].every((secret) => !serverLogs.join("").includes(secret)),
+    "Machine credentials never appear in server logs",
+  );
 
   for (const { logs } of runners) {
     const log = (await logs).join("");

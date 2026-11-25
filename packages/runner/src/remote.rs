@@ -104,6 +104,10 @@ async fn reconnect(
         .redirect(reqwest::redirect::Policy::none());
     if url.scheme() == "http" {
         client = client.no_proxy();
+        if url.host_str() == Some("localhost") {
+            client =
+                client.resolve_to_addrs("localhost", &["127.0.0.1:0".parse()?, "[::1]:0".parse()?]);
+        }
     }
     let client = client.build()?;
     let mut delay = BACKOFF_MIN;
@@ -231,7 +235,7 @@ async fn connection(
                 Some(Ok(Message::Ping(_))) => continue,
                 Some(Ok(Message::Close(frame))) => {
                     refused = match frame.map(|frame| u16::from(frame.code)) {
-                        Some(4001) => Some("Server revoked the device key"),
+                        Some(server::websocket::DEVICE_SIGNED_OUT) => Some("Server revoked the device key"),
                         Some(machine_wire::DUPLICATE) => Some("A Runner is already connected with this device key"),
                         _ => None,
                     };

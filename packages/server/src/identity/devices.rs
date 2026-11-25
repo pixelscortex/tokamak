@@ -28,7 +28,7 @@ pub(super) struct DeviceRecord {
     #[serde(skip)]
     open_sockets: usize,
     #[serde(skip)]
-    machine_online: Option<bool>,
+    machine_sockets: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     revoked_at: Option<u64>,
     #[serde(skip)]
@@ -44,7 +44,7 @@ impl DeviceRecord {
             last_seen: None,
             live_last_seen: None,
             open_sockets: 0,
-            machine_online: None,
+            machine_sockets: None,
             revoked_at: None,
             cancelled: CancellationToken::new(),
         }
@@ -116,6 +116,7 @@ pub(crate) enum DeviceSocket {
     Closed,
     MachineOpened,
     MachineClosed,
+    MachineHeartbeat,
 }
 
 pub(crate) enum RevokeError {
@@ -261,7 +262,7 @@ impl Identities {
                     device: device.public.clone(),
                     member: member.user.clone(),
                     last_seen: device.live_last_seen.max(device.last_seen),
-                    online: device.machine_online.unwrap_or(device.open_sockets > 0),
+                    online: device.machine_sockets.unwrap_or(device.open_sockets) > 0,
                 })
                 .collect(),
         )
@@ -278,8 +279,16 @@ impl Identities {
         match socket {
             DeviceSocket::Opened => device.open_sockets += 1,
             DeviceSocket::Closed => device.open_sockets -= 1,
-            DeviceSocket::MachineOpened => device.machine_online = Some(true),
-            DeviceSocket::MachineClosed => device.machine_online = Some(false),
+            DeviceSocket::MachineOpened => *device.machine_sockets.get_or_insert(0) += 1,
+            DeviceSocket::MachineClosed => *device.machine_sockets.get_or_insert(1) -= 1,
+            DeviceSocket::MachineHeartbeat
+                if device
+                    .live_last_seen
+                    .is_some_and(|seen| now().saturating_sub(seen) < 60_000) =>
+            {
+                return;
+            }
+            DeviceSocket::MachineHeartbeat => {}
         }
         device.live_last_seen = Some(now()).max(device.live_last_seen);
         self.device_changes.send_replace(());

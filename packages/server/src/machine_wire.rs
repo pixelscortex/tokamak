@@ -20,7 +20,7 @@ pub const PATH: &str = "/machine";
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 pub const HEARTBEAT_LIMIT: Duration = Duration::from_secs(15);
 pub const DUPLICATE: u16 = 4002;
-const CAPACITY: usize = 128;
+pub(crate) const CAPACITY: usize = 128;
 
 pub fn heartbeat() -> (Duration, Duration) {
     fn setting(name: &str, default: Duration) -> Duration {

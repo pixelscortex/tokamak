@@ -88,7 +88,7 @@ impl RunnerActionUpstream {
         })
     }
 
-    async fn request(&self, name: &str, payload: Value) -> Result<(u64, Value), String> {
+    async fn request(&self, name: &str, payload: Value) -> Result<Value, String> {
         let Upstream::Connected { peer, root, scope } = &self.0 else {
             return Err("Expected connected Runner scope".into());
         };
@@ -103,14 +103,13 @@ impl RunnerActionUpstream {
             },
         )
         .await
-        .map(|value| (id, value))
     }
 
     pub async fn dispatch(&self, name: &str, payload: Value) -> Result<Value, engine::CallError> {
         match &self.0 {
             Upstream::Embedded(ops) => ops.ops.dispatch_call(name, payload).await,
             Upstream::Connected { .. } => {
-                let (_, value) = self.request(name, payload).await?;
+                let value = self.request(name, payload).await?;
                 if let Some(error) = value.get("error") {
                     if let Some(message) = error.as_str() {
                         return Err(message.into());
@@ -135,10 +134,7 @@ impl RunnerActionUpstream {
 
     pub async fn local_contracts(&self, payload: &Value) -> Result<Value, String> {
         let Upstream::Embedded(ops) = &self.0 else {
-            return self
-                .request("local.contracts", payload.clone())
-                .await
-                .map(|(_, value)| value);
+            return self.request("local.contracts", payload.clone()).await;
         };
         let scope = ops.scope.as_ref().ok_or("Missing plugin scope")?;
         let declaration = scope.declaration(payload)?;
@@ -168,33 +164,33 @@ impl RunnerActionUpstream {
         label: &str,
         payload: &Value,
     ) -> Result<RunnerContractRoute, String> {
-        let Upstream::Embedded(ops) = &self.0 else {
-            let Upstream::Connected { peer, root, .. } = &self.0 else {
-                unreachable!()
-            };
-            let (scope, route) = self
-                .request(
-                    "local.contract.route",
-                    serde_json::json!({
-                        "label": label, "args": payload,
+        let ops = match &self.0 {
+            Upstream::Embedded(ops) => ops,
+            Upstream::Connected { peer, root, .. } => {
+                let route = self
+                    .request(
+                        "local.contract.route",
+                        serde_json::json!({
+                            "label": label, "args": payload,
+                        }),
+                    )
+                    .await?;
+                let hash = |key: &str| {
+                    route[key]
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or("Missing contract artifact hash")
+                };
+                return Ok(RunnerContractRoute {
+                    entry_hash: hash("entryHash")?,
+                    code_hash: hash("codeHash")?,
+                    upstream: Self(Upstream::Connected {
+                        peer: peer.clone(),
+                        root: *root,
+                        scope: route["scope"].as_u64().ok_or("Missing contract scope")?,
                     }),
-                )
-                .await?;
-            let hash = |key: &str| {
-                route[key]
-                    .as_str()
-                    .map(str::to_owned)
-                    .ok_or("Missing contract artifact hash")
-            };
-            return Ok(RunnerContractRoute {
-                entry_hash: hash("entryHash")?,
-                code_hash: hash("codeHash")?,
-                upstream: Self(Upstream::Connected {
-                    peer: peer.clone(),
-                    root: *root,
-                    scope,
-                }),
-            });
+                });
+            }
         };
         let scope = ops.scope.as_ref().ok_or("Missing plugin scope")?;
         let invalid = || "Invalid local contract route".to_owned();

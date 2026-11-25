@@ -19,7 +19,7 @@ pub use runner_upstream::RunnerActionUpstream;
 pub(crate) use runner_upstream::runner_hashes;
 
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, String>> + Send>>;
-type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
+pub(crate) type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
 mod machines;
 pub(crate) use machines::Machines;
 use machines::Selection;
@@ -118,7 +118,7 @@ pub(crate) fn resolve(
                 entry_hash: entry_hash.to_owned(),
                 code_hash: code_hash.to_owned(),
             };
-            match runner.select(auth, note.is_window_continuation(), placement.window) {
+            match runner.select(auth, note.is_window_continuation()) {
                 Selection::Attached(dispatch) => {
                     return Destination::AttachedRunner(placement_for(dispatch));
                 }

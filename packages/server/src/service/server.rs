@@ -114,7 +114,6 @@ impl Server {
             caller: std::sync::RwLock::new(auth),
             revoked,
             local_continuations,
-            window_notes: Default::default(),
         });
         let (reply, wait) = oneshot::channel();
         admit(&self.commands, Command::Connect(auth.clone(), reply))?;

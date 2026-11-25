@@ -4,7 +4,10 @@ use crate::{
     machine_wire::{self, Incoming, Packet, Peer, Request},
 };
 use serde_json::{Value, json};
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    sync::Mutex,
+};
 
 pub(super) async fn upgrade(
     State(adapter): State<Adapter>,
@@ -91,7 +94,7 @@ async fn dispatch(peer: Peer, scopes: Scopes, action: RunnerAction) -> Result<Va
     result.map_err(|error| upstream.redact(error))
 }
 
-async fn operation(scopes: Scopes, id: u64, request: Request) -> Result<Value, String> {
+async fn operation(scopes: Scopes, peer: Peer, request: Request) -> Result<Value, String> {
     let Request::Operation {
         root,
         scope,
@@ -117,14 +120,14 @@ async fn operation(scopes: Scopes, id: u64, request: Request) -> Result<Value, S
     tokio::select! {
         biased;
         () = scopes.ended.cancelled() => Err("Machine invocation has ended".into()),
-        result = invoke_operation(&scopes, upstream, id, &name, payload) => result,
+        result = invoke_operation(&scopes, upstream, &peer, &name, payload) => result,
     }
 }
 
 async fn invoke_operation(
     scopes: &Scope,
     upstream: Arc<RunnerActionUpstream>,
-    id: u64,
+    peer: &Peer,
     name: &str,
     payload: Value,
 ) -> Result<Value, String> {
@@ -135,11 +138,15 @@ async fn invoke_operation(
             let label = payload["label"].as_str().ok_or("Missing contract label")?;
             let route = upstream.local_contract(label, &payload["args"]).await?;
             let mut scopes = scopes.upstreams.lock().expect("machine invocation scopes");
-            if scopes.len() >= 128 {
+            if scopes.len() >= machine_wire::CAPACITY {
                 return Err("Machine contract scope capacity exceeded".into());
             }
-            scopes.insert(id, Arc::new(route.upstream));
-            Ok(json!({"entryHash":route.entry_hash, "codeHash":route.code_hash}))
+            let id = peer.next_id();
+            let Entry::Vacant(slot) = scopes.entry(id) else {
+                return Err("Duplicate machine contract scope".into());
+            };
+            slot.insert(Arc::new(route.upstream));
+            Ok(json!({"scope":id, "entryHash":route.entry_hash, "codeHash":route.code_hash}))
         }
         _ => Ok(match upstream.dispatch(name, payload).await {
             Ok(value) => json!({"value":value}),
@@ -148,6 +155,10 @@ async fn invoke_operation(
             }
         }),
     }
+}
+
+fn dispatch_to(peer: Peer, scopes: Scopes) -> crate::actions::RunnerDispatch {
+    Arc::new(move |action| Box::pin(dispatch(peer.clone(), scopes.clone(), action)))
 }
 
 async fn connection(
@@ -161,29 +172,15 @@ async fn connection(
     }
     let (peer, mut outgoing) = Peer::new();
     let scopes = Scopes::default();
-    let dispatch_peer = peer.clone();
-    let dispatch_scopes = scopes.clone();
-    let Some(registration) = adapter.server.machines().connect(
-        &auth,
-        Arc::new(move |action| {
-            Box::pin(dispatch(
-                dispatch_peer.clone(),
-                dispatch_scopes.clone(),
-                action,
-            ))
-        }),
-    ) else {
-        close(
-            &mut socket,
-            machine_wire::DUPLICATE,
-            "Machine already connected",
-        )
-        .await;
-        return;
-    };
+    let replaced = CancellationToken::new();
     adapter
         .identities
         .record_last_seen(&auth, DeviceSocket::MachineOpened);
+    let registration = adapter.server.machines().connect(
+        &auth,
+        dispatch_to(peer.clone(), scopes.clone()),
+        replaced.clone(),
+    );
     let (interval, limit) = machine_wire::heartbeat();
     let mut ticks = tokio::time::interval(interval);
     let mut deadline = tokio::time::Instant::now() + limit;
@@ -193,6 +190,7 @@ async fn connection(
             biased;
             () = adapter.stopping.cancelled() => break,
             () = revoked.cancelled() => break,
+            () = replaced.cancelled() => break,
             () = peer.stop().cancelled() => break,
             () = tokio::time::sleep_until(deadline) => break,
             reaped = incoming.reap() => if reaped { continue } else { break },
@@ -200,11 +198,13 @@ async fn connection(
                 Some(Ok(Message::Text(text))) => {
                     let Ok(packet) = serde_json::from_str::<Packet>(&text) else { break };
                     let scopes = scopes.clone();
-                    incoming.receive(&peer, packet, move |id, request, _| operation(scopes, id, request));
+                    let operation_peer = peer.clone();
+                    incoming.receive(&peer, packet, move |_, request, _| operation(scopes, operation_peer, request));
                     continue;
                 }
                 Some(Ok(Message::Pong(_))) => {
                     deadline = tokio::time::Instant::now() + limit;
+                    adapter.identities.record_last_seen(&auth, DeviceSocket::MachineHeartbeat);
                     continue;
                 }
                 Some(Ok(Message::Ping(_))) => continue,
@@ -217,10 +217,11 @@ async fn connection(
             },
             _ = ticks.tick() => Message::Ping(Default::default()),
         };
-        if !matches!(
-            tokio::time::timeout_at(deadline, socket.send(send)).await,
-            Ok(Ok(()))
-        ) {
+        if !tokio::select! {
+            biased;
+            () = replaced.cancelled() => false,
+            result = tokio::time::timeout_at(deadline, socket.send(send)) => matches!(result, Ok(Ok(()))),
+        } {
             break;
         }
     }
@@ -231,6 +232,13 @@ async fn connection(
     drop(registration);
     if revoked.is_cancelled() {
         close(&mut socket, DEVICE_SIGNED_OUT, "Device signed out").await;
+    } else if replaced.is_cancelled() {
+        close(
+            &mut socket,
+            machine_wire::DUPLICATE,
+            "Machine already connected",
+        )
+        .await;
     }
     drop(socket);
     incoming.shutdown().await;

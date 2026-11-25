@@ -88,7 +88,12 @@ export type LaunchLocalWorker = (
 }>;
 
 type Continuation = { depth: number; thread: string | null; proof?: string | null };
-type WindowInvocation = { destination: "callerWindowRunner"; note: Continuation; artifact: LocalArtifact };
+type WindowInvocation = {
+  destination: "callerWindowRunner";
+  requestId?: number;
+  note: Continuation;
+  artifact: LocalArtifact;
+};
 type WorkerCallContext = {
   continuation?: Continuation;
   signal?: ActionSignal;
@@ -101,6 +106,7 @@ type ServerConnection = ClientTransport & {
     on?: ActionTarget,
     signal?: ActionSignal,
   ): Promise<JsonValue>;
+  finishWindowAction?(id: number): void;
   continueLocalCall?(
     kind: "query" | "mutation" | "action",
     name: string,
@@ -176,6 +182,8 @@ export class LocalFunctions implements LocalTransport {
     } catch (error) {
       if (error instanceof RunnerUnavailable) return fail("noMachine", null);
       throw error;
+    } finally {
+      if (dispatch.requestId !== undefined) this.server.finishWindowAction?.(dispatch.requestId);
     }
   }
 

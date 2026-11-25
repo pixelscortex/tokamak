@@ -173,17 +173,22 @@ Do not print the response or put either credential in shell arguments. Use
 one device key per Runner. Signing that device out revokes the key and stops
 the Runner from reconnecting.
 
-Give the Runner the same complete plugin builds installed on the server,
-including `manifest.json`, `local-entry.js` and `local.js`. The cloud package
-omits Runner bundles, so keep the original build output to install on the
-Runner. The Runner verifies the two local bundle hashes against the call's
-catalog identity and refuses to run mismatched code. Until the server can
-distribute those bundles, update the Runner's installation when you update
-the server's plugins.
+Install the full Runner build of every plugin this machine serves in
+`--plugins`, including `manifest.json`, `local-entry.js`, and `local.js`.
+Reinstall the build after every plugin update. The cloud package omits Runner
+bundles and automatic delivery is separate work. A missing or mismatched build
+returns `runnerArtifactMismatch`. In a caller action, `ctx.env` comes from the
+Runner's own environment.
 
-The server prefers the Runner connected with the caller's own device key.
-A browser or nested server action without a matching device uses the caller's
-only connected Runner, if there is one. A desktop with an unmatched local
-Runner can still use the existing window route. After a device key is used by a Runner, its online status follows the
-Runner connection even if a window shares that key; a lost connection fails active calls with `machineLost`, then the
-Runner retries with backoff. Calls are not replayed.
+The server uses the connected Runner for the exact device in the caller's
+call note. A desktop without a connection for its device can still use the
+window route. A browser without a Runner for its device gets `noMachine`.
+The newest connection using a device key takes over; the old Runner exits
+if it receives the takeover notice. Connection loss fails active calls with
+`machineLost`; the Runner retries with backoff and does not replay calls.
+
+Plain HTTP is available only for loopback IP addresses and `localhost`,
+which the Runner resolves directly to loopback addresses. Other origins
+require TLS. Set `TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS` (default 5000) and
+`TOKAMAK_MACHINE_HEARTBEAT_LIMIT_MS` (default 15000) on the Runner and server
+to tune heartbeat timing. Use positive values with the interval below the limit.

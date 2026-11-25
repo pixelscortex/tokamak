@@ -22,6 +22,9 @@ impl Coordinator {
 
         match action {
             Action::Cancel(id) => {
+                if let Some(client) = self.sessions.get_mut(&session) {
+                    client.window_notes.retain(|_, (request, _)| *request != id);
+                }
                 if let Some((cancel, _)) = self.action_cancellations.get(&(session, id)) {
                     cancel.cancel();
                 }
@@ -55,7 +58,7 @@ impl Coordinator {
                 kind: expected,
                 local_parent,
                 placement,
-            } => match self.request_caller(auth, &name, &args, local_parent, placement) {
+            } => match self.request_caller(session, auth, &name, &args, local_parent, placement) {
                 Ok(caller) => self.call(session, id, name, args, expected, caller).await,
                 Err(error) => self.respond(session, id, Err(error)),
             },
@@ -75,6 +78,7 @@ impl Coordinator {
 
     fn request_caller(
         &self,
+        session_id: u64,
         session: SessionAuth,
         name: &str,
         args: &Json,
@@ -100,13 +104,10 @@ impl Coordinator {
                 .and_then(|loaded| loaded.targets.get(name))
                 .map(|target| target.args.as_ref());
             let parent = if let Some(proof) = proof {
-                let notes = session
-                    .window_notes
-                    .lock()
-                    .expect("window continuation notes");
-                let (_, note) = notes
-                    .iter()
-                    .find(|(key, _)| key == &proof)
+                let (_, note) = self
+                    .sessions
+                    .get(&session_id)
+                    .and_then(|client| client.window_notes.get(&proof))
                     .ok_or("Unknown window action continuation")?;
                 note.as_window_continuation(auth.clone())
             } else {

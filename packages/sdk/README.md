@@ -180,10 +180,15 @@ action receives the original identity and call note.
 The workspace server chooses the destination. A direct client authenticated
 as a person on an embedded Runner's machine uses that Runner, including for
 nested actions. A [Runner connected to a shared server](../runner/README.md#connect-a-headless-runner-to-a-shared-server)
-receives actions for its own device. A browser or nested server action with no
-exact device match can use the caller's only connected Runner. With several
-candidates, it needs an exact match. A desktop without a connected Runner for
-its device can still forward work to its own local Runner.
+receives actions only for the device in the original call note, including
+nested actions from that device. A desktop without a connected Runner for
+its device can still forward work to its own local Runner. A browser without
+a Runner for its device gets `noMachine`.
+
+Install the full Runner build of each served plugin in the remote Runner's
+`--plugins` directory after every update. Missing or mismatched builds return
+`runnerArtifactMismatch`; automatic delivery is separate work. In a caller
+action on a connected Runner, `ctx.env` comes from the Runner's environment.
 
 Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
 Providers can implement its methods with `action({ on: "caller", handler })`

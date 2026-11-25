@@ -47,7 +47,7 @@ use response::{account_result, snapshots};
 
 const CONNECTIONS: u32 = 64;
 const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
-const DEVICE_SIGNED_OUT: u16 = 4001;
+pub const DEVICE_SIGNED_OUT: u16 = 4001;
 const DEVICE_STREAM_PATH: &str = "/devices/live";
 pub const WS_PROTOCOL: &str = "tokamak";
 const RUNNER_WORKER_PATH: &str = "/local-worker";
