@@ -7,6 +7,7 @@ type WebType<K extends string> = typeof globalThis extends Record<K, { prototype
 export interface HttpActionContext {
   readonly serverUrl: string;
   readonly path: string;
+  readonly originalHost: string | null;
   readonly params: Readonly<Record<string, string>>;
 }
 

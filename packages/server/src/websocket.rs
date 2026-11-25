@@ -235,10 +235,10 @@ async fn serve_inner(
         .clear_revoked_window_state(&identities)
         .await
         .map_err(io::Error::other)?;
-    server.machines().configure(
-        identities.clone(),
-        crate::web::configured_public_url().map_err(|error| io::Error::other(error.to_string()))?,
-    )?;
+    let public_origin = crate::web::configured_public_url()?;
+    server
+        .machines()
+        .configure(identities.clone(), public_origin.clone())?;
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
     let hosted = web.is_some();
@@ -263,12 +263,13 @@ async fn serve_inner(
         adapter.server.clone(),
         stopping.clone(),
         web,
+        public_origin,
         listener.local_addr()?,
-    );
+    )?;
     // Catch-all plugin paths belong in a fallback router so Axum can keep
     // the core asset and reload paths registered independently.
     let app = routes(adapter, worker).fallback_service(http_actions);
-    // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
+    // The listener owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
     // connections that eventually reach our WebSocket handler.
@@ -277,19 +278,15 @@ async fn serve_inner(
         stopping: stopping.clone(),
     };
     let presence = hosted.then(|| start_last_seen_timer(identities.clone(), stopping.clone()));
-    let trigger = stopping.clone();
-    let result = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<PeerAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        tokio::select! {
-            _ = shutdown => {},
-            _ = trigger.cancelled() => {},
+    let serving = crate::http_listener::serve(listener, app, stopping.clone());
+    tokio::pin!(serving);
+    let result = tokio::select! {
+        result = &mut serving => result,
+        () = shutdown => {
+            stopping.cancel();
+            serving.await
         }
-        trigger.cancel();
-    })
-    .await;
+    };
     stopping.cancel();
     // Axum does not wait for upgraded connections. Permits include the upgrade
     // handshake, so none can escape this barrier and outlive storage shutdown.
@@ -832,15 +829,7 @@ impl axum::serve::Listener for ShutdownListener {
 }
 
 #[derive(Clone)]
-struct PeerAddr(SocketAddr);
-
-impl axum::extract::connect_info::Connected<axum::serve::IncomingStream<'_, ShutdownListener>>
-    for PeerAddr
-{
-    fn connect_info(stream: axum::serve::IncomingStream<'_, ShutdownListener>) -> Self {
-        Self(*stream.remote_addr())
-    }
-}
+pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 pub(crate) struct ShutdownIo {
     stream: TcpStream,

@@ -26,7 +26,13 @@ generated references in `src/server/_generated/` and component declarations in
   in the handler; these routes do not require member sign-in. Use the web
   `Request` and return a `Response`, including a direct `fetch` response to
   stream it. The context provides `ctx.serverUrl`, `ctx.path` and `ctx.params`.
-  Declare the usual network permission for outbound requests.
+  Set `TOKAMAK_PUBLIC_URL` on the Server to read `ctx.serverUrl`. Core routes
+  `/plugins/<id>/<revision>/assets/<name...>` and `/plugins/<id>/reload` take
+  precedence. Handle `OPTIONS` yourself if you need CORS. Duplicate headers
+  are joined and response `Set-Cookie` is dropped. Pass `request.signal` to
+  outbound fetches so they can end on disconnect. Declare the usual network
+  permission; each fetch from a fresh host performs its own DNS lookup and,
+  for HTTPS, TLS handshake.
 - **Caller actions**: use `action({ on: "caller", args, handler })` for files and programs on the
   person's computer. Use `ctx.proc([program, ...args], { cwd })` for programs
   and `ctx.signal` for cancellation. Call public server functions with their

@@ -39,6 +39,9 @@ axum = { version = "0.8.9", default-features = false, features = [
   "query",
   "matched-path",
 ] }
+http-body-util = "0.1.3"
+hyper = { version = "1.12.0", default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["service", "tokio"] }
 tower = { version = "0.5.3", default-features = false }
 # Already used by the embedded engine; its owned cancellation future wakes
 # accepted TCP I/O, including HTTP peers that never finish upgrade headers.

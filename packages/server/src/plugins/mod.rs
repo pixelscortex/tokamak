@@ -18,7 +18,7 @@ pub struct Artifact {
     pub bundle: Option<Arc<Bundle>>,
     assets: BTreeMap<String, Arc<Asset>>,
     permissions: BTreeSet<String>,
-    http_slots: Arc<tokio::sync::Semaphore>,
+    http_slots: Arc<std::sync::OnceLock<Arc<tokio::sync::Semaphore>>>,
 }
 pub struct Catalog {
     pub order: Vec<String>,

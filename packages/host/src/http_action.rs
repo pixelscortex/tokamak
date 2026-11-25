@@ -12,18 +12,18 @@ use anyhow::{Context, Result, ensure};
 use engine::{Invocation, install_ops, web};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CaughtError, Ctx, Exception, Function, Module, Object, Promise,
-    TypedArray,
+    TypedArray, function::Async,
 };
 use serde_json::Value;
 
 use crate::watchdog::Watchdog;
 
 const HEAD_BYTES: usize = 256 * 1024;
-const BODY_BYTES: usize = 8 * 1024 * 1024;
+const BODY_BYTES: usize = 32 * 1024 * 1024;
 const CHUNK_BYTES: usize = 64 * 1024;
 
 pub(crate) async fn run(path: &Path) -> Result<()> {
-    let (head, body) = receive()?;
+    let (head, body, disconnected) = receive()?;
     let metadata: Value = serde_json::from_str(&head)?;
     let heap = metadata["heap"]
         .as_u64()
@@ -63,12 +63,22 @@ pub(crate) async fn run(path: &Path) -> Result<()> {
             let handlers: Object = plugin.get("handlers")?;
 
             let (head_out, chunk_out) = output_functions(&ctx)?;
+            let wait_for_abort = Function::new(
+                ctx.clone(),
+                Async(move || {
+                    let mut disconnected = disconnected.clone();
+                    async move {
+                        let _ = disconnected.wait_for(|stopped| *stopped).await;
+                    }
+                }),
+            )?;
             let pending: Promise = serve.call((
                 handlers,
                 head,
                 TypedArray::new(ctx.clone(), body)?,
                 head_out,
                 chunk_out,
+                wait_for_abort,
             ))?;
             pending.into_future::<()>().await
         }
@@ -113,7 +123,7 @@ fn output_functions<'js>(ctx: &Ctx<'js>) -> rquickjs::Result<(Function<'js>, Fun
     Ok((head, chunk))
 }
 
-fn receive() -> Result<(String, Vec<u8>)> {
+fn receive() -> Result<(String, Vec<u8>, tokio::sync::watch::Receiver<bool>)> {
     let mut input = BufReader::new(io::stdin());
     let mut size = [0; 4];
     input.read_exact(&mut size)?;
@@ -136,13 +146,16 @@ fn receive() -> Result<(String, Vec<u8>)> {
     let mut body = vec![0; length as usize];
     input.read_exact(&mut body)?;
 
-    // The server holds stdin open for the whole response. Even if the server
-    // crashes, EOF retires this host and closes any outstanding upstream I/O.
+    let (stop, disconnected) = tokio::sync::watch::channel(false);
+    // EOF signals the handler on a live server, and the fallback also retires
+    // the host if its parent dies and cannot enforce the grace period.
     std::thread::spawn(move || {
         let _ = input.read(&mut [0_u8; 1]);
+        let _ = stop.send(true);
+        std::thread::sleep(std::time::Duration::from_secs(2));
         std::process::exit(0);
     });
-    Ok((head, body))
+    Ok((head, body, disconnected))
 }
 
 fn write_packet(output: &mut impl Write, bytes: &[u8]) -> io::Result<()> {

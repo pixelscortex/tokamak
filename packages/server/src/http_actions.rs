@@ -1,15 +1,18 @@
 //! Route lookup uses the installed catalog. HTTP I/O stays outside the coordinator.
+mod config;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     io,
     process::Stdio,
-    sync::Arc,
+    sync::{Arc, OnceLock},
+    time::Duration,
 };
 
 use axum::{
     Router,
     body::{Body, Bytes, to_bytes},
-    extract::{Path, Request, State},
+    extract::{Request, State},
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -26,21 +29,25 @@ use crate::{Server, plugins::Asset};
 
 const CHUNK_BYTES: usize = 64 * 1024;
 const HEAD_BYTES: usize = 256 * 1024;
-const REQUEST_BYTES: usize = 8 * 1024 * 1024;
-pub(crate) const PLUGIN_CAPACITY: usize = 8;
+const REQUEST_BYTES: usize = 32 * 1024 * 1024;
+const BODY_TIMEOUT: Duration = Duration::from_secs(30);
+const SLOT_WAIT: Duration = Duration::from_millis(250);
+const ABORT_GRACE: Duration = Duration::from_millis(500);
 
 pub(crate) struct Route {
     pub code: Arc<Asset>,
     pub pattern: String,
     pub params: BTreeMap<String, String>,
     pub permissions: Vec<String>,
-    pub slots: Arc<Semaphore>,
+    pub slots: Arc<OnceLock<Arc<Semaphore>>>,
 }
 
 #[derive(Clone)]
 struct HttpActions {
     server: Arc<Server>,
-    server_url: String,
+    request_origin: String,
+    server_url: Option<String>,
+    config: Arc<config::Config>,
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
 }
@@ -49,15 +56,29 @@ pub(crate) fn router(
     server: Arc<Server>,
     stopping: CancellationToken,
     web: Option<crate::web::HostedWeb>,
+    public_origin: Option<String>,
     listen: std::net::SocketAddr,
-) -> Router {
+) -> io::Result<Router> {
+    let config = Arc::new(config::Config::load()?);
+    let server_url = match &web {
+        Some(web) => web.public_origin.clone(),
+        None if cfg!(feature = "local-runtime") => Some(format!("http://{listen}")),
+        None => public_origin,
+    };
+    if server_url.is_none() {
+        eprintln!(
+            "TOKAMAK_PUBLIC_URL is unset; HTTP actions cannot read ctx.serverUrl on this hosted Server"
+        );
+    }
     let state = HttpActions {
         server,
-        server_url: web
-            .as_ref()
-            .map_or_else(|| format!("http://{listen}"), |web| web.origin.clone()),
+        request_origin: server_url
+            .clone()
+            .unwrap_or_else(|| format!("http://{listen}")),
+        server_url,
+        slots: Arc::new(Semaphore::new(config.total_slots)),
+        config,
         stopping,
-        slots: Arc::new(Semaphore::new(64)),
     };
     let route = || axum::routing::any(handle);
     let router = Router::new()
@@ -65,14 +86,14 @@ pub(crate) fn router(
         .route("/plugins/{id}/", route())
         .route("/plugins/{id}/{*path}", route())
         .with_state(state);
-    match web {
+    Ok(match web {
         Some(web) => router.fallback_service(
             Router::new()
                 .fallback(axum::routing::get(crate::web::shell))
                 .with_state(web),
         ),
         None => router,
-    }
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -182,70 +203,128 @@ pub(crate) fn match_path<'a>(
         .map(|(_, pattern, params)| (pattern, params))
 }
 
-async fn handle(
-    State(state): State<HttpActions>,
-    Path(params): Path<BTreeMap<String, String>>,
-    request: Request,
-) -> Response {
-    let Some(plugin) = params.get("id") else {
+async fn handle(State(state): State<HttpActions>, request: Request) -> Response {
+    let Some(rest) = request.uri().path().strip_prefix("/plugins/") else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    // Use the URI rather than the wildcard extractor: decoding separators
-    // before matching would change how many segments the caller supplied.
-    let path = request
-        .uri()
-        .path()
-        .strip_prefix("/plugins/")
-        .and_then(|path| path.find('/').map(|index| &path[index..]))
-        .unwrap_or("/");
-    let route = match state
-        .server
-        .http_action(plugin.clone(), path.to_owned())
-        .await
+    let (plugin, path) = rest
+        .find('/')
+        .map_or((rest, "/"), |index| rest.split_at(index));
+    // Validate before matching or building a WHATWG URL, which normalizes dot segments.
+    let Ok(plugin) = safe_segment(plugin) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if path
+        .split('/')
+        .any(|segment| safe_segment(segment).is_err())
     {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let (plugin, path) = (plugin.into_owned(), path.to_owned());
+    if request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok()?.parse::<u64>().ok())
+        .is_some_and(|length| length > REQUEST_BYTES as u64)
+    {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
+    let route = match state.server.http_action(plugin.clone(), path).await {
         Ok(Some(route)) => route,
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
-    };
-    let Ok(plugin_slot) = route.slots.clone().try_acquire_owned() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    };
-    let Ok(slot) = state.slots.clone().try_acquire_owned() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        Err(_) => return busy(),
     };
     let stopping = state.stopping.clone();
     tokio::select! {
-        () = stopping.cancelled() => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-        result = invoke(state, route, path.to_owned(), request, [slot, plugin_slot]) => match result {
-            Ok(response) => response,
-            Err(error) => {
-                eprintln!("HTTP action for {plugin}: {error}");
-                StatusCode::BAD_GATEWAY.into_response()
-            }
-        }
+        () = stopping.cancelled() => busy(),
+        response = run_request(state, route, request, &plugin) => response,
     }
 }
 
-async fn invoke(
-    state: HttpActions,
-    route: Route,
-    path: String,
-    request: Request,
-    slots: [OwnedSemaphorePermit; 2],
-) -> io::Result<Response> {
+fn safe_segment(segment: &str) -> Result<std::borrow::Cow<'_, str>, ()> {
+    let decoded = percent_encoding::percent_decode_str(segment)
+        .decode_utf8()
+        .map_err(|_| ())?;
+    if matches!(decoded.as_ref(), "." | "..") || decoded.contains(['/', '\\']) {
+        return Err(());
+    }
+    Ok(decoded)
+}
+
+fn busy() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(header::RETRY_AFTER, "1")],
+    )
+        .into_response()
+}
+
+async fn run_request(state: HttpActions, route: Route, request: Request, plugin: &str) -> Response {
     let (parts, incoming) = request.into_parts();
-    let body = match to_bytes(incoming, REQUEST_BYTES).await {
-        Ok(body) => body,
-        Err(_) => return Ok(StatusCode::PAYLOAD_TOO_LARGE.into_response()),
+    let body = match tokio::time::timeout(BODY_TIMEOUT, to_bytes(incoming, REQUEST_BYTES)).await {
+        Ok(Ok(body)) => body,
+        Ok(Err(error)) => {
+            use std::error::Error;
+            return if error
+                .source()
+                .is_some_and(|cause| cause.is::<http_body_util::LengthLimitError>())
+            {
+                StatusCode::PAYLOAD_TOO_LARGE
+            } else {
+                StatusCode::BAD_REQUEST
+            }
+            .into_response();
+        }
+        Err(_) => return StatusCode::REQUEST_TIMEOUT.into_response(),
     };
+    let plugin_slots = route
+        .slots
+        .get_or_init(|| Arc::new(Semaphore::new(state.config.plugin_slots)));
+    let Ok(Some(slots)) = tokio::time::timeout(SLOT_WAIT, async {
+        let plugin = plugin_slots.clone().acquire_owned().await.ok()?;
+        let shared = state.slots.clone().acquire_owned().await.ok()?;
+        Some([shared, plugin])
+    })
+    .await
+    else {
+        return busy();
+    };
+    match tokio::time::timeout(
+        state.config.first_headers,
+        invoke(state, route, parts, body, slots),
+    )
+    .await
+    {
+        Ok(Ok(response)) => response,
+        Ok(Err(error)) => {
+            eprintln!("HTTP action for {plugin}: {error}");
+            StatusCode::BAD_GATEWAY.into_response()
+        }
+        Err(_) => StatusCode::GATEWAY_TIMEOUT.into_response(),
+    }
+}
+
+fn request_head(
+    state: &HttpActions,
+    route: &Route,
+    parts: &mut axum::http::request::Parts,
+    length: usize,
+) -> io::Result<Vec<u8>> {
     let url = format!(
         "{}{}",
-        state.server_url,
+        state.request_origin,
         parts
             .uri
             .path_and_query()
             .map_or("/", |value| value.as_str())
     );
+    let original_host = parts
+        .headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    strip_hop_headers(&mut parts.headers);
+    parts.headers.remove(header::HOST);
     let headers: Vec<_> = parts
         .headers
         .iter()
@@ -261,17 +340,30 @@ async fn invoke(
             )
         })
         .collect();
-    let heap = tokamak_worker::configured_action_heap_bytes().map_err(io::Error::other)?;
-    let head = serde_json::to_vec(&json!({
+    // A buffered 32 MiB request may also be decoded to a JS string and parsed.
+    let heap = tokamak_worker::configured_action_heap_bytes()
+        .map_err(io::Error::other)?
+        .max(192 * 1024 * 1024);
+    Ok(serde_json::to_vec(&json!({
         "method": parts.method.as_str(),
         "url": url,
         "headers": headers,
-        "length": body.len(),
+        "length": length,
         "heap": heap,
         "permissions": route.permissions,
         "pattern": route.pattern,
-        "context": { "serverUrl": state.server_url, "path": path, "params": route.params },
-    }))?;
+        "context": { "serverUrl": state.server_url, "params": route.params, "originalHost": original_host },
+    }))?)
+}
+
+async fn invoke(
+    state: HttpActions,
+    route: Route,
+    mut parts: axum::http::request::Parts,
+    body: Bytes,
+    slots: [OwnedSemaphorePermit; 2],
+) -> io::Result<Response> {
+    let head = request_head(&state, &route, &mut parts, body.len())?;
     if head.len() > HEAD_BYTES {
         return Ok(StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE.into_response());
     }
@@ -284,7 +376,7 @@ async fn invoke(
         .stdout(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
-    let mut input = child
+    let input = child
         .stdin
         .take()
         .ok_or_else(|| io::Error::other("Missing HTTP action input"))?;
@@ -293,17 +385,19 @@ async fn invoke(
         .take()
         .ok_or_else(|| io::Error::other("Missing HTTP action output"))?;
 
-    input.write_u32(head.len() as u32).await?;
-    input.write_all(&head).await?;
-    input.write_all(&body).await?;
-    drop(body);
-    let running = Running {
-        _child: child,
-        _input: input,
-        output,
-        _slots: slots,
+    let mut running = Running {
+        child: Some(child),
+        input: Some(input),
+        output: Some(output),
+        slots: Some(slots),
         stopping: state.stopping,
     };
+    if let Some(input) = &mut running.input {
+        input.write_u32(head.len() as u32).await?;
+        input.write_all(&head).await?;
+        input.write_all(&body).await?;
+    }
+    drop(body);
     // Keep the verified bundle available until the child has loaded it.
     let response = read_response(running, parts.method).await;
     drop(route);
@@ -311,19 +405,24 @@ async fn invoke(
 }
 
 async fn read_response(mut running: Running, method: Method) -> io::Result<Response> {
-    let message = read_packet(&mut running.output, HEAD_BYTES).await?;
+    let message = running.read(HEAD_BYTES).await?;
     let head: ResponseHead = serde_json::from_slice(&message)?;
     let status = StatusCode::from_u16(head.status).map_err(io::Error::other)?;
+    if status.is_informational() {
+        return Err(io::Error::other(
+            "HTTP actions cannot return informational statuses",
+        ));
+    }
     let headers = response_headers(head.headers)?;
     let body = if method == Method::HEAD || matches!(head.status, 204 | 205 | 304) {
         Body::empty()
     } else {
-        // Hyper drops this state on disconnect. Closing stdin and killing the
-        // isolated host also closes any upstream request it was waiting on.
+        // Dropping the stream starts cancellation even if the child is idle.
         let stream = futures_util::stream::try_unfold(running, |mut running| async move {
+            let stopping = running.stopping.clone();
             let packet = tokio::select! {
-                () = running.stopping.cancelled() => return Ok(None),
-                result = read_packet(&mut running.output, CHUNK_BYTES) => result?,
+                () = stopping.cancelled() => return Ok(None),
+                result = running.read(CHUNK_BYTES) => result?,
             };
             Ok::<_, io::Error>((!packet.is_empty()).then(|| (Bytes::from(packet), running)))
         });
@@ -355,6 +454,23 @@ fn response_headers(incoming: Vec<(String, String)>) -> io::Result<HeaderMap> {
             HeaderValue::from_bytes(&bytes).map_err(io::Error::other)?,
         );
     }
+    strip_hop_headers(&mut headers);
+    for name in ["set-cookie", "clear-site-data"] {
+        headers.remove(name);
+    }
+    // Do not let plugin responses execute scripts in the workspace origin.
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(headers)
+}
+
+fn strip_hop_headers(headers: &mut HeaderMap) {
     let connection: Vec<_> = headers
         .get_all(header::CONNECTION)
         .iter()
@@ -376,30 +492,51 @@ fn response_headers(incoming: Vec<(String, String)>) -> io::Result<HeaderMap> {
         "transfer-encoding",
         "upgrade",
         "content-length",
-        "set-cookie",
-        "clear-site-data",
     ] {
         headers.remove(name);
     }
-    // The plugin route shares the workspace's origin. A navigated plugin
-    // response must not run scripts with access to the workspace window.
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("sandbox"),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    Ok(headers)
 }
 
 struct Running {
-    _child: Child,
-    _input: ChildStdin,
-    output: ChildStdout,
-    _slots: [OwnedSemaphorePermit; 2],
+    child: Option<Child>,
+    input: Option<ChildStdin>,
+    output: Option<ChildStdout>,
+    slots: Option<[OwnedSemaphorePermit; 2]>,
     stopping: CancellationToken,
+}
+
+impl Running {
+    async fn read(&mut self, maximum: usize) -> io::Result<Vec<u8>> {
+        let output = self
+            .output
+            .as_mut()
+            .ok_or_else(|| io::Error::other("Missing HTTP action output"))?;
+        read_packet(output, maximum).await
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        // EOF signals AbortController in the child. Drain its pipe while cleanup
+        // runs so a full pipe cannot prevent JS from seeing cancellation.
+        self.input.take();
+        let (Some(mut child), Some(mut output)) = (self.child.take(), self.output.take()) else {
+            return;
+        };
+        let slots = self.slots.take();
+        tokio::spawn(async move {
+            let _slots = slots;
+            let cleanup = async {
+                let mut sink = tokio::io::sink();
+                let (status, _) =
+                    tokio::join!(child.wait(), tokio::io::copy(&mut output, &mut sink));
+                status
+            };
+            if tokio::time::timeout(ABORT_GRACE, cleanup).await.is_err() {
+                let _ = child.kill().await;
+            }
+        });
+    }
 }
 
 async fn read_packet(

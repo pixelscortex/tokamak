@@ -97,9 +97,7 @@ impl Artifact {
             bundle,
             assets,
             permissions,
-            http_slots: Arc::new(tokio::sync::Semaphore::new(
-                crate::http_actions::PLUGIN_CAPACITY,
-            )),
+            http_slots: Arc::default(),
         })
     }
 

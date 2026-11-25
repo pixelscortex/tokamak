@@ -38,14 +38,52 @@ export const proxy = httpAction({
   handler: async (ctx, request) => {
     if (request.headers.get("x-key") !== "test-key") return new Response(null, { status: 401 });
     const target = new URL(request.url).searchParams.get("target");
-    if (target) return fetch(target, { signal: request.signal });
+    if (target) {
+      const url = new URL(request.url);
+      try {
+        return await fetch(target, {
+          headers: request.headers,
+          signal: url.searchParams.has("ignore") ? undefined : request.signal,
+        });
+      } finally {
+        const marker = url.searchParams.get("marker");
+        if (marker && request.signal.aborted) await fetch(marker);
+      }
+    }
+    if (ctx.params.profile === "size") return Response.json((await request.arrayBuffer()).byteLength);
+    let serverUrl;
+    try { serverUrl = ctx.serverUrl; } catch (error) { serverUrl = error instanceof Error ? error.message : String(error); }
     return Response.json({
       method: request.method,
       url: request.url,
-      ...ctx,
+      path: ctx.path, params: ctx.params, originalHost: ctx.originalHost, serverUrl,
       body: await request.text(),
     }, { status: 202, headers: { "x-fixture": "proxy" } });
   },
+});
+export const hang = httpAction({ path: "/hang", handler: () => new Promise(() => {}) });
+export const broken = httpAction({
+  path: "/broken",
+  handler: async (_, request) => {
+    const gate = new URL(request.url).searchParams.get("gate");
+    if (!gate) throw new Error("missing gate");
+    let first = true;
+    return new Response(new ReadableStream({
+      async pull(stream) {
+        if (first) {
+          first = false;
+          stream.enqueue(new TextEncoder().encode("first"));
+        } else {
+          await fetch(gate);
+          throw new Error("fixture crashed mid-body");
+        }
+      },
+    }));
+  },
+});
+export const informational = httpAction({
+  path: "/informational",
+  handler: () => Object.assign(new Response(), { status: 103 }),
 });
 export const fail = httpAction({
   path: "/fail/now",
@@ -54,14 +92,15 @@ export const fail = httpAction({
 `
       : `
 import type {} from "@tokamak/sdk/web";
-import { action, httpAction } from "@tokamak/sdk";
+import { action, httpAction, query } from "@tokamak/sdk";
 
 export const fast = httpAction({ path: "/ready", handler: () => new Response("ready") });
 export const normal = action({ handler: () => "normal" });
+export const overBudget = query({ handler: () => { for (;;) {} } });
 `,
   );
   if (id === "http-peer")
-    await writeFile(join(path, "src/server/api.ts"), 'export { normal } from "./ops";\n');
+    await writeFile(join(path, "src/server/api.ts"), 'export { normal, overBudget } from "./ops";\n');
   const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {
     cwd: workspace,
     stdout: "inherit",

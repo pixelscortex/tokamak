@@ -349,23 +349,40 @@ For example, `POST /plugins/my-proxy/ACME/v1/messages?format=sse` sets
 `ctx.path` to `/ACME/v1/messages`, with `ctx.params.profile` equal to `ACME`
 and `ctx.params["*"]` equal to `v1/messages`. Use a literal path; `:name`
 captures one segment and a final `*` captures the remainder. Literal segments
-take precedence over parameters, and parameters over the wildcard. Core plugin
-reload and asset URLs keep their existing routing. There is no member
-sign-in on an HTTP action: check the caller in the handler before doing work.
+take precedence over parameters, and parameters over the wildcard.
+The core routes `/plugins/<id>/<revision>/assets/<name...>` and
+`/plugins/<id>/reload` take precedence over HTTP actions. Dot segments,
+including percent-encoded dots, and encoded slash or backslash are rejected.
+There is no member sign-in: check the caller in the handler before doing work.
+`OPTIONS` reaches the handler; the plugin is responsible for CORS answers.
 
-`ctx.serverUrl` is the server origin. It uses the actual bound address in the
-Runner and `TOKAMAK_PUBLIC_URL` when configured for hosted mode. The
-`Request` provides the method, URL (including query), headers and body. It uses
-the same [web API subset](../engine/WEB_APIS.md) as `fetch`; uploads are
-buffered up to 8 MiB. Outbound requests require the usual `net:<hostname>`
-permission. Return the upstream `Response` directly to stream its body with
-backpressure. Hop-by-hop headers are handled by the server; plugin responses
-cannot set workspace cookies.
+`ctx.serverUrl` is the bound loopback origin in the Runner. Set
+`TOKAMAK_PUBLIC_URL` to the CLI-reachable origin in the Server. If it is unset,
+the Server logs a startup warning and reading `ctx.serverUrl` throws.
+The request's Host header is never used to derive the origin.
+
+The `Request` provides the method, URL (including query), headers and body
+using the same [web API subset](../engine/WEB_APIS.md) as `fetch`. Uploads are
+buffered up to 32 MiB and must finish within 30 seconds. The server gives
+request headers 10 seconds. It removes Host, Content-Length and hop-by-hop
+headers before handing the request to the plugin. The original Host is
+available as `ctx.originalHost` and is untrusted. Duplicate headers are joined
+by the web Headers implementation; the server drops response `Set-Cookie`.
+
+Outbound requests require the usual `net:<hostname>` permission. Each
+outbound `fetch` from a fresh host performs its own DNS lookup and, for HTTPS,
+TLS handshake. Return the upstream `Response` directly to stream its body
+with backpressure.
 
 HTTP actions run in a separate plugin host process per request on macOS and
-Linux, in both the Runner and the Server. The normal action wall deadline does
-not apply. A caller disconnect or server shutdown stops the host and closes
-its upstream requests. HTTP actions have no generated function references and
+Linux. `TOKAMAK_HTTP_PLUGIN_SLOTS` (default 32) and
+`TOKAMAK_HTTP_TOTAL_SLOTS` (default 96) cap concurrent hosts. After reading the
+upload, the server waits up to 250 ms for a slot and replies with
+`503 Retry-After: 1` if none becomes available. The time to response headers
+is bounded by `TOKAMAK_HTTP_FIRST_HEADERS_MS` (default 300000); the normal action
+wall deadline does not apply to the response stream. On disconnect or server
+shutdown, the host aborts `request.signal` and has up to 500 ms for cleanup
+before it is killed. HTTP actions have no generated function references and
 cannot be exported to windows or provided as contract methods.
 
 ## Internal functions and expected failures

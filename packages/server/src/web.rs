@@ -14,6 +14,7 @@ use std::{
 pub struct HostedWeb {
     pub(crate) directory: PathBuf,
     pub(crate) origin: String,
+    pub(crate) public_origin: Option<String>,
 }
 
 impl HostedWeb {
@@ -28,25 +29,31 @@ impl HostedWeb {
         if !directory.join("index.html").is_file() {
             return Err("--web must contain a built index.html".into());
         }
-        let public =
-            std::env::var("TOKAMAK_PUBLIC_URL").unwrap_or_else(|_| format!("http://{listen}"));
+        let public_origin = configured_public_url()?;
+        let origin = public_origin
+            .clone()
+            .unwrap_or_else(|| format!("http://{listen}"));
         Ok(Some(Self {
             directory,
-            origin: parse_public_url(&public)?,
+            public_origin,
+            origin,
         }))
     }
 }
 
-pub(crate) fn configured_public_url() -> Result<Option<String>, Box<dyn std::error::Error>> {
-    std::env::var("TOKAMAK_PUBLIC_URL")
-        .ok()
-        .as_deref()
-        .map(parse_public_url)
-        .transpose()
-}
-
-fn parse_public_url(public: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let url = reqwest::Url::parse(public)?;
+pub(crate) fn configured_public_url() -> std::io::Result<Option<String>> {
+    let public = match std::env::var("TOKAMAK_PUBLIC_URL") {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(error) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)),
+    };
+    let invalid = || {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "TOKAMAK_PUBLIC_URL must be an http(s) origin without a path or credentials",
+        )
+    };
+    let url = reqwest::Url::parse(&public).map_err(|_| invalid())?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -55,11 +62,9 @@ fn parse_public_url(public: &str) -> Result<String, Box<dyn std::error::Error>> 
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(
-            "TOKAMAK_PUBLIC_URL must be an http(s) origin without a path or credentials".into(),
-        );
+        return Err(invalid());
     }
-    Ok(url.origin().ascii_serialization())
+    Ok(Some(url.origin().ascii_serialization()))
 }
 
 pub(crate) async fn shell(State(web): State<HostedWeb>, uri: Uri) -> Response {
@@ -146,6 +151,7 @@ mod tests {
         let web = HostedWeb {
             directory: std::fs::canonicalize(root).unwrap(),
             origin: "https://example.test".into(),
+            public_origin: Some("https://example.test".into()),
         };
         for path in ["/", "/chat/thread/123", "/p/org.plugin", "/index.html"] {
             let response = shell(State(web.clone()), path.parse().unwrap()).await;
