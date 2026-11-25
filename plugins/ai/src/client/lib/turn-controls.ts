@@ -66,8 +66,7 @@ export async function stopTurn(client: TokamakClient, turnId: Id<"turns">) {
     const result = await windowAction(client, api.run.stop, { turnId });
     // A turn that is only saving its after work has already finished; Stop has nothing to say.
     if (isFailure(result)) {
-      if (result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable")
-        notice.set(reasonLine(result.kind, ""));
+      if (result.kind !== "NotRunning") notice.set(reasonLine(result.kind, ""));
       else if (!("finishing" in result.data))
         notice.set("This turn is running in another window or has ended.");
     }
@@ -81,11 +80,11 @@ export async function forceStopTurn(client: TokamakClient, turnId: Id<"turns">) 
     const result = await windowAction(client, api.run.forceStop, { turnId });
     if (isFailure(result))
       notice.set(
-        result.kind === "noMachine" || result.kind === "runnerCapabilityUnavailable"
-          ? reasonLine(result.kind, "")
-          : result.kind === "NotRunning"
-            ? "This turn is running in another window or has ended."
-            : "Still stopping…",
+        result.kind === "NotRunning"
+          ? "This turn is running in another window or has ended."
+          : result.kind === "TooEarly"
+            ? "Still stopping…"
+            : reasonLine(result.kind, ""),
       );
   } catch (cause) {
     notice.set(`The turn could not stop: ${errorText(cause)}`);

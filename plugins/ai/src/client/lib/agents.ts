@@ -1,4 +1,4 @@
-import { isFailure, type TokamakClient } from "@tokamak/sdk";
+import { isFailure, type MachineFailure, type TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Info } from "../../contracts";
 import { setupReason } from "../../shared/turn-shared";
@@ -84,20 +84,19 @@ export function refreshAgents(client: TokamakClient): Promise<void> {
 }
 
 /** Why a turn cannot run or begin, as `run:turn` fails or the row sees it. */
-export type Reason =
-  | "NoAgent"
-  | "NotInstalled"
-  | "SignedOut"
-  | "Busy"
-  | "Answered"
-  | "noMachine"
-  | "runnerCapabilityUnavailable";
+export type Reason = "NoAgent" | "NotInstalled" | "SignedOut" | "Busy" | "Answered" | MachineFailure["kind"];
 
 /** The row's line for `reason`, naming the agent as a person sees it. */
 export function reasonLine(reason: Reason, agent: string, updateRequired?: string): string {
   switch (reason) {
     case "noMachine":
+    case "machineOffline":
+    case "machineLost":
       return connectMachine;
+    case "machineForbidden":
+    case "machineLimit":
+    case "runnerArtifactMismatch":
+    case "serverOnly":
     case "runnerCapabilityUnavailable":
       return "This machine cannot run this action.";
     case "NotInstalled":

@@ -44,8 +44,8 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
       notice.set(
         reasonLine(
           result.kind,
-          "agent" in result.data ? result.data.agent : resolved.agent.name,
-          "updateRequired" in result.data ? result.data.updateRequired : undefined,
+          result.data && "agent" in result.data ? result.data.agent : resolved.agent.name,
+          result.data && "updateRequired" in result.data ? result.data.updateRequired : undefined,
         ),
       );
     } else if ("ended" in result && result.ended) notice.set(result.ended);
