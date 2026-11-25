@@ -260,19 +260,13 @@ test.each([
   const sizing = /^(?:h-|w-|px-|gap-|text-(?:row|label)$)/;
   const icon = screen.getByRole("button", { name: "Add" });
   const mixed = screen.getByRole("button", { name: "Continue" });
-  expect([...icon.classList].filter((name) => sizing.test(name))).toEqual([
-    "gap-2",
-    "text-row",
-    height,
-    "px-0",
-    width,
-  ]);
-  expect([...mixed.classList].filter((name) => sizing.test(name))).toEqual([
-    "gap-2",
-    "text-row",
-    height,
-    padding,
-  ]);
+  // Sorted: the order of classes is tailwind-variants' business, not a size change.
+  expect([...icon.classList].filter((name) => sizing.test(name)).sort()).toEqual(
+    ["gap-2", "text-row", height, "px-0", width].sort(),
+  );
+  expect([...mixed.classList].filter((name) => sizing.test(name)).sort()).toEqual(
+    ["gap-2", "text-row", height, padding].sort(),
+  );
   expect(icon.querySelector("svg")?.classList.contains("size-4")).toBe(true);
   expect(mixed.querySelector("svg")?.classList.contains("size-4")).toBe(true);
 });
