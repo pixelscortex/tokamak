@@ -17,15 +17,22 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
+use tokamak_worker::{
+    HTTP_ACTION_LOG_PACKET, HTTP_ACTION_OP_CAPACITY, HTTP_ACTION_OP_PACKET, WORKER_FRAME_BYTES,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::{Child, ChildStdin, ChildStdout, Command},
     sync::{OwnedSemaphorePermit, Semaphore},
+    task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Server, plugins::Asset};
+use crate::{
+    Server, actions::HttpCalls, environment::Snapshot, host::process_frames::operation_reply,
+    plugins::Asset,
+};
 
 const CHUNK_BYTES: usize = 64 * 1024;
 const HEAD_BYTES: usize = 256 * 1024;
@@ -259,7 +266,12 @@ fn busy() -> Response {
         .into_response()
 }
 
-async fn run_request(state: HttpActions, route: Route, request: Request, plugin: &str) -> Response {
+async fn run_request(
+    state: HttpActions,
+    (route, calls): (Route, HttpCalls),
+    request: Request,
+    plugin: &str,
+) -> Response {
     let (parts, incoming) = request.into_parts();
     let body = match tokio::time::timeout(BODY_TIMEOUT, to_bytes(incoming, REQUEST_BYTES)).await {
         Ok(Ok(body)) => body,
@@ -291,7 +303,7 @@ async fn run_request(state: HttpActions, route: Route, request: Request, plugin:
     };
     match tokio::time::timeout(
         state.config.first_headers,
-        invoke(state, route, parts, body, slots),
+        invoke(state, route, calls, parts, body, slots),
     )
     .await
     {
@@ -359,6 +371,7 @@ fn request_head(
 async fn invoke(
     state: HttpActions,
     route: Route,
+    calls: HttpCalls,
     mut parts: axum::http::request::Parts,
     body: Bytes,
     slots: [OwnedSemaphorePermit; 2],
@@ -385,12 +398,23 @@ async fn invoke(
         .take()
         .ok_or_else(|| io::Error::other("Missing HTTP action output"))?;
 
+    let lifetime = CancellationToken::new();
+    let environment = Arc::new(Snapshot::new(Some(&calls.generation), Some(&calls.owner)));
+    let operations = Arc::new(
+        calls
+            .operations(environment.clone(), lifetime.clone())
+            .map_err(io::Error::other)?,
+    );
     let mut running = Running {
         child: Some(child),
         input: Some(input),
         output: Some(output),
         slots: Some(slots),
         stopping: state.stopping,
+        lifetime,
+        environment,
+        operations,
+        pending: JoinSet::new(),
     };
     if let Some(input) = &mut running.input {
         input.write_u32(head.len() as u32).await?;
@@ -503,6 +527,10 @@ struct Running {
     output: Option<ChildStdout>,
     slots: Option<[OwnedSemaphorePermit; 2]>,
     stopping: CancellationToken,
+    lifetime: CancellationToken,
+    environment: Arc<Snapshot>,
+    operations: Arc<engine::OpRegistry>,
+    pending: JoinSet<io::Result<Value>>,
 }
 
 impl Running {
@@ -511,7 +539,41 @@ impl Running {
             .output
             .as_mut()
             .ok_or_else(|| io::Error::other("Missing HTTP action output"))?;
-        read_packet(output, maximum).await
+        let input = self
+            .input
+            .as_mut()
+            .ok_or_else(|| io::Error::other("Missing HTTP action input"))?;
+        loop {
+            // Keep one partially read frame across operation completions.
+            let packet = read_packet(output, maximum);
+            tokio::pin!(packet);
+            let (kind, bytes) = loop {
+                tokio::select! {
+                    Some(reply) = self.pending.join_next() => {
+                        let reply = reply.map_err(io::Error::other)??;
+                        let bytes = serde_json::to_vec(&reply)?;
+                        input.write_u32(bytes.len() as u32).await?;
+                        input.write_all(&bytes).await?;
+                    }
+                    result = &mut packet => break result?,
+                }
+            };
+            match kind {
+                HTTP_ACTION_OP_PACKET => {
+                    if self.pending.len() >= HTTP_ACTION_OP_CAPACITY {
+                        return Err(io::Error::other("HTTP action operation capacity exceeded"));
+                    }
+                    let operations = self.operations.clone();
+                    self.pending
+                        .spawn(async move { dispatch(&operations, &bytes).await });
+                }
+                HTTP_ACTION_LOG_PACKET => {
+                    let message = String::from_utf8_lossy(&bytes);
+                    eprintln!("{}", self.environment.redact(message.into_owned()));
+                }
+                _ => return Ok(bytes),
+            }
+        }
     }
 }
 
@@ -519,6 +581,8 @@ impl Drop for Running {
     fn drop(&mut self) {
         // EOF signals AbortController in the child. Drain its pipe while cleanup
         // runs so a full pipe cannot prevent JS from seeing cancellation.
+        self.lifetime.cancel();
+        self.pending.abort_all();
         self.input.take();
         let (Some(mut child), Some(mut output)) = (self.child.take(), self.output.take()) else {
             return;
@@ -539,15 +603,37 @@ impl Drop for Running {
     }
 }
 
+async fn dispatch(operations: &engine::OpRegistry, bytes: &[u8]) -> io::Result<Value> {
+    let frame: Value = serde_json::from_slice(bytes)?;
+    let id = frame["id"]
+        .as_u64()
+        .ok_or_else(|| io::Error::other("Missing HTTP action operation ID"))?;
+    let name = frame["name"]
+        .as_str()
+        .ok_or_else(|| io::Error::other("Missing HTTP action operation name"))?;
+    let result = operations
+        .dispatch_call(name, frame["payload"].clone())
+        .await;
+    operation_reply(None, id, result).map_err(io::Error::other)
+}
+
 async fn read_packet(
     input: &mut (impl AsyncReadExt + Unpin),
     maximum: usize,
-) -> io::Result<Vec<u8>> {
-    let length = input.read_u32().await? as usize;
-    if length > maximum {
+) -> io::Result<(u32, Vec<u8>)> {
+    let header = input.read_u32().await?;
+    let mask = HTTP_ACTION_OP_PACKET | HTTP_ACTION_LOG_PACKET;
+    let kind = header & mask;
+    let length = (header & !mask) as usize;
+    let limit = match kind {
+        0 => maximum,
+        HTTP_ACTION_OP_PACKET | HTTP_ACTION_LOG_PACKET => WORKER_FRAME_BYTES,
+        _ => return Err(io::Error::other("Invalid HTTP action packet kind")),
+    };
+    if length > limit {
         return Err(io::Error::other("HTTP action packet exceeds its limit"));
     }
     let mut packet = vec![0; length];
     input.read_exact(&mut packet).await?;
-    Ok(packet)
+    Ok((kind, packet))
 }

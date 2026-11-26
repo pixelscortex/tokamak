@@ -1,5 +1,5 @@
 // Keep the HTTP adapter outside the normal action entry and its JSON protocol.
-export async function serve(handlers, head, bytes, writeHead, writeChunk, waitForAbort) {
+export async function serve(handlers, head, bytes, writeHead, writeChunk, waitForAbort, callUpstream) {
   const { context, method, url, headers, pattern } = JSON.parse(head);
   const handler = handlers[pattern];
   if (typeof handler !== "function") throw new Error("HTTP action is missing from its bundle");
@@ -37,7 +37,15 @@ export async function serve(handlers, head, bytes, writeHead, writeChunk, waitFo
   const pathname = new URL(request.url).pathname;
   const remainder = pathname.indexOf("/", "/plugins/".length);
   context.path = remainder === -1 ? "/" : pathname.slice(remainder);
-  const response = await handler(context, request);
+  const bridge = {
+    async op(name, args) {
+      const { value, error } = JSON.parse(await callUpstream(name, JSON.stringify(args)));
+      if (typeof error === "string") throw new Error(error);
+      if (error) throw Object.assign(new Error(error.message), error);
+      return value;
+    },
+  };
+  const response = await handler(context, request, bridge);
   if (!(response instanceof Response)) throw new TypeError("HTTP action must return a Response");
   if (response.status >= 100 && response.status < 200)
     throw new TypeError("HTTP actions cannot return informational statuses");

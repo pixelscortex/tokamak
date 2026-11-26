@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { lanes, placedModules } from "./placement.mjs";
 
 export function httpActionEntry(placement, root, organized) {
@@ -5,7 +6,8 @@ export function httpActionEntry(placement, root, organized) {
   if (!modules.length) return;
   const routes = Object.create(null);
   const shapes = new Set();
-  const imports = [];
+  const adapter = fileURLToPath(new URL("../src/http-action.ts", import.meta.url));
+  const imports = [`import { bindHttpAction } from ${JSON.stringify(adapter)};`];
   const handlers = [];
   for (const [file, , names] of modules) {
     for (const name of names) {
@@ -29,7 +31,7 @@ export function httpActionEntry(placement, root, organized) {
       const binding = `route${imports.length}`;
       routes[path] = true;
       imports.push(`import { ${JSON.stringify(name)} as ${binding} } from ${JSON.stringify(file)};`);
-      handlers.push(`[${JSON.stringify(path)}]: ${binding}.handler`);
+      handlers.push(`[${JSON.stringify(path)}]: bindHttpAction(${binding})`);
     }
   }
   return {

@@ -223,7 +223,7 @@ pub(crate) enum Command {
     HttpAction(
         String,
         String,
-        oneshot::Sender<Option<crate::http_actions::Route>>,
+        oneshot::Sender<Option<(crate::http_actions::Route, crate::actions::HttpCalls)>>,
     ),
     Asset(
         Option<String>,
