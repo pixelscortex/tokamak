@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { render } from "@solidjs/web";
 import { afterEach, expect, test } from "vitest";
 import { TokamakClient, fail, type ClientTransport, type Id, type JsonValue } from "@tokamak/sdk";
@@ -13,8 +14,8 @@ import { startTurn } from "../src/client/lib/turn";
 import { AgentRow } from "../src/client/ui/agent-row";
 
 // The agent row on its own, with a stand-in client: the Runner answers
-// `agents:list` with whatever `installed` holds at that moment, and the server
-// answers `choices:get` with `stored` (no turn runs, nothing is queued).
+// `agents:list` with whatever `installed` holds at that moment, the server
+// answers `choices:get` with `stored` and records each `choices:set` in `saved`.
 
 const ready: Info = {
   installed: true,
@@ -36,23 +37,25 @@ let shortcut: (() => void) | undefined;
 const actions: string[] = [];
 const threadId = "chat/threads:fixture" as Id<"threads">;
 const turnId = "ai/turns:fixture" as Id<"turns">;
+let saved: JsonValue[] = [];
 
 function client(): TokamakClient {
   const transport = {
+    mutation: async (name: string, args: JsonValue) => {
+      if (name === "ai/turns:enqueue") return null;
+      if (name !== "ai/choices:set") throw new Error(`Unexpected mutation ${name}`);
+      saved.push(args);
+      return null;
+    },
     subscribe: (name: string, _args: JsonValue, onEvent: (event: { value: JsonValue }) => void) => {
       queueMicrotask(() => onEvent({ value: answer(name) }));
       return () => {};
     },
     query: async (name: string) => (name === "ai/turns:pending" ? active : answer(name)),
-    mutation: async (name: string) => {
-      if (name === "ai/turns:enqueue") return null;
-      throw new Error(`Unexpected mutation ${name}`);
-    },
     action: async (name: string) => {
       actions.push(name);
       if (name === "chat/folders:resolve") return "/fixture";
       if (!hasMachine) return fail("noMachine", null);
-      if (name === "chat/folders:resolve") return "/fixture";
       if (name === "ai/working:list") return [];
       if (name === "ai/run:stop") return null;
       if (name === "ai/run:steer") return { error: null };
@@ -65,8 +68,8 @@ function client(): TokamakClient {
   return new TokamakClient(transport);
 }
 
-/** A picker by its "<name>: <value>" text (jsdom drops the space that browsers keep). */
-const picker = (name: string, value = ".+") => new RegExp(`^${name}: ?${value}$`);
+/** The closed picker by its "Agent: <name> · <model> · <effort>" text (jsdom drops the space browsers keep). */
+const chip = (value = ".+") => new RegExp(`^Agent: ?${value}$`);
 
 /** What the stand-in server answers each live query with. */
 function answer(name: string): JsonValue {
@@ -131,6 +134,7 @@ afterEach(() => {
   active = null;
   queued = [];
   actions.length = 0;
+  saved = [];
 });
 
 test("with one agent, signed out, the agent picker still opens and asks again", async () => {
@@ -139,16 +143,18 @@ test("with one agent, signed out, the agent picker still opens and asks again", 
   const status = await screen.findByRole("status");
   expect(status.textContent).toBe("Solo is signed out. Sign in, then come back.");
   expect(isHeld(composer(undefined))).toBe(true);
-  expect(screen.queryByRole("button", { name: picker("Model") })).toBeNull();
+  // Signed out, the chip names only the agent.
+  const closed = screen.getByRole("button", { name: chip("Solo") });
 
-  // Signing in meanwhile; opening the only picker on screen asks the agent again.
+  // Signing in meanwhile; opening the picker asks the agent again.
   installed = [{ id: "solo", name: "Solo", info: ready }];
   const before = asked;
-  screen.getByRole("button", { name: picker("Agent", "Solo") }).click();
+  await user.click(closed);
   await waitFor(() => expect(asked).toBeGreaterThan(before));
   await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   expect(isHeld(composer(undefined))).toBe(false);
-  expect(screen.getByRole("button", { name: picker("Permission level") })).toBeTruthy();
+  // The open popover hides the rest of the window from screen readers.
+  expect(screen.getByRole("button", { name: chip("Solo · opus 5.5"), hidden: true })).toBeTruthy();
 });
 
 test("a thread whose agent plugin was removed keeps that agent, says it isn't installed and holds Send", async () => {
@@ -157,8 +163,7 @@ test("a thread whose agent plugin was removed keeps that agent, says it isn't in
   mount("t1");
   const status = await screen.findByRole("status");
   expect(status.textContent).toBe("Gone isn't installed.");
-  expect(screen.getByRole("button", { name: picker("Agent", "Gone") })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: picker("Model") })).toBeNull();
+  expect(screen.getByRole("button", { name: chip("Gone") })).toBeTruthy();
   expect(isHeld(composer("t1"))).toBe(true);
   expect(isHeld(composer("t2"))).toBe(false);
 });
@@ -236,4 +241,112 @@ test("a transient noMachine leaves Stop and steer usable and retries a ready que
   await waitFor(() => expect(screen.getByRole("status").textContent).toBe("esc to stop"));
   shortcut?.();
   await waitFor(() => expect(actions).toContain("ai/run:stop"));
+});
+
+// Two agents as the picker lists them: Solo offers levels, speeds and modes; Other only a model.
+const solo = {
+  id: "solo",
+  name: "Solo",
+  info: {
+    ...ready,
+    models: [
+      { id: "opus", name: "Solo Opus 5.5", efforts: ["low", "high"] },
+      { id: "haiku", name: "Haiku 5.5", efforts: ["low"] },
+    ],
+    speeds: ["standard", "fast"],
+    modes: ["build", "plan"],
+  },
+};
+const other = { id: "other", name: "Other", info: ready };
+
+const user = userEvent.setup();
+
+/** Opens the picker and waits for its popover. */
+async function open(name: RegExp) {
+  await user.click(await screen.findByRole("button", { name }));
+  return screen.findByRole("menu");
+}
+
+/** The radio items of one group in the open popover, as "label" or "label ✓" when checked. */
+function choices(group: string) {
+  return [...screen.getByRole("group", { name: group }).querySelectorAll("[role=menuitemradio]")].map(
+    (item) => `${item.textContent}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}`,
+  );
+}
+
+test("the picker is one popover: agent and model, effort, then speed, mode, access and the computer", async () => {
+  installed = [solo, other];
+  stored = {
+    agent: { id: "solo", name: "Solo" },
+    model: "opus",
+    effort: "high",
+    speed: "fast",
+    access: "full",
+  };
+  mount("t1");
+  // The closed chip: the agent's model without the agent's name, then the level.
+  const menu = await open(chip("Solo · Opus 5.5 · High"));
+  expect(menu.textContent).toContain("Agent and model");
+  // Every agent with its models; the thread's model is checked.
+  expect(choices("Agent and model")).toEqual(["Opus 5.5 ✓", "Haiku 5.5", "opus 5.5"]);
+  expect(choices("Effort")).toEqual(["Low", "High ✓"]);
+  expect(choices("Speed")).toEqual(["Standard", "Fast ✓"]);
+  // The mode was never picked: the first one the agent offers.
+  expect(choices("Mode")).toEqual(["Build ✓", "Plan"]);
+  expect(choices("Access level")).toEqual(["Full access ✓", "Ask first"]);
+  expect(menu.textContent).toContain("Runs onThis computer");
+});
+
+test("a pick is stored on the thread as it is made, and another agent's model switches agent", async () => {
+  installed = [solo, other];
+  stored = {
+    agent: { id: "solo", name: "Solo" },
+    model: "opus",
+    effort: "high",
+    speed: "fast",
+    access: "ask",
+  };
+  mount("t1");
+  await open(chip("Solo · Opus 5.5 · High"));
+  await user.click(screen.getByRole("menuitemradio", { name: "Low" }));
+  await waitFor(() => expect(saved).toHaveLength(1));
+  expect(saved[0]).toEqual({
+    threadId: "t1",
+    agent: { id: "solo", name: "Solo" },
+    model: "opus",
+    effort: "low",
+    speed: "fast",
+    mode: "build",
+    access: "ask",
+  });
+
+  // The same popover stays open for the next choice: Other's only model.
+  await user.click(screen.getByRole("menuitemradio", { name: "opus 5.5" }));
+  await waitFor(() => expect(saved).toHaveLength(2));
+  expect(saved[1]).toEqual({
+    threadId: "t1",
+    agent: { id: "other", name: "Other" },
+    model: "opus",
+    access: "ask",
+  });
+});
+
+test("a stored model, level or speed no longer offered falls back to the first offered one", async () => {
+  installed = [solo];
+  stored = {
+    agent: { id: "solo", name: "Solo" },
+    model: "retired",
+    effort: "max",
+    speed: "warp",
+    access: "full",
+  };
+  mount("t1");
+  await open(chip("Solo · Opus 5.5 · Low"));
+  expect(choices("Agent and model")).toEqual(["Opus 5.5 ✓", "Haiku 5.5"]);
+  expect(choices("Effort")).toEqual(["Low ✓", "High"]);
+  expect(choices("Speed")).toEqual(["Standard ✓", "Fast"]);
+  // What a change stores is the fallback too, never the retired values.
+  await user.click(screen.getByRole("menuitemradio", { name: "Plan" }));
+  await waitFor(() => expect(saved).toHaveLength(1));
+  expect(saved[0]).toMatchObject({ model: "opus", effort: "low", speed: "standard", mode: "plan" });
 });

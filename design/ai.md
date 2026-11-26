@@ -20,6 +20,7 @@ Plain chat Send does not show this line.
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |
 | Base: chat's open thread without this plugin (a copy of `Chat · open thread`)                  | `plugins/chat`                                                      | `Base · Chat · open thread` |
 | New thread: agent heading, agent row                                                           | `plugins/ai/src/client/ui/heading.tsx`, `ui/agent-row.tsx`          | `AI · new thread`           |
+| Agent picker open: one popover above the new thread's composer                                 | `ui/agent-picker.tsx`                                               | `AI · picker open`          |
 | Reply while the turn runs: work line with the step and clock, Stop, thread status              | `ui/reply-work.tsx`, `ui/turn-controls.tsx`, `ui/thread-status.tsx` | `AI · reply running`        |
 | Reply after the turn: reply header, "Worked · 5 actions", helper row, text, tasks, plan, usage | `ui/reply-header.tsx`, `ui/reply-work.tsx`, `ui/reply-cards.tsx`    | `AI · reply finished`       |
 | Thinking and the actions line opened                                                           | `ui/reply-work.tsx`                                                 | `AI · reply opened`         |
@@ -27,8 +28,51 @@ Plain chat Send does not show this line.
 | Permission question on the composer (Ask first)                                                | `ui/permission-card.tsx`                                            | `AI · permission question`  |
 
 Not drawn yet: the thread list after several turns (its status icons show on the other artboards), the agent row's lines ("Codex isn't installed.", signed out,
-"Only Sam can run the agent here"), a picker menu open, a pending steer, queued messages, the
-expired question line, "Force stop".
+"Only Sam can run the agent here"), the picker over an open thread or with a second agent, a
+pending steer, queued messages, the expired question line, "Force stop".
+
+### The agent picker
+
+The agent row holds one picker, drawn by the owner in the Paper file "Tokamak — Directions"
+(artboard "6 · Thread · picker open"; its first column is not built here).
+
+- **Closed chip** (`PickerChip`): the agent's mark, then the model and its effort,
+  "work" or "Opus 5.5 · High", then ⇅. It is the standard ghost `Menu.Trigger` (32 tall,
+  fills while open). A missing or signed-out agent shows only its name; the row's line says why.
+  Screen readers read "Agent: Claude · Opus 5.5 · High".
+- **Popover**: opens 8 px above the composer tray, aligned to its start (the anchor is the
+  agent row's parent). It is the standard `Menu.Content` card (padding 4, radius 12).
+- **Columns** (`PickerColumns`, one element, side by side, 4 apart):
+  - "Agent and model" (at least 344 wide): each agent's mark and name as a quiet title
+    (28 tall), then its models as radio items (32 tall), indented past the mark. Picking
+    another agent's model switches agent and takes this device's last picks for it.
+    An agent that offers no model (signed out, not installed) is one item with its name.
+  - "Effort" (152 wide): the picked model's levels; left out when it has none.
+- **Bar** under the columns (40 tall, tray tone, radius 8): Speed and Mode (with the quiet
+  word "Mode") when the agent offers them, the access level (Full access, Ask first), and on
+  the right "Runs on" with this computer's name. Each is a row of radio items. Left out while
+  the agent cannot answer.
+- Every option is a menu radio item, so the popover stays open while several change; each
+  pick is stored at once (`choices:set`, or the new thread's window state) as before.
+- A long model list scrolls inside the columns; the bar stays in view.
+
+What the picker offers comes from one public function, `agents:list` (the agents and their
+models, levels, speeds and modes as the caller action answers). Nothing else adds
+choices. What that means for a plugin that changes its answer:
+
+- It changes the picker's agents and models, the agent a new thread starts with, the chip's
+  fallback model and effort, and the settings a new turn starts with.
+- The answer is fetched once for the window (`lib/agents.ts`) and takes no thread, so it is
+  the same for every thread and is not asked again when something else changes.
+- The same answer feeds the agent marks on reply headers and thread rows and the "isn't
+  installed" line. An agent removed from it loses its mark, and its threads say it isn't
+  installed.
+- The turn checks the agent's own `info`, not this list.
+
+A stored model, level, speed or mode
+that is no longer offered reads as the first offered one, in the chip and in the turn alike
+(`shared/offered.ts`); the next change stores that fallback. A thread whose agent is gone
+keeps it and says it isn't installed, as before.
 
 A launch hook can supply environment variables and CLI arguments. If two
 plugins set the same variable, the existing error reply names both plugins
@@ -49,23 +93,27 @@ including the picker and the agent row. See
 `plugins/ai/src/client/_generated/components.d.ts` for the generated paths.
 Agent plugins supply data through `plugin:ai/contracts`.
 
+The agent picker keeps the places another plugin would add to as one named element each:
+the closed chip (`PickerChip` in `ui/agent-picker.tsx`) and the column area
+(`PickerColumns`). Its list of agents and models is one call, `agents:list`.
+
 ## What it adds to others
 
 All actions are in `plugins/ai/src/client/api.ts`.
 
-| Target (chat part)                             | Action                                 | What is drawn                                                                                                                            | File                     | Paper artboard                                                                |
-| ---------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| `parts.Composer.div.box`                       | after                                  | Agent row: agent (mark and name), model, level, speed, mode, permission level; a line on the right ("esc to stop")                       | `ui/agent-row.tsx`       | all five `AI ·` artboards                                                     |
-| `parts.Composer.div.top`                       | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx` | `AI · permission question`                                                    |
-| `parts.Composer.div.box.div.SendButton`        | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`   | `AI · reply running`, `AI · permission question`                              |
-| `parts.Empty.div.div.heading`                  | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`         | `AI · new thread`                                                             |
-| `parts.Message.article.header`                 | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
-| `parts.Message.article.body`                   | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
-| `parts.Message.article.body`                   | after, agent replies                   | Tasks card, plan card, usage line (left out when the agent counted 0 in and 0 out)                                                       | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
-| `parts.Message.article.body`                   | replace, agent replies with steers     | The text cut where each steer arrived; between the parts "↳ Steer" (quiet label), then the person's author line and text                 | `ui/turn-steers.tsx`     | `AI · reply steered`                                                          |
-| `parts.ThreadRow.ListboxItem.span.span.status` | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
-| `parts.ThreadRow.ListboxItem.span.detail`      | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   | `AI · reply running`, `AI · permission question`                              |
-| `parts.ThreadRow.ListboxItem.span.detail`      | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   | `AI · reply running`                                                          |
+| Target (chat part)                             | Action                                 | What is drawn                                                                                                                            | File                                      | Paper artboard                                                                |
+| ---------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| `parts.Composer.div.box`                       | after                                  | Agent row: the agent picker's chip (mark, model · effort, ⇅); a line on the right ("esc to stop"). Its popover opens above the tray      | `ui/agent-row.tsx`, `ui/agent-picker.tsx` | every `AI ·` artboard; open in `AI · picker open`                             |
+| `parts.Composer.div.top`                       | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx`                  | `AI · permission question`                                                    |
+| `parts.Composer.div.box.div.SendButton`        | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`                    | `AI · reply running`, `AI · permission question`                              |
+| `parts.Empty.div.div.heading`                  | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`                          | `AI · new thread`                                                             |
+| `parts.Message.article.header`                 | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`                     | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `parts.Message.article.body`                   | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`                       | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
+| `parts.Message.article.body`                   | after, agent replies                   | Tasks card, plan card, usage line (left out when the agent counted 0 in and 0 out)                                                       | `ui/reply-cards.tsx`                      | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
+| `parts.Message.article.body`                   | replace, agent replies with steers     | The text cut where each steer arrived; between the parts "↳ Steer" (quiet label), then the person's author line and text                 | `ui/turn-steers.tsx`                      | `AI · reply steered`                                                          |
+| `parts.ThreadRow.ListboxItem.span.span.status` | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`                    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `parts.ThreadRow.ListboxItem.span.detail`      | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`                    | `AI · reply running`, `AI · permission question`                              |
+| `parts.ThreadRow.ListboxItem.span.detail`      | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`                    | `AI · reply running`                                                          |
 
 Where a steer goes: when it is recorded, the server keeps the length of the
 reply's stored text (`turns.steerOffsets`, parallel to `steers`). The reply
@@ -81,10 +129,16 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
 ## If you change X, check Y
 
 - The agent row's height (`h-8`) or its missing start padding: chat's
-  composer tray (gap 4, 4 px edge) must still frame it; the row's first
-  button edge sits on the box edge above it.
-- `Picker` (the ghost `Menu.Trigger`): Button's `md` size owns its height and
-  padding; changing Button's ghost look changes the whole row.
+  composer tray (gap 4, 4 px edge) must still frame it; the chip's edge sits
+  on the box edge above it.
+- `PickerChip` (the ghost `Menu.Trigger`): Button's `md` size owns its height,
+  padding and text; changing Button's ghost look changes the chip.
+- The popover's anchor is the agent row's parent, chat's composer tray: if chat
+  moves `parts.Composer.div.box`'s siblings out of the tray, the popover moves with them.
+- The picker's items are `Menu.RadioItem`s and its card is `Menu.Content`: their
+  look (32 rows, the check, padding 4, radius 12) is `@tokamak/ui`'s menu.
+- The column widths (`--container-models` 344, `--container-effort` 152 in
+  `src/client/styles.css`) set the popover's width; the bar can make it wider.
 - The permission card padding (`py-1 ps-3 pe-1`): chat's `parts.Composer.div.top`
   gap and the box below it.
 - The reply header (`h-5`, mark 14 px, model in `text-data`): chat's
@@ -105,10 +159,26 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
 
 ## Primitives used
 
-`Avatar` (steers), `Button`, `Collapsible` (Thinking uses its `quiet` trigger), `Icon`, `icons`, `Kbd`, `Menu`, `rowVariants`,
+`Avatar` (steers), `Button`, `Collapsible` (Thinking uses its `quiet` trigger), `Icon`, `icons`, `Kbd`, `Menu` (the picker: `Trigger`, `Content`, `RadioGroup`, `RadioItem`), `rowVariants`,
 `StatusIcon`, `Tooltip`; its own `AgentMark` and `Spinning`.
 
 ## Open questions
 
+- The owner's drawing shows Speed as segments on a darker track and Mode, access and
+  "Runs on" as small dropdowns. `@tokamak/ui` has no segmented control or submenu for a
+  menu, and its menu items own their look, so the bar uses plain radio items side by side
+  (the check marks the pick) and "Runs on" names the caller’s computer. Turn actions use caller placement.
+- The drawing marks the picked row with a fill and medium text; the menu's radio item marks
+  it with its check only.
+- The popover is wider than drawn (about 686 against 512) because the bar's radio items
+  are wider than the drawn dropdowns, and a long model list can reach the top of the window.
+- A thread whose agent is no longer in the `agents:list` answer says it "isn't installed"
+  and holds Send. Whether it should switch to the first offered agent, or say it is not
+  offered, is not decided.
+- The closed chip shows the model and effort only; speed, mode and the access level are
+  read in the popover.
+- The agent rows on every `AI ·` artboard and the whole `AI · picker open` artboard were
+  taken again from `feature/tkm-259` (TKM-259); the rest of those artboards is still the
+  earlier copy. The picker's "Runs on" shows "This Mac" in Paper, not the test computer's name.
 - The Paper copy uses the test agent ("Fake agent", models named after
   replays such as "work"). Real agents show their own names and models.

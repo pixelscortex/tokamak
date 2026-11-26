@@ -59,7 +59,9 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - The composer tray (`nest-lg/1 surface-tray`, gap 4) or the box padding
   (`py-3 ps-2 pe-3`, plus the input's own `ps-2`): `ai` agent row (no start padding, so its first button
   sits on the box edge), `ai` permission card (`ps-3 pe-1` on the tray), `ai`
-  Stop button (same size as Send).
+  Stop button (same size as Send). `ai`'s agent picker opens its popover 8 px above
+  the tray, aligned to its start: it finds the tray as the agent row's parent, so the
+  row must stay a direct child of the tray.
 - The message column width (`max-w-thread` 760, `px-8`) or the composer
   column: `code` change card (full width of the column), `ai` work lines and
   cards (`max-w-read` 560), the new thread's composer (same column on purpose).
