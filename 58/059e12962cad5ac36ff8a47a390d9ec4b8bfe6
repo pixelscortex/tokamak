@@ -1,0 +1,35 @@
+packages/server/tests/fixtures/sign-in/src/server/accounts.ts
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-184
+packages/server/tests/fixtures/sign-in/src/server/schema.ts
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-14
+packages/server/tests/fixtures/sign-in/src/server/credentials.ts
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-2
+packages/server/tests/fixtures/sign-in/src/server/method.ts
+  s_cb2e6045e6b3bc::t_400c0efb4a7693 38-39,41
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-11,28-37,40,42-52
+  s_cb2e6045e6b3bc::t_237d24f5be942e 12-27
+packages/server/tests/fixtures/sign-in/package.json
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-6
+packages/server/tests/fixtures/sign-in/plugin.ts
+  s_cb2e6045e6b3bc::t_49b715b560b46a 1-14
+packages/server/tests/fixtures/sign-in/src/server/_generated/api.ts
+  s_cb2e6045e6b3bc::t_65dd2870b22ff3 1-4
+packages/server/tests/fixtures/sign-in/src/server/_generated/internal.ts
+  s_cb2e6045e6b3bc::t_6b6017714e30ea 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58059e12962cad5ac36ff8a47a390d9ec4b8bfe6",
+  "prompts": {},
+  "sessions": {
+    "s_cb2e6045e6b3bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ac81cd7-5d7d-4ae0-9966-f53bdd3c63a6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
