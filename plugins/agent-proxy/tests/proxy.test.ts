@@ -1,6 +1,8 @@
 import { mkdtemp } from "node:fs/promises";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { createApi, type FunctionReference, type TokamakClient } from "@tokamak/sdk";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { blockingProxy, cliEnvironment, empty, run } from "./cli-sandbox";
@@ -19,9 +21,10 @@ const api = createApi<{
   turns: {
     register: Ref<"mutation", { set?: string; subscriptions: string[] }, Set | Failure>;
     key: Ref<"action", Set, Address | Failure>;
+    remove: Ref<"mutation", Set, null | Failure>;
     end: Ref<"mutation", Key, null>;
   };
-}>("turn-caller", ["turns:register", "turns:key", "turns:end"]);
+}>("turn-caller", ["turns:register", "turns:key", "turns:end", "turns:remove"]);
 const profiles = createApi<{
   subscriptions: {
     startSignIn: Ref<"action", { company: "anthropic"; method: "subscription" }, Id & { link: string }>;
@@ -50,7 +53,16 @@ const stream = (address: Address, path = "/v1/messages", apiKey = false, signal?
       "content-type": "application/json",
       "anthropic-version": "2023-06-01",
       "anthropic-beta": "claude-code-20250219",
-      "x-test-header": "unchanged",
+      "x-stainless-lang": "js",
+      "x-claude-test": "unchanged",
+      cookie: "private=local",
+      forwarded: "for=192.0.2.42",
+      "x-forwarded-for": "192.0.2.42",
+      "x-forwarded-host": "private.example.test",
+      "x-real-ip": "192.0.2.42",
+      "cf-connecting-ip": "192.0.2.42",
+      "true-client-ip": "192.0.2.42",
+      "x-test-header": "unrelated",
     },
   });
 const rejected = async (response: Response, status: number, message: string) => {
@@ -147,10 +159,22 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
         "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
-        "x-test-header": "unchanged",
+        "x-stainless-lang": "js",
+        "x-claude-test": "unchanged",
       },
     });
-    expect(request.headers).not.toHaveProperty("x-api-key");
+    for (const name of [
+      "x-api-key",
+      "cookie",
+      "forwarded",
+      "x-forwarded-for",
+      "x-forwarded-host",
+      "x-real-ip",
+      "cf-connecting-ip",
+      "true-client-ip",
+      "x-test-header",
+    ])
+      expect(request.headers).not.toHaveProperty(name);
     expect(JSON.stringify(request)).not.toContain(address.key);
     const updated = await client.query(profiles.subscriptions.list, {});
     expect(updated.subscriptions.find(({ id }) => id === subscription.id)?.lastUsedAt).toBeGreaterThan(0);
@@ -202,7 +226,7 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
     await member.mutation(api.turns.end, { key: next.key });
 
     const count = messages().length;
-    await rejected(await fetch(first.address + "/v1/messages"), 401, "Missing or invalid turn key.");
+    await rejected(await fetch(first.address + "/v1/models"), 401, "Missing or invalid turn key.");
     await rejected(
       await stream({ ...elsewhere, key: first.key }),
       401,
@@ -245,8 +269,198 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
     ).toEqual(["limited", "outside", "spare"]);
 
     await client.mutation(profiles.subscriptions.setEnabled, { id: spare.id, enabled: false });
-    await rejected(await stream(a), 503, "No usable Claude subscription in this set.");
+    const held = await stream(a);
+    await rejected(held, 429, "Claude subscriptions in this set are rate limited.");
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(messages()).toHaveLength(start + 3);
+  });
+
+  test("forwards only the four Claude API routes with their expected methods", async () => {
+    const { subscription } = await signIn("routes");
+    const address = await key(await register([subscription.id]));
+    const count = fake.requests.length;
+    for (const [method, path] of [
+      ["GET", "/api/oauth/profile"],
+      ["POST", "/v1/files"],
+      ["POST", "/v1/models"],
+      ["GET", "/v1/messages"],
+      ["GET", "/v1/models/claude-sonnet-4-6/files"],
+    ]) {
+      const response = await fetch(address.address + path, { method, headers: { "x-api-key": address.key } });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ type: "error", error: { type: "not_found_error" } });
+    }
+    expect(fake.requests).toHaveLength(count);
+    const tokens = await stream(address, "/v1/messages/count_tokens");
+    expect(tokens.status).toBe(200);
+    expect(await tokens.json()).toEqual({ input_tokens: 8 });
+    const modelDetails = await fetch(address.address + "/v1/models/" + model, {
+      headers: { "x-api-key": address.key },
+    });
+    expect(modelDetails.status).toBe(200);
+    expect(await modelDetails.json()).toMatchObject({ id: model, type: "model" });
+  });
+
+  test("concurrent upstream 401s force one renewal and replay the original request", async () => {
+    const { account, subscription } = await signIn("reject-access");
+    const address = await key(await register([subscription.id]));
+    const before = fake.requests.length;
+    const original = account.accessToken;
+    account.rejectedAccess = { token: original, delayMs: 200 };
+    account.tokenDelayMs = 200;
+    const path = "/v1/messages?beta=true";
+    const results = await Promise.all([stream(address, path), stream(address, path)]);
+    expect(results.map(({ status }) => status)).toEqual([200, 200]);
+    await Promise.all(results.map((result) => result.text()));
+    secrets.push(account.accessToken, account.refreshToken);
+    const records = fake.requests.slice(before);
+    expect(records.filter(({ path }) => path.endsWith("/v1/oauth/token"))).toHaveLength(1);
+    const turns = records.filter(({ path: actual }) => actual === "/anthropic" + path);
+    expect(turns.map(({ headers }) => headers.authorization)).toEqual(
+      [original, original, account.accessToken, account.accessToken].map((access) => `Bearer ${access}`),
+    );
+    expect(turns.map(({ rawBody }) => rawBody)).toEqual([body, body, body, body]);
+  });
+
+  test("a refused renewal signs out the account and replays once on the next account", async () => {
+    const first = await signIn("refused-access");
+    const second = await signIn("fallback-access");
+    const third = await signIn("unused-access");
+    const address = await key(
+      await register([first.subscription.id, second.subscription.id, third.subscription.id]),
+    );
+    first.account.rejectedAccess = { token: first.account.accessToken };
+    first.account.signIn = "refuse-renewal";
+    // The retry itself also gets a 401; it must never trigger another retry or renewal.
+    second.account.rejectedAccess = { token: second.account.accessToken };
+    const before = fake.requests.length;
+    const response = await stream(address);
+    expect(response.status).toBe(401);
+    await response.text();
+    const records = fake.requests.slice(before);
+    expect(records.map(({ path, account }) => [path, account])).toEqual([
+      ["/anthropic/v1/messages", first.account.id],
+      ["/anthropic/v1/oauth/token", first.account.id],
+      ["/anthropic/v1/messages", second.account.id],
+    ]);
+    expect(records[2]?.rawBody).toBe(body);
+    const { subscriptions } = await client.query(profiles.subscriptions.list, {});
+    expect(subscriptions.find(({ id }) => id === first.subscription.id)).toMatchObject({
+      status: "signed-out",
+      reason: "Claude would not renew the login. Sign in again.",
+    });
+    for (const { subscription } of [first, second])
+      expect(subscriptions.find(({ id }) => id === subscription.id)?.lastUsedAt).toBeUndefined();
+  });
+
+  test("an empty set returns 403 and names Claude without contacting the company", async () => {
+    const address = await key(await register([]));
+    const before = fake.requests.length;
+    const response = await stream(address);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      type: "error",
+      error: { type: "permission_error", message: "No usable Claude subscription in this set." },
+    });
+    expect(fake.requests).toHaveLength(before);
+  });
+
+  test("holds out bare 429s and uses the earliest reset when all accounts are held out", async () => {
+    const first = await signIn("bare-limit");
+    const second = await signIn("retry-after-limit");
+    const address = await key(await register([first.subscription.id, second.subscription.id]));
+    fake.script(first.account.id, [{ kind: "bare-limit" }]);
+    fake.script(second.account.id, [{ kind: "bare-limit", retryAfter: "37" }]);
+    const before = messages().length;
+    for (let i = 0; i < 2; i++) {
+      const response = await stream(address);
+      expect(response.status).toBe(429);
+      await response.text();
+    }
+    const capped = await stream(address);
+    expect(capped.status).toBe(429);
+    expect(await capped.json()).toMatchObject({ type: "error", error: { type: "rate_limit_error" } });
+    expect(Number(capped.headers.get("retry-after"))).toBeGreaterThanOrEqual(35);
+    expect(Number(capped.headers.get("retry-after"))).toBeLessThanOrEqual(37);
+    expect(
+      messages()
+        .slice(before)
+        .map(({ account }) => account),
+    ).toEqual([first.account.id, second.account.id]);
+    const { subscriptions } = await client.query(profiles.subscriptions.list, {});
+    for (const { subscription } of [first, second])
+      expect(subscriptions.find(({ id }) => id === subscription.id)?.lastUsedAt).toBeUndefined();
+  });
+
+  test("honors the unified rejection and reset even without a 429 or window headers", async () => {
+    const first = await signIn("unified-limit");
+    const second = await signIn("unified-spare");
+    const address = await key(await register([first.subscription.id, second.subscription.id]));
+    fake.script(first.account.id, [{ kind: "unified-limit", resetAt: Math.floor(Date.now() / 1000) + 30 }]);
+    const before = messages().length;
+    for (let i = 0; i < 2; i++) {
+      const response = await stream(address);
+      expect(response.status).toBe(200);
+      await response.text();
+    }
+    expect(
+      messages()
+        .slice(before)
+        .map(({ account }) => account),
+    ).toEqual([first.account.id, second.account.id]);
+  });
+
+  test("streams upstream gzip bytes and preserves content-encoding", async () => {
+    const { subscription } = await signIn("gzip");
+    const address = await key(await register([subscription.id]));
+    // node:http exposes wire bytes; fetch would decode the response in the test client.
+    const actual = await new Promise<{ encoding?: string; bytes: Buffer }>((resolve, reject) => {
+      const post = request(
+        address.address + "/v1/messages?gzip",
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": address.key,
+            "content-type": "application/json",
+            "accept-encoding": "gzip",
+          },
+        },
+        (reply) => {
+          const chunks: Buffer[] = [];
+          reply.on("data", (chunk) => chunks.push(chunk));
+          reply.on("error", reject);
+          reply.on("end", () =>
+            resolve({ encoding: reply.headers["content-encoding"], bytes: Buffer.concat(chunks) }),
+          );
+        },
+      );
+      post.on("error", reject);
+      post.end(body);
+    });
+    expect(actual.encoding).toBe("gzip");
+    expect(actual.bytes).toEqual(gzipSync(turn("anthropic", model, false).join("")));
+  });
+
+  test("only the owner may remove a set, and removal invalidates its existing keys", async () => {
+    const { subscription } = await signIn("remove-set");
+    const set = await register([subscription.id]);
+    const address = await key(set);
+    const member = await workspace.member("remove-set-member");
+    await expect(member.mutation(api.turns.remove, set)).resolves.toMatchObject({
+      failed: true,
+      kind: "NotFound",
+    });
+    const before = await stream(address);
+    expect(before.status).toBe(200);
+    await before.text();
+    await expect(client.mutation(api.turns.remove, set)).resolves.toBeNull();
+    await expect(client.action(api.turns.key, set)).resolves.toMatchObject({
+      failed: true,
+      kind: "NotFound",
+    });
+    const count = fake.requests.length;
+    await rejected(await stream(address), 401, "Turn key has no set.");
+    expect(fake.requests).toHaveLength(count);
   });
 
   test("concurrent requests renew an expired login once and use the renewed token", async () => {

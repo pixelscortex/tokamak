@@ -153,6 +153,10 @@ export const register = mutation({
   args: { set: v.optional(v.string()), subscriptions: v.array(v.string()) },
   handler: (ctx, args) => ctx.use(proxy).registerSet(args),
 });
+export const remove = mutation({
+  args: { set: v.string() },
+  handler: (ctx, args) => ctx.use(proxy).removeSet(args),
+});
 export const key = action({
   args: { set: v.string() },
   handler: (ctx, args) => ctx.use(proxy).turnKey(args),

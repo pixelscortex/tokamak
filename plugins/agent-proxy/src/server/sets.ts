@@ -48,6 +48,20 @@ export const registerSet = pluginOnly(
   }),
 );
 
+/** Removing the set also makes every outstanding key for it unusable. */
+export const removeSet = pluginOnly(
+  mutation({
+    args: { set: setId },
+    handler: async (ctx, { set }) => {
+      const ref = idIn("sets", set);
+      const row = ref && (await ctx.db.get(ref));
+      if (!row || row.owner !== ownerOf(ctx.auth)) return notFound("set");
+      await ctx.db.delete(row._id);
+      return null;
+    },
+  }),
+);
+
 /** The raw credential only crosses the boundary back to the calling plugin. */
 export const turnKey = pluginOnly(
   action({
@@ -114,13 +128,14 @@ export const candidates = internalQuery({
     const row = await ctx.db.get(key.set);
     if (!row || row.owner !== key.owner) return { ok: false as const, error: "Turn key has no set." };
 
-    const accounts = await eligibleAccounts(ctx, row, now);
-    return { ok: true as const, owner: row.owner, accounts };
+    const availability = await eligibleAccounts(ctx, row, now);
+    return { ok: true as const, owner: row.owner, ...availability };
   },
 });
 
 async function eligibleAccounts(ctx: QueryContext<Model>, row: Doc<Model, "sets">, now: number) {
   const accounts = [];
+  let earliestReset = 0;
   for (const id of row.subscriptions) {
     const subscription = await ctx.db.get(id);
     if (!subscription?.enabled || subscription.owner !== row.owner || subscription.company !== "anthropic")
@@ -130,11 +145,13 @@ async function eligibleAccounts(ctx: QueryContext<Model>, row: Doc<Model, "sets"
       .withIndex("by_subscription", (q) => q.eq("subscription", id))
       .collect();
     for (const account of members) {
-      if (account.owner === row.owner && account.status === "ok" && (account.limitedUntil ?? 0) <= now)
-        accounts.push({ id: account._id, subscription: id });
+      if (account.owner !== row.owner || account.status !== "ok") continue;
+      const until = account.limitedUntil ?? 0;
+      if (until <= now) accounts.push({ id: account._id, subscription: id });
+      else earliestReset = earliestReset ? Math.min(earliestReset, until) : until;
     }
   }
-  return accounts;
+  return { accounts, earliestReset };
 }
 
 export const recordForward = internalMutation({
@@ -143,12 +160,13 @@ export const recordForward = internalMutation({
     subscription: v.id("subscriptions"),
     account: v.id("accounts"),
     limitedUntil: v.number(),
+    success: v.boolean(),
   },
-  handler: async (ctx, { owner, subscription, account, limitedUntil }) => {
+  handler: async (ctx, { owner, subscription, account, limitedUntil, success }) => {
     const row = await ctx.db.get(subscription);
     if (row?.owner !== owner) return;
     const now = Date.now();
-    await ctx.db.patch(subscription, { lastUsedAt: now });
+    if (success) await ctx.db.patch(subscription, { lastUsedAt: now });
     if (limitedUntil <= now) return;
     const member = await ctx.db.get(account);
     if (member?.owner === owner && limitedUntil > (member.limitedUntil ?? 0))

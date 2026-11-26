@@ -32,17 +32,26 @@ None.
 
 The plugin-only `registerSet` export stores an ordered list of subscriptions
 owned by the calling member and returns the set id. A caller can replace the
-list without changing the id. `turnKey` gives the caller a fresh key and the
-set's address under `/plugins/agent-proxy/<set>` on the configured public
-origin. The proxy accepts the key only for that set until `endTurnKey` or
-expiry. It stores a hash of the key and never returns a provider login.
+list without changing the id. `removeSet` is plugin-only and owner-scoped;
+removing a set invalidates all its outstanding keys. The plugin-only `turnKey`
+gives the caller a fresh key and the set's address under
+`/plugins/agent-proxy/<set>` on the configured public origin. The proxy stores
+only a hash and accepts the key only for that set. Keys expire after eight
+hours. The consumer (TKM-266) must call `endTurnKey` when the turn ends,
+including on stop or failure.
 
-Each HTTP request tries the enabled Claude subscriptions in set order. It
-skips signed-out accounts and those with an active account quota limit and
-renews the chosen login if needed. It forwards the request with the
-subscription's OAuth headers, streams the answer back and records the last
-use. If no Claude account can be used, it names Claude in the error. When a
-key is missing or invalid, it names only the problem with the key.
+The proxy accepts only POST to `/v1/messages` and
+`/v1/messages/count_tokens`, and GET to `/v1/models` and `/v1/models/<id>`.
+Each request tries the enabled Claude subscriptions in set order, skipping
+signed-out accounts and accounts with an active rate limit. It forwards with
+the subscription's OAuth headers, streams the answer, and records last use
+only on a 2xx response. An upstream 401 forces a renewal and allows one
+replay. If Claude refuses renewal, the account is signed out and the replay
+uses the next available account. A 429 holds the account out of later
+requests. If every candidate is held out, the proxy returns 429 with the
+earliest reset in `Retry-After`. A set with no usable Claude subscription
+otherwise returns 403. A missing or invalid key names only the problem with
+the key.
 
 ## If you change X, check Y
 
@@ -123,6 +132,11 @@ None.
   out of hookable functions, before that ships.
 
 ## Open questions
+
+- `registerSet` and `turnKey` are plugin-only. Any plugin that depends on
+  agent-proxy can use them to mint keys for the calling member's own
+  subscriptions only. Does the owner want to restrict which plugins can
+  issue keys further?
 
 - The Claude proxy works against fake Claude. The owner still needs to
   confirm a Claude Code turn through it on a live subscription.

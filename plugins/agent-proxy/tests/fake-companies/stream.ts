@@ -4,7 +4,12 @@ export function event(type: string, data: object) {
   return `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
 }
 
-export function stream(chunks: string[], headers: ResponseInit["headers"], delayMs: number, status = 200) {
+export function stream(
+  chunks: (string | Uint8Array)[],
+  headers: ResponseInit["headers"],
+  delayMs: number,
+  status = 200,
+) {
   const encoder = new TextEncoder();
   let index = 0;
   let cancelled = false;
@@ -16,7 +21,10 @@ export function stream(chunks: string[], headers: ResponseInit["headers"], delay
           return;
         }
         if (index) await new Promise((resolve) => setTimeout(resolve, delayMs));
-        if (!cancelled) controller.enqueue(encoder.encode(chunks[index++]));
+        if (!cancelled) {
+          const chunk = chunks[index++]!;
+          controller.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+        }
       },
       cancel() {
         cancelled = true;

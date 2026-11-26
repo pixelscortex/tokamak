@@ -6,9 +6,11 @@ type References = {
     readonly "claim": ReferenceFromDefinition<typeof import("../logins")["claim"]>;
     readonly "due": ReferenceFromDefinition<typeof import("../logins")["due"]>;
     readonly "fresh": ReferenceFromDefinition<typeof import("../logins")["fresh"]>;
+    readonly "isSignedOut": ReferenceFromDefinition<typeof import("../logins")["isSignedOut"]>;
     readonly "later": ReferenceFromDefinition<typeof import("../logins")["later"]>;
     readonly "read": ReferenceFromDefinition<typeof import("../logins")["read"]>;
     readonly "refused": ReferenceFromDefinition<typeof import("../logins")["refused"]>;
+    readonly "rejectAccess": ReferenceFromDefinition<typeof import("../logins")["rejectAccess"]>;
     readonly "renewed": ReferenceFromDefinition<typeof import("../logins")["renewed"]>;
   };
   readonly "manage": {
@@ -35,9 +37,11 @@ export const internal: References = createApi("agent-proxy", [
   "logins:claim",
   "logins:due",
   "logins:fresh",
+  "logins:isSignedOut",
   "logins:later",
   "logins:read",
   "logins:refused",
+  "logins:rejectAccess",
   "logins:renewed",
   "manage:accounts",
   "manage:checked",

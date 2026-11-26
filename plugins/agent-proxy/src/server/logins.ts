@@ -53,6 +53,28 @@ export const read = internalQuery({
   },
 });
 
+/** Expire this login and let the 401 trigger a renewal even during a previous backoff. */
+export const rejectAccess = internalMutation({
+  args: { owner, account, access: v.string(), expiresAt: v.number() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("logins")
+      .withIndex("by_account", (q) => q.eq("account", args.account))
+      .first();
+    // Another request may already have expired or rotated this login.
+    if (row?.owner === args.owner && row.access === args.access && row.expiresAt === args.expiresAt)
+      await ctx.db.patch(row._id, { expiresAt: 0, retryAt: 0 });
+  },
+});
+
+export const isSignedOut = internalQuery({
+  args: { owner, account },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.account);
+    return row?.owner === args.owner && row.status === "signed-out";
+  },
+});
+
 /** A member's signed-in accounts, for the proxy to choose from (TKM-263). */
 export const accountsOf = internalQuery({
   args: { owner },

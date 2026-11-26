@@ -3,7 +3,7 @@ import { createServer as createTlsServer, type ServerOptions } from "node:https"
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { pipeline } from "node:stream/promises";
-import { zstdDecompressSync } from "node:zlib";
+import { gzipSync, zstdDecompressSync } from "node:zlib";
 import type { Addresses, Company } from "../../src/server/addresses";
 import { challenge, oauth, syntheticJwt } from "./oauth";
 import type { Fixture } from "./recorder";
@@ -11,7 +11,9 @@ import { stream, turn } from "./stream";
 
 export type Answer =
   | { kind: "normal" | "signed-out" | "overloaded" }
-  | { kind: "limit" | "partial-limit"; resetAt: number; scope?: "account" | "model" };
+  | { kind: "limit" | "partial-limit"; resetAt: number; scope?: "account" | "model" }
+  | { kind: "bare-limit"; retryAfter?: string }
+  | { kind: "unified-limit"; resetAt: number };
 /**
  * How the account's token endpoint answers: `unavailable` gives HTTP 503 and
  * `limited` HTTP 429 with `Retry-After: 120`, to the code exchange and to renewals alike.
@@ -55,6 +57,7 @@ export async function startFakeCompanies({
       strict: boolean;
       /** Milliseconds the token endpoint waits before it answers for this account. */
       tokenDelayMs: number;
+      rejectedAccess?: { token: string; delayMs?: number };
       /**
        * The plan the company reports: Claude's `organization_type` on the
        * profile read (`claude_pro` unless set), ChatGPT's `chatgpt_plan_type`
@@ -251,6 +254,11 @@ export async function startFakeCompanies({
         { status, headers: responseHeaders },
       );
     if (!account || account.expiresAt <= Date.now()) return error(401, "authentication_error");
+    if (isTurn && account.rejectedAccess && credential === account.rejectedAccess.token) {
+      const { delayMs } = account.rejectedAccess;
+      if (delayMs) await new Promise((done) => setTimeout(done, delayMs));
+      return error(401, "authentication_error");
+    }
     if (isTurn && account.strict) {
       if (
         company === "anthropic" &&
@@ -271,6 +279,8 @@ export async function startFakeCompanies({
       ["/models", "/codex/models", "/v1/models", "/api/oauth/profile"].includes(route)
     )
       return error(503, "api_error");
+    if (company === "anthropic" && route === "/v1/models/claude-sonnet-4-6")
+      return Response.json({ id: "claude-sonnet-4-6", type: "model", display_name: "Fake Sonnet" });
     if (company === "anthropic" && route === "/v1/models" && account.models)
       return Response.json({
         data: account.models.map((model) => ({ id: model.id, type: "model", display_name: model.name })),
@@ -396,12 +406,21 @@ export async function startFakeCompanies({
           : { "anthropic-ratelimit-unified-overage-status": "rejected" }),
       });
     }
-    const responseHeaders = { "content-type": "text/event-stream" };
-    return stream(
-      turn(company, fields?.model ?? "fake", answer?.kind === "partial-limit"),
-      responseHeaders,
-      delayMs,
-    );
+    if (answer?.kind === "bare-limit")
+      return error(429, "rate_limit_error", answer.retryAfter ? { "retry-after": answer.retryAfter } : {});
+    const responseHeaders: Record<string, string> = { "content-type": "text/event-stream" };
+    if (answer?.kind === "unified-limit") {
+      responseHeaders["anthropic-ratelimit-unified-status"] = "rejected";
+      responseHeaders["anthropic-ratelimit-unified-reset"] = String(answer.resetAt);
+    }
+    const chunks = turn(company, fields?.model ?? "fake", answer?.kind === "partial-limit");
+    if (isTurn && url.searchParams.has("gzip")) {
+      const zipped = gzipSync(chunks.join(""));
+      responseHeaders["content-encoding"] = "gzip";
+      responseHeaders["content-length"] = String(zipped.length);
+      return stream([zipped.subarray(0, 32), zipped.subarray(32)], responseHeaders, delayMs);
+    }
+    return stream(chunks, responseHeaders, delayMs);
   }
 
   const listener: RequestListener = async (incoming, outgoing) => {
@@ -474,6 +493,7 @@ export async function startFakeCompanies({
         refreshToken: `fake-${id}-refresh`,
         generation: 0,
         tokenDelayMs: 0,
+        rejectedAccess: undefined as { token: string; delayMs?: number } | undefined,
         plan: plan as string | null | undefined,
         ...(workspace !== undefined && { workspace }),
         expiresAt: Infinity,
