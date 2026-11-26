@@ -22,6 +22,7 @@ import {
   managerCrash,
   reloadManager,
   reloadManagerTimeout,
+  windowOwnership,
   separateProcesses,
   stopDuringAfter,
   stopIsolation,
@@ -44,19 +45,7 @@ try {
   const address = await h.serve("snapshots");
   const runner = h.runner(address);
   assert.ok(runner, "Code process tests require the Runner");
-  const hookCalls = new Set();
-  const desk = await h.connect(address, {
-    local: true,
-    observe(plugin, frame, direction) {
-      if (
-        direction === "fromWorker" &&
-        frame.name === "local.contract.call" &&
-        frame.payload.plugin === "code"
-      ) {
-        hookCalls.add(`${plugin}/${frame.payload.name}/${frame.payload.method}`);
-      }
-    },
-  });
+  const desk = await h.connect(address, { local: true });
   await preservesWorktree(desk, code);
   await snapshotFailures(desk, code);
   await changedWorktree(desk);
@@ -65,20 +54,16 @@ try {
   const fixture = { h, runner, desk, code, project, start, refs, turnRef };
   await stopDuringAfter(fixture);
   await separateProcesses(fixture);
-  assert.deepEqual([...hookCalls].sort(), [
-    "ai/turnHooks/after",
-    "ai/turnHooks/before",
-    "chat/threadDeletedLocal/after",
-  ]);
   await unavailableProviders(fixture);
   await thirdPartyNotice(desk);
   await cancelledCleanup(fixture);
+  await windowOwnership(fixture);
   await reloadManager(fixture);
   await reloadManagerTimeout(fixture);
   await snapshotReviewCases({
     ...fixture,
     gate: h.gate,
-    removeThread: (threadId) => desk.local(chat.threads.removeLocal, { threadId }),
+    removeThread: (threadId) => desk.action(chat.threads.removeLocal, { threadId }),
     stopIsolation: () => stopIsolation(fixture),
   });
   await gitAppearsMidTurn(desk);
@@ -150,14 +135,14 @@ export default definePlugin({ id: "other-hook", version: "1.0.0", depends: ["ai"
   await writeFile(
     join(folder, "src/server/hook.ts"),
     `
-import { local, provide } from "@tokamak/sdk";
+import { action, provide } from "@tokamak/sdk";
 import { turnHooks, type TurnInfo } from "plugin:ai/contracts";
 export const hooks = provide(turnHooks, {
-  before: local({ handler: async (ctx, turn: TurnInfo) => {
+  before: action({ on: "caller", handler: async (ctx, turn: TurnInfo) => {
     if (turn.signal !== ctx.signal || turn.signal.aborted) throw new Error("Missing provider signal");
     return 1 as never; // Non-object hook results have always been ignored.
   } }),
-  after: local({ handler: async (_ctx, turn: TurnInfo) => {
+  after: action({ on: "caller", handler: async (_ctx, turn: TurnInfo) => {
     if (turn.folder.endsWith("/third-party-after")) throw new Error("The example hook could not update its report");
   } }),
 });
@@ -209,7 +194,7 @@ async function start(desk, folder, text = "Make an edit") {
   const { threadId } = sent;
   const run = (messageId, model, timeout) =>
     within(
-      desk.local(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
+      desk.action(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
       model,
       timeout,
     );
@@ -315,7 +300,7 @@ async function preservesWorktree(desk, code) {
   for (const phase of ["before", "after"]) {
     assert.equal(git("ls-tree", "-r", "--name-only", `${prefix}/${phase}`), tracked);
   }
-  assert.deepEqual(await desk.local(code.notices.forTurn, { threadId, turnId }), {
+  assert.deepEqual(await desk.action(code.notices.forTurn, { threadId, turnId }), {
     omitted: [large],
     warning: null,
   });
@@ -334,7 +319,7 @@ async function preservesWorktree(desk, code) {
   const other = await start(desk, folder, "Keep this thread");
   await other.run(other.messageId, "edit");
   assert.equal(refs(git, threadRef(other.threadId)).length, 2);
-  await desk.local(chat.threads.removeLocal, { threadId });
+  await desk.action(chat.threads.removeLocal, { threadId });
   assert.equal(await desk.query(chat.threads.get, { threadId }), null);
   assert.deepEqual(
     refs(git),
@@ -370,7 +355,7 @@ async function snapshotFailures(desk, code) {
   });
   assert.equal((await thread.reply(current._id)).state, "done");
   assert.deepEqual(refs(git, prefix), [`${prefix}/before`]);
-  assert.deepEqual(await desk.local(code.notices.forTurn, { threadId, turnId: current._id }), {
+  assert.deepEqual(await desk.action(code.notices.forTurn, { threadId, turnId: current._id }), {
     omitted: [],
     warning: "Couldn't save this turn's code",
   });
@@ -409,7 +394,7 @@ async function stoppedTurn(desk) {
   const running = thread.run(thread.messageId, "edit-stop");
   await thread.edited();
   const [turn] = await thread.turns.until("running stop fixture", (rows) => rows.length === 1);
-  await desk.local(ai.run.stop, { turnId: turn._id });
+  await desk.action(ai.run.stop, { turnId: turn._id });
   assert.equal((await running).state, "stopped");
   const saved = await thread.reply(turn._id);
   assert.equal(saved.state, "stopped");
@@ -442,11 +427,11 @@ async function withoutAi(code) {
     text: "Plain chat",
     folder: { kind: "chosen", path: folder },
   });
-  assert.equal(await desk.local(code.notices.forTurn, { threadId, turnId: "older" }), null);
+  assert.equal(await desk.action(code.notices.forTurn, { threadId, turnId: "older" }), null);
   const fromEarlier = `${threadRef(threadId)}/turns/older/after`;
   git("update-ref", fromEarlier, "HEAD");
   assert.deepEqual(refs(git), [fromEarlier]);
-  await desk.local(chat.threads.removeLocal, { threadId });
+  await desk.action(chat.threads.removeLocal, { threadId });
   assert.deepEqual(refs(git), [], "code cleans up older snapshots even while ai is uninstalled");
 }
 
@@ -464,7 +449,7 @@ async function prunesWhenReopened(address, desk, code) {
   assert.equal(refs(git, threadRef(deleted.threadId)).length, 2);
 
   const reopened = await h.connect(address, { local: true });
-  await reopened.local(code.hooks.prune, {});
+  await reopened.action(code.hooks.prune, {});
   assert.deepEqual(refs(git), refs(git, threadRef(kept.threadId)));
   assert.equal(refs(git).length, 2);
   assert.equal(git("rev-parse", branch), branchHead);
@@ -492,7 +477,7 @@ async function withoutDataFolder() {
   assert.deepEqual(refs(git, prefix), [`${prefix}/after`, `${prefix}/before`]);
 
   const loose = await desk.mutation(chat.threads.start, { text: "No folder", folder: { kind: "own" } });
-  const own = await desk.local(chat.folders.resolve, { threadId: loose.threadId });
+  const own = await desk.action(chat.folders.resolve, { threadId: loose.threadId });
   assert.ok((await stat(own)).isDirectory(), "the thread still gets a folder of its own");
   await rm(own, { recursive: true, force: true });
   assert.equal((await desk.query(chat.threads.get, { threadId: loose.threadId })).folder.path, undefined);

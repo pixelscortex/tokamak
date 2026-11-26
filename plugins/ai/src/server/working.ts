@@ -1,18 +1,18 @@
 /// <reference types="node" />
-import { local, TIMED_OUT, within, type AuthContext, type Id } from "@tokamak/sdk";
-import { isSendersDevice } from "../shared/turn-shared";
+import { action, TIMED_OUT, within, v, type AuthContext, type Id } from "@tokamak/sdk";
 import { FORCE_STOP_MS } from "../shared/turn-timing";
 import type { turnControl } from "./controls";
 import { api } from "./_generated/api";
 
 /**
- * The turns this computer's local part is running right now, for quitting the
+ * The turns this window is running on the Runner, for quitting the
  * app: the window asks `working:list` when the person quits, and Stop and quit
  * calls `working:stopAll`. Only turns that really run here count, not rows
  * left behind by an app that crashed (the server interrupts those).
  */
 
 interface Working {
+  readonly owner: string;
   readonly threadId: string;
   readonly agent: string;
   readonly control: ReturnType<typeof turnControl>;
@@ -32,14 +32,21 @@ export function workingOn(turnId: Id<"turns">, turn: Omit<Working, "ended">): ()
   };
 }
 
-function mine(auth: AuthContext) {
-  return [...working].filter(([, turn]) => isSendersDevice(turn.control, auth));
+export function windowKey(auth: AuthContext, windowId: string): string {
+  return JSON.stringify([auth.user.id, auth.device.id, windowId]);
 }
 
-/** Each turn running on this computer for the caller: its thread and the agent's name. */
-export const list = local({
-  handler: async (ctx) =>
-    mine(ctx.auth).map(([turnId, { threadId, agent }]) => ({ turnId, threadId, agent })),
+function mine(auth: AuthContext, windowId: string) {
+  const owner = windowKey(auth, windowId);
+  return [...working].filter(([, turn]) => turn.owner === owner);
+}
+
+/** Each turn owned by the calling window: its thread and the agent's name. */
+export const list = action({
+  on: "caller",
+  args: { windowId: v.string() },
+  handler: async (ctx, { windowId }) =>
+    mine(ctx.auth, windowId).map(([turnId, { threadId, agent }]) => ({ turnId, threadId, agent })),
 });
 
 /** How long Stop and quit waits for the agents' programs to go once they are force-stopped. */
@@ -51,10 +58,12 @@ const AFTER_FORCE_MS = 3_000;
  * An agent still running after the Force stop delay has its programs killed.
  * Resolves with how many turns were handled.
  */
-export const stopAll = local({
-  handler: async (ctx) => {
+export const stopAll = action({
+  on: "caller",
+  args: { windowId: v.string() },
+  handler: async (ctx, { windowId }) => {
     await ctx.runMutation(api.turns.stopQueued, {});
-    const turns = mine(ctx.auth);
+    const turns = mine(ctx.auth, windowId);
     await Promise.all(
       turns.map(async ([turnId, { control, skipAfter }]) => {
         const stopping = await control.requestStop(() =>

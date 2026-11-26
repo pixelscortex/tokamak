@@ -3,17 +3,18 @@ import type { JSX } from "@solidjs/web";
 import { Region, useClient } from "@tokamak/sdk/client";
 import { Button, Chip } from "@tokamak/ui";
 import type { HeaderProps } from "plugin:chat/client";
-import { branchOf, followBranch, openReview, rememberLocalClient, review } from "../lib/changes";
+import { branchOf, followBranch, openReview, review } from "../lib/changes";
+import { rememberClient } from "../lib/runner";
 import { branchIcon, singleLayoutIcon, splitLayoutIcon } from "../lib/icons";
 import { ReviewPanel } from "./review-panel";
 
 /** The thread's branch after the title (Paper "Branch chip"), kept current while the thread is open. */
 export function BranchChip(props: HeaderProps): JSX.Element {
   const client = useClient();
-  const local = rememberLocalClient(client);
+  rememberClient(client);
   createEffect(
     () => props.thread._id,
-    (threadId) => (local ? followBranch(client, threadId) : undefined),
+    (threadId) => followBranch(client, threadId),
   );
   return (
     <Show when={branchOf(props.thread._id)}>

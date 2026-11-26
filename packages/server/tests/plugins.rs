@@ -110,7 +110,9 @@ async fn next(session: &mut Session) -> Event {
 async fn call(session: &mut Session, id: u64, name: &str, args: Value) -> Result<Value, String> {
     session.call(id, name, args).unwrap();
     match next(session).await {
-        Event::Response { id: actual, result } => {
+        Event::Response {
+            id: actual, result, ..
+        } => {
             assert_eq!(actual, id);
             result
         }
@@ -143,7 +145,8 @@ fn nested_plugins_share_transactions_read_dependencies_and_a_single_worker() {
                 next(&mut reader).await,
                 Event::Subscription {
                     id: 100,
-                    result: Ok(_)
+                    result: Ok(_),
+                    ..
                 }
             ));
             call(&mut writer, 9, "b/ops:add", json!({"fail":false}))
@@ -153,6 +156,7 @@ fn nested_plugins_share_transactions_read_dependencies_and_a_single_worker() {
                 Event::Subscription {
                     id: 100,
                     result: Ok(value),
+                    ..
                 } => {
                     assert_eq!(value["a"].as_array().unwrap().len(), 1);
                     assert_eq!(value["b"].as_array().unwrap().len(), 2);
@@ -717,7 +721,7 @@ async fn deterministic_query_and_conflict_retry_preserve_time_randomness_and_wri
     winner.commit().await.unwrap();
     resume.send(()).unwrap();
     let replayed = match next(&mut session).await {
-        Event::Response { id: 3, result } => result.unwrap(),
+        Event::Response { id: 3, result, .. } => result.unwrap(),
         event => panic!("{event:?}"),
     };
     assert_eq!(

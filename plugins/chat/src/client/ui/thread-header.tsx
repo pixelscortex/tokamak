@@ -1,6 +1,5 @@
 import { Show, createSignal } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { component } from "@tokamak/sdk/client";
 import { Button, Chip, Dialog, Icon, Menu } from "@tokamak/ui";
 import type { Thread } from "../lib/api";
 import { folderName } from "../lib/folders";
@@ -18,7 +17,7 @@ export interface HeaderProps {
  * (double-click renames), its `folder`, and the `menu` with Rename and Delete.
  * Others add after the title (a branch chip) or before the menu (a panel toggle).
  */
-export const Header = component("header", {}, (props: HeaderProps) => {
+export const Header = (props: HeaderProps) => {
   const [renaming, setRenaming] = createSignal(false, { ownedWrite: true });
   const [deleting, setDeleting] = createSignal(false, { ownedWrite: true });
   const [busy, setBusy] = createSignal(false, { ownedWrite: true });
@@ -42,8 +41,8 @@ export const Header = component("header", {}, (props: HeaderProps) => {
   }
   return (
     <div class="flex min-w-0 flex-1 items-center gap-2">
-      <Icon part="icon" path={glyphs.thread} class="text-ink" />
-      <div part="title" data-part="title" class="flex min-w-0 items-center">
+      <Icon path={glyphs.thread} class="text-ink" />
+      <div data-part="title" class="flex min-w-0 items-center">
         <Show
           when={renaming()}
           fallback={
@@ -59,9 +58,9 @@ export const Header = component("header", {}, (props: HeaderProps) => {
           <TitleInput title={props.thread.title} onDone={(title) => void rename(title)} />
         </Show>
       </div>
-      <FolderChip part="folder" path={props.thread.folder?.path} />
+      <FolderChip path={props.thread.folder?.path} />
       <span class="flex-1" />
-      <ThreadMenu part="menu" onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} />
+      <ThreadMenu onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} />
       <DeleteDialog
         title={props.thread.title}
         open={deleting()}
@@ -76,7 +75,7 @@ export const Header = component("header", {}, (props: HeaderProps) => {
       />
     </div>
   );
-});
+};
 
 /**
  * The thread's folder by name, as a chip like the branch beside it (Paper's

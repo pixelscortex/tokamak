@@ -1,7 +1,7 @@
 //! The window answers host operations using its own workspace connection.
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-mod quickjs;
+pub(super) mod quickjs;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::artifact::client_env;
@@ -36,7 +36,7 @@ pub(super) struct Local {
     stopping: CancellationToken,
     slots: Arc<Semaphore>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pool: quickjs::Pool,
+    pub(super) pool: quickjs::Pool,
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -107,8 +107,13 @@ impl Local {
     ) -> Result<(), server::Error> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
+            let pool = self.pool.clone();
+            let leases = Arc::new(quickjs::Leases::new(&pool, workspace.into()));
             self.pool
-                .observe(server, server.connect().await?, workspace.into());
+                .observe(server, server.connect().await?, leases.clone());
+            server.attach_runner(move |action| {
+                Box::pin(quickjs::action(pool.clone(), leases.clone(), action))
+            })?;
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = (server, workspace);

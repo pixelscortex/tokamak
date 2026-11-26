@@ -65,7 +65,7 @@ They cover loopback, desktop token authentication and a configured origin list.
 
 ## Plugin imports
 
-Production source (server, window and local part; tests excluded) must stay inside
+Production source (server, window and caller actions; tests excluded) must stay inside
 its own plugin folder. Relative paths, absolute paths, source aliases and
 symlinks cannot reach another folder. Dependencies installed through
 `node_modules`, including workspace packages, are allowed; another plugin's
@@ -85,6 +85,11 @@ queries, mutations and actions. The `api` object uses the public export names;
 named imports also carry references. No runtime helpers or handlers cross the
 boundary. Public APIs are inspected
 statically and are never executed by the builder.
+
+`plugin:<id>/tables` exposes generated handles for the tables in a sibling
+plugin's server schema. Add the owner to `depends` to use one in `v.ref`. The
+builder makes a local type copy in `.tokamak/types/<id>/tables.d.ts` and emits
+only qualified table names at runtime. Do not check in or hand edit the copy.
 
 Within a plugin, use `src/server/_generated/api.ts` from the window. Its runtime
 references contain only public names. The window build refuses imports of other
@@ -116,55 +121,76 @@ paths to the plugin's tsconfig (relative to the plugin root):
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
 
-## Extending a component
+## Extending a screen
 
-Export the component from the plugin's window API, then build the owner plugin.
-In the render function, a tag such as `<SendButton />` publishes `sendButton`.
-Use `part="name"` on a native element or to give two uses of the same tag
-different names. Solid controls such as `Show` and `For` publish paths only
-with an explicit `part`. Mark an element `locked` to prevent actions on it.
+Build the owner plugin to publish a typed `parts` export on its public client
+API. No part declarations are needed: every authored JSX element in window
+code is addressable. Solid control flow (`Show`, `For`, `Index`, `Switch`,
+`Match`, `Suspense`, `ErrorBoundary`/`Errored`, `Dynamic`, and `Portal`) is
+transparent, like fragments. Wrapping an element with one does not rename it.
+
+A path follows the named render function and the element's JSX ancestry.
+Nested named functions add a segment under their enclosing function and
+inherit its props if they declare no parameter. Inline callbacks, including
+callbacks passed to calls such as `map` or `createMemo`, add no segment. A
+duplicate render name in the same scope fails the build with both locations
+rather than assigning file-order suffixes.
+
+Each element's segment is its nonempty static `data-part`, then its static
+`id`, then its tag or component name. A static name keeps its segment if a plain tag shares the name; the plain tag
+gets a positional suffix. Two explicit names cannot collide. Unnamed siblings with the same name use source order:
+`div`, `div$2`, `div$3`. Inserting another tag or editing another branch
+does not renumber them. Adding an earlier unnamed sibling with the same name
+can change a positional path; static names keep their paths. Names retain
+case. Punctuation is escaped as a dollar sign, its hex code, and a closing
+dollar sign (`Menu.Root` becomes `Menu$2e$Root`). The names `target`, `fingerprint`,
+`constructor`, `prototype`, and `__proto__` are prefixed with `$`.
+
+For example, Chat's message body is `chat.parts.Message.article.body` and
+AI's picker option is `ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item`.
+
+Commit the generated `_generated/components.d.ts` next to the client entry.
+Export actions from the contributing plugin's client entry:
 
 ```tsx
-// chat/src/client/api.tsx
-import { component } from "@tokamak/sdk/client";
+import { after } from "@tokamak/sdk/client";
+import * as ai from "plugin:ai/client";
 
-const SendButton = () => <button>Send</button>;
-export const Composer = component("composer", {}, () => (
-  <section part="toolbar">
-    <SendButton />
-    <span part="status" locked>
-      Ready
-    </span>
-  </section>
-));
+export const Profile = after(ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item, ProfileColumn);
 ```
 
-Commit the generated `src/client/_generated/components.d.ts` with the component.
-Other plugins use the public client import and export each action from their own
-window API:
+`before` and `after` render siblings. `prepend` and `append` render inside
+elements that accept children. `wrap` receives the element as `props.children`.
+`replace` substitutes another element; `hide` also removes the sibling
+additions. `replace` and `hide` dispose the original element and its
+descendants while active. Actions and their live `when` option receive the
+props of the render function that owns the tag. Parts inside an inline list
+callback get `props.$row.item` and `props.$row.index`, typed as Solid passes
+them to that callback. Nested rows expose the enclosing row as `$row.parent`.
+With `Index` (or Solid 2’s `For keyed={false}`), the item is an accessor and
+the index is a number. Layers at one position are
+ordered by `order` (default 0) and then plugin ID. The first installed
+replacement owns the position even while its condition is false.
 
-```tsx
-import { append, before } from "@tokamak/sdk/client";
-import * as chat from "plugin:chat/client";
+If an installed plugin targets a path that is renamed or removed, the build
+warns with the contributing plugin's ID. The window also warns once per
+add-on and path when a missing or changed target is skipped.
 
-export const Cost = before(chat.Composer.sendButton, () => <small>Free</small>);
-export const Mic = append(chat.Composer.toolbar, MicLevel, { when: micEnabled, order: 10 });
-```
+Only positional segments add to a fingerprint: a shared tag or component
+name disambiguated by position. A path's fingerprint chains every positional
+segment from its render scope down, so a named part under a positional
+ancestor is still protected. A static `data-part` or `id`, or a name unique
+among its siblings, adds nothing. Paths with no positional segment carry no
+fingerprint and are never skipped for a fingerprint mismatch.
 
-`before` and `after` render siblings; `prepend` and `append` render inside the
-element. `wrap` gets the current element as `props.children`. The remaining
-actions are `replace(path, UI, options?)` and `hide(path, options?)`, which
-dispose the original element and its descendants when active. Hiding also
-removes its `before` and `after` additions. Actions receive
-the declaring component's props, and so does `when`, a live check such as `(m) => m.isLast`. Layers at one
-position are ordered by `order` (default 0) and then plugin ID. The first
-installed replacement owns the position even while its condition is false.
-
-A named native element can place the inside layers explicitly with a sole
-function child, for example `{(added) => <><header>{added.prepend}</header><footer>{added.append}</footer></>}`.
-The callback receives `PartAdditions`. On a component tag, use its ordinary
-render prop for the data it supplies; put any placement callback on a named
-native child.
+A positional segment hashes the tag, the attributes `role`, `type`, `name`,
+`for` and `href` (each by its static string value or as "an expression"),
+and any `aria-*` attribute that has a static string value. It ignores every
+other attribute, including `class`, `style`, `data-*`, computed `aria-*`,
+event handlers, `ref`, spread attributes, and the source text of
+expressions. If two positional siblings
+still have the same identity, the add-on build warns that the target is
+ambiguous and asks the owner for a `data-part` or `id`.
 
 ### Contract registrations
 

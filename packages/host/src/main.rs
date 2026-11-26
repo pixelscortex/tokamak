@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "local-runtime")]
         Some(code) => protocol::run(std::path::Path::new(code), None).await,
         #[cfg(feature = "local-runtime")]
-        None => anyhow::bail!("Expected a local function bundle path"),
+        None => anyhow::bail!("Expected a caller action bundle path"),
         #[cfg(not(feature = "local-runtime"))]
         _ => anyhow::bail!("This host runs only server actions"),
     }
@@ -85,7 +85,7 @@ mod local_plugin {
             .ok_or_else(|| anyhow::anyhow!("Expected a local plugin ID"))?;
         let bundle = args
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
+            .ok_or_else(|| anyhow::anyhow!("Expected a caller action bundle path"))?;
         let native = args
             .next()
             .map(|arg| -> anyhow::Result<UnixDatagram> {

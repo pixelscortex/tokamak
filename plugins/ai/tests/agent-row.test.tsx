@@ -1,15 +1,18 @@
 import { screen, waitFor } from "@testing-library/dom";
 import { render } from "@solidjs/web";
 import { afterEach, expect, test } from "vitest";
-import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { TokamakClient, fail, type ClientTransport, type Id, type JsonValue } from "@tokamak/sdk";
 import { ShortcutContext } from "@tokamak/sdk/client";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { ComposerProps } from "plugin:chat/client";
+import { submitDraft } from "../../chat/src/client/lib/sent";
 import { isHeld } from "../../chat/src/client/lib/hold";
 import type { Info } from "../src/contracts";
+import { refreshAgents } from "../src/client/lib/agents";
+import { startTurn } from "../src/client/lib/turn";
 import { AgentRow } from "../src/client/ui/agent-row";
 
-// The agent row on its own, with a stand-in client: the local part answers
+// The agent row on its own, with a stand-in client: the Runner answers
 // `agents:list` with whatever `installed` holds at that moment, and the server
 // answers `choices:get` with `stored` (no turn runs, nothing is queued).
 
@@ -26,6 +29,13 @@ let installed: { id: string; name: string; info: Info }[] = [];
 let stored: JsonValue = null;
 let creator: JsonValue = { id: "local", name: "Sam" };
 let asked = 0;
+let hasMachine = true;
+let active: JsonValue = null;
+let queued: JsonValue = [];
+let shortcut: (() => void) | undefined;
+const actions: string[] = [];
+const threadId = "chat/threads:fixture" as Id<"threads">;
+const turnId = "ai/turns:fixture" as Id<"turns">;
 
 function client(): TokamakClient {
   const transport = {
@@ -33,15 +43,26 @@ function client(): TokamakClient {
       queueMicrotask(() => onEvent({ value: answer(name) }));
       return () => {};
     },
-  } as unknown as ClientTransport;
-  const local = {
-    invoke: async (name: string) => {
-      if (name !== "ai/agents:list") throw new Error(`Unexpected local call ${name}`);
+    query: async (name: string) => (name === "ai/turns:pending" ? active : answer(name)),
+    mutation: async (name: string) => {
+      if (name === "ai/turns:enqueue") return null;
+      throw new Error(`Unexpected mutation ${name}`);
+    },
+    action: async (name: string) => {
+      actions.push(name);
+      if (name === "chat/folders:resolve") return "/fixture";
+      if (!hasMachine) return fail("noMachine", null);
+      if (name === "chat/folders:resolve") return "/fixture";
+      if (name === "ai/working:list") return [];
+      if (name === "ai/run:stop") return null;
+      if (name === "ai/run:steer") return { error: null };
+      if (name === "ai/run:turn") return { turnId, state: "done" };
+      if (name !== "ai/agents:list") throw new Error(`Unexpected action ${name}`);
       asked += 1;
       return structuredClone(installed) as unknown as JsonValue;
     },
-  };
-  return new TokamakClient(transport, local);
+  } as unknown as ClientTransport;
+  return new TokamakClient(transport);
 }
 
 /** A picker by its "<name>: <value>" text (jsdom drops the space that browsers keep). */
@@ -51,8 +72,9 @@ const picker = (name: string, value = ".+") => new RegExp(`^${name}: ?${value}$`
 function answer(name: string): JsonValue {
   if (name === "ai/choices:get") return stored;
   if (name === "ai/choices:creator") return creator;
-  if (name === "ai/turns:ready" || name === "ai/turns:questions") return [];
-  if (name === "ai/turns:active") return null;
+  if (name === "ai/turns:ready") return queued;
+  if (name === "ai/turns:questions") return [];
+  if (name === "ai/turns:active") return active;
   if (name === "auth:caller")
     return {
       user: { id: "local", name: "Sam", role: "owner" },
@@ -63,7 +85,7 @@ function answer(name: string): JsonValue {
 
 const composer = (threadId: string | undefined) => ({ threadId }) as unknown as ComposerProps;
 
-function mount(threadId: string | undefined) {
+function mount(threadId: string | undefined, connection = client()) {
   const root = document.createElement("div");
   document.body.append(root);
   const props = {
@@ -76,8 +98,17 @@ function mount(threadId: string | undefined) {
   };
   const dispose = render(
     () => (
-      <ClientContext value={client()}>
-        <ShortcutContext value={{ registerShortcut: () => () => {} }}>
+      <ClientContext value={connection}>
+        <ShortcutContext
+          value={{
+            registerShortcut: (_key, run) => {
+              shortcut = run;
+              return () => {
+                shortcut = undefined;
+              };
+            },
+          }}
+        >
           <AgentRow {...(props as ComposerProps)} />
         </ShortcutContext>
       </ClientContext>
@@ -96,6 +127,10 @@ afterEach(() => {
   stored = null;
   creator = { id: "local", name: "Sam" };
   asked = 0;
+  hasMachine = true;
+  active = null;
+  queued = [];
+  actions.length = 0;
 });
 
 test("with one agent, signed out, the agent picker still opens and asks again", async () => {
@@ -138,4 +173,67 @@ test("in someone else's thread the row names the creator and hides the agent pic
   expect(screen.queryByRole("button")).toBeNull();
   // The creator's missing agent does not hold another member's text.
   expect(isHeld(composer("t1"))).toBe(false);
+});
+
+const sent = {
+  threadId,
+  messageId: "chat/messages:fixture" as Id<"messages">,
+  text: "Hello",
+  first: true,
+};
+
+test("no machine is shown only when a Send tries to start a turn", async () => {
+  installed = [];
+  hasMachine = false;
+  const connection = client();
+  mount(undefined, connection);
+  await refreshAgents(connection);
+  await startTurn(connection, { ...sent, folder: undefined });
+  await startTurn(connection, { ...sent, folder: "/fixture" });
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(actions).not.toContain("ai/run:turn");
+
+  installed = [{ id: "solo", name: "Solo", info: ready }];
+  hasMachine = true;
+  await refreshAgents(connection);
+  hasMachine = false;
+  await startTurn(connection, { ...sent, folder: "/fixture" });
+  expect((await screen.findByRole("status")).textContent).toBe("Connect a machine to run this.");
+  expect(actions).toContain("ai/run:turn");
+});
+
+test("a transient noMachine leaves Stop and steer usable and retries a ready queue", async () => {
+  installed = [{ id: "solo", name: "Solo", info: ready }];
+  active = { _id: turnId, threadId, state: "running", sender: { id: "local", device: "here" } };
+  queued = [
+    {
+      _id: "ai/turns:queued",
+      threadId: "chat/threads:queued",
+      messageId: "queued",
+      agent: { id: "solo", name: "Solo" },
+    },
+  ];
+  hasMachine = false;
+  const connection = client();
+  hasMachine = true;
+  await refreshAgents(connection);
+  hasMachine = false;
+  mount(threadId, connection);
+  await waitFor(() => {
+    expect(actions).toContain("ai/run:turn");
+    expect(shortcut).toBeDefined();
+  });
+  // Discovery also lost the Runner; it must not disable shortcuts or consume the draft as chat.
+  await refreshAgents(connection);
+  expect(shortcut).toBeDefined();
+  await expect(submitDraft({ threadId, text: "Steer", intent: "steer" })).rejects.toThrow(
+    "Connect a machine to run this.",
+  );
+
+  hasMachine = true;
+  await expect(submitDraft({ threadId, text: "Steer", intent: "steer" })).resolves.toBe(true);
+  await waitFor(() => expect(actions.filter((name) => name === "ai/run:turn")).toHaveLength(2));
+  await waitFor(() => expect(screen.getByRole("status").textContent).toBe("esc to stop"));
+  shortcut?.();
+  await waitFor(() => expect(actions).toContain("ai/run:stop"));
 });

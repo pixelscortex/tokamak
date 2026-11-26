@@ -106,10 +106,10 @@ pub(super) async fn run(
     Ok(None)
 }
 
-pub(super) async fn inspect(source: &str, heap: usize, worker_entry: bool) -> Result<()> {
+pub(super) async fn inspect(source: &str, heap: usize, worker_entry: bool) -> Result<Value> {
     let runtime = ActionRuntime::new(heap, Arc::default(), Rc::new(CallOutput::default())).await?;
-    let _realm = runtime.load(source, &[], worker_entry, false).await?;
-    Ok(())
+    let realm = runtime.load(source, &[], worker_entry, false).await?;
+    Ok(realm.validators.clone())
 }
 
 struct ActionRuntime {

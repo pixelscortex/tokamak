@@ -1,6 +1,14 @@
-// Generated plugin component paths. Commit this file.
+// Generated plugin screen paths. Commit this file.
 export * from "../api";
-declare const _part_FixtureBody: import("@tokamak/sdk/client").ComponentParts<(typeof import("../api"))["FixtureBody"], {
-  readonly "body": { readonly target: "browser-fixture.fixtureBody.body"; readonly locked: false };
-}>;
-export { _part_FixtureBody as FixtureBody };
+type Props1 = Extract<NonNullable<Parameters<typeof import("../api")["FixtureBody"]>[0]>, object>;
+export declare const parts: {
+  readonly "FixtureBody": {
+    readonly "section": import("@tokamak/sdk/client").ComponentPart<"browser-fixture.FixtureBody.section", Props1> & {
+      readonly "h1": import("@tokamak/sdk/client").ComponentPart<"browser-fixture.FixtureBody.section.h1", Props1>;
+      readonly "p": import("@tokamak/sdk/client").ComponentPart<"browser-fixture.FixtureBody.section.p", Props1>;
+    };
+  };
+  readonly "FixtureView": {
+    readonly "FixtureBody": import("@tokamak/sdk/client").ComponentPart<"browser-fixture.FixtureView.FixtureBody", {}>;
+  };
+};

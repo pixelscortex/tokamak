@@ -1,6 +1,6 @@
 /**
  * Chat's window entry. Other plugins extend these components through
- * `plugin:chat/client`, e.g. `after(chat.Composer.box, AgentRow)`, and learn
+ * `plugin:chat/client`, e.g. `after(chat.parts.Composer.div.box, AgentRow)`, and learn
  * about each Send with `onSent`, and can turn Send off with `holdSend`.
  */
 export { Chat } from "./pages/chat";

@@ -56,13 +56,13 @@ async fn cancellation_rejects_only_its_operations_and_preserves_module_state() {
     host.invoke(1, "sleep", json!(3000)).await;
     host.invoke(2, "pending", json!({})).await;
     let pending = host.receive().await;
-    assert_eq!(pending["name"], "local.runQuery");
+    assert_eq!(pending["name"], "plugin.call");
 
     host.send(json!({ "type": "cancel", "id": 2 })).await;
     assert_eq!(
         host.receive().await,
         json!({
-            "type": "result", "id": 2, "error": "Plugin local function cancelled"
+            "type": "result", "id": 2, "error": "Plugin action cancelled"
         })
     );
     assert_eq!(host.receive().await["text"], "signal aborted");
@@ -74,10 +74,7 @@ async fn cancellation_rejects_only_its_operations_and_preserves_module_state() {
             .unwrap()
             .contains("abort listener failed")
     );
-    assert_eq!(
-        host.receive().await["text"],
-        "Plugin local function cancelled"
-    );
+    assert_eq!(host.receive().await["text"], "Plugin action cancelled");
     assert_eq!(
         host.receive().await["text"],
         "stale invocation: host operation refused"
@@ -119,7 +116,7 @@ async fn watchdog_interrupts_a_tight_loop_and_retires_only_started_calls() {
     for result in results {
         assert_eq!(
             result["error"],
-            "Plugin local function did not yield for 5 seconds; QuickJS runtime reset"
+            "Plugin caller action did not yield for 5 seconds; QuickJS runtime reset"
         );
     }
 
@@ -144,7 +141,7 @@ async fn allocation_failure_does_not_stop_another_call() {
     host.invoke(2, "memory", json!({})).await;
     assert_eq!(
         host.receive().await["error"],
-        "Plugin local function ran out of memory"
+        "Plugin action ran out of memory"
     );
 
     host.send(json!({ "type": "opResult", "id": echo_op["id"], "value": null }))
@@ -173,7 +170,7 @@ async fn oversized_output_fails_the_call_and_oversized_input_closes_the_host() {
 }
 
 #[tokio::test]
-async fn local_functions_can_use_native_modules_timers_text_encoder_and_fetch() {
+async fn caller_actions_can_use_native_modules_timers_text_encoder_and_fetch() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}/", listener.local_addr().unwrap());
     let responder = std::thread::spawn(move || {
@@ -272,7 +269,7 @@ async fn a_full_output_queue_does_not_stop_the_host_answering() {
         let frame = host.receive().await;
         if frame["type"] == "result" {
             assert_eq!(frame["id"], 1);
-            assert_eq!(frame["error"], "Plugin local function cancelled");
+            assert_eq!(frame["error"], "Plugin action cancelled");
             break;
         }
     }

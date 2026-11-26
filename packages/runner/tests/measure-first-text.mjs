@@ -30,7 +30,7 @@ function observedLaunch(launch) {
           else if (name === "local.contract.call" || name === "local.contract.describe")
             mark(`${payload.plugin}.${payload.method ?? "describe"}`);
           else if (name === "auth.current") mark(`${frame.plugin ?? artifact.id} auth.current`);
-          else if (name.startsWith("local.run")) mark(payload.name);
+          else if (name === "plugin.call") mark(payload.name);
         }
         receive(frame);
       },
@@ -68,7 +68,7 @@ async function sample(client, folder) {
         return performance.now() - started;
       });
     const finished = client
-      .local(ai.run.turn, {
+      .action(ai.run.turn, {
         threadId,
         messageId,
         folder,

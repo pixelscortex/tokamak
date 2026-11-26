@@ -5,33 +5,58 @@ import ts from "typescript";
 import { readdirSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import {
+  actionPlacementLiteral,
   definitionInfo,
   definitionTypeInfo,
   pluginCompilerOptions,
   runtimeExportNames,
 } from "./plugin-compiler.mjs";
 
+import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
+import { resultValidator } from "./result-validator.mjs";
+import { discoverPoints, originalSymbol } from "./points.mjs";
 import { discoverProviders, contractTarget } from "./contracts.mjs";
 
-const serverFunction = (kind) => kind !== "local";
-const localFunction = (kind) => kind === "local";
-const serverProvider = (provider) => provider.place === "server";
-const localProvider = (provider) => provider.place === "local";
-const action = (kind) => kind === "action";
+const hookable = (kind) => ["query", "mutation", "action"].includes(kind);
+export const runnerFunction = (kind) => kind === "action" || kind === "actionHook";
+export function runnerProvider(provider) {
+  return localProvider(provider) || provider.methods.some((method) => runnerFunction(method.kind));
+}
+
+export function runnerActionFiles(modules, providers, on) {
+  const action = (entry) =>
+    runnerFunction(entry.kind) &&
+    (entry.kind === "actionHook" ||
+      on === undefined ||
+      (on === "caller" ? entry.on && entry.on !== "server" : entry.on === on));
+  return new Set([
+    ...[...modules].filter(([, exports]) => [...exports.values()].some(action)).map(([path]) => path),
+    ...providers
+      .filter((provider) => runnerProvider(provider) && provider.methods.some(action))
+      .map((p) => p.path),
+  ]);
+}
+const serverProvider = (provider) => provider.on === "server";
+const localProvider = (provider) => provider.on === "caller";
+const transaction = (kind) => !runnerFunction(kind);
 const noFunctions = () => false;
 
 export const lanes = {
   window: { keep: noFunctions, provider: noFunctions, method: noFunctions },
-  local: { keep: localFunction, provider: localProvider, method: localFunction },
-  server: { keep: serverFunction, provider: serverProvider, method: serverFunction },
+  local: {
+    keep: runnerFunction,
+    provider: runnerProvider,
+    method: runnerFunction,
+  },
+  server: { provider: serverProvider },
   descriptor: {
-    keep: (kind) => serverFunction(kind) && !action(kind),
+    keep: transaction,
     provider: serverProvider,
-    method: (kind) => serverFunction(kind) && !action(kind),
+    method: transaction,
   },
 };
 
-export function functionPlacement(root, selected) {
+export function functionPlacement(root, selected, namespace) {
   root = realpathSync(root);
   const src = resolve(root, "src");
   const files = selected ? [...selected.files] : [];
@@ -59,6 +84,31 @@ export function functionPlacement(root, selected) {
   const program = ts.createProgram(files.sort(), pluginCompilerOptions(root, options ?? {}));
   const checker = program.getTypeChecker();
   const modules = new Map();
+  const stageKind = (type) =>
+    ["hook", "trigger"].find((kind) =>
+      type.getProperties().some((p) => p.name.startsWith(`__@${kind}Brand@`)),
+    );
+  function targetsStage(symbol) {
+    const expression = originalSymbol(checker, symbol)?.valueDeclaration?.initializer;
+    const target = expression && ts.isCallExpression(expression) && expression.arguments[0];
+    return target && stageKind(checker.getTypeAtLocation(target));
+  }
+  function hookInfo(type, source) {
+    const reference = checker.getTypeOfSymbolAtLocation(type.getProperty("reference"), source);
+    const brand = reference.getProperties().find((p) => p.name.startsWith("__@referenceTypes@"));
+    const metadata = brand && checker.getTypeOfSymbolAtLocation(brand, source);
+    const literal = (property) => {
+      const symbol = metadata?.getProperty(property);
+      return symbol && checker.getTypeOfSymbolAtLocation(symbol, source).value;
+    };
+    const targetKey = reference.getProperties().find((p) => p.name.startsWith("__@functionName@"));
+    return {
+      kind: literal("kind") === "action" ? "actionHook" : "hook",
+      targetKind: literal("kind"),
+      owner: literal("owner"),
+      target: targetKey && checker.getTypeOfSymbolAtLocation(targetKey, source).value,
+    };
+  }
   const providers = discoverProviders(root, files, program, checker);
   for (const path of files) {
     if (path === resolve(src, "server/api.ts")) continue;
@@ -69,10 +119,39 @@ export function functionPlacement(root, selected) {
     for (const value of symbol ? checker.getExportsOfModule(symbol) : []) {
       if (!runtime.has(value.name)) continue;
       const definition = definitionInfo(checker, value, source);
-      if (definition?.kind) exports.set(value.name, definition);
+      const type = checker.getTypeOfSymbolAtLocation(value, source);
+      const stage = stageKind(type);
+      if (stage === "trigger") {
+        if (["client", "local"].some((part) => path.startsWith(resolve(src, part) + sep)))
+          throw new Error("Triggers must be exported from the plugin's server part");
+        exports.set(value.name, { kind: stage });
+      } else if (stage === "hook") {
+        if (path.startsWith(resolve(src, "client") + sep))
+          throw new Error("Hooks must be exported from the plugin's server part");
+        const info = hookInfo(type, source);
+        if (info.targetKind ? !hookable(info.targetKind) : targetsStage(value))
+          throw new Error("Only queries, mutations and actions can be hooked");
+        if (!info.targetKind) throw new Error("Hook target reference could not be resolved");
+        if (namespace && info.owner === namespace) throw new Error("Hooks must target another plugin");
+        exports.set(value.name, info);
+      } else if (definition?.kind) {
+        exports.set(value.name, {
+          ...definition,
+          ...(hookable(definition.kind) ? { type, source, symbol: originalSymbol(checker, value) } : {}),
+        });
+      }
     }
     if (exports.size) modules.set(path, exports);
   }
+
+  const allDefinitions = [...modules.values()].flatMap((definitions) => [...definitions.values()]);
+  const namedPoints = discoverPoints(
+    files.map((file) => program.getSourceFile(file)),
+    checker,
+    allDefinitions.map(({ symbol }) => symbol).filter(Boolean),
+    console.warn,
+  );
+  for (const definition of allDefinitions) definition.points = namedPoints.get(definition.symbol);
 
   function edits(path, lane) {
     const file = program.getSourceFile(path);
@@ -95,7 +174,7 @@ export function functionPlacement(root, selected) {
         return;
       }
       const method = !erased && fields.get(node);
-      if (method && !lane.method(method.kind)) {
+      if (method && lane.method && !lane.method(method.kind)) {
         cuts.push([
           node.getStart(file),
           node.end,
@@ -105,8 +184,13 @@ export function functionPlacement(root, selected) {
         return;
       }
       if (!erased && ts.isVariableDeclaration(node) && node.initializer) {
-        const target = definitionTypeInfo(checker, checker.getTypeAtLocation(node.initializer), node)?.kind;
-        if (target && !lane.keep(target)) {
+        const type = checker.getTypeAtLocation(node.initializer);
+        const stage = stageKind(type);
+        const target =
+          stage === "hook"
+            ? hookInfo(type, node).kind
+            : (stage ?? definitionTypeInfo(checker, type, node)?.kind);
+        if (target && lane.keep && !lane.keep(target)) {
           cuts.push([node.initializer.getStart(file), node.initializer.end, "undefined"]);
           references(node.initializer, discard, true);
           return;
@@ -167,7 +251,113 @@ export function functionPlacement(root, selected) {
       contents = contents.slice(0, start) + replacement + contents.slice(end);
     return contents;
   }
-  return { modules, providers, transform, edits };
+  function points(server, organized) {
+    return Object.fromEntries(
+      [...modules].flatMap(([path, definitions]) =>
+        [...definitions].flatMap(([name, definition]) =>
+          definition.points?.size
+            ? [
+                [
+                  `${moduleName(server, path, organized)}:${name}`,
+                  Object.fromEntries([...definition.points].map(([name, point]) => [name, point.validators])),
+                ],
+              ]
+            : [],
+        ),
+      ),
+    );
+  }
+
+  function results(server, organized) {
+    return Object.fromEntries(
+      [...modules].flatMap(([path, definitions]) =>
+        [...definitions].flatMap(([name, { kind, type, source }]) => {
+          const result = hookable(kind) && resultValidator(checker, type, source);
+          return result ? [[`${moduleName(server, path, organized)}:${name}`, result]] : [];
+        }),
+      ),
+    );
+  }
+  const callerFiles = runnerActionFiles(modules, providers, "caller");
+  for (const path of callerFiles) {
+    const file = program.getSourceFile(path);
+    if (!file) continue;
+    const stubbed = new Set();
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+      if (!suppliedNodeModules.local.includes(nodeModule(statement.moduleSpecifier.text))) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly) continue;
+      const add = (binding) => {
+        if (binding) stubbed.add(checker.getSymbolAtLocation(binding));
+      };
+      add(clause.name);
+      const bindings = clause.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings)) add(bindings.name);
+      else for (const binding of bindings?.elements ?? []) if (!binding.isTypeOnly) add(binding.name);
+    }
+    function checkModuleLoad(node) {
+      if (ts.isImportDeclaration(node) || ts.isFunctionLike(node) || ts.isTypeNode(node)) return;
+      if (
+        ts.isPropertyDeclaration(node) &&
+        !node.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword)
+      ) {
+        if (ts.isComputedPropertyName(node.name)) checkModuleLoad(node.name);
+        return;
+      }
+      if (
+        ts.isIdentifier(node) &&
+        !isDeclarationName(node) &&
+        stubbed.has(checker.getSymbolAtLocation(node))
+      ) {
+        throw new Error(
+          `Plugin import boundary: ${relative(root, path)} uses ${node.text} at module load. Move it inside the handler.`,
+        );
+      }
+      ts.forEachChild(node, checkModuleLoad);
+    }
+    if (stubbed.size) checkModuleLoad(file);
+
+    function visit(node) {
+      const specifier =
+        (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) ||
+        (ts.isExportDeclaration(node) && !node.isTypeOnly)
+          ? node.moduleSpecifier
+          : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+            ? node.arguments[0]
+            : undefined;
+      if (specifier && ts.isStringLiteralLike(specifier)) {
+        const dependency = checker.getSymbolAtLocation(specifier)?.declarations?.find(ts.isSourceFile);
+        if (dependency && !dependency.isDeclarationFile && dependency.fileName.startsWith(root + sep))
+          callerFiles.add(dependency.fileName);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+  }
+
+  for (const path of files) {
+    const file = program.getSourceFile(path);
+    function visit(node) {
+      if (
+        ts.isCallExpression(node) &&
+        definitionTypeInfo(checker, checker.getTypeAtLocation(node), node)?.kind === "action"
+      ) {
+        const options = node.arguments[0];
+        const type = options && checker.getTypeAtLocation(options);
+        if (type?.getProperty("handler") && type.getProperty("on")) {
+          if (!actionPlacementLiteral(checker, options))
+            throw new Error(
+              `Action placement in ${path} must use a literal: "caller", "server", or a machine id`,
+            );
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+  }
+
+  return { modules, providers, callerFiles, transform, edits, results, points };
 }
 
 function isDeclarationName(node) {
@@ -220,7 +410,9 @@ export function moduleName(root, file, organized) {
 
 export function placedModules(placement, root, organized, keep) {
   return [...placement.modules].flatMap(([path, exports]) => {
-    const names = [...exports].filter(([, definition]) => keep(definition.kind)).map(([name]) => name);
+    const names = keep
+      ? [...exports].filter(([, definition]) => keep(definition.kind)).map(([name]) => name)
+      : [...exports.keys()];
     return names.length ? [[path, moduleName(root, path, organized), names]] : [];
   });
 }
@@ -230,6 +422,10 @@ export function registrySource({
   modules,
   hasSchema,
   metadata,
+  hasActionHooks,
+  placement,
+  results,
+  points,
   providers = [],
   lane = lanes.server,
   worker = false,
@@ -259,31 +455,45 @@ export function registrySource({
     return `import ${name} from ${JSON.stringify(p.path.replace(/\.tsx?$/, ""))};`;
   });
   imports.push(...contractImports);
-  const localProviders = registrations.map((p, i) => `${JSON.stringify(p.registration)}: provider${i}`);
+  const localProviders = registrations.flatMap((p, i) =>
+    localProvider(p) ? [`${JSON.stringify(p.registration)}: provider${i}`] : [],
+  );
   const serverData = registrations.map(
     (p, i) =>
       `${JSON.stringify(p.registration)}: contractData(provider${i}.implementation, ${JSON.stringify(p.methods.map((m) => m.member))})`,
   );
   const targets = registrations.flatMap((p, i) =>
-    p.methods
-      .filter((m) => lane.method(m.kind))
+    (localProvider(p) ? [] : p.methods)
+      .filter((m) => lane.method?.(m.kind) !== false)
       .map(
         (m) =>
           `${JSON.stringify(contractTarget(p, m))}: provider${i}.implementation[${JSON.stringify(m.member)}]`,
       ),
   );
-  const registry = targets.length
-    ? `createRegistry({${entries.join(",")}}, {${targets.join(",")}})`
-    : `createRegistry({${entries.join(",")}})`;
+  const declaredPoints = Object.fromEntries(
+    Object.entries(points ?? {}).map(([name, points]) => [name, Object.keys(points)]),
+  );
+  const registry = `createRegistry({${entries.join(",")}}, {${targets.join(",")}}, ${JSON.stringify(declaredPoints)})`;
   const definitions = imports.join("\n");
+  const hookKinds = JSON.stringify(
+    Object.fromEntries(
+      modules.flatMap(([path, module, names]) =>
+        [...(placement?.modules.get(path) ?? [])].flatMap(([name, definition]) =>
+          definition.targetKind && (!names || names.includes(name))
+            ? [[`${module}:${name}`, definition.targetKind]]
+            : [],
+        ),
+      ),
+    ),
+  );
   if (worker)
     return (
       header +
-      `import {createRegistry} from "@tokamak/sdk";\n${definitions}\nexport const functions = ${registry};\n${localProviders.length && lane === lanes.local ? `export const contractProviders = {${localProviders.join(",")}};\n` : ""}`
+      `import {createRegistry,createHookRegistry} from "@tokamak/sdk";\n${definitions}\nexport const functions = ${registry};\nexport const hooks = createHookRegistry({${entries.join(",")}}, ${hookKinds});\n${localProviders.length && lane === lanes.local ? `export const contractProviders = {${localProviders.join(",")}};\n` : ""}`
     );
   return (
     header +
-    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
+    'import {createRegistry, functionMetadata, schemaMetadata, invokeFunction, createHookRegistry, hookMetadata, invokeHook, createTriggerRegistry, triggerMetadata, invokeTrigger, type HostBridge, type JsonValue} from "@tokamak/sdk";\n' +
     (serverData.length ? 'import {contractData} from "@tokamak/sdk/internal/contracts";\n' : "") +
     definitions +
     "\n" +
@@ -295,8 +505,12 @@ export function registrySource({
         ? `[...functionMetadata(functions), ...${JSON.stringify(metadata)}]`
         : "functionMetadata(functions)"
     };\n` +
-    `export const describe = () => ({schema, functions: metadata${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
-    "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n"
+    `export const hooks = createHookRegistry({${entries.join(",")}}, ${hookKinds});\n` +
+    `const triggers = createTriggerRegistry({${entries.join(",")}});\n` +
+    `export const describe = () => ({schema, functions: metadata, hooks: hookMetadata(hooks), triggers: triggerMetadata(triggers),${hasActionHooks ? " actionHooks: true," : ""} results: ${JSON.stringify(results ?? {})}${points && Object.keys(points).length ? `, points: ${JSON.stringify(points)}` : ""}${serverData.length ? `, contractProviders: {${serverData.join(",")}}` : ""}});\n` +
+    "export const invoke = (request: {name: string; args: JsonValue}, host: HostBridge) => invokeFunction(functions, request, host);\n" +
+    "export const invoke_hook = (request: Parameters<typeof invokeHook>[1], host: HostBridge) => invokeHook(hooks, request, host);\n" +
+    "export const invoke_trigger = (request: Parameters<typeof invokeTrigger>[1], host: HostBridge) => invokeTrigger(triggers, request, host);\n"
   );
 }
 

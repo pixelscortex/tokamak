@@ -83,6 +83,8 @@ pub struct Manifest {
     pub public_functions: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub plugin_functions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub hook_targets: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contracts: Vec<ContractDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -91,7 +93,7 @@ pub struct Manifest {
 }
 
 impl Definition {
-    pub(super) fn declares_access_to(&self, owner: &str) -> bool {
+    pub(crate) fn declares_access_to(&self, owner: &str) -> bool {
         self.id == owner || self.depends.contains_key(owner) || self.optional.contains_key(owner)
     }
 

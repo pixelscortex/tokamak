@@ -78,7 +78,7 @@ acceptance: try {
   await writeFile(
     join(src, "turn.ts"),
     `
-    import { action, createApi, fail, internalAction, internalQuery, local, mutation, query, v,
+    import { action, createApi, fail, internalAction, internalQuery, mutation, query, v,
       type FunctionReference, type RunningProcess } from "@tokamak/sdk";
     import { readFile } from "node:fs/promises";
     import { api } from "./_generated/api";
@@ -91,10 +91,10 @@ acceptance: try {
     export const secret = internalQuery({ handler: () => "private" });
     export const summary = query({ handler: (ctx) => ctx.runQuery(internal.turn.secret, {}) });
     export const runtimeProbe = action({ handler: () => "Bun" in globalThis });
-    export const localRuntimeProbe = local({ handler: () => "Bun" in globalThis });
+    export const localRuntimeProbe = action({ on: "caller", handler: () => "Bun" in globalThis });
     export const format = internalAction({ handler: () => fail("NoReport", { count: 0 }) });
     export const report = action({ handler: (ctx) => ctx.runAction(internal.turn.format, {}) });
-    export const inspect = local({
+    export const inspect = action({ on: "caller",
       handler: async (ctx) => ({
         summary: await ctx.runQuery(api.turn.summary, {}),
         report: await ctx.runAction(api.turn.report, {}),
@@ -105,14 +105,14 @@ acceptance: try {
       format: FunctionReference<"action", {}, string>;
       report: FunctionReference<"query", {}, string>;
     } }>("local-test");
-    export const blocked = local({
+    export const blocked = action({ on: "caller",
       args: { target: v.string() },
       handler: (ctx, { target }) => target === "format"
         ? ctx.runAction(unchecked.turn.format, {})
         : ctx.runQuery(target === "secret" ? unchecked.turn.secret : unchecked.turn.report, {}),
     });
     let child: RunningProcess | undefined;
-    export const run = local({
+    export const run = action({ on: "caller",
       args: { bun: v.string(), file: v.string(), heartbeat: v.string(), hold: v.boolean() },
       handler: async (ctx, { bun, file, heartbeat, hold }) => {
         const source = await readFile(file, "utf8");
@@ -127,7 +127,7 @@ acceptance: try {
         }
       },
     });
-    export const roundTrip = local({
+    export const roundTrip = action({ on: "caller",
       args: { file: v.string(), number: v.number() },
       handler: async (ctx, { file, number }) => {
         const text = await readFile(file, "utf8");
@@ -137,14 +137,14 @@ acceptance: try {
         return { found: rows.some((row) => row.text === text), number };
       },
     });
-    export const slow = local({
+    export const slow = action({ on: "caller",
       handler: async (ctx) => {
         console.info("slow call started");
         await new Promise((resolve) => setTimeout(resolve, 200));
         return ctx.runMutation(api.turn.save, { text: "cancelled call wrote a row" });
       },
     });
-    export const programIO = local({
+    export const programIO = action({ on: "caller",
       args: { bun: v.string(), cwd: v.string() },
       handler: async (ctx, { bun, cwd }) => {
         const child = ctx.proc([bun, "-e", \`
@@ -168,7 +168,7 @@ acceptance: try {
         return [stdout.filter((line) => line === "line").length, stdout.slice(-2), stderr, code];
       },
     });
-    export const programStartFailure = local({
+    export const programStartFailure = action({ on: "caller",
       args: { command: v.string(), cwd: v.string() },
       handler: async (ctx, { command, cwd }) => {
         const child = ctx.proc([command], { cwd });
@@ -180,8 +180,12 @@ acceptance: try {
         return Promise.all([read(child.stdout), read(child.stderr), child.exited]);
       },
     });
-    export const identity = local({ handler: (ctx) => ({ auth: ctx.auth }) });
-    export const stop = local({
+    export const callNote = action({ on: "caller",
+      args: { id: v.optional(v.id("threads")) },
+      handler: (ctx) => ctx.call,
+    });
+    export const identity = action({ on: "caller", handler: (ctx) => ({ auth: ctx.auth }) });
+    export const stop = action({ on: "caller",
       handler: () => {
         if (!child) throw new Error("No program running");
         child.stop("SIGKILL");
@@ -256,11 +260,15 @@ acceptance: try {
           if (frame.type === "log") logs.push(frame.text);
           if (
             frame.type === "op" &&
-            frame.name === "local.runMutation" &&
+            frame.name === "plugin.call" &&
+            frame.payload.kind === "mutation" &&
             frame.payload.args.text === "hold for cancellation"
           ) {
             heldOperation.resolve();
             continue;
+          }
+          if (frame.type === "op" && frame.name === "plugin.call") {
+            frame.continuation = { depth: 0, thread: null };
           }
           message(frame);
         }
@@ -290,27 +298,38 @@ acceptance: try {
   assert.equal(Object.hasOwn(api.turn, "secret"), false);
   assert.equal(Object.hasOwn(api.turn, "format"), false);
   const auth = await client.query(authCaller, {});
-  assert.deepEqual(await client.local(api.turn.identity, {}), { auth });
-  assert.deepEqual(await client.local(api.turn.inspect, {}), {
+  assert.deepEqual(await client.action(api.turn.identity, {}), { auth });
+  const threadId = "chat/threads:local-test";
+  assert.deepEqual(await client.action(api.turn.callNote, { id: threadId }), { ...auth, threadId, depth: 0 });
+  assert.deepEqual(await client.action(api.turn.callNote, {}), { ...auth, depth: 0 });
+  assert.deepEqual(await client.action(api.turn.inspect, {}), {
     summary: "private",
     report: { failed: true, kind: "NoReport", data: { count: 0 } },
   });
   assert.equal(await client.action(api.turn.runtimeProbe, {}), false);
-  assert.equal(await client.local(api.turn.localRuntimeProbe, {}), false);
+  assert.equal(await client.action(api.turn.localRuntimeProbe, {}), false);
   if (withoutBun) {
     server.kill();
     assert.equal(await server.exited, 0);
     assert.doesNotMatch(await diagnostics, /\bBun\b/i);
-    console.log("Default QuickJS: local function and server action passed with an empty PATH.");
+    console.log("Default QuickJS: caller action and server action passed with an empty PATH.");
     break acceptance;
   }
-  await assert.rejects(client.local(api.turn.blocked, { target: "secret" }), /unknown function/i);
-  await assert.rejects(client.local(api.turn.blocked, { target: "format" }), /unknown function/i);
-  await assert.rejects(client.local(api.turn.blocked, { target: "report" }), /function kind does not match/i);
+  for (const target of ["secret", "format"]) {
+    assert.deepEqual(await client.action(api.turn.blocked, { target }), {
+      failed: true,
+      kind: "runnerCapabilityUnavailable",
+      data: "privateFunctions",
+    });
+  }
+  await assert.rejects(
+    client.action(api.turn.blocked, { target: "report" }),
+    /function kind does not match/i,
+  );
   const file = join(scratch, "local-input.txt");
   await writeFile(file, "local text");
   const number = 0.018920700000000002;
-  assert.deepEqual(await client.local(api.turn.roundTrip, { file, number }), { found: true, number });
+  assert.deepEqual(await client.action(api.turn.roundTrip, { file, number }), { found: true, number });
   assert.ok(logs.includes("local round trip local text"));
 
   async function waitForSlowCall() {
@@ -322,11 +341,11 @@ acceptance: try {
       }
       await Bun.sleep(10);
     }
-    assert.fail("Local function did not start");
+    assert.fail("Caller action did not start");
   }
 
   const abort = new AbortController();
-  const slow = client.local(api.turn.slow, {}, { signal: abort.signal });
+  const slow = client.action(api.turn.slow, {}, { signal: abort.signal });
   void slow.catch(() => {});
   await waitForSlowCall();
   abort.abort();
@@ -341,15 +360,15 @@ acceptance: try {
   );
 
   {
-    const interrupted = client.local(api.turn.slow, {});
+    const interrupted = client.action(api.turn.slow, {});
     void interrupted.catch(() => {});
     await waitForSlowCall();
     worker.kill("SIGKILL");
     await assert.rejects(interrupted, /Plugin host exited/);
-    assert.deepEqual(await client.local(api.turn.identity, {}), { auth });
+    assert.deepEqual(await client.action(api.turn.identity, {}), { auth });
   }
 
-  assert.deepEqual(await client.local(api.turn.programIO, { bun: process.execPath, cwd: scratch }), [
+  assert.deepEqual(await client.action(api.turn.programIO, { bun: process.execPath, cwd: scratch }), [
     4096,
     [await realpath(scratch), "stdin bytes"],
     ["stderr", '["one argument","$literal"]'],
@@ -359,7 +378,7 @@ acceptance: try {
   if (process.platform !== "win32") {
     {
       const command = "tokamak-tkm239-missing-command";
-      const [stdout, stderr, code] = await client.local(api.turn.programStartFailure, {
+      const [stdout, stderr, code] = await client.action(api.turn.programStartFailure, {
         command,
         cwd: scratch,
       });
@@ -372,7 +391,7 @@ acceptance: try {
     {
       const command = join(scratch, "non-executable");
       await writeFile(command, "#!/bin/sh\nexit 0\n", { mode: 0o600 });
-      const [stdout, stderr, code] = await client.local(api.turn.programStartFailure, {
+      const [stdout, stderr, code] = await client.action(api.turn.programStartFailure, {
         command,
         cwd: scratch,
       });
@@ -386,7 +405,7 @@ acceptance: try {
     }
 
     await assert.rejects(
-      client.local(api.turn.programStartFailure, {
+      client.action(api.turn.programStartFailure, {
         command: "/bin/sh",
         cwd: join(scratch, "missing-cwd"),
       }),
@@ -404,7 +423,7 @@ acceptance: try {
     const start = (label, options, hold = false) => {
       const heartbeat = join(scratch, label + ".heartbeat");
       grandchildPidFiles.add(heartbeat + ".pid");
-      const running = client.local(
+      const running = client.action(
         api.turn.run,
         { bun: process.execPath, file: fake, heartbeat, hold },
         options,
@@ -417,7 +436,7 @@ acceptance: try {
     void running.then(() => done.reject(new Error("Program exited before the stop call")), done.reject);
     assert.deepEqual(await Promise.race([rows.promise, done.promise]), ["one", "two"]);
     await waitForFile(heartbeat);
-    await client.local(api.turn.stop, {});
+    await client.action(api.turn.stop, {});
     await expectHeartbeatStopped(heartbeat);
     assert.notEqual(await running, 0);
 
@@ -443,9 +462,9 @@ acceptance: try {
       "read two live rows and verified process-tree cleanup on stop, cancellation, and worker retirement",
     );
   }
-  await assert.rejects(transport.action("local-test/turn:run", {}), /unknown function/i);
-  await assert.rejects(transport.query("local-test/turn:run", {}), /unknown function/i);
-  await assert.rejects(transport.mutation("local-test/turn:run", {}), /unknown function/i);
+  assert.equal((await transport.action("local-test/turn:run", {})).kind, "noMachine");
+  await assert.rejects(transport.query("local-test/turn:run", {}), /function kind does not match/i);
+  await assert.rejects(transport.mutation("local-test/turn:run", {}), /function kind does not match/i);
   const { revision } = await transport.plugins();
   await assert.rejects(transport.pluginAsset("local-test", "local.js", revision), /asset/i);
 } finally {

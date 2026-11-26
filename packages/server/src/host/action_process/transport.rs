@@ -9,7 +9,12 @@ use tokio_util::task::AbortOnDropHandle;
 use super::*;
 use crate::host::process_frames::{operation_reply, read_frame, write_messages};
 
-type OpResult = (u64, u64, Result<Value, String>, OwnedSemaphorePermit);
+type OpResult = (
+    u64,
+    u64,
+    Result<Value, engine::CallError>,
+    OwnedSemaphorePermit,
+);
 
 pub(super) fn start(runtime: &Handle, host: &Path, timing: Timing) -> Result<Arc<Running>, String> {
     let _entered = runtime.enter();
@@ -50,7 +55,7 @@ pub(super) fn start(runtime: &Handle, host: &Path, timing: Timing) -> Result<Arc
 
         for (_, call) in calls {
             call.active.cancel();
-            let _ = call.reply.send(Err(error.clone()));
+            let _ = call.reply.send(Err(error.clone().into()));
         }
         child.stop().await;
     });
@@ -214,12 +219,21 @@ impl Broker<'_> {
             let call = entry.remove();
             call.active.cancel();
             let result = if let Some(error) = message["error"].as_str() {
+                if let Some(details) = message.get("details") {
+                    let _ = call.reply.send(Err(engine::CallError {
+                        message: error.to_owned(),
+                        details: Some(details.clone()),
+                        limit: None,
+                        kind: None,
+                    }));
+                    return Ok(());
+                }
                 let mut error = error.to_owned();
                 if let Some(stack) = message["stack"].as_str().filter(|stack| !stack.is_empty()) {
                     error.push('\n');
                     error.push_str(&call.source.bundle.remap_stack(stack, "tokamak-action.js"));
                 }
-                Err(error)
+                Err(error.into())
             } else {
                 Ok(message.get("value").cloned().unwrap_or(Value::Null))
             };
@@ -285,7 +299,7 @@ impl Broker<'_> {
                 biased;
                 () = active.cancelled() => Err("stale invocation".into()),
                 () = retired.cancelled() => Err("stale invocation".into()),
-                result = registry.dispatch(&name, payload) => result,
+                result = registry.dispatch_call(&name, payload) => result,
             };
             (id, op, result, permit)
         });

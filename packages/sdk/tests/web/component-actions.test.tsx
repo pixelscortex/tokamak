@@ -3,13 +3,14 @@ import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
 import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
-import { Composer, CustomLayout, Labels } from "./fixtures/parts/owner/src/client/_generated/components";
+import { BenchmarkRow, Composer, Labels, RealisticRow } from "./fixtures/parts/owner/src/client/api";
+import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
 
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
 
 test("a plugin can add live UI before another plugin's button", async () => {
   const [visible, setVisible] = createSignal(false);
-  const target = Composer.sendButton;
+  const target = parts.Composer.section.SendButton;
   const Cost = before(target, (props) => <small>Cost of {props.label}</small>, { when: visible });
   const root = document.createElement("div");
   const lifecycle: string[] = [];
@@ -39,8 +40,8 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   const [hiding, setHiding] = createSignal(false);
   const [wrapping, setWrapping] = createSignal(true);
   const [label, setLabel] = createSignal("Send");
-  const button = Composer.sendButton;
-  const toolbar = Composer.toolbar;
+  const button = parts.Composer.section.SendButton;
+  const toolbar = parts.Composer.section;
   const layers = [
     layer(
       "Before",
@@ -143,42 +144,9 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   }
 });
 
-test("an owner can place appended and prepended UI itself", async () => {
-  const target = CustomLayout.ribbon;
-  const layers = [
-    layer(
-      "Intro",
-      prepend(target, () => "intro"),
-      "prepend",
-      target,
-    ),
-    layer(
-      "Title",
-      append(target, () => "title"),
-      "append",
-      target,
-    ),
-  ];
-  const root = document.createElement("div");
-  const dispose = render(
-    () => (
-      <ExtensionProvider host={host(layers)}>
-        <CustomLayout />
-      </ExtensionProvider>
-    ),
-    root,
-  );
-  try {
-    await waitFor(() => expect(root.querySelector("h2")?.textContent).toBe("title"));
-    expect(root.querySelector("footer")?.textContent).toBe("intro");
-  } finally {
-    dispose();
-  }
-});
-
 test("a later replacement is refused even while the first installed replacement is inactive", async () => {
   const [active, setActive] = createSignal(false);
-  const target = Composer.sendButton;
+  const target = parts.Composer.section.SendButton;
   const layers = [
     layer(
       "Second",
@@ -229,10 +197,11 @@ test("a later replacement is refused even while the first installed replacement 
   }
 });
 
-test("render props, explicit children and void elements still work inside an extensible component", async () => {
-  const list = Labels.for;
-  const search = Labels.search;
-  const body = Labels.body;
+test("render props, forwarded and explicit children, and void elements keep their behavior", async () => {
+  const list = parts.Labels.section.span;
+  const search = parts.Labels.section.input;
+  const body = parts.Labels.section.Region.span;
+  const button = parts.Labels.section.button;
   const layers = [
     layer(
       "Result",
@@ -252,6 +221,12 @@ test("render props, explicit children and void elements still work inside an ext
       "append",
       body,
     ),
+    layer(
+      "Forwarded",
+      append(button, () => "?"),
+      "append",
+      button,
+    ),
   ];
   const root = document.createElement("div");
   const dispose = render(
@@ -263,7 +238,9 @@ test("render props, explicit children and void elements still work inside an ext
     root,
   );
   try {
-    await waitFor(() => expect(root.textContent).toBe("one!two!FilterBody!"));
+    await waitFor(() =>
+      expect(root.textContent).toBe("1: one!2: two!" + "0:0:ONE1:0:TWOFilterBody!Forwarded?"),
+    );
     expect(root.querySelector("b + input")?.getAttribute("aria-label")).toBe("Search");
   } finally {
     dispose();
@@ -271,8 +248,8 @@ test("render props, explicit children and void elements still work inside an ext
 });
 
 test("each action's `when` reads the props of the instance it would change", async () => {
-  const button = Composer.sendButton;
-  const toolbar = Composer.toolbar;
+  const button = parts.Composer.section.SendButton;
+  const toolbar = parts.Composer.section;
   // Only the composer labelled "Post" is changed; the "Send" one stays as it was.
   const onPost = (props: { label: string }) => props.label === "Post";
   const cases: [Layer[], string][] = [
@@ -347,5 +324,140 @@ test("each action's `when` reads the props of the instance it would change", asy
     } finally {
       dispose();
     }
+  }
+});
+
+test("a cloned native subtree supports live placements and restores its original nodes", async () => {
+  const [layers, setLayers] = createSignal<Layer[]>([]);
+  const [hidden, setHidden] = createSignal(false);
+  const [replaced, setReplaced] = createSignal(false);
+  const header = parts.BenchmarkRow.article.header;
+  const bold = header.b;
+  const additions = [
+    layer(
+      "Before",
+      before(header, () => <i>before</i>),
+      "before",
+      header,
+    ),
+    layer(
+      "After",
+      after(header, () => <i>after</i>),
+      "after",
+      header,
+    ),
+    layer(
+      "Prepend",
+      prepend(header, () => <i>prepend</i>),
+      "prepend",
+      header,
+    ),
+    layer(
+      "Append",
+      append(header, () => <i>append</i>),
+      "append",
+      header,
+    ),
+    layer(
+      "Wrap",
+      wrap(header, (p) => <aside>{p.children}</aside>),
+      "wrap",
+      header,
+    ),
+    layer(
+      "Replace",
+      replace(header, () => <strong>replacement</strong>, { when: replaced }),
+      "replace",
+      header,
+    ),
+    layer("Hide", hide(header, { when: hidden }), "hide", header),
+    layer(
+      "Nested",
+      after(bold, () => <i>nested</i>),
+      "after",
+      bold,
+    ),
+  ];
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={{
+          ...host([]),
+          contributions: (kind) => host(layers()).contributions(kind),
+          load: (id) => host(layers()).load(id),
+        }}
+      >
+        <BenchmarkRow text="message" />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    const original = root.querySelector("header");
+    expect(root.textContent).toBe("Person10:00messageSent");
+    setLayers(additions);
+    await waitFor(() =>
+      expect(root.textContent).toBe("beforeprependPersonnested10:00appendaftermessageSent"),
+    );
+    expect(root.querySelector("aside > header")).toBe(original);
+    setHidden(true);
+    flush();
+    expect(root.textContent).toBe("messageSent");
+    setHidden(false);
+    setReplaced(true);
+    flush();
+    expect(root.textContent).toBe("beforereplacementaftermessageSent");
+    setReplaced(false);
+    flush();
+    expect(root.textContent).toBe("beforeprependPersonnested10:00appendaftermessageSent");
+    setLayers([]);
+    flush();
+    expect(root.textContent).toBe("Person10:00messageSent");
+    expect(root.querySelector("header")).toBe(original);
+  } finally {
+    dispose();
+  }
+});
+
+test("a child component is a hole in the native template and unloads when its containing part hides", async () => {
+  const [hidden, setHidden] = createSignal(false);
+  const unloaded = vi.fn();
+  const header = parts.RealisticRow.article.header;
+  const person = header.b;
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={host([
+          layer(
+            "Label",
+            after(person, () => <i>Added</i>),
+            "after",
+            person,
+          ),
+          layer("Hide", hide(header, { when: hidden }), "hide", header),
+        ])}
+      >
+        <RealisticRow text="test" unloaded={unloaded} />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    await waitFor(() => expect(root.querySelector("b + i")?.textContent).toBe("Added"));
+    const headerNode = root.querySelector("header");
+    expect(root.querySelector("header small")?.textContent).toBe("Ready");
+    setHidden(true);
+    flush();
+    expect(root.querySelector("header")).toBeNull();
+    expect(unloaded).toHaveBeenCalledTimes(1);
+    setHidden(false);
+    flush();
+    expect(root.querySelector("header")).toBe(headerNode);
+    expect(root.querySelector("b + i")?.textContent).toBe("Added");
+    expect(root.querySelector("header small")?.textContent).toBe("Ready");
+  } finally {
+    dispose();
   }
 });

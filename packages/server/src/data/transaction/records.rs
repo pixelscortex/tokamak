@@ -5,6 +5,7 @@ use crate::data::{
 };
 use std::{
     borrow::Cow,
+    collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH},
 };
 use surrealdb_datastore::key::schema::{RecordKey, RecordPrefix};
@@ -74,6 +75,14 @@ impl Transaction {
     /// Mutations that error or are dropped after polling poison the transaction.
     /// Only rollback is then allowed; commit discards all staged writes.
     pub async fn insert(&mut self, table: &Table, value: Object) -> Result<Id> {
+        self.insert_document(table, value).await.map(|row| row.id)
+    }
+
+    pub(crate) async fn insert_document(
+        &mut self,
+        table: &Table,
+        value: Object,
+    ) -> Result<Document> {
         self.create(table, None, value).await
     }
 
@@ -81,10 +90,12 @@ impl Transaction {
     /// JavaScript capability; keyed insertion rejects duplicates and poisons the
     /// transaction rather than silently replacing existing data.
     pub(crate) async fn insert_keyed(&mut self, id: &Id, value: Object) -> Result<Id> {
-        self.create(id.table(), Some(id), value).await
+        self.create(id.table(), Some(id), value)
+            .await
+            .map(|row| row.id)
     }
 
-    async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Id> {
+    async fn create(&mut self, table: &Table, id: Option<&Id>, value: Object) -> Result<Document> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -113,16 +124,18 @@ impl Transaction {
 
             let rid = id.record();
 
+            let row = Document {
+                id,
+                creation_time: millis,
+                fields,
+            };
+
+            Box::pin(tx.validate_references(None, &row)).await?;
+
             let core = &tx.state.storage;
             tx.inner
                 .get_or_add_tb(None, "tokamak", "tokamak", &rid.table, None)
                 .await?;
-
-            let row = Document {
-                id: id.clone(),
-                creation_time: millis,
-                fields,
-            };
             tx.indexes(None, Some(&row)).await?;
             tx.inner
                 .put_record(
@@ -136,21 +149,26 @@ impl Transaction {
             tx.written.insert(table.clone());
             tx.record(None, Some(&row));
 
-            Ok(id)
+            Ok(row)
         }
         .await;
         mutation.finish(result)
     }
 
     pub async fn patch(&mut self, id: &Id, value: Object) -> Result<()> {
-        self.update(id, value, false).await
+        self.update(id, value, false).await.map(drop)
     }
 
     pub async fn replace(&mut self, id: &Id, value: Object) -> Result<()> {
-        self.update(id, value, true).await
+        self.update(id, value, true).await.map(drop)
     }
 
-    async fn update(&mut self, id: &Id, value: Object, replace: bool) -> Result<()> {
+    pub(crate) async fn update(
+        &mut self,
+        id: &Id,
+        value: Object,
+        replace: bool,
+    ) -> Result<Option<(Document, Document)>> {
         let mutation = Mutation::new(self);
 
         let tx = &mut *mutation.tx;
@@ -176,7 +194,7 @@ impl Transaction {
             };
 
             if fields == old.fields {
-                return Ok(());
+                return Ok(None);
             }
             tx.catalog(false)?;
 
@@ -185,6 +203,8 @@ impl Transaction {
                 creation_time: old.creation_time,
                 fields,
             };
+
+            Box::pin(tx.validate_references(Some(&old), &persisted)).await?;
 
             let rid = id.record();
 
@@ -202,7 +222,7 @@ impl Transaction {
             tx.written.insert(id.table().clone());
             tx.record(Some(&old), Some(&persisted));
 
-            Ok(())
+            Ok(Some((old, persisted)))
         }
         .await;
         mutation.finish(result)
@@ -210,31 +230,47 @@ impl Transaction {
 
     /// Deleting an absent record is a no-op and must not report its table.
     pub async fn delete(&mut self, id: &Id) -> Result<()> {
-        let mutation = Mutation::new(self);
+        Box::pin(self.delete_documents(id)).await.map(drop)
+    }
 
+    pub(crate) async fn delete_documents(&mut self, id: &Id) -> Result<Vec<Document>> {
+        let mutation = Mutation::new(self);
         let tx = &mut *mutation.tx;
 
         let result = async {
             tx.ready(true)?;
 
-            let Some(old) = tx.get(id).await? else {
-                return Ok(());
-            };
-            tx.catalog(false)?;
+            let mut deleted = Vec::new();
+            let mut pending = VecDeque::from([id.clone()]);
+            while let Some(id) = pending.pop_front() {
+                if let Some(old) = Box::pin(tx.delete_record(&id)).await? {
+                    pending.extend(Box::pin(tx.referring_rows(&id)).await?);
+                    deleted.push(old);
+                }
+            }
 
-            let rid = id.record();
-
-            let core = &tx.state.storage;
-            tx.indexes(Some(&old), None).await?;
-            tx.inner
-                .del_record(core.ns, core.db, &rid.table, &rid.key)
-                .await?;
-            tx.written.insert(id.table().clone());
-            tx.record(Some(&old), None);
-
-            Ok(())
+            Ok(deleted)
         }
         .await;
         mutation.finish(result)
+    }
+
+    async fn delete_record(&mut self, id: &Id) -> Result<Option<Document>> {
+        let Some(old) = self.get(id).await? else {
+            return Ok(None);
+        };
+
+        self.catalog(false)?;
+        let rid = id.record();
+        let core = &self.state.storage;
+        self.indexes(Some(&old), None).await?;
+        self.inner
+            .del_record(core.ns, core.db, &rid.table, &rid.key)
+            .await?;
+
+        self.written.insert(id.table().clone());
+        self.record(Some(&old), None);
+
+        Ok(Some(old))
     }
 }

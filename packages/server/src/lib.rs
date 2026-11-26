@@ -13,6 +13,7 @@ mod environment;
 mod host;
 pub mod identity;
 pub mod local_endpoint;
+pub mod machine_wire;
 pub mod plugins;
 pub mod protocol;
 mod schema;
@@ -20,7 +21,12 @@ mod service;
 mod web;
 pub mod websocket;
 
+pub use actions::{
+    RunnerAction, RunnerActionUpstream, RunnerFuture, RunnerHookPlan,
+    runner_action_artifact_unavailable,
+};
 pub use backend::{Backend, BackendConfig};
+pub use environment::Snapshot as ActionEnvironment;
 pub use service::{Error, Event, Server, Session, SessionSender};
 
 #[cfg(test)]

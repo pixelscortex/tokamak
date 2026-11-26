@@ -1,4 +1,4 @@
-import type { FunctionDefinition, ServerFunctionKind, WireResult } from "../functions";
+import type { FunctionDefinition, MachineFailure, FunctionKind, WireResult } from "../functions";
 import { callHost, type HostBridge, type LocalChannel, type ChannelHandler } from "../host";
 import { jsonSnapshot, type JsonValue } from "../values";
 
@@ -34,18 +34,18 @@ export function openLocalChannel(
   return entry[openChannel]?.(method, args, receive);
 }
 
-export type ContractPlace = "local" | "server";
+export type ContractTarget = "caller" | "server";
 export interface ContractKey {
   readonly name: string;
   readonly owner?: string;
-  readonly place: ContractPlace;
+  readonly on: ContractTarget;
   /** Route every method across local QuickJS processes. */
   readonly dataMethods?: true;
 }
 
-export interface Contract<T extends object, P extends ContractPlace = ContractPlace> extends ContractKey {
+export interface Contract<T extends object, P extends ContractTarget = ContractTarget> extends ContractKey {
   readonly [contractBrand]: (shape: T) => T;
-  readonly place: P;
+  readonly on: P;
   list(...context: LookupContext<P>): Promise<readonly BoundProvider<T, P>[]>;
   get(id: string, ...context: LookupContext<P>): ProviderSelection<BoundProvider<T, P>>;
 }
@@ -64,11 +64,11 @@ export interface ContractContext {
   readonly [contractScope]: ContractScope;
 }
 
-type LookupContext<P extends ContractPlace> = P extends "local"
+type LookupContext<P extends ContractTarget> = P extends "caller"
   ? [context: ContractContext, options?: LocalLookupOptions]
   : [context?: ContractContext];
 
-type BoundProvider<T, P extends ContractPlace> = {
+type BoundProvider<T, P extends ContractTarget> = {
   [K in keyof T]: NonNullable<T[K]> extends (...args: infer A) => infer R
     ? P extends "server"
       ? (...args: A) => Promise<WireResult<R>>
@@ -103,56 +103,50 @@ function select<T extends object>(id: string, lookup: () => Promise<T | undefine
   }) as ProviderSelection<T>;
 }
 
-type Implementation<T, P extends ContractPlace> = {
+type Implementation<T, P extends ContractTarget> = {
   [K in keyof T]: NonNullable<T[K]> extends (...args: infer A) => infer R
-    ? P extends "local"
+    ? P extends "caller"
       ? ((...args: A) => R) | LocalImplementation<A, R>
       : A extends [infer Input] | []
-        ? FunctionDefinition<ServerFunctionKind, Input, WireResult<R>>
+        ? FunctionDefinition<FunctionKind, Input, WireResult<R>>
         : never
     : T[K];
 };
 type LocalImplementation<A extends unknown[], R> = A extends [infer Input] | []
-  ? FunctionDefinition<"local", Input, WireResult<R>>
+  ? FunctionDefinition<"action", Input, WireResult<R | MachineFailure>> & { readonly on: "caller" }
   : never;
 
-export interface Provider<P extends ContractPlace> {
+export interface Provider<P extends ContractTarget> {
   readonly [providerBrand]: true;
-  readonly contract: ContractKey & { readonly place: P };
+  readonly contract: ContractKey & { readonly on: P };
   readonly implementation: Readonly<Record<string, unknown>>;
 }
 
 export function contract<T extends object>(
   name: string,
-  options: {
-    place: "local";
-    dataMethods: true;
-  },
-): Contract<T, "local">;
+  options: { on: "caller"; dataMethods?: true },
+): Contract<T, "caller">;
+export function contract<T extends object>(name: string, options?: { on: "server" }): Contract<T, "server">;
 export function contract<T extends object>(
   name: string,
-  options?: { place: "server" },
-): Contract<T, "server">;
-export function contract<T extends object>(
-  name: string,
-  options?: { place: ContractPlace; dataMethods?: true },
-): Contract<T, "local"> | Contract<T, "server"> {
-  return options?.place === "local"
-    ? contractReference<T, "local">(name, "local", undefined, options.dataMethods)
+  options?: { on: ContractTarget; dataMethods?: true },
+) {
+  return options?.on === "caller"
+    ? contractReference<T, "caller">(name, "caller", undefined, true)
     : contractReference<T, "server">(name, "server");
 }
 
 /** Used by the build to import contract keys without importing the defining plugin's code. */
-export function contractReference<T extends object, P extends ContractPlace>(
+export function contractReference<T extends object, P extends ContractTarget>(
   name: string,
-  place: P,
+  on: P,
   owner?: string,
   dataMethods?: true,
 ): Contract<T, P> {
   if (!contractName.test(name)) throw new Error(`Invalid contract name: ${name}`);
   const key = Object.freeze({
     name,
-    place,
+    on,
     ...(owner === undefined ? {} : { owner }),
     ...(dataMethods === undefined ? {} : { dataMethods }),
   });
@@ -161,11 +155,8 @@ export function contractReference<T extends object, P extends ContractPlace>(
     id?: string,
     options?: LocalLookupOptions,
   ): Promise<readonly ContractEntry[]> => {
-    const scoped = context?.[contractScope] ?? (place === "server" ? serverScope : undefined);
-    if (!scoped)
-      throw new Error(
-        "Contract lookup requires a plugin function; pass ctx in local functions and server actions",
-      );
+    const scoped = context?.[contractScope] ?? (on === "server" ? serverScope : undefined);
+    if (!scoped) throw new Error("Contract lookup requires a plugin function; pass ctx in actions");
     return scoped.list(key, id, options);
   };
   return Object.freeze({
@@ -187,10 +178,10 @@ export function contractReference<T extends object, P extends ContractPlace>(
 }
 
 /** A provider is registered by exporting it from an authored plugin module. */
-export function provide<T extends object, P extends ContractPlace>(
+export function provide<T extends object, P extends ContractTarget>(
   key: Contract<T, P>,
   implementation: Implementation<NoInfer<T>, P>,
-  _options?: P extends "local" ? { unavailable: string } : never,
+  _options?: P extends "caller" ? { unavailable: string } : never,
 ): Provider<P> {
   return Object.freeze({
     [providerBrand]: true as const,
@@ -209,13 +200,13 @@ export interface ContractScope {
 }
 
 /** List usable local providers alongside builds whose declarations no longer match. */
-export async function localProviders<T extends object>(key: Contract<T, "local">, context: ContractContext) {
+export async function localProviders<T extends object>(key: Contract<T, "caller">, context: ContractContext) {
   const incompatible: string[] = [];
   const entries = await context[contractScope].list(key, undefined, {
     onIncompatible: (plugin) => incompatible.push(plugin),
   });
   return {
-    providers: entries.map((entry) => entry.implementation as BoundProvider<T, "local">),
+    providers: entries.map((entry) => entry.implementation as BoundProvider<T, "caller">),
     incompatible,
   };
 }
@@ -225,7 +216,7 @@ let serverScope: ContractScope | undefined;
 export function serverContracts(host: HostBridge): ContractScope {
   return {
     async list(key) {
-      if (key.place !== "server") throw new Error("Local contracts run in a plugin process");
+      if (key.on !== "server") throw new Error("Local contracts run in a plugin process");
       const providers = await callHost(host, "contract.list", {
         name: key.name,
         ...(key.owner && { owner: key.owner }),

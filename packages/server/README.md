@@ -76,6 +76,8 @@ SDK IDs are monotonic and never reused. Requests are tagged `query`, `mutation`,
 `subscribe`, `unsubscribe`, with `{id,name,args}` (unsubscribe has only id).
 Events are tagged `response`, `subscription`, `unsubscribed`. The first two have
 `result: {Ok: value} | {Err: string}`: null success cannot be confused with error.
+Structured failures add an optional top-level `error: {plugin, hook, stage, kind, data}`
+field. Older clients continue to receive the string in `result.Err`.
 A mismatched query/mutation kind is rejected without executing the function.
 
 `SessionSender` implements `tower::Service<Request, Response=()>`; this response
@@ -490,4 +492,9 @@ Owned-probe measured release executable SHA-256:
 ## Plugin code
 
 See [Plugin host](../host/README.md) for the action process and the Runner's
-plugin process. Local functions and server actions are unavailable on Windows.
+plugin process. Caller actions and server actions are unavailable on Windows.
+
+Connected Runner heartbeat timing can be tuned on both processes with
+`TOKAMAK_MACHINE_HEARTBEAT_INTERVAL_MS` (default 5000) and
+`TOKAMAK_MACHINE_HEARTBEAT_LIMIT_MS` (default 15000). Use positive values
+with the interval below the limit.

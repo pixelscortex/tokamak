@@ -15,7 +15,7 @@ export function retainSubscriptions(transport: ClientTransport): ClientTransport
   return {
     query: (name, args) => transport.query(name, args),
     mutation: (name, args) => transport.mutation(name, args),
-    action: transport.action ? (name, args) => transport.action!(name, args) : undefined,
+    action: transport.action ? (name, args, on) => transport.action!(name, args, on) : undefined,
     subscribe(name, args, observer) {
       const key = JSON.stringify([name, args]);
       let entry = entries.get(key);

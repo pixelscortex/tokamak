@@ -8,7 +8,7 @@ moves ai's agent row. These files do.
 Each plugin with UI has one file, with the same five sections:
 
 1. **Screens**: what it draws, the source file, the Paper artboard.
-2. **Parts it offers**: named parts others may add to or replace.
+2. **Parts it offers**: compiler-named paths and the parts other plugins use.
 3. **What it adds to others**: its additions to other plugins' screens.
 4. **If you change X, check Y**: what else moves when this changes.
 5. **Primitives used** from `@tokamak/ui`.

@@ -1,4 +1,4 @@
-import { local, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
+import { action, v, type DatabaseReader, type Doc, type Id } from "@tokamak/sdk";
 import { threadDeletedLocal, threadDeletedServer } from "../../contracts";
 import { api } from "../_generated/api";
 import { folder } from "../folders/folder";
@@ -13,7 +13,7 @@ const RECENT_FOLDERS = 3;
 /** Threads read to find them; older folders drop off the list. */
 const RECENT_SCAN = 200;
 
-/** One thread, for the creator's local part to find its folder. */
+/** One thread, for the creator's Runner to find its folder. */
 export const get = query({
   args: { threadId: v.id("threads") },
   handler: ({ db }, { threadId }) => db.get(threadId),
@@ -37,7 +37,7 @@ export const creator = query({
 /**
  * Creates a thread with its first message. There are no empty threads: the
  * window keeps an unsent thread to itself until this first Send.
- * `{ kind: "own" }` is "No folder": the creator's local part makes that folder
+ * `{ kind: "own" }` is "No folder": the creator's Runner makes that folder
  * (`folders:resolve`) before anything works in it.
  */
 export const start = mutation({
@@ -66,7 +66,7 @@ export const start = mutation({
 
 /**
  * Stores the path of a "No folder" thread's own folder, once, made by its
- * creator's local part. Only the creator may: the folder is on their computer,
+ * creator's Runner. Only the creator may: the folder is on their computer,
  * and their agent works in it.
  */
 export const setFolder = mutation({
@@ -101,7 +101,7 @@ function titleFrom(text: string) {
 
 /**
  * A folder is an absolute path on its creator's computer. `~` is expanded by
- * that computer's local part before it is stored; a browser stores what it was given.
+ * a caller action on that computer before it is stored; a browser stores what it was given.
  */
 function fullPath(path: string) {
   const value = nonempty(path);
@@ -135,7 +135,8 @@ export const remove = mutation({
 });
 
 /** Desktop deletion can also clean up things plugins kept on this computer. */
-export const removeLocal = local({
+export const removeLocal = action({
+  on: "caller",
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
     const current = await ctx.runQuery(api.threads.get, { threadId });
@@ -144,7 +145,7 @@ export const removeLocal = local({
     let cleaned = true;
     function cleanupFailed(cause: unknown) {
       cleaned = false;
-      // oxlint-disable-next-line no-console -- The local worker sends this warning to the client log.
+      // oxlint-disable-next-line no-console -- The Runner worker sends this warning to the client log.
       console.warn("chat: could not remove local thread data", cause);
     }
     try {

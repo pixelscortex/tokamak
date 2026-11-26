@@ -280,7 +280,7 @@ async function checkVersionAndSize({ client, ai, chat, folder, claudeTurns }) {
   const prompt = "p".repeat(1009 * 1024);
   const messageId = await client.mutation(chat.messages.post, { threadId, text: prompt });
   await assert.rejects(
-    client.local(ai.run.turn, { threadId, messageId, folder: project, agentId: "claude" }),
+    client.action(ai.run.turn, { threadId, messageId, folder: project, agentId: "claude" }),
     new RegExp(tooLong),
   );
   assert.ok(!(await client.query(ai.turns.list, { threadId })).some((turn) => turn.messageId === messageId));
@@ -289,7 +289,7 @@ async function checkVersionAndSize({ client, ai, chat, folder, claudeTurns }) {
   const queued = await client.mutation(ai.turns.enqueue, { ...settings, text: prompt });
   const next = await client.mutation(ai.turns.enqueue, { ...settings, text: "@hold" });
   const start = (queued) =>
-    client.local(ai.run.turn, { threadId, messageId: queued.messageId, folder: project, agentId: "claude" });
+    client.action(ai.run.turn, { threadId, messageId: queued.messageId, folder: project, agentId: "claude" });
   assert.deepEqual(await start(queued), { turnId: queued.turnId, state: "failed" });
   const message = (await client.query(chat.messages.list, { threadId })).find(
     ({ _id }) => _id === queued.messageId,
@@ -332,7 +332,7 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
       const { _id: turnId, replyId } = await control.replyUntil("steer turn", () => true);
       const steers = () => client.query(ai.turns.replySteers, { replyId });
       assert.match(
-        (await client.local(ai.run.steer, { turnId, text: "fail" })).error,
+        (await client.action(ai.run.steer, { turnId, text: "fail" })).error,
         /steer rejected by replay/,
       );
       assert.deepEqual(await steers(), []);
@@ -433,7 +433,7 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
   ]);
   await writeFile(join(forceProject, "go"), "");
   await until("tail report in flight", () => Bun.file(join(forceProject, "report-ready")).exists());
-  const force = client.local(ai.run.forceStop, forceArgs);
+  const force = client.action(ai.run.forceStop, forceArgs);
   void force.catch(() => {});
   await until("Force stop sent", () => Bun.file(join(forceProject, "force-sent")).exists());
   await writeFile(join(forceProject, "report-release"), "");
@@ -451,7 +451,7 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
   await writeFile(join(busyProject, "go"), "");
   await until("agent starts spinning", () => Bun.file(join(busyProject, "spinning")).exists());
   const began = performance.now();
-  assert.equal(await client.local(ai.run.forceStop, busyArgs), null);
+  assert.equal(await client.action(ai.run.forceStop, busyArgs), null);
   await busy;
   await until(
     "native Force stop reaps the spinning invocation's program",
@@ -462,7 +462,7 @@ async function checkForceAndSteer({ client, ai, folder, scratch, processInfo, cl
   // Discovery routes a real invocation through Claude's host; it can only
   // respond after the watchdog has reset the stuck realm.
   await until("Claude answers again after the watchdog", async () =>
-    (await client.local(ai.agents.list, {})).some(({ id, info }) => id === "claude" && info.signedIn),
+    (await client.action(ai.agents.list, {})).some(({ id, info }) => id === "claude" && info.signedIn),
   );
 }
 

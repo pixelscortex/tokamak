@@ -112,7 +112,7 @@ try {
       local.launch(
         artifact,
         (frame) => {
-          if (frame.type === "op") requests.push(frame.name);
+          if (frame.type === "op" && frame.name === "plugin.call") requests.push(frame.payload.kind);
           receive(frame);
         },
         closed,
@@ -125,7 +125,7 @@ try {
     const identity = (client) => client.query(authCaller, {});
     const inProvider = async (client) =>
       JSON.parse(
-        (await client.local(h.api.ai.agents.list, {})).find(({ id }) => id === "fake-agent").info.signIn,
+        (await client.action(h.api.ai.agents.list, {})).find(({ id }) => id === "fake-agent").info.signIn,
       );
     const [ownerAuth, memberAuth, ownerFromProvider, memberFromProvider] = await Promise.all([
       identity(window),
@@ -152,8 +152,8 @@ try {
   assert.equal((await otherWindow.query(h.api.ai.turns.list, args))[0]._id, result.row._id);
   assert.deepEqual(await runnerWindow.query(h.api.ai.turns.list, args), []);
   assert.match(result.text, /Read this shared thread and reply through the local Runner/);
-  assert.ok(requests.includes("local.runQuery"), JSON.stringify(requests));
-  assert.ok(requests.includes("local.runMutation"), JSON.stringify(requests));
+  assert.ok(requests.includes("query"), JSON.stringify(requests));
+  assert.ok(requests.includes("mutation"), JSON.stringify(requests));
   console.log(
     "Shared server: a local Runner query read its thread and its mutations stored the turn only on that server.",
   );

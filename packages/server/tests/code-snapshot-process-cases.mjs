@@ -3,7 +3,6 @@ import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { editBundle, inspectHosts, reload, until } from "../../runner/tests/support/routing.mjs";
 import { runLocalTurn } from "../../../plugins/ai/src/client/lib/local-turn.ts";
-import { connect, within } from "../../../e2e/fake-agent/harness.mjs";
 import { FORCE_STOP_MS, RELOADED } from "../../../plugins/ai/src/shared/turn-timing.ts";
 import { alive, gitPids, stall } from "./code-snapshot-review-cases.mjs";
 
@@ -47,7 +46,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
   process.kill(originalCode, "SIGKILL");
   await until("code's process exited", () => !alive(originalCode));
   // The replacement process must find the before ref without any in-memory state.
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   await h.gate(crash.folder, "go");
   const done = await interrupted;
   assert.deepEqual(done, { turnId: done.turnId, state: "done" });
@@ -63,7 +62,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
   const oldCode = host("code");
   await editBundle(join(h.plugins, "code"), "/* replacement local artifact */");
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   assert.ok(hosts().some(({ id, pid }) => id === "code" && pid !== oldCode));
   await h.gate(updated.folder, "go");
   const finished = await duringReload;
@@ -82,7 +81,7 @@ export async function separateProcesses({ h, runner, desk, code, project, start,
     [originalAi],
     "a new turn reuses the only ai process after changing Code",
   );
-  await desk.local(chat.threads.removeLocal, { threadId: reloadedTurn.threadId });
+  await desk.action(chat.threads.removeLocal, { threadId: reloadedTurn.threadId });
   assert.deepEqual(refs(updated.git), [], "the deletion hook routes to the replacement code process");
   console.log(
     "code snapshots: overlapping turns, separate provider PID, code crash, code reload and routed deletion",
@@ -98,7 +97,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   await h.waitFor(folder, "process-tree.json");
   const agentPids = await Bun.file(join(folder, "process-tree.json")).json();
   const args = { turnId: turn._id };
-  await desk.local(ai.run.stop, args);
+  await desk.action(ai.run.stop, args);
   const [stopping] = await agent.turns.until("agent stopping", (rows) => !!rows[0]?.stoppingAt);
 
   const blocked = await project("stop-before");
@@ -108,7 +107,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   const pending = hook.run(hook.messageId, "edit");
   const pids = await gitPids(blocked);
   await Bun.sleep(Math.max(0, stopping.stoppingAt + FORCE_STOP_MS - Date.now()));
-  assert.equal(await desk.local(ai.run.forceStop, args), null);
+  assert.equal(await desk.action(ai.run.forceStop, args), null);
   assert.ok(agentPids.every((pid) => !alive(pid)));
   assert.ok(pids.every(alive), "agent Force stop leaves the running hook's Git group alone");
   assert.deepEqual(await running, { turnId: turn._id, state: "stopped" });
@@ -116,7 +115,7 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   assert.deepEqual(refs(git, prefix), [`${prefix}/after`, `${prefix}/before`]);
 
   const [before] = await hook.turns.until("before hook is running", (rows) => rows.length === 1);
-  await desk.local(ai.run.stop, { turnId: before._id });
+  await desk.action(ai.run.stop, { turnId: before._id });
   assert.deepEqual(await pending, { turnId: before._id, state: "stopped" });
   await until("Stop cancels the hook's Git group", () => pids.every((pid) => !alive(pid)));
   assert.deepEqual(refs(blocked.git), []);
@@ -124,11 +123,74 @@ export async function stopIsolation({ h, desk, project, start, refs, turnRef }) 
   console.log("code snapshots: Force stop isolated agent programs; Stop cancelled before");
 }
 
+export async function windowOwnership({ h, desk, project, start }) {
+  const { ai } = h.api;
+  const { folder } = await project("window-ownership");
+  const thread = await start(desk, folder);
+  const first = crypto.randomUUID();
+  const second = crypto.randomUUID();
+  const run = (windowId, messageId) =>
+    desk.action(ai.run.turn, {
+      windowId,
+      threadId: thread.threadId,
+      messageId,
+      folder,
+      agentId: "fake-agent",
+      model: "ask-once",
+      access: "ask",
+    });
+  const waiting = (messageId) =>
+    thread.turns
+      .until("permission question owned by its window", (rows) =>
+        rows.some((row) => row.messageId === messageId && row.state === "waiting"),
+      )
+      .then((rows) => rows.find((row) => row.messageId === messageId));
+
+  const running = run(first, thread.messageId);
+  void running.catch(() => {});
+  const turn = await waiting(thread.messageId);
+  const question = { turnId: turn._id, questionId: turn.question.id };
+  assert.equal(await desk.action(ai.run.pending, { windowId: first, ...question }), true);
+  assert.equal(await desk.action(ai.run.pending, { windowId: second, ...question }), false);
+  assert.equal(
+    (await desk.action(ai.run.answer, { windowId: second, ...question, answer: "approve" })).kind,
+    "Expired",
+  );
+  assert.equal((await desk.action(ai.run.stop, { windowId: second, turnId: turn._id })).kind, "NotRunning");
+  assert.equal(
+    (await desk.action(ai.run.steer, { windowId: second, turnId: turn._id, text: "Other window" })).kind,
+    "NotRunning",
+  );
+  assert.deepEqual(await desk.action(ai.working.list, { windowId: second }), []);
+  assert.equal(await desk.action(ai.working.stopAll, { windowId: second }), 0);
+  assert.equal(
+    await desk.action(ai.run.answer, { windowId: first, ...question, answer: "approveSession" }),
+    null,
+  );
+  assert.equal((await running).state, "done");
+  assert.equal((await run(first, await thread.post())).state, "done");
+
+  const messageId = await thread.post();
+  const afterReload = run(second, messageId);
+  void afterReload.catch(() => {});
+  const askedAgain = await waiting(messageId);
+  assert.equal(
+    await desk.action(ai.run.answer, {
+      windowId: second,
+      turnId: askedAgain._id,
+      questionId: askedAgain.question.id,
+      answer: "approve",
+    }),
+    null,
+  );
+  assert.equal((await afterReload).state, "done");
+}
+
 export async function reloadManager({ h, runner, desk, project, start }) {
   const { ai } = h.api;
   const waiting = await project("reload-during-question");
   const thread = await start(desk, waiting.folder);
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId: thread.threadId,
     messageId: thread.messageId,
     folder: waiting.folder,
@@ -168,12 +230,12 @@ export async function reloadManager({ h, runner, desk, project, start }) {
   assert.equal(row.state, "interrupted");
   assert.equal(row.error, why);
   assert.equal(row.question, undefined);
-  assert.equal((await desk.local(ai.run.stop, { turnId: turn._id })).kind, "NotRunning");
+  assert.equal((await desk.action(ai.run.stop, { turnId: turn._id })).kind, "NotRunning");
   const question = { turnId: turn._id, questionId: turn.question.id };
-  assert.equal(await desk.local(ai.run.pending, question), false);
-  assert.equal((await desk.local(ai.run.answer, { ...question, answer: "approve" })).kind, "Expired");
-  assert.deepEqual(await desk.local(ai.working.list, {}), []);
-  assert.equal(await desk.local(ai.working.stopAll, {}), 0);
+  assert.equal(await desk.action(ai.run.pending, question), false);
+  assert.equal((await desk.action(ai.run.answer, { ...question, answer: "approve" })).kind, "Expired");
+  assert.deepEqual(await desk.action(ai.working.list, {}), []);
+  assert.equal(await desk.action(ai.working.stopAll, {}), 0);
   await until("AI reload reaped the agent and Git", () => [...children, ...git].every((pid) => !alive(pid)));
   await h.gate(waiting.folder, "go");
   assert.equal((await thread.run(await thread.post(), "edit")).state, "done");
@@ -186,81 +248,69 @@ export async function reloadManagerTimeout({ h, runner, desk, project, start }) 
   const { ai } = h.api;
   const { folder } = await project("reload-timeout");
   const thread = await start(desk, folder);
-  const cleanup = [];
-  const blocked = Promise.withResolvers();
+  const plugin = join(h.plugins, "ai");
+  const workspace = join(h.scratch, "snapshots");
+  const original = await readFile(join(plugin, "local.js"), "utf8");
+  const finish = "state = await ctx.runMutation(api.turns.finish,";
+  assert.ok(original.includes(finish));
+  // Hold finish inside the retired build, so the test works when the action
+  // reaches the Runner directly without passing through a window worker.
+  await editBundle(plugin, 'import { writeFile as markFinish } from "node:fs/promises";', (code) =>
+    code.replace(
+      finish,
+      `await markFinish(${JSON.stringify(join(folder, "finish-attempted"))}, "");
+       await new Promise(() => {});
+       ${finish}`,
+    ),
+  );
+  await reload(runner, workspace, "ai");
   const hosts = await inspectHosts(runner);
-  const window = await connect(runner.endpoint.ws, {
-    token: runner.endpoint.token,
-    cleanup,
-    launch(artifact, receive, close, workspace) {
-      return runner.launch(
-        artifact,
-        (frame) => {
-          if (
-            artifact.id === "ai" &&
-            frame.name === "local.runMutation" &&
-            frame.payload.name === "ai/turns:finish"
-          ) {
-            blocked.resolve(); // The old build cannot save its own interruption.
-            return;
-          }
-          receive(frame);
-        },
-        close,
-        workspace,
-      );
-    },
+  const running = runLocalTurn(desk, {
+    threadId: thread.threadId,
+    messageId: thread.messageId,
+    folder,
+    agentId: "fake-agent",
+    model: "ask-once",
+    access: "ask",
   });
-  try {
-    const running = runLocalTurn(window, {
-      threadId: thread.threadId,
+  void running.catch(() => {});
+  const [turn] = await thread.turns.until(
+    "the agent asks permission",
+    (rows) => rows[0]?.state === "waiting",
+  );
+  const old = hosts().find(({ id }) => id === "ai");
+  assert.ok(old);
+  assert.equal(
+    await desk.mutation(ai.liveness.releaseReloaded, {
       messageId: thread.messageId,
-      folder,
-      agentId: "fake-agent",
-      model: "ask-once",
-      access: "ask",
-    });
-    void running.catch(() => {});
-    const [turn] = await thread.turns.until(
-      "the agent asks permission",
-      (rows) => rows[0]?.state === "waiting",
-    );
-    const old = hosts().find(({ id }) => id === "ai");
-    assert.ok(old);
-    assert.equal(
-      await desk.mutation(ai.liveness.releaseReloaded, {
-        messageId: thread.messageId,
-        replyToken: "another invocation",
-      }),
-      false,
-    );
-    await editBundle(join(h.plugins, "ai"), "/* replaced while finish cannot settle */");
-    await reload(runner, join(h.scratch, "snapshots"), "ai");
-    await within(blocked.promise, "old AI version attempts finish");
-    assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
-    const row = await thread.reply(turn._id);
-    assert.equal(row.state, "interrupted");
-    assert.equal(row.error, RELOADED);
-    assert.equal(row.question, undefined);
-    await until("the window closed the stuck retired host", () => !alive(old.pid));
-    await h.gate(folder, "go");
-    const messageId = await thread.post();
-    const replyToken = "01".repeat(32);
-    const next = await desk.local(ai.run.turn, {
-      threadId: thread.threadId,
-      messageId,
-      replyToken,
-      folder,
-      agentId: "fake-agent",
-      model: "edit",
-    });
-    assert.equal(next.state, "done");
-    assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
-    assert.equal((await thread.reply(next.turnId)).state, "done");
-    console.log("code snapshots: the window saved the reload reason when old AI could not finish");
-  } finally {
-    for (const close of cleanup.reverse()) await close();
-  }
+      replyToken: "another invocation",
+    }),
+    false,
+  );
+  await editBundle(plugin, "", () => original);
+  await reload(runner, workspace, "ai");
+  await h.waitFor(folder, "finish-attempted");
+  assert.deepEqual(await running, { state: "interrupted", ended: RELOADED });
+  const row = await thread.reply(turn._id);
+  assert.equal(row.state, "interrupted");
+  assert.equal(row.error, RELOADED);
+  assert.equal(row.question, undefined);
+  await until("the Runner closed the stuck retired host", () => !alive(old.pid));
+  await h.gate(folder, "go");
+  const messageId = await thread.post();
+  const replyToken = "01".repeat(32);
+  const next = await desk.action(ai.run.turn, {
+    threadId: thread.threadId,
+    messageId,
+    replyToken,
+    folder,
+    agentId: "fake-agent",
+    model: "edit",
+  });
+  assert.equal(next.state, "done");
+  assert.equal(await desk.mutation(ai.liveness.releaseReloaded, { messageId, replyToken }), "ended");
+  assert.equal((await thread.reply(next.turnId)).state, "done");
+  console.log("code snapshots: the window saved the reload reason when old AI could not finish");
 }
 
 export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }) {
@@ -274,7 +324,7 @@ export async function stopDuringAfter({ h, desk, project, start, refs, turnRef }
   const afterPids = await gitPids(final);
   const [last] = await after.turns.until("after hook is running", (rows) => rows.length === 1);
   for (let i = 0; i < 2; i++) {
-    const result = await desk.local(ai.run.stop, { turnId: last._id });
+    const result = await desk.action(ai.run.stop, { turnId: last._id });
     assert.equal(result.kind, "NotRunning", "Stop cannot change a turn whose agent has settled");
     assert.equal(result.data.finishing, true, "the window shows no notice for a turn that is only finishing");
   }
@@ -352,14 +402,14 @@ ${code}`,
 ${code}`,
   );
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  assert.deepEqual(await desk.local(chat.threads.removeLocal, { threadId: doomed.threadId }), {
+  assert.deepEqual(await desk.action(chat.threads.removeLocal, { threadId: doomed.threadId }), {
     warning: "The thread was deleted, but some of its local data couldn't be removed.",
   });
   assert.equal(await desk.query(chat.threads.get, { threadId: doomed.threadId }), null);
   assert.equal(refs(cleanup.git).length, 2);
   await editBundle(installed, "/* recovered from deletion outage */", () => original);
   await reload(runner, join(h.scratch, "snapshots"), "code");
-  await desk.local(code.hooks.prune, {});
+  await desk.action(code.hooks.prune, {});
   assert.deepEqual(refs(cleanup.git), []);
   console.log(
     "code snapshots: crashed cached hook, failed first lookup and deletion outage with prune retry",
@@ -411,7 +461,7 @@ cat >/dev/null
       () => false,
     );
   const controller = new AbortController();
-  const removing = desk.local(
+  const removing = desk.action(
     chat.threads.removeLocal,
     { threadId: thread.threadId },
     { signal: controller.signal },
@@ -471,7 +521,7 @@ export async function managerCrash({ h, runner, desk, code: codeApi, project, st
     25_000,
   );
   const notice = () =>
-    desk.local(codeApi.notices.forTurn, {
+    desk.action(codeApi.notices.forTurn, {
       threadId: agentThread.threadId,
       turnId: running._id,
     });

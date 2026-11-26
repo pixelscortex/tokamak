@@ -148,28 +148,21 @@ impl Engine for QuickJsEngine {
             call_end,
             "call",
             world.context.async_with(async |ctx| {
-                let result = async {
-                    let namespace: Object = namespace.restore(&ctx)?;
-                    let function: Function = namespace
-                        .get::<_, Value>(export)?
-                        .into_function()
-                        .ok_or_else(|| {
-                            rquickjs::Exception::throw_type(
-                                &ctx,
-                                &format!("bundle export {export:?} is missing or not a function"),
-                            )
-                        })?;
+                let function = exported_function(&ctx, namespace, export)
+                    .map_err(|e| js_error(&ctx, e, bundle, false))?;
+                if ops.3.is_some() || ops.may_run_stages() {
+                    return bridge::invoke_export(&ctx, &invocation, ops, function, args, bundle)
+                        .await;
+                }
+                async {
                     let args = bridge::encode(&ctx, args)?;
                     let host = bridge::install_ops(&ctx, ops, &invocation)?;
-                    // One JSON argument plus the unforgeable per-call capability.
-                    // SDK's wrapper is invoke({name,args}, host); no SDK concepts
-                    // need to leak into this generic exported-function primitive.
                     let pending: MaybePromise = function.call((args, host))?;
                     let value: Value = pending.into_future().await?;
                     bridge::decode(&ctx, value)
                 }
-                .await;
-                result.map_err(|e| js_error(&ctx, e, bundle, false))
+                .await
+                .map_err(|error| js_error(&ctx, error, bundle, false))
             }),
         )
         .await;
@@ -178,6 +171,23 @@ impl Engine for QuickJsEngine {
         invocation.retire();
         result
     }
+}
+
+fn exported_function<'js>(
+    ctx: &Ctx<'js>,
+    namespace: Persistent<Object<'static>>,
+    export: &str,
+) -> rquickjs::Result<Function<'js>> {
+    namespace
+        .restore(ctx)?
+        .get::<_, Value>(export)?
+        .into_function()
+        .ok_or_else(|| {
+            rquickjs::Exception::throw_type(
+                ctx,
+                &format!("bundle export {export:?} is missing or not a function"),
+            )
+        })
 }
 
 /// The interrupt stops running JS; the timer independently stops a pending
@@ -210,6 +220,9 @@ pub(crate) fn js_error_named(
         return Error::Engine(error.to_string());
     }
     let thrown = ctx.catch();
+    if let Some(error) = thrown.as_object().and_then(bridge::native_call_error) {
+        return Error::Call(error);
+    }
     let message = thrown
         .as_object()
         .and_then(|o| o.get::<_, String>("message").ok())

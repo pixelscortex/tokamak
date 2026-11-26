@@ -85,7 +85,7 @@ async function grantSession(turns, folder) {
 async function reloadProviders(h, runner, client) {
   const hosts = await inspectHosts(runner);
   const host = (id) => hosts().find((process) => process.id === id)?.pid;
-  const listAgents = () => client.local(h.api.ai.agents.list, {});
+  const listAgents = () => client.action(h.api.ai.agents.list, {});
   await listAgents(); // Warm Codex, even though this fixture doesn't have its CLI.
   const ai = host("ai");
   const claude = host("claude");

@@ -20,10 +20,10 @@ impl Bundle {
     pub fn new(code: &Path) -> anyhow::Result<Self> {
         let code = code
             .canonicalize()
-            .context("Resolving local function bundle")?;
+            .context("Resolving caller action bundle")?;
         let root = code
             .to_str()
-            .context("Local function bundle path is not UTF-8")?;
+            .context("Caller action bundle path is not UTF-8")?;
         Ok(Self(Rc::from(root)))
     }
 

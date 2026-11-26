@@ -20,7 +20,7 @@ import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
+import { functionName, TokamakClient, WebSocketTransport } from "../../packages/sdk/src/index.ts";
 import { LocalFunctions } from "../../packages/runtime/js/local.ts";
 import { agentsFolder, bunPath, fakeAgents, installFakeAgent, localLauncher, startRunner } from "./local.mjs";
 
@@ -121,13 +121,19 @@ export async function startServer({
   shared,
   localDir,
   ownerToken,
+  callMs,
+  heapBytes,
   servers,
   cleanup,
   env = {},
   started = () => {},
+  stdoutLine,
+  stderr = "inherit",
 }) {
   await mkdir(dir);
   const args = ["--plugins", pluginsDir, "--data", join(dir, "store"), "--listen", "127.0.0.1:0"];
+  if (callMs !== undefined) args.push("--call-ms", String(callMs));
+  if (heapBytes !== undefined) args.push("--heap-bytes", String(heapBytes));
   if (localDir) args.push("--local-dir", localDir);
   if (shared) {
     await writeFile(join(dir, "index.html"), "End-to-end server");
@@ -137,7 +143,7 @@ export async function startServer({
     env: { ...process.env, TOKAMAK_OWNER_NAME: "Sam", TOKAMAK_ACCESS_TOKEN: ownerToken, ...env },
     ...(localDir && { stdin: "pipe" }),
     stdout: "pipe",
-    stderr: "inherit",
+    stderr,
   });
   servers.push(child);
   started(child);
@@ -146,6 +152,7 @@ export async function startServer({
   return within(
     new Promise((resolve, reject) => {
       lines.on("line", (line) => {
+        stdoutLine?.(line);
         const match = line.match(/ws:\/\/127\.0\.0\.1:\d+\/ws/);
         if (match) resolve(match[0]);
       });
@@ -153,6 +160,17 @@ export async function startServer({
     }),
     "server readiness",
   );
+}
+
+/** Drive AI like a desktop composer: every connection owns a distinct window ID. */
+class AgentWindow extends TokamakClient {
+  #windowId = crypto.randomUUID();
+
+  action(reference, args, options) {
+    const name = reference[functionName];
+    if (/^ai\/(run|working|agents):/.test(name)) args = { windowId: this.#windowId, ...args };
+    return super.action(reference, args, options);
+  }
 }
 
 /** A window on `address` with device key `token`; with `launch`, also a local part. */
@@ -171,14 +189,14 @@ export async function connect(
   if (onClose) socket.addEventListener("close", onClose, { once: true });
   const transport = new WebSocketTransport(socket);
   cleanup.push(() => transport.close());
-  if (!launch) return new TokamakClient(transport);
+  if (!launch) return new AgentWindow(transport);
   const url = new URL(address);
   const part = new LocalFunctions(transport, launch, url.origin + url.pathname);
   cleanup.push(() => part.close());
   socket.addEventListener("close", ({ code }) => {
     if (code === 4001) void part.close();
   });
-  return new TokamakClient(transport, part);
+  return new AgentWindow(transport, part);
 }
 
 /** Observe or hold the same worker frames regardless of the wire transport. */
@@ -329,7 +347,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       await mkdir(folder);
       const entry = await readFile(join(plugins, "ai", "local-entry.js"));
       const code =
-        'export const functions = { probe: { kind: "local", args: { kind: "any" }, invoke: () => typeof Bun } };';
+        'export const functions = { probe: { kind: "action", on: "caller", visibility: "public", args: { kind: "any" }, invoke: () => typeof Bun } };';
       await writeFile(join(folder, "local-entry.js"), entry);
       await writeFile(join(folder, "local.js"), code);
 
@@ -379,10 +397,11 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
     /**
      * Starts the real server on `pluginsDir` (chat, ai and the fake agents by
      * default); resolves its WebSocket address. `shared` makes it a shared server.
+     * `windowRouted` uses a separate desktop Runner so a test can observe the window bridge.
      */
-    async serve(label, { shared = false, pluginsDir = plugins } = {}) {
+    async serve(label, { shared = false, pluginsDir = plugins, windowRouted = false } = {}) {
       if (shared) await installBasicAuth(pluginsDir);
-      if (useRunner) {
+      if (useRunner && !windowRouted) {
         assert.ok(!shared, "A Runner serves a private workspace");
         const runner = await startRunner({
           binary,
@@ -396,7 +415,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
       }
       let child;
       const address = await startServer({
-        binary,
+        binary: useRunner ? join(dirname(binary), "tokamak-server") : binary,
         dir: join(scratch, label),
         pluginsDir,
         shared,

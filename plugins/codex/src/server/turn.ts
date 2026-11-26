@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import type { Run, TurnResult } from "plugin:ai/contracts";
 import { approvals } from "./approvals";
 import { turnHelpers } from "./helpers";
@@ -16,7 +16,7 @@ function input(text: string) {
   return [{ type: "text", text, text_elements: [] }];
 }
 
-export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult> {
+export async function codexTurn(ctx: CallerActionContext, run: Run): Promise<TurnResult> {
   const app = new AppServer(ctx, run.folder);
   const controls = registerTurnControls(app, run);
   let mustFlushSession = false;

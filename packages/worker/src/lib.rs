@@ -299,3 +299,18 @@ fn spawn_group(
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
 }
+
+/// Qualified record IDs for chat threads.
+pub const CHAT_THREAD_ID_PREFIX: &str = "chat/threads:";
+
+/// The root call is at depth zero.
+pub const MAX_CALL_DEPTH: usize = 15;
+
+/// Advance the depth before admitting a nested invocation.
+pub fn next_call_depth(depth: usize, target: &str) -> Result<usize, String> {
+    if depth >= MAX_CALL_DEPTH {
+        return Err(format!("Plugin call cycle or depth limit at {target}"));
+    }
+
+    Ok(depth + 1)
+}

@@ -7,7 +7,7 @@ export interface Sent {
   readonly text: string;
   /**
    * The thread's folder on this computer, made if it was "No folder". Undefined
-   * in a window without a local part (a plain browser), where nothing can work in it.
+   * in a window without a Runner, where nothing can work in it.
    */
   readonly folder: string | undefined;
   /** True for the Send that created the thread. */

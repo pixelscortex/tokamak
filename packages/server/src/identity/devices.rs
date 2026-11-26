@@ -27,6 +27,8 @@ pub(super) struct DeviceRecord {
     live_last_seen: Option<u64>,
     #[serde(skip)]
     open_sockets: usize,
+    #[serde(skip)]
+    machine_sockets: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     revoked_at: Option<u64>,
     #[serde(skip)]
@@ -42,6 +44,7 @@ impl DeviceRecord {
             last_seen: None,
             live_last_seen: None,
             open_sockets: 0,
+            machine_sockets: None,
             revoked_at: None,
             cancelled: CancellationToken::new(),
         }
@@ -111,6 +114,9 @@ pub(crate) struct DeviceEntry {
 pub(crate) enum DeviceSocket {
     Opened,
     Closed,
+    MachineOpened,
+    MachineClosed,
+    MachineHeartbeat,
 }
 
 pub(crate) enum RevokeError {
@@ -151,6 +157,12 @@ pub(super) fn generate_key() -> Result<String, String> {
 }
 
 impl Identities {
+    pub(crate) fn issued_device(&self, caller: &AuthContext) -> Option<CancellationToken> {
+        let members = self.members.lock().expect("members lock");
+        let (_, device) = active_device(&members, caller)?;
+        (device.kind == Kind::Issued).then(|| device.cancelled.clone())
+    }
+
     pub(crate) fn is_bootstrap(&self, caller: &AuthContext) -> bool {
         let members = self.members.lock().expect("members lock");
         active_device(&members, caller).is_some_and(|(_, device)| device.kind == Kind::Bootstrap)
@@ -229,6 +241,37 @@ impl Identities {
         Ok(())
     }
 
+    pub(crate) fn owns_machine(&self, user: &str, id: &str) -> bool {
+        self.with_active(user, |member| {
+            Some(member.devices.iter().any(|device| {
+                device.kind == Kind::Issued && device.is_active() && device.public.id == id
+            }))
+        })
+        .unwrap_or(false)
+    }
+
+    pub(crate) fn personal_machines(&self, user: &str) -> Vec<serde_json::Value> {
+        self.with_active(user, |member| {
+            Some(
+                member
+                    .devices
+                    .iter()
+                    .filter(|device| device.kind == Kind::Issued && device.is_active())
+                    .map(|device| {
+                        serde_json::json!({
+                            "id":device.public.id,
+                            "name":device.public.name,
+                            "owner":{"kind":"person","user":user},
+                            "online":device.machine_sockets.unwrap_or(0) > 0,
+                            "lastSeen":device.live_last_seen.max(device.last_seen),
+                        })
+                    })
+                    .collect(),
+            )
+        })
+        .unwrap_or_default()
+    }
+
     pub(crate) fn device_updates(&self) -> tokio::sync::watch::Receiver<()> {
         self.device_changes.subscribe()
     }
@@ -250,7 +293,7 @@ impl Identities {
                     device: device.public.clone(),
                     member: member.user.clone(),
                     last_seen: device.live_last_seen.max(device.last_seen),
-                    online: device.open_sockets > 0,
+                    online: device.machine_sockets.unwrap_or(device.open_sockets) > 0,
                 })
                 .collect(),
         )
@@ -267,6 +310,16 @@ impl Identities {
         match socket {
             DeviceSocket::Opened => device.open_sockets += 1,
             DeviceSocket::Closed => device.open_sockets -= 1,
+            DeviceSocket::MachineOpened => *device.machine_sockets.get_or_insert(0) += 1,
+            DeviceSocket::MachineClosed => *device.machine_sockets.get_or_insert(1) -= 1,
+            DeviceSocket::MachineHeartbeat
+                if device
+                    .live_last_seen
+                    .is_some_and(|seen| now().saturating_sub(seen) < 60_000) =>
+            {
+                return;
+            }
+            DeviceSocket::MachineHeartbeat => {}
         }
         device.live_last_seen = Some(now()).max(device.live_last_seen);
         self.device_changes.send_replace(());

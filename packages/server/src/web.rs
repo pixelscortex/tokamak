@@ -30,24 +30,36 @@ impl HostedWeb {
         }
         let public =
             std::env::var("TOKAMAK_PUBLIC_URL").unwrap_or_else(|_| format!("http://{listen}"));
-        let url = reqwest::Url::parse(&public)?;
-        if !matches!(url.scheme(), "http" | "https")
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.path() != "/"
-            || url.query().is_some()
-            || url.fragment().is_some()
-        {
-            return Err(
-                "TOKAMAK_PUBLIC_URL must be an http(s) origin without a path or credentials".into(),
-            );
-        }
         Ok(Some(Self {
             directory,
-            origin: url.origin().ascii_serialization(),
+            origin: parse_public_url(&public)?,
         }))
     }
+}
+
+pub(crate) fn configured_public_url() -> Result<Option<String>, Box<dyn std::error::Error>> {
+    std::env::var("TOKAMAK_PUBLIC_URL")
+        .ok()
+        .as_deref()
+        .map(parse_public_url)
+        .transpose()
+}
+
+fn parse_public_url(public: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let url = reqwest::Url::parse(public)?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(
+            "TOKAMAK_PUBLIC_URL must be an http(s) origin without a path or credentials".into(),
+        );
+    }
+    Ok(url.origin().ascii_serialization())
 }
 
 pub(crate) async fn shell(State(web): State<HostedWeb>, uri: Uri) -> Response {

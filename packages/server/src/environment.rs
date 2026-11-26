@@ -1,4 +1,12 @@
-use std::path::Path;
+use serde_json::Value;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
+fn installation_file(root: &Path) -> PathBuf {
+    root.parent().unwrap_or(root).join(".env.local")
+}
 
 // Called only after the action's manifest grant has been checked. Never mutate
 // process env or include dotenv parse errors (which may contain secrets).
@@ -22,26 +30,45 @@ pub(crate) fn get(name: &str, path: &Path) -> Result<Option<String>, String> {
 
 /// Values and read failures are frozen before an action is admitted.
 #[derive(Default)]
-pub(crate) struct Snapshot(std::collections::BTreeMap<String, Result<Option<String>, String>>);
+pub struct Snapshot(std::collections::BTreeMap<String, Result<Option<String>, String>>);
 
 impl Snapshot {
     pub(crate) fn new(loaded: Option<&crate::plugins::Loaded>, owner: Option<&str>) -> Self {
         let (Some(loaded), Some(owner)) = (loaded, owner) else {
             return Self::default();
         };
+        Self::from_manifest(
+            &loaded.catalog.root,
+            &loaded.catalog.plugins[owner].manifest,
+        )
+    }
+
+    fn for_installation(permissions: &[String], environment: &Path) -> Self {
         Self(
-            loaded.catalog.plugins[owner]
-                .manifest
-                .plugin
-                .permissions
+            permissions
                 .iter()
                 .filter_map(|permission| permission.strip_prefix("env:"))
-                .map(|name| (name.to_owned(), get(name, &loaded.catalog.environment)))
+                .map(|name| (name.to_owned(), get(name, environment)))
                 .collect(),
         )
     }
 
-    pub(crate) fn get(&self, name: &str) -> Result<Option<String>, String> {
+    pub fn from_manifest(root: &Path, manifest: &crate::plugins::Manifest) -> Self {
+        Self::for_installation(&manifest.plugin.permissions, &installation_file(root))
+    }
+
+    pub fn register(self: &Arc<Self>, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {
+        engine::register_password_crypto(ops)?;
+        let values = self.clone();
+        ops.register_sync("action.env", move |payload| {
+            let name = payload["name"].as_str().ok_or("env requires a name")?;
+            values
+                .get(name)
+                .map(|value| value.map(Value::String).unwrap_or(Value::Null))
+        })
+    }
+
+    fn get(&self, name: &str) -> Result<Option<String>, String> {
         self.0.get(name).cloned().unwrap_or_else(|| {
             Err(format!(
                 "environment permission denied: requires env:{name}"
@@ -49,7 +76,7 @@ impl Snapshot {
         })
     }
 
-    pub(crate) fn redact(&self, mut error: String) -> String {
+    pub fn redact(&self, mut error: String) -> String {
         let mut values: Vec<_> = self
             .0
             .values()

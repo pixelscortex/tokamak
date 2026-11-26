@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import type { Id, LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext, Id } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import {
   beforeSnapshot,
@@ -14,14 +14,19 @@ import {
 } from "./git";
 
 type Tracked = { root: string; threadId: Id<"threads">; turnId?: string; prefix?: string };
-type TurnFolder = { folder: string; threadId: Id<"threads">; turnId: string; signal: LocalContext["signal"] };
+type TurnFolder = {
+  folder: string;
+  threadId: Id<"threads">;
+  turnId: string;
+  signal: CallerActionContext["signal"];
+};
 
 function key(...parts: string[]): string {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
 /** Where this device records its repositories; `undefined` when the client gave no data folder. */
-function directory(ctx: LocalContext): string | undefined {
+function directory(ctx: CallerActionContext): string | undefined {
   const base = process.env.TOKAMAK_APP_DATA_DIR;
   if (!base || !isAbsolute(base)) return undefined;
   // Two servers can use the same repository. Only inspect refs recorded by this device key.
@@ -32,16 +37,16 @@ function directory(ctx: LocalContext): string | undefined {
  * Records a worktree for later cleanup and for after hooks whose folder moved.
  * Best-effort: the Git ref still works without a data folder.
  */
-export async function trackSnapshots(ctx: LocalContext, tracked: Tracked): Promise<void> {
+export async function trackSnapshots(ctx: CallerActionContext, tracked: Tracked): Promise<void> {
   try {
     await record(ctx, tracked);
   } catch (cause) {
-    // oxlint-disable-next-line no-console -- The local worker sends console output to the client's log.
+    // oxlint-disable-next-line no-console -- The Runner worker sends console output to the client's log.
     console.warn(`code: could not record this repository for later cleanup: ${String(cause)}`);
   }
 }
 
-async function record(ctx: LocalContext, tracked: Tracked): Promise<void> {
+async function record(ctx: CallerActionContext, tracked: Tracked): Promise<void> {
   const { root, threadId } = tracked;
   const dir = directory(ctx);
   if (!dir) throw new Error("the client did not provide its data folder");
@@ -57,7 +62,7 @@ async function record(ctx: LocalContext, tracked: Tracked): Promise<void> {
 }
 
 /** Find this turn's before ref even if Git now discovers a different worktree. */
-export async function findBeforeSnapshot(ctx: LocalContext, turn: TurnFolder) {
+export async function findBeforeSnapshot(ctx: CallerActionContext, turn: TurnFolder) {
   const find = async (repo: Repository) => {
     const target = { ...turn, ...repo };
     const before = await beforeSnapshot(ctx, target);
@@ -109,7 +114,7 @@ async function readTracked(dir: string, name: string): Promise<Tracked | undefin
   if (name === key(tracked.threadId, tracked.root) && isAbsolute(tracked.root)) return tracked;
 }
 
-export async function pruneSnapshots(ctx: LocalContext): Promise<void> {
+export async function pruneSnapshots(ctx: CallerActionContext): Promise<void> {
   const dir = directory(ctx);
   if (!dir) return; // Nothing was recorded without a data folder.
   for (const name of await records(dir)) {

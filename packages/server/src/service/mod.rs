@@ -4,7 +4,7 @@
 //! A session has ONE ordered output stream; transports must preserve its order.
 
 pub use crate::protocol::Event;
-use crate::protocol::Request;
+use crate::protocol::{ActionTarget, CallError, Request};
 use crate::{
     data::{ChangeEvent, DataSpace, Database},
     host::{self, ReadSet},
@@ -21,8 +21,9 @@ use std::{
 };
 use tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FunctionKind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FunctionKind {
     Query,
     Mutation,
     Action,
@@ -64,7 +65,7 @@ impl Visibility {
 }
 
 impl FunctionKind {
-    fn from_wire(value: &Json) -> Option<Self> {
+    pub(crate) fn from_wire(value: &Json) -> Option<Self> {
         match value.as_str()? {
             "query" => Some(Self::Query),
             "mutation" => Some(Self::Mutation),
@@ -125,6 +126,7 @@ pub struct Server {
     // Shutdown must never compete for space with application calls.
     closing: mpsc::Sender<oneshot::Sender<Result<(), Error>>>,
     descriptor: Json,
+    runner: Arc<crate::actions::Machines>,
     cleanup: Arc<Notify>,
     closed: watch::Receiver<Option<Result<(), Error>>>,
 }
@@ -168,9 +170,33 @@ type Connection = (
 pub(crate) struct SessionIdentity {
     caller: std::sync::RwLock<crate::identity::AuthContext>,
     revoked: tokio_util::sync::CancellationToken,
+    local_continuations: bool,
 }
 
 type SessionAuth = Arc<SessionIdentity>;
+
+pub(crate) struct WindowParent {
+    depth: usize,
+    thread: Option<String>,
+    proof: Option<String>,
+    hook_scope: Option<u64>,
+}
+
+impl WindowParent {
+    fn new(
+        depth: usize,
+        thread: Option<String>,
+        proof: Option<String>,
+        hook_scope: Option<u64>,
+    ) -> Self {
+        Self {
+            depth,
+            thread,
+            proof,
+            hook_scope,
+        }
+    }
+}
 
 pub(crate) enum Command {
     Connect(SessionAuth, oneshot::Sender<Result<Connection, Error>>),
@@ -193,6 +219,7 @@ pub(crate) enum Command {
     SignInMethods(oneshot::Sender<Result<Vec<crate::plugins::SignInMethod>, Error>>),
     Reload(String, oneshot::Sender<Result<Json, Error>>),
     RunFunction(crate::actions::NestedCall),
+    CurrentPlugins(oneshot::Sender<Option<Arc<crate::plugins::Loaded>>>),
     Asset(
         Option<String>,
         String,
@@ -203,6 +230,12 @@ pub(crate) enum Command {
 
 pub(crate) enum Action {
     Plugins(u64),
+    Cancel(u64),
+    HookStage {
+        id: u64,
+        scope: u64,
+        done: bool,
+    },
     PluginsPage {
         id: u64,
         revision: String,
@@ -220,6 +253,8 @@ pub(crate) enum Action {
         name: String,
         args: Json,
         kind: Option<FunctionKind>,
+        local_parent: Option<WindowParent>,
+        placement: crate::actions::Placement,
     },
     Subscribe {
         id: u64,
@@ -232,7 +267,7 @@ pub(crate) enum Action {
 struct Subscription {
     query: SubscriptionQuery,
     reads: ReadSet,
-    last: Option<Result<Json, String>>,
+    last: Option<Result<Json, CallError>>,
     dirty: bool,
     // A runtime/admission failure may not have reached all reads. Until a
     // successful run, changed tables conservatively invalidate this subscription.
@@ -250,6 +285,8 @@ struct Client {
     output: mpsc::Sender<Event>,
     slow: Arc<AtomicBool>,
     subscriptions: BTreeMap<u64, Subscription>,
+    hook_scopes: BTreeMap<u64, crate::identity::HookBudget>,
+    window_notes: std::collections::HashMap<String, (u64, crate::identity::CallNote)>,
 }
 
 struct Coordinator {
@@ -263,8 +300,10 @@ struct Coordinator {
     plugin_root: Option<std::path::PathBuf>,
     changes: broadcast::Receiver<ChangeEvent>,
     action_process: Option<Arc<crate::host::action_process::Supervisor>>,
+    runner: Arc<crate::actions::Machines>,
     legacy_action_source: Option<Arc<crate::host::action_process::Source>>,
-    action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, String>)>,
+    action_jobs: tokio::task::JoinSet<(u64, u64, Result<Json, CallError>)>,
+    action_cancellations: BTreeMap<(u64, u64), (tokio_util::sync::CancellationToken, bool)>,
     commands: mpsc::WeakSender<Command>,
     sessions: BTreeMap<u64, Client>,
     next_session: u64,

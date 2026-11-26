@@ -92,8 +92,8 @@ plugins that require it.
 Limits, checked at declaration and again by the server at load: 256 tables per
 plugin, 32 indexes per table, 16 fields per index, 64 characters per table or
 index name.
-Field descriptions provide types and metadata; field validation on persisted
-writes and schema migrations remain deferred.
+General field descriptions provide types and metadata. Typed refs are checked
+on persisted writes; general field validation and schema migrations remain deferred.
 
 ## Actions
 
@@ -141,6 +141,189 @@ Both bundled transports implement the `action` wire request. The optional
 `ClientTransport.action` preserves existing custom transports; `client.action`
 throws clearly when a custom transport has not implemented it.
 
+### Choose where an action runs
+
+An action without an `on` setting runs beside the server in its action process.
+Set `on: "caller"` to run it in the caller's desktop Runner. It can use
+`ctx.proc`, Runner Node modules such as `node:fs/promises` and `node:path`,
+and the program scopes and cancellation controls below.
+The Runner needs the matching plugin build installed. Use a literal
+`on: "caller"` or `on: "server"` in a definition so the builder can place its
+imports. Queries and mutations still run on the workspace server.
+
+```ts
+import { action, isFailure, v } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const collect = action({
+  on: "caller",
+  args: { cwd: v.string() },
+  handler: async (ctx, { cwd }) => {
+    const git = ctx.proc(["git", "status", "--short"], { cwd });
+    for await (const text of git.stdout) await ctx.runMutation(api.records.save, { text });
+    return await git.exited;
+  },
+});
+
+// From a window connected to a Runner:
+const result = await client.action(api.jobs.collect, { cwd });
+if (isFailure(result) && result.kind === "noMachine") {
+  // Show "Connect a machine to run this".
+}
+```
+
+Pass `{ on: "server" }` or `{ on: "caller" }` to `client.action` or
+`ctx.runAction` to choose the destination for that call. Pass `{ signal }` to
+`client.action` to cancel an action running on the desktop Runner. The
+action receives the original identity and call note.
+
+The workspace server chooses the destination. A direct client authenticated
+as a person on an embedded Runner's machine uses that Runner, including for
+nested actions. A [Runner connected to a shared server](../runner/README.md#connect-a-headless-runner-to-a-shared-server)
+receives `"caller"` actions for the exact device in the original call note,
+including nested actions from that device. A desktop without a connected Runner for
+its device can still forward work to its own local Runner. A browser without
+a Runner for its device gets `noMachine`.
+
+Install the full Runner build of each served plugin in the remote Runner's
+`--plugins` directory after every update. Missing or mismatched builds return
+`runnerArtifactMismatch`; automatic delivery is separate work. In a caller
+action on a connected Runner, `ctx.env` comes from the Runner's environment.
+
+#### Run actions on a sandbox machine
+
+A server action can create a machine for its plugin. Pass the returned key to
+your sandbox provider as a secret. The provider starts a Runner with
+`--server` set to the workspace URL and `--key-file` pointing to the key in a
+private file. Install the full plugin build in the Runner's `--plugins`
+directory. The Runner identifies itself with the key; it does not need the id.
+
+```ts
+import { action, fail, isFailure } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+
+export const newSandbox = action({
+  handler: async (ctx) => {
+    const server = await ctx.server.url();
+    if (!server) return fail("sandboxServerUrlMissing");
+
+    const machine = await ctx.machines.create({
+      name: "Thread sandbox",
+      member: ctx.auth.user.id,
+    });
+    if (isFailure(machine)) return machine;
+    const { id, key } = machine;
+    await startSandbox({ server, runnerKey: key }); // Your provider code.
+    const ready = await ctx.machines.waitOnline(id);
+    if (isFailure(ready)) return ready;
+    await ctx.runMutation(api.threads.saveMachine, { threadId: ctx.call.threadId, machineId: id });
+    return id; // Save only the id, never the key.
+  },
+});
+
+// Inside a server action:
+await ctx.runAction(api.jobs.collect, { cwd }, { on: machineId });
+// From the owning plugin's window:
+await client.action(api.jobs.collect, { cwd }, { on: machineId });
+```
+
+Set `TOKAMAK_PUBLIC_URL` on the server to its reachable HTTP(S) origin, for
+example `https://workspace.example.com`. `ctx.server.url()` returns `null` if
+it is unset. Use HTTPS for a Runner outside loopback.
+
+`MachineId` is a branded string. Keep ids returned by `create` or `list` and
+supply them in per-call options for dynamic placement. For a fixed default in
+an action declaration, use a literal such as `on: "device:example" as MachineId`
+with an actual issued id. The action has the Runner capabilities described
+above. The original caller and call note reach the action, including the
+thread, and queries and mutations still execute on the server.
+
+Only actions owned by a machine's plugin may run on it. A machine bound to
+a member accepts only calls whose original call note identifies that member.
+For thread turns, read the saved machine id and pass it as `{ on: id }`.
+Omitting `member` makes a machine server-only: only the owning plugin's server
+code can dispatch its own actions to it with `ctx.runAction`. A signed-in
+creator does not implicitly bind the machine. Binding is fixed at creation.
+A person's device is available only to calls started by that person.
+
+An unbound machine is only reachable through the owning plugin's server code,
+so if a server action accepts a machine id from a window, check `ctx.auth` and
+the plugin's own records before passing the id through.
+Bind a machine with `member` when a window should target it directly.
+`create({ member })` returns `machineForbidden` if the id is not an active member.
+
+Unknown, removed and unauthorized ids all return `machineForbidden`.
+An authorized machine without a Runner returns `machineOffline` immediately.
+If its Runner disconnects or its key is removed during an action, that action
+returns `machineLost`. Calls are never queued or replayed.
+
+`ctx.machines.list()` returns the plugin's machines bound to the caller and
+that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
+milliseconds or `null`). Bound plugin entries also carry the member id in
+`member`. Without a person, the ordinary list is empty. Server actions
+can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
+Lists are snapshots; presence does not refresh query subscriptions.
+
+`create`, `waitOnline`, and `remove` run only in server actions. The credential
+store is separate from plugin transactions. `create` returns the key once
+and returns `machineLimit` when the plugin already has 100 active machines.
+`waitOnline` returns `null` when connected and `machineOffline` when it times
+out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
+sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
+container with your provider. Uninstalling a plugin revokes its machine keys.
+
+A per-call override can move a server action to a Runner, where machine
+management methods and `ctx.server.url()` fail with the typed `serverOnly` error.
+
+`ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
+one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
+a signal. The invocation stays alive until the handler settles. To cancel
+from the window, pass `{ signal }` to `client.action`; the plugin process stops programs
+still running for that invocation. Use `node:fs/promises` for local files.
+
+**Await the programs you need finished before returning.** Any
+call (including a routed contract method) can return while its unawaited
+programs are still being reaped. These programs still count toward the host's
+256-program limit. Normal cleanup sends TERM and gives a live process group
+up to two seconds before sending KILL.
+
+Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
+started through `scoped.proc` and providers selected with `scoped`. Calling
+`forceStop()` ends those process groups without cancelling the invocation
+or its other programs. `withPrograms` can return while the scope
+is still being reaped. Force stop sends KILL immediately, including to groups
+already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
+actions so the lookup follows the caller across awaits.
+Queries and mutations still use `contract.list()` and `contract.get(id)`.
+
+Caller actions have no database context. Use `ctx.runQuery`,
+`ctx.runMutation`, or `ctx.runAction` to call the connected server. Use public
+`api` references when the window forwards calls to the Runner.
+
+Declare a Runner contract with `contract<T>("name", { on: "caller" })`.
+Providers can implement its methods with `action({ on: "caller", handler })`. Methods run inside the Runner with live input, including
+callbacks, signals, and channels.
+
+All Runner routes support local contracts and their channels. When the
+window forwards work, it uses the public client API, so private function
+calls and server contract discovery return `runnerCapabilityUnavailable`
+with `data` set to `"privateFunctions"` or `"serverContracts"`. Those operations
+are available to embedded and connected Runners. The window route cannot
+invoke private functions or server contracts from a caller action.
+
+Runner actions use the Runner's program scope and lifetime rules, including
+no fixed deadline while the build is current. When the build is retired, the
+action has five seconds to settle. If it is still running, the Runner cancels
+it and `client.action` rejects. Use `isLocalReloadTimeout(error)` from
+`@tokamak/sdk` to detect this on either Runner route.
+
+A Runner action resolves `ctx.env` grants from its installation on that machine.
+A call returns the typed failure `{ failed: true, kind: "noMachine", data: null }` when it needs a Runner
+and has none, or when it requests a file or program from the server action
+process. This includes calls to stubbed modules such as `node:path`,
+`node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their
+bindings inside the handler so the server bundle can load independently.
+
 ## Internal functions and expected failures
 
 Use `internalQuery`, `internalMutation` or `internalAction` for a function only
@@ -174,59 +357,6 @@ callee's writes roll back. The caller can handle it and commit its own writes,
 or return the failure to roll back the caller's writes too. Actions are not
 transactional: returning `fail` from an action does not undo mutations it
 already called. Throw for unexpected errors.
-
-## Local functions
-
-`local({ args, handler })` runs in the client's local part. Put it
-under the plugin's `src/`; it can share a module with server functions.
-The plugin build emits its own `local.js` and a typed reference in the
-generated `api`. The desktop client uses the matching plugin build installed
-on the computer. A browser without the desktop client cannot run it.
-
-```ts
-import { local } from "@tokamak/sdk";
-import { api } from "./_generated/api";
-
-export const collect = local({
-  handler: async (ctx) => {
-    const program = ctx.proc(["git", "status", "--short"], { cwd: "/path/to/repo" });
-    for await (const text of program.stdout) {
-      await ctx.runMutation(api.records.save, { text });
-    }
-    return await program.exited;
-  },
-});
-// From the window: await client.local(api.jobs.collect, {});
-```
-
-`client.hasLocal` is true when the window has a local part (the desktop
-client); in a plain browser `client.local` throws, so check it first when local
-work is optional.
-
-`ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
-one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
-a signal. The invocation stays alive until the handler settles. To cancel
-from the window, pass `{ signal }` to `client.local`; the plugin process stops programs
-still running for that invocation. Use `node:fs/promises` for local files.
-
-**Await the programs you need finished before returning.** Any
-call (including a routed contract method) can return while its unawaited
-programs are still being reaped. These programs still count toward the host's
-256-program limit. Normal cleanup sends TERM and gives a live process group
-up to two seconds before sending KILL.
-
-Use `ctx.withPrograms(async (forceStop, scoped) => { … })` to group programs
-started through `scoped.proc` and providers selected with `scoped`. Calling
-`forceStop()` ends those process groups without cancelling the invocation
-or its other programs. `withPrograms` can return while the scope
-is still being reaped. Force stop sends KILL immediately, including to groups
-already in their TERM grace. Use `contract.list(ctx)` or `contract.get(id, ctx)` in
-local functions and server actions so the lookup follows the caller across awaits.
-Queries and mutations still use `contract.list()` and `contract.get(id)`.
-
-Local functions have no database context. Use `ctx.runQuery`,
-`ctx.runMutation`, or `ctx.runAction` with references from the public `api` to
-call the connected server. Only server functions can use `_generated/internal`.
 
 ## Build and consume typed references
 
@@ -405,20 +535,21 @@ SurrealDB integration remains for the host issues and their tests.
 
 ## Plugin process and action process
 
-On macOS and Linux, a plugin process runs local functions and the action
-process runs server actions in `tokamak-plugin-host`. Queries and mutations run
-in the server's engine. On Windows, local functions and server actions report
+On macOS and Linux, a plugin process runs caller actions.
+The action process runs server actions in `tokamak-plugin-host`. Queries and mutations run
+in the server's engine. On Windows, caller actions and server actions report
 “Plugin code is not supported on Windows yet.”
 
-Local functions can import `node:path`, `node:os`, `node:crypto`,
-`node:url`, and `node:fs/promises`. The server part cannot import Node modules. The build checks imports,
+A caller action can import `node:path`, `node:os`, `node:crypto`,
+`node:url`, and `node:fs/promises`; an action sent to the server returns `noMachine` if it
+uses that module. The build checks imports,
 including bare names such as `path`. Unsupported imports such as `node:timers`,
 `events`, or `node:path/posix` fail the build. Built-ins reached indirectly,
 such as `process.getBuiltinModule`, `import.meta.require`, `process.binding`,
-or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a local
-function to run a separate program when needed.
+or `globalThis.Bun`, fail at runtime in QuickJS. Use `ctx.proc` in a caller
+action to run a separate program when needed.
 
-Local functions get `process.platform` (`darwin` or `linux`), an
+Caller actions get `process.platform` (`darwin` or `linux`), an
 empty `process.versions`, and a snapshot in `process.env`. Writing to that
 object does not change the environment of later programs. Pass `env` to
 `ctx.proc` instead. The local host supplies global timers and fetch. It caps
@@ -433,7 +564,7 @@ receive this signal.
 
 ### Server actions
 
-All plugins’ actions run in one action process. Every action call has its own
+All plugins’ server actions run in one action process. Every action call has its own
 QuickJS runtime and starts with fresh module state. Use `ctx.runQuery`,
 `ctx.runMutation`, and `ctx.use` for host-mediated data and plugin calls;
 `ctx.signal` observes cancellation. There is no `process` or `process.env`;
@@ -490,17 +621,27 @@ replaces it.
 
 ## Component actions
 
-Export a `component(name, options, render)` from your plugin's window API to
-give other plugins named JSX elements they can extend. The builder publishes
-typed paths using `ComponentParts`, so an action can target a path such as
-`chat.Composer.sendButton` and receive the owner's props.
+The builder publishes typed paths for the elements of each plugin's screen
+under its public client `parts` export. Write ordinary JSX in the owner
+plugin. In the add-on, import the parts and export a placement:
+
+```tsx
+import { after } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Cost = after(chat.parts.Composer.div.box, (props) => (
+  <small>{props.draft.length} characters</small>
+));
+```
 
 Use `before` and `after` for siblings, `prepend` and `append` for children,
 `wrap` to surround an element, `replace` to substitute another element, or
-`hide` to remove it. A named native element can accept a `PartAdditions`
-callback to place the prepended and appended children explicitly.
-See the [builder guide](../build/README.md#extending-a-component) for examples
-and the rules for naming, ordering, and locking elements.
+`hide` to remove it. A placement and its optional live `when` function
+receive the owning render function's props, plus `$row.item` and
+`$row.index` in a Solid list row. Nested rows expose the enclosing row
+as `$row.parent`. If a path disappears or identifies a
+different element, the build warns and the window skips that placement. See the
+[builder guide](../build/README.md#extending-a-screen) for the naming rule.
 
 ## Caller identity
 
@@ -533,6 +674,32 @@ function AccountName() {
 The core provides identity even without any installed plugins. A local
 server supplies the owner automatically and uses the computer's name for
 the device.
+
+### Call notes
+
+Queries, mutations, and actions receive a read-only
+`ctx.call` with `user`, `device`, `depth`, and an optional `threadId`.
+Anonymous calls have `null` for `user` and `device`; `ctx.auth` behaves
+as before.
+
+A root call starts at depth zero. Each nested call adds one.
+A function can call itself or loop through others up to depth 15; going past it
+fails with the target plugin and function in the error.
+The first call in the chain with a validated
+`v.id("threads")` argument whose value is a qualified `chat/threads:…` ID
+sets the thread for its descendants. The argument can be inside an object
+or array and can have any name. An ordinary string that looks like a thread
+ID does not set it. If multiple typed IDs occur in one call, object fields
+are visited in key order and arrays in element order.
+
+`threadId` says which thread the caller claims the call is about. It is not an
+access check; verify the caller's access before reading or changing that thread.
+
+The Runner preserves the note across routed local contracts and when a
+caller action calls a server query, mutation, or action through the window.
+The server uses the window's authenticated identity and advances the depth.
+A typed thread ID in the caller action's own arguments carries into its
+server calls when no earlier call set the thread.
 
 ### Membership hooks
 
@@ -589,6 +756,40 @@ const remove = onQuit(async () => {
 `within(promise, ms)` from `@tokamak/sdk` waits at most `ms` and resolves
 `TIMED_OUT` when the time is up (window and local code; server functions have no timers).
 
+### Typed references to another plugin's rows
+
+Declare the owner in `depends` in `plugin.ts`. Import its table handles from
+`plugin:<id>/tables` and use `v.ref` on a top-level field in your own schema:
+
+```ts
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+
+export default defineSchema({
+  threadProfiles: defineTable({
+    thread: v.ref(chat.tables.threads),
+    profile: v.string(),
+  }).unique("by_thread", ["thread"]),
+});
+```
+
+The field has type `Id<"chat.threads">`. The builder copies the owner's table
+types into `.tokamak/types/` and refreshes the copy each time you build.
+Use `TableDocument<typeof chat.tables.threads>` for the owner's document type.
+You can use the same validator for function arguments. The ref works with an
+index like any other field and may be optional with `v.optional`.
+
+A ref does not give `ctx.db` access to the owner's table. To read a referenced
+row, call the owner's public query. Saving a ref requires an existing row in
+the declared table. Deleting that row automatically deletes all rows that
+reference it as part of the same save. If the save rolls back, all rows remain.
+
+Adding a ref or changing its target does not check existing values. Rows of a
+removed plugin keep their refs, but those refs do not cascade until the plugin
+is installed again. Importing `plugin:owner/tables` anywhere in your plugin
+switches that owner's generated API types to qualified IDs for your whole
+plugin, so you can pass those IDs directly between refs and public functions.
+
 ### Typed contracts between plugins
 
 Define a contract in `src/contracts.ts`. The defining plugin can discover and
@@ -601,7 +802,7 @@ export const agent = contract<{
   id: string;
   name: string;
   start: (run: { report(text: string): void }) => Promise<void>;
-}>("agent", { place: "local" });
+}>("agent", { on: "caller" });
 ```
 
 A provider declares the defining plugin in `depends` or `optional` in
@@ -620,7 +821,7 @@ export default provide(agent, {
 });
 ```
 
-In a local function or server action belonging to the defining plugin, pass
+In a caller action or server action belonging to the defining plugin, pass
 the handler's `ctx`: call `await agent.list(ctx)`, `await agent.get(id, ctx)`
 (returns `undefined` when absent), or `await agent.get(id, ctx).start(run)`
 for a required method. Queries and mutations leave `ctx` out. Use the awaited
@@ -628,8 +829,8 @@ provider to read data or check optional methods. Lookups use the current
 catalog. An explicit
 implementation `id` is the selection key; otherwise the plugin id is used.
 
-A local contract is called from `local`. Declare
-`{ place: "local", dataMethods: true }`. The Runner routes every call
+Declare a Runner contract with `{ on: "caller" }` and call it from a caller
+action. The Runner routes every call
 to the provider's process, reusing the caller's host when the provider is the
 same plugin. Lookups read provider data
 and available method names from that process. Keep the fields static for a
@@ -642,24 +843,23 @@ Pass `{ signal }` to a local contract lookup to cancel its pending routed
 calls without ending the caller's invocation. A method that accepts one object
 can also take that same signal as `input.signal`. QuickJS sends only the other
 fields and assigns the provider invocation's signal to `input.signal` before
-calling the regular `local({ handler })` definition. If the live input uses a different signal than the
+calling the regular `action({ on: "caller", handler })` definition. If the live input uses a different signal than the
 routed call, use `inputSignal` to identify the value to keep off the wire.
 A provider can use `{ unavailable: "…" }` in
 `provide()` to supply a notice for the lookup's `onUnavailable` callback even
 when its process cannot start; errors thrown by the handler still reject.
 
-The plugin build rejects local contracts without `dataMethods: true`, including
-old declarations that mark only some methods as data. QuickJS also refuses
-older built plugins that declare live methods.
+The builder marks caller contracts as plain data in the manifest, and QuickJS
+checks that marker before routing a provider call.
 
-Turn hook authors declare a regular `local({ handler })` and read
+Turn hook authors declare a regular `action({ on: "caller", handler })` and read
 `turn.signal`. The SDK attaches the hook invocation's signal
 as described above. Stop cancels the before hook; after hooks run together
 under one deadline and are also cancelled if the turn is lost. Code stores
 the before snapshot under a Git ref scoped to the thread and turn ID, so a
 replacement Code process can pair it with the after snapshot.
 
-Use `local({ handler: (ctx, run: Run) => ... })` when a method needs local context
+Use `action({ on: "caller", handler: (ctx, run: Run) => ... })` when a method needs local context
 such as `ctx.proc`. Declare it as a private constant and pass it to `provide`.
 All local methods receive the calling member and device in their context. A
 matching provider build must be installed on the client.
@@ -700,7 +900,7 @@ reports within 750 ms, the host can still kill the invocation's programs
 without running JavaScript. A stuck realm may subsequently be reset by the
 watchdog, which also ends its other invocations.
 
-A server contract defaults to `place: "server"`. For each
+A server contract runs on the server by default. For each
 method provide a server function definition such as `internalAction` or
 `internalQuery`; calls obey the usual kind rules and cross the server function
 boundary as JSON. Data fields are JSON, and the implementation uses an object
@@ -721,3 +921,215 @@ Dependents can import the reference from `plugin:<id>/server`. Within the
 defining plugin, use the generated `_generated/plugin.ts` references. These
 functions are excluded from the window API, local-to-server transport and
 subscriptions. `internal*` remains private to its own plugin.
+
+## Hook another plugin's function
+
+A hook on an `on: "caller"` action runs on the caller's own machine and is
+advisory there: a modified client can skip it. Enforce rules with a query or
+mutation hook, which runs on the server.
+
+Export a hook from a server module and target a query, mutation, or action
+in another plugin. Installing your plugin registers the hook automatically.
+Public and plugin-only references come from `plugin:<id>/server`; the same
+module's `internal` namespace provides typed references such as
+`team.internal.users.saveHidden`. An internal hook runs when the owner calls
+the function. The reference does not let other plugins call it or make it
+visible to the window. You cannot hook an `httpAction`.
+
+```ts
+import { createHook, fail } from "@tokamak/sdk";
+import * as team from "plugin:team/server";
+import schema from "./schema";
+
+const hook = createHook(schema); // use the SDK's `hook` directly if no schema is needed
+
+export const moderateUsers = hook(team.api.list, {
+  before(ctx, args) {
+    if (ctx.auth.user.role === "member") return fail("forbidden");
+    return { ...args, text: args.text.trim() };
+  },
+  async after(ctx, users, args) {
+    const bans = await ctx.db.query("bans").collect();
+    return users.filter((user) => !bans.some((ban) => ban.name === user.name));
+  },
+});
+```
+
+Either stage can be omitted. `before` returns valid arguments for the target
+or stops the call with `fail(kind, data?)`. `after` receives the function's
+result and the final arguments and returns a result of the same type. The
+server checks both stages' output against the target validators and rejects
+extra fields on validated objects. The result validator comes from the function's
+`returns` option or its TypeScript result type. Open values such as `unknown`
+remain unchecked inside otherwise validated results. For older bundles without
+a result validator, the server accepts after-hook results and warns on load.
+If the owner's value falls outside a derived validator, the server warns and
+accepts after-hook values for that call. An explicit `returns` validator remains strict.
+
+A hook's `fail("forbidden", data)` rejects the window call or nested
+`ctx.runQuery` with an error whose `kind` is `"forbidden"` and whose `data`
+is the supplied value (or `null`). The error also exposes `plugin`, `hook`,
+and `stage`. Built-in kinds are `hookException` for a thrown error,
+`invalidHookResult` for an invalid return, `hookDepthLimit` for a depth or
+delegation budget limit, and `hookTimeout` for a timed-out stage. Hook order across plugins is unspecified;
+each stage receives the previous stage's value.
+
+A query hook can only read its own plugin's database. It has the original
+caller in `ctx.auth` and shares the call note in `ctx.call` at one greater
+depth. Calling the hooked query again is subject to the same depth limit as
+any nested call. The hooks also run on server calls and live window queries;
+a change to data read by either the query or a hook can refresh a live result.
+A mutation hook can write its own tables as part of the target's save. A failure
+in the hook or handler rolls back all those writes, even if a caller catches a
+nested hook error. A write conflict retries the whole mutation and its hooks.
+
+Each write to a watched table outside a trigger starts a fresh budget of 256
+stages and delegated calls per trigger it dispatches. This applies to writes
+from the root handler, its delegated mutations, and mutation hooks. Nested
+hooks, triggers, and delegated calls in the same trigger chain share its budget,
+so endless fan-out fails with the hook or trigger named. In the worst case a
+top-level call can spend a fresh budget on every dispatch, so the total is
+bounded by the call deadline and depth, not by a global count.
+
+A plugin’s query hooks, mutation hooks, and triggers share a module instance
+within one call. A stage that is still running can share its `ctx` with another
+stage through module state; that `ctx` stops working when its own stage ends.
+
+An action hook runs with its own plugin's network grants and environment. It can
+use `ctx.runQuery`, `ctx.runMutation`, and `ctx.runAction`. The selected placement,
+including a per-call `on` override, applies to both stages. On an attached or
+personal connected Runner, the server runs both stages on that Runner with the
+same budget as nested calls and point hooks. On the shared-server window route,
+stages can only call public functions; attempts to call private functions fail
+with `runnerCapabilityUnavailable`. If the Runner cannot execute a stage, the
+call fails with `hookRunnerUnavailable` and names the hook plugin. A plugin-owned
+machine only receives code owned by its plugin. The server rejects any action
+with a foreign hook or point on that machine before running it.
+
+Removing the hooking plugin removes its hooks. When a target is renamed or
+removed, the owner's build warns and names the hooking plugin. The hooking
+plugin still loads; the server skips that hook and logs a warning.
+
+### Hook a named point inside a function
+
+A query, mutation, or action can expose a named spot in its handler with
+`ctx.point`. Use a unique, nonempty string literal without `#`. A helper
+in the same module can take `ctx` and call a point if the compiler can trace it
+to exactly one exported handler. Points are not allowed in triggers or hook stages.
+
+```ts
+const launch = await ctx.point("launch", { env: {} as Record<string, string>, args: [] as string[] });
+
+const rows = await ctx.point("load", { search }, (input) => load(input.search));
+```
+
+The first form lets `before` hooks change the value. A value point cannot have
+an `after` hook. In the second form, `before` hooks change the input, the owner
+runs its callback in its own process, and `after(ctx, result, input)` hooks can
+change the result. `input` in an after hook is the input the callback received.
+
+The generated API puts each point under the function it belongs to. For example,
+a plugin that depends on `ai` could hook a point named `launch` on its exported
+`turn` action:
+
+```ts
+import { hook } from "@tokamak/sdk";
+import { api } from "plugin:ai/server";
+
+export const setProxy = hook(api.turn.points.launch, {
+  before: (_ctx, launch) => ({
+    ...launch,
+    env: { ...launch.env, HTTPS_PROXY: "http://localhost:8080" },
+  }),
+});
+```
+
+Point references are for hooks. Their input and result types are inferred from
+the value or callback. These types define what hooks may return, so annotate
+empty literals with the types you want to allow. Use plain JSON data: a function, class instance, symbol,
+or promise inside point data is a build error. An async callback is fine; its
+resolved result is what crosses the boundary. A callback that returns
+`undefined` produces `null`, and object fields set to `undefined` are omitted
+when crossing the boundary. The build treats `unknown` and
+`any` as open data; a value that crosses a host boundary must still be JSON.
+
+Point hooks follow the enclosing function's rules. Action hooks receive an
+action context: use `ctx.runQuery` or `ctx.runMutation` for your plugin's data
+(there is no `ctx.db`), and `ctx.call.threadId` for the thread. In a mutation they run
+inside the same transaction, and a failed hook rolls it back. A failed stage
+rejects the point with the hook's plugin, `point` name, and `pointBefore` or
+`pointAfter` stage. Each hook uses one level of call depth and counts against
+the shared 256-stage budget, including repeated calls to a point in a loop.
+A hooked value point returns a copy of the value. An unhooked point checks the
+declared and hooked names locally, then returns the original value or runs the
+callback directly. It spends no hook budget and makes
+no host call. Renaming or removing a hooked point warns the owner at build time.
+An installed plugin with a stale point reference still loads; the server warns
+and skips that hook. With a point hook on an `on: "caller"` action, every call
+fails with `hookRunnerUnavailable` on a desktop whose window or Runner cannot
+run point hooks. The error names the hooking plugin and point; update both the
+window and Runner.
+
+## Run code when a table changes
+
+Export a trigger from your plugin's server part. The owner doesn't need to
+register the trigger or call it from its mutations.
+
+```ts
+import { createTrigger } from "@tokamak/sdk";
+import * as chat from "plugin:chat/tables";
+import schema from "./schema";
+
+const trigger = createTrigger(schema);
+
+export const logThread = trigger(chat.tables.threads, async (ctx, change) => {
+  if (change.operation === "insert") {
+    await ctx.db.insert("threadLog", { thread: change.id, title: change.newDoc.title });
+  }
+});
+```
+
+Declare `chat` in `depends` to watch its tables. To watch one of your
+own tables, pass its name to the builder returned by `createTrigger(schema)`,
+for example `trigger("threadLog", handler)`. You can import `trigger` directly
+to watch another plugin's table when you don't need a schema for your own
+database. The table determines the types of `id`, `oldDoc`, and `newDoc`.
+Insert has a null `oldDoc`, delete has a null `newDoc`, and update has both.
+
+A trigger runs after the write is applied and before the database call returns,
+inside the same transaction. It runs for writes from any mutation, including
+writes made by mutation hooks and other triggers. It gets the original caller in `ctx.auth`
+and the same call note at one greater depth in `ctx.call`. Its writable
+`ctx.db` contains only its own plugin's tables. Call the owner's functions
+to read or change the owner's data.
+
+Deletes run one trigger chain per deleted row, including rows removed by
+`v.ref` cascades. The database applies the cascade before dispatching those
+triggers and dispatches in breadth-first order, starting with the deleted row.
+Patch or replace that leaves the stored document unchanged, deleting an absent row,
+schema resets, and startup index backfills do not run triggers.
+
+If a trigger throws, the whole transaction rolls back, even if the writing
+mutation catches the exception. The caller's error identifies `plugin`,
+`hook` (the trigger export name), `stage: "trigger"`, and `table`. Its message
+also lists the registered triggers for that table.
+
+Each write to a watched table outside a trigger starts a fresh budget of 256
+stages and delegated calls per trigger it dispatches. This applies to writes
+from the root handler, its delegated mutations, and mutation hooks. Nested
+hooks, triggers, and delegated calls in the same trigger chain share its budget,
+so endless fan-out fails with the hook or trigger named. In the worst case a
+top-level call can spend a fresh budget on every dispatch, so the total is
+bounded by the call deadline and depth, not by a global count.
+
+A trigger that writes one row and calls one query added about 2 ms per row
+on an Apple M4 Pro; with the default 1 s deadline such a save times out near
+500 rows, and sooner on a slower host. Split larger writes across mutations.
+
+A plugin’s query hooks, mutation hooks, and triggers share a module instance
+within one call. A stage that is still running can share its `ctx` with another
+stage through module state; that `ctx` stops working when its own stage ends.
+
+The server's plugin catalog lists active triggers under `triggers`, keyed by
+qualified table name. A trigger whose table is missing is skipped with a
+warning. Removing the trigger plugin removes its registrations.

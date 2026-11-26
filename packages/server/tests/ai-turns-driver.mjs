@@ -44,7 +44,7 @@ async function localServer() {
   const other = await h.connect(address);
 
   // The agent row's list: the fake agent, installed and signed in, each replay a model.
-  const listed = (await desk.local(ai.agents.list, {})).find((agent) => agent.id === AGENT.id);
+  const listed = (await desk.action(ai.agents.list, {})).find((agent) => agent.id === AGENT.id);
   assert.equal(listed?.name, AGENT.name);
   // The mark the agent plugin registered (`Agent.icon`) reaches the window as SVG text.
   assert.match(listed.icon ?? "", /^<svg[^>]*viewBox="0 0 24 24"[\s\S]*<path d="M/);
@@ -62,7 +62,7 @@ async function localServer() {
   const turns = h.watch(other, ai.turns.list, { threadId: sent.threadId });
   const messages = h.watch(other, chat.messages.list, { threadId: sent.threadId });
   const run = (messageId, model, more = {}) =>
-    desk.local(ai.run.turn, {
+    desk.action(ai.run.turn, {
       threadId: sent.threadId,
       messageId,
       folder: project,
@@ -161,7 +161,7 @@ async function reportsReachTheReply() {
     text: "The session test fails since the token refresh change. Fix it.",
     folder: { kind: "chosen", path: project },
   });
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
     folder: project,
@@ -265,7 +265,7 @@ async function longReports(desk, other) {
     text: "Think hard",
     folder: { kind: "chosen", path: project },
   });
-  const ended = await desk.local(ai.run.turn, {
+  const ended = await desk.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
     folder: project,
@@ -300,7 +300,7 @@ async function refusedReports(desk) {
   const start = async (model, text) => {
     const sent = await desk.mutation(chat.threads.start, { text, folder: { kind: "chosen", path: project } });
     const begun = Date.now();
-    const result = desk.local(ai.run.turn, {
+    const result = desk.action(ai.run.turn, {
       threadId: sent.threadId,
       messageId: sent.messageId,
       folder: project,
@@ -353,7 +353,7 @@ async function permissions() {
   let messageId = sent.messageId;
   const next = async (text) => (messageId = await desk.mutation(chat.messages.post, { threadId, text }));
   const run = (model, access, window = desk) =>
-    window.local(ai.run.turn, {
+    window.action(ai.run.turn, {
       threadId,
       messageId,
       folder: project,
@@ -407,7 +407,7 @@ async function permissions() {
       { action: "run", subject: "git push origin feat/csv-export", agent: AGENT.name },
     );
     assert.equal(
-      await desk.local(ai.run.answer, { turnId: turn._id, questionId: question.id, answer }),
+      await desk.action(ai.run.answer, { turnId: turn._id, questionId: question.id, answer }),
       null,
     );
     assert.equal((await running).state, "done");
@@ -427,7 +427,7 @@ async function permissions() {
       list.some((q) => q.threadId === sessionThread.threadId),
     );
     assert.equal(question.subject, expected, label);
-    await desk.local(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer });
+    await desk.action(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer });
     await questions.until(`${label} answered`, (list) => !list.some((q) => q.id === question.id));
   };
   const PUSH = "git push origin feat/csv-export";
@@ -467,7 +467,7 @@ async function permissions() {
   ];
   let sessionMessage = sessionThread.messageId;
   for (const [label, agentId, asked, reply] of sessionTurns) {
-    const running = desk.local(ai.run.turn, {
+    const running = desk.action(ai.run.turn, {
       threadId: sessionThread.threadId,
       messageId: sessionMessage,
       folder: project,
@@ -494,7 +494,7 @@ async function permissions() {
   await next("Push, then stop");
   const stopping = run("ask-once", "ask");
   const { turn: asking } = await waiting("question before Stop");
-  await desk.local(ai.run.stop, { turnId: asking._id });
+  await desk.action(ai.run.stop, { turnId: asking._id });
   assert.deepEqual(await stopping, { turnId: asking._id, state: "stopped" });
   const stopped = (await desk.query(ai.turns.list, { threadId })).find((t) => t._id === asking._id);
   assert.equal(stopped.state, "stopped");
@@ -512,16 +512,16 @@ async function permissions() {
   void run("ask-once", "ask", app).catch(() => {});
   const { question } = await waiting("question before quitting");
   const asked = { turnId: question.turnId, questionId: question.id };
-  assert.equal(await app.local(ai.run.pending, asked), true);
-  assert.equal(await desk.local(ai.run.pending, asked), false);
+  assert.equal(await app.action(ai.run.pending, asked), true);
+  assert.equal(await desk.action(ai.run.pending, asked), false);
   await assert.rejects(
     desk.mutation(ai.turns.answer, { ...asked, token: "ab".repeat(32) }),
     /Only the app that asked/,
   );
   await h.quit(app);
   const relaunched = await h.connect(address, { local: true });
-  assert.equal(await relaunched.local(ai.run.pending, asked), false, "the card shows it expired at once");
-  const expired = await relaunched.local(ai.run.answer, { ...asked, answer: "approve" });
+  assert.equal(await relaunched.action(ai.run.pending, asked), false, "the card shows it expired at once");
+  const expired = await relaunched.action(ai.run.answer, { ...asked, answer: "approve" });
   assert.ok(
     isFailure(expired) && expired.kind === "Expired",
     "a question from before the quit cannot be answered",
@@ -535,7 +535,7 @@ async function steerTurn() {
   const sent = await desk.mutation(chat.threads.start, { text: "Start here", folder: { kind: "own" } });
   const turns = h.watch(desk, ai.turns.list, { threadId: sent.threadId });
   const messages = h.watch(desk, chat.messages.list, { threadId: sent.threadId });
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
     folder,
@@ -550,7 +550,7 @@ async function steerTurn() {
   const other = await desk.mutation(chat.threads.start, { text: "Stop this turn", folder: { kind: "own" } });
   const otherTurns = h.watch(desk, ai.turns.list, { threadId: other.threadId });
   const otherMessages = h.watch(desk, chat.messages.list, { threadId: other.threadId });
-  const otherRunning = desk.local(ai.run.turn, {
+  const otherRunning = desk.action(ai.run.turn, {
     threadId: other.threadId,
     messageId: other.messageId,
     folder: await h.folder("steering-overlap"),
@@ -566,15 +566,15 @@ async function steerTurn() {
 
   const text = "Take the other route ✓";
   const followup = "Keep these notes too";
-  await desk.local(ai.run.steer, { turnId: turn._id, text });
-  await desk.local(ai.run.stop, { turnId: otherTurn._id });
+  await desk.action(ai.run.steer, { turnId: turn._id, text });
+  await desk.action(ai.run.stop, { turnId: otherTurn._id });
   assert.equal((await otherRunning).state, "stopped");
   const otherTranscript = await desk.query(chat.messages.list, { threadId: other.threadId });
   assert.equal(replyOf(otherTurn)(otherTranscript).parts[0].text, "Partial reply.stop");
   // The agent's answer to the first steer is stored before the second is sent, so its offset is exact.
   const answered = `Ready for steering. Steered: ${text}`;
   await messages.until("first steer answered", (list) => replyOf(turn)(list)?.parts[0]?.text === answered);
-  await desk.local(ai.run.steer, { turnId: turn._id, text: followup });
+  await desk.action(ai.run.steer, { turnId: turn._id, text: followup });
   assert.equal((await running).state, "done");
   const [done] = await desk.query(ai.turns.list, { threadId: sent.threadId });
   const transcript = await desk.query(chat.messages.list, { threadId: sent.threadId });
@@ -600,7 +600,7 @@ async function noSteerHandler() {
   });
   const turns = h.watch(desk, ai.turns.list, { threadId });
   const messages = h.watch(desk, chat.messages.list, { threadId });
-  const running = desk.local(ai.run.turn, {
+  const running = desk.action(ai.run.turn, {
     threadId,
     messageId,
     folder,
@@ -610,12 +610,12 @@ async function noSteerHandler() {
   const [turn] = await turns.until("running turn", (list) => list.length === 1);
   await messages.until("ready", (list) => replyOf(turn)(list)?.parts[0].text === "Ready without steering.");
   assert.equal(
-    (await desk.local(ai.run.steer, { turnId: turn._id, text: "Keep this draft" })).kind,
+    (await desk.action(ai.run.steer, { turnId: turn._id, text: "Keep this draft" })).kind,
     "NoSteerHandler",
   );
   assert.deepEqual(await desk.query(ai.turns.replySteers, { replyId: turn.replyId }), []);
   assert.equal((await desk.query(chat.messages.list, { threadId })).length, 2);
-  await desk.local(ai.run.stop, { turnId: turn._id });
+  await desk.action(ai.run.stop, { turnId: turn._id });
   assert.equal((await running).state, "stopped");
 }
 
@@ -631,7 +631,7 @@ async function stopTurns() {
     const turns = h.watch(desk, ai.turns.list, { threadId });
     const messages = h.watch(desk, chat.messages.list, { threadId });
     const run = (messageId, model) =>
-      desk.local(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model });
+      desk.action(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model });
     const running = run(messageId, model);
     void running.catch(() => {});
     const [turn] = await turns.until("running turn", (list) => list.length === 1);
@@ -639,7 +639,7 @@ async function stopTurns() {
       replyOf(turn)(list)?.parts[0]?.text.startsWith("Partial reply"),
     );
     const args = { turnId: turn._id };
-    await desk.local(ai.run.stop, args);
+    await desk.action(ai.run.stop, args);
     if (model === "ignore-stop") {
       const pids = JSON.parse(await readFile(join(folder, "process-tree.json"), "utf8"));
       const alive = (pid) => {
@@ -649,13 +649,13 @@ async function stopTurns() {
       };
       assert.equal(new Set(pids).size, 3);
       assert.ok(pids.every(alive), "the agent, child and grandchild are still running after Stop");
-      assert.equal((await desk.local(ai.run.forceStop, args)).kind, "TooEarly");
+      assert.equal((await desk.action(ai.run.forceStop, args)).kind, "TooEarly");
       const [stopping] = await turns.until("stop was requested", (list) => !!list[0]?.stoppingAt);
       await messages.until("agent got Stop", (list) =>
         replyOf(turn)(list)?.parts[0]?.text.endsWith("Stop received."),
       );
       await Bun.sleep(Math.max(0, stopping.stoppingAt + FORCE_STOP_MS - Date.now()));
-      assert.equal(await desk.local(ai.run.forceStop, args), null);
+      assert.equal(await desk.action(ai.run.forceStop, args), null);
       assert.ok(
         pids.every((pid) => !alive(pid)),
         `Force stop must end the entire group: ${pids}`,
@@ -685,7 +685,7 @@ async function queueTurns() {
   const turns = h.watch(desk, ai.turns.list, { threadId });
   const messages = h.watch(desk, chat.messages.list, { threadId });
   const run = (messageId) =>
-    desk.local(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model: "echo" });
+    desk.action(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model: "echo" });
   const running = run(messageId);
   void running.catch(() => {});
   await turns.until("first turn running", (list) => list.some((turn) => turn.state === "running"));
@@ -710,7 +710,7 @@ async function queueTurns() {
   assert.equal(next.messageId, second.messageId);
   checkSettings(next);
   assert.equal((await run(third.messageId)).kind, "Busy");
-  const promoted = await desk.local(ai.run.turn, {
+  const promoted = await desk.action(ai.run.turn, {
     threadId,
     messageId: second.messageId,
     folder,
@@ -747,8 +747,8 @@ async function sharedServer() {
   const desktop = await h.connect(address, { token: await h.ownerDevice(address, "Desktop") });
   const member = await h.connect(address, { token: (await h.signInMember(address, "Noor")).key });
   const sent = await laptop.mutation(chat.threads.start, { text: "Plan the week", folder: { kind: "own" } });
-  const folder = await laptop.local(chat.folders.resolve, { threadId: sent.threadId });
-  const running = laptop.local(ai.run.turn, {
+  const folder = await laptop.action(chat.folders.resolve, { threadId: sent.threadId });
+  const running = laptop.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
     folder,
@@ -823,10 +823,10 @@ async function sharedServer() {
   // A question belongs to the sender's device: nobody else sees it in their questions or can answer it.
   // A thread of its own: the one above still holds its queued follow-up.
   const pushing = await laptop.mutation(chat.threads.start, { text: "Push it", folder: { kind: "own" } });
-  const asking = laptop.local(ai.run.turn, {
+  const asking = laptop.action(ai.run.turn, {
     threadId: pushing.threadId,
     messageId: pushing.messageId,
-    folder: await laptop.local(chat.folders.resolve, { threadId: pushing.threadId }),
+    folder: await laptop.action(chat.folders.resolve, { threadId: pushing.threadId }),
     agentId: AGENT.id,
     model: "ask-once",
     access: "ask",
@@ -850,7 +850,7 @@ async function sharedServer() {
       refusal,
     );
   }
-  await laptop.local(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer: "decline" });
+  await laptop.action(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer: "decline" });
   assert.equal((await asking).state, "done");
 }
 
@@ -861,9 +861,9 @@ async function withoutAgents() {
   for (const id of ["chat", "ai"]) await cp(join(h.plugins, id), join(bare, id), { recursive: true });
   const address = await h.serve("bare", { pluginsDir: bare });
   const desk = await h.connect(address, { local: true, pluginsDir: bare });
-  assert.deepEqual(await desk.local(ai.agents.list, {}), []);
+  assert.deepEqual(await desk.action(ai.agents.list, {}), []);
   const sent = await desk.mutation(chat.threads.start, { text: "Hello", folder: { kind: "own" } });
-  const result = await desk.local(ai.run.turn, {
+  const result = await desk.action(ai.run.turn, {
     threadId: sent.threadId,
     messageId: sent.messageId,
     folder: h.home,
@@ -887,12 +887,12 @@ async function memberSignsInAndRuns(address) {
   });
   const { threadId } = first;
   const run = (messageId, model, access = "ask") =>
-    member.local(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model, access });
+    member.action(ai.run.turn, { threadId, messageId, folder, agentId: AGENT.id, model, access });
   const post = (text) => member.mutation(chat.messages.post, { threadId, text });
   const questions = h.watch(member, ai.turns.questions, {});
   const turns = h.watch(observer, ai.turns.list, { threadId });
   const answer = (question, answer) =>
-    member.local(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer });
+    member.action(ai.run.answer, { turnId: question.turnId, questionId: question.id, answer });
 
   const task = run(first.messageId, "ask-once");
   const [question] = await questions.until("signed-in member's first question", (rows) => rows.length === 1);
@@ -952,7 +952,7 @@ async function memberSignsInAndRuns(address) {
   await assert.rejects(reader.mutation(chat.threads.remove, { threadId }), /Only the person who started/);
   // Another member's window learns who runs the agent; their Send gets no folder, so no turn.
   assert.deepEqual(await reader.query(ai.choices.creator, { threadId }), { id: user.id, name: "Morgan" });
-  assert.equal(await reader.local(chat.folders.resolve, { threadId }), null);
+  assert.equal(await reader.action(chat.folders.resolve, { threadId }), null);
   // A valid key on the original account, issued after the first password change.
   const creatorKey = await fetch(new URL("/auth/sign-in", address.replace(/^ws:/, "http:")), {
     method: "POST",

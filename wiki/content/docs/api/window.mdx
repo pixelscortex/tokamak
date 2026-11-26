@@ -9,33 +9,28 @@ and actions from your plugin's `src/client/api.tsx` so the build can discover th
 ## Pages and components
 
 `view` gives a page a literal route and can supply its title and icon.
-A `component` publishes named elements for actions. A JSX component tag
-such as `<SendButton />` exposes `sendButton` by default. Use `part="name"`
-to name a native element or distinguish two uses of the same tag.
-Add `locked` to an element to prevent other plugins from acting on it.
+The build publishes typed paths under `parts` for plain JSX elements. Path
+segments follow the render function and its JSX ancestry, using a static
+`data-part` or `id` when present, and the tag name otherwise.
 
 ```tsx
-import { component, view } from "@tokamak/sdk/client";
+import { view } from "@tokamak/sdk/client";
 
-export const Composer = component("composer", {}, () => (
-  <section part="tray">
-    <button part="send">Send</button>
-    <span part="status" locked>
-      Ready
-    </span>
+export const Composer = () => (
+  <section>
+    <button>Send</button>
   </section>
-));
+);
 
 export const Work = view({ route: "/work", title: "Work" }, () => <Composer />);
 ```
 
 <api-declaration path="../../../../packages/sdk/view.ts" name="view" />
-<api-declaration path="../../../../packages/sdk/component-actions.ts" name="component" />
 
 ## Actions on elements
 
 Import another plugin's window entry through `plugin:example/client`.
-An action targets a component's published path, such as `Composer.tray.send`.
+An action targets a component's published path, such as `parts.Composer.section.button`.
 
 | Action    | Effect                                                                   |
 | --------- | ------------------------------------------------------------------------ |
@@ -48,7 +43,8 @@ An action targets a component's published path, such as `Composer.tray.send`.
 | `hide`    | Remove the element, its children, and additions before and after it.     |
 
 Use `{ when: (props) => condition }` to make an action conditional. The
-check is reactive and receives the declaring component's props. The
+check is reactive and receives the declaring component's props, including
+`$row.item` and `$row.index` inside a `For` row. The
 `order` option sorts actions at the same position (default 0, then plugin ID).
 Only the first installed replacement owns a target.
 

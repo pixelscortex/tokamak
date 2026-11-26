@@ -81,23 +81,17 @@ impl Coordinator {
                     .remove(&id);
                 self.emit(
                     owner,
-                    Event::Subscription {
+                    Event::subscription(
                         id,
-                        result: Err("subscription ended: snapshot kept changing".into()),
-                    },
+                        Err("subscription ended: snapshot kept changing".into()),
+                    ),
                 );
                 continue;
             }
 
             if sub.last.as_ref() != Some(&call.result) {
                 sub.last = Some(call.result.clone()); // serde_json structural equality; no hash dependency.
-                self.emit(
-                    owner,
-                    Event::Subscription {
-                        id,
-                        result: call.result,
-                    },
-                );
+                self.emit(owner, Event::subscription(id, call.result));
             }
         }
     }
@@ -162,6 +156,7 @@ impl Coordinator {
                     &self.database,
                     &self.pool,
                     host::Invocation {
+                        machines: self.runner.clone(),
                         bundle: self.bundle.clone(),
                         name: &name,
                         args,
@@ -169,7 +164,7 @@ impl Coordinator {
                         space: &self.space,
                         plugins: self.plugins.clone(),
                         determinism: engine::Determinism::default(),
-                        auth: Some(auth),
+                        note: Some(auth).into(),
                     },
                 )
                 .await

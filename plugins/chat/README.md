@@ -11,7 +11,7 @@ Opening the app lands on a new thread: an icon, "Start a conversation", the
 recent folders with "Choose a folder…" and "No folder", and the composer.
 Nothing is stored until the first Send, which creates the thread and its first
 message. "No folder" gives the thread an empty folder of its own under the
-app's data, `<app data>/no-project/threads/<thread>`, made by chat's local part.
+app's data, `<app data>/no-project/threads/<thread>`, made by a caller action on the Runner.
 The list has "New thread ⌘N" on top and one list of threads, newest first.
 The header shows the title (double-click renames), the folder, and `⋯` with
 Rename and Delete thread.
@@ -28,7 +28,7 @@ else's computer it returns null, so their Send stays plain chat. Without the
 client's data folder (`TOKAMAK_APP_DATA_DIR`), an own folder is a temporary one
 that is not stored.
 
-## Server and local functions
+## Server functions and caller actions
 
 - `threads:start({ text, folder })` creates a thread with its first message and
   returns `{ threadId, messageId }`.
@@ -46,12 +46,12 @@ that is not stored.
   `replies:write({ messageId, token, text, done?, outcome?, error? })` replaces its
   text, and only with that token. A finished reply can be cancelled or failed.
   Exported from `src/server/api.ts` as `startReply` / `writeReply`.
-- Local: `folders:resolve`, `folders:check`, `threads:removeLocal`. Use them only when
-  `client.hasLocal` (a `TokamakClient` getter, true in the desktop client).
+- Caller actions: `folders:resolve`, `folders:check`, `threads:removeLocal`. Call them
+  with `client.action`; a window without a Runner receives `noMachine`.
   Only the creator can rename or delete a thread. The server calls the
   `threadDeletedServer` providers in the deletion transaction.
   `threads:removeLocal({ threadId })` deletes the thread on the server, then calls
-  `threadDeletedLocal` providers from `plugin:chat/contracts` in the local part. Their
+  `threadDeletedLocal` providers from `plugin:chat/contracts` in the caller’s Runner. Their
   `after({ threadId, folder })` can clean up local data; `folder` may be absent.
 
 Agent runs and permission questions belong to `ai`. Chat stores the thread
@@ -59,19 +59,13 @@ and streams replies from plugins through its reply API.
 
 ## Extending chat
 
-Import the components through `plugin:chat/client` and act on their elements.
-Every action and its `when` receive the component's props.
-
-| Component   | Elements                                                        | Props                                    |
-| ----------- | --------------------------------------------------------------- | ---------------------------------------- |
-| `Composer`  | `top`, `box`, `input`, `tools`, `sendButton`                    | `threadId`, `folder`, `draft`, `sending` |
-| `Message`   | `avatar`, `header`, `body`, `footer`                            | `message`, `threadId`, `next`, `isLast`  |
-| `Empty`     | `icon`, `glyph`, `heading`, `folders`                           | `folders`, `folder`                      |
-| `ThreadRow` | `row`, `status`, `title`, `age`, `detail` (second line)         | `thread`, `now`                          |
-| `Header`    | `icon`, `title`, `titleInput`, `folder`, `menu`, `deleteDialog` | `thread`                                 |
+Import `parts` through `plugin:chat/client`. The compiler publishes paths for
+every JSX tag. See [Chat's design notes](../../design/chat.md#parts-it-offers)
+for the parts used by starter add-ons. Each action and its live `when`
+receive the owning component's props.
 
 `Message.next` and `isLast` tell where a run of replies ends without chat
-knowing about turns. A filled `ThreadRow.detail` makes the row a double row.
+knowing about turns. A filled detail lane makes the thread row a double row.
 
 `onDraftSubmit` can handle an open thread's draft before normal Send. It
 receives `{ threadId, text, intent }`, where intent is `"steer"` for Enter or
@@ -84,14 +78,16 @@ import { onCleanup } from "solid-js";
 import { after, append, prepend, replace } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Row = after(chat.Composer.box, AgentRow);
-export const Question = prepend(chat.Composer.top, PermissionCard, { when: (c) => waiting(c.threadId) });
-export const Card = append(chat.Message.footer, ChangeCard, {
+export const Row = after(chat.parts.Composer.div.box, AgentRow);
+export const Question = prepend(chat.parts.Composer.div.top, PermissionCard, {
+  when: (c) => waiting(c.threadId),
+});
+export const Card = append(chat.parts.Message.article.footer, ChangeCard, {
   when: (m) => !m.next || m.next.role === "user",
 });
-export const Heading = replace(chat.Empty.heading, AgentHeading);
-export const Status = append(chat.ThreadRow.status, StatusIcon);
-export const Branch = after(chat.Header.title, BranchChip);
+export const Heading = replace(chat.parts.Empty.div.div.heading, AgentHeading);
+export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.status, StatusIcon);
+export const Branch = after(chat.parts.Header.div.title, BranchChip);
 
 // After each Send, once the message is stored and the folder exists on this computer:
 // { threadId, messageId, text, folder, first }.
@@ -105,6 +101,6 @@ onCleanup(chat.onSent((sent) => beginTurn(sent)));
   checks Send announcements).
 - End to end: `CARGO_BUILD_JOBS=2 cargo test --locked -p server --test chat_threads`
   (real server, real chat build, a real reply plugin, two clients, chat's real
-  local part, and a shared server where a member is refused).
+  Runner, and a shared server where a member is refused).
 - Browser: `proto run bun -- run e2e:browser e2e/browser/chat.spec.ts`.
 - Types: `src/client/tsconfig.json` and `tests/tsconfig.json` (in `workspace:plugins-check`).

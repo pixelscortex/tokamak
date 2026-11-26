@@ -13,3 +13,6 @@ export const toggle = mutation({
   handler: async ({ db }, { id }) => db.patch(id, { done: !(await db.get(id))!.done }),
 });
 export const remove = mutation({ args: { id: v.id("records") }, handler: ({ db }, { id }) => db.delete(id) });
+
+export const readCall = query({ handler: ({ call }) => call });
+export const writeCall = mutation({ handler: ({ call }) => call });

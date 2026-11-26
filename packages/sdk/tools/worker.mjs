@@ -1,3 +1,4 @@
+import { isServerRoot } from "./server-files.mjs";
 import { Visibility } from "../src/visibility.ts";
 import { join } from "node:path";
 import { functionPlacement, lanes, placementTransform, registrySource } from "./placement.mjs";
@@ -5,9 +6,18 @@ import { bunPluginBoundary } from "./plugin-boundary.mjs";
 import { contractTarget } from "./contracts.mjs";
 import { serverBuiltins, workerBuiltins } from "./server-builtins.mjs";
 
-export function transactionSources({ root, files, modules, hasSchema, header, pluginRoot, placement }) {
+export function transactionSources({
+  root,
+  files,
+  modules,
+  hasSchema,
+  header,
+  pluginRoot,
+  placement,
+  namespace,
+}) {
   const paths = files.map((file) => join(root, file));
-  placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root });
+  placement ??= functionPlacement(pluginRoot, { files: paths, configRoot: root }, namespace);
   const inLane = (keep) =>
     paths.flatMap((path, index) => {
       const definitions = placement?.modules.get(path);
@@ -25,6 +35,7 @@ export function transactionSources({ root, files, modules, hasSchema, header, pl
       kind: "action",
       args: { kind: "any" },
       visibility: placement.modules.get(path).get(name).visibility,
+      on: placement.modules.get(path).get(name).on,
     })),
   );
   const providers = placement?.providers ?? [];
@@ -36,6 +47,7 @@ export function transactionSources({ root, files, modules, hasSchema, header, pl
           kind: "action",
           args: { kind: "any" },
           visibility: Visibility.Internal,
+          on: method.on,
         });
   return {
     source: registrySource({
@@ -43,6 +55,10 @@ export function transactionSources({ root, files, modules, hasSchema, header, pl
       modules: inLane(lanes.descriptor.keep),
       hasSchema,
       metadata,
+      placement,
+      hasActionHooks: inLane((kind) => kind === "actionHook").length > 0,
+      results: placement?.results(root, isServerRoot(root)),
+      points: placement?.points(root, isServerRoot(root)),
       providers,
       lane: lanes.descriptor,
       header,
@@ -54,7 +70,7 @@ export function transactionSources({ root, files, modules, hasSchema, header, pl
   };
 }
 
-export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plugins }) {
+export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plugins, actionModules }) {
   const result = await Bun.build({
     entrypoints: ["tokamak-worker:entry"],
     target: "node",
@@ -66,7 +82,7 @@ export async function buildLocalBundle({ root, sdkRoot, pluginRoot, source, plug
     env: "disable",
     plugins: [
       workerBuiltins(pluginRoot),
-      bunPluginBoundary(pluginRoot, { publicOnly: true }),
+      bunPluginBoundary(pluginRoot, { publicOnly: (path) => !actionModules.has(path) }),
       ...plugins,
       {
         name: "worker-sdk",

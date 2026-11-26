@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { definitionTypeInfo, runtimeExportNames } from "./plugin-compiler.mjs";
+import { declaredActionPlacement, definitionTypeInfo, runtimeExportNames } from "./plugin-compiler.mjs";
 
 import { contractName, MEMBER_HOOK_RUN } from "../src/internal/contracts.ts";
 const unalias = (checker, symbol) =>
@@ -17,6 +17,11 @@ export function importedContractEntry(root, id) {
   // Optional dependencies can distribute their contract types separately from
   // the defining plugin. The checked-in copy is never executable at runtime.
   return existsSync(source) ? source : resolve(root, "contracts", id + ".ts");
+}
+
+export function contractPlacementMigration(value) {
+  const on = value && ts.isStringLiteralLike(value) && value.text === "server" ? "server" : "caller";
+  return `use contract(name, { on: "${on}" })`;
 }
 
 function nonDataMethods(entry, exported, data, file) {
@@ -73,41 +78,39 @@ export function contractDeclarations(entry) {
       )
         throw new Error(`${entry} must export contracts declared with contract<T>("name", options)`);
       const [key, options] = call.arguments;
-      const place =
+      const property = (name) =>
         options && ts.isObjectLiteralExpression(options)
           ? options.properties.find(
-              (p) => ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "place",
+              (p) => ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === name,
             )?.initializer
           : undefined;
+      const on = property("on");
+      const place = property("place");
+      if (place) throw new Error(`${entry}: ${contractPlacementMigration(place)}`);
       if (
         !key ||
         !ts.isStringLiteralLike(key) ||
         !contractName.test(key.text) ||
-        (options && (!place || !ts.isStringLiteralLike(place) || !["local", "server"].includes(place.text)))
+        (options && (!on || !ts.isStringLiteralLike(on) || !["caller", "server"].includes(on.text)))
       )
-        throw new Error(`${entry}: contract names and places must be literals`);
+        throw new Error(`${entry}: contract names and on values must be literals`);
+      const local = on?.text === "caller";
       if (contracts.some((item) => item.name === key.text))
         throw new Error(`${entry}: duplicate contract ${key.text}`);
-      const data =
-        options && ts.isObjectLiteralExpression(options)
-          ? options.properties.find(
-              (p) =>
-                ts.isPropertyAssignment(p) && p.name.getText(file).replace(/['"]/g, "") === "dataMethods",
-            )?.initializer
-          : undefined;
-      if (place?.text === "local" && data?.kind !== ts.SyntaxKind.TrueKeyword) {
+      const data = property("dataMethods");
+      if (data && !local) throw new Error(`${entry}: dataMethods requires a caller contract`);
+      if (data && data.kind !== ts.SyntaxKind.TrueKeyword) {
         const missing = nonDataMethods(entry, name.text, data, file);
         throw new Error(
-          `${entry}: local contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
+          `${entry}: caller contract "${key.text}" requires dataMethods: true on QuickJS; non-data methods: ${missing}`,
         );
       }
-      if (data && place?.text !== "local") throw new Error(`${entry}: dataMethods requires a local contract`);
       contracts.push({
         exported: name.text,
         name: key.text,
-        place: place?.text ?? "server",
+        on: local ? "caller" : "server",
         declarationHash,
-        dataMethods: data ? true : undefined,
+        dataMethods: local ? true : undefined,
         memberHook: call.typeArguments?.[0]?.getText(file) === "MemberHook",
       });
     }
@@ -157,7 +160,7 @@ export function discoverProviders(root, files, program, checker) {
       if (options) {
         const field = ts.isObjectLiteralExpression(options) && options.properties[0];
         if (
-          contract.place !== "local" ||
+          contract.on !== "caller" ||
           !field ||
           options.properties.length !== 1 ||
           !ts.isPropertyAssignment(field) ||
@@ -175,7 +178,7 @@ export function discoverProviders(root, files, program, checker) {
         if (owner !== "auth" || !contract.memberHook)
           throw new Error(`${path}: onMember requires an auth membership event`);
         methods.push({ member: MEMBER_HOOK_RUN, kind: "mutation", field: implementation, argument: true });
-      } else if (contract.place === "server") {
+      } else if (contract.on === "server" || ts.isObjectLiteralExpression(implementation)) {
         if (!ts.isObjectLiteralExpression(implementation))
           throw new Error(`${path}: a server provider must declare its members in an object literal`);
         for (const field of implementation.properties) {
@@ -183,16 +186,24 @@ export function discoverProviders(root, files, program, checker) {
             (!ts.isShorthandPropertyAssignment(field) && !ts.isPropertyAssignment(field)) ||
             !(ts.isIdentifier(field.name) || ts.isStringLiteralLike(field.name)) ||
             !contractName.test(field.name.text)
-          )
+          ) {
+            // Spread and computed Runner methods are resolved when the provider binds.
+            if (contract.on === "caller") continue;
             throw new Error(`${path}: a server provider requires statically named members`);
+          }
           const value = ts.isShorthandPropertyAssignment(field) ? field.name : field.initializer;
           const actual = checker.getTypeAtLocation(value);
           const info = definitionTypeInfo(checker, actual, value);
-          if (info?.kind === "local")
+          const expression = ts.isShorthandPropertyAssignment(field)
+            ? checker.getShorthandAssignmentValueSymbol(field)?.valueDeclaration?.initializer
+            : value;
+          const on =
+            info?.on ?? (info?.kind === "action" ? declaredActionPlacement(checker, expression) : undefined);
+          if (contract.on === "caller" && info?.kind && (info.kind !== "action" || on !== "caller"))
             throw new Error(
-              `${path}: contract "${contract.name}" is server-side. To provide local functions, declare it with { place: "local", dataMethods: true }`,
+              `${path}: contract "${contract.name}" method "${field.name.text}" requires action({ on: "caller" })`,
             );
-          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, field });
+          if (info?.kind) methods.push({ member: field.name.text, kind: info.kind, on, field });
         }
       }
       providers.push({
@@ -216,9 +227,9 @@ export const contractTarget = (provider, method) => `$contract:${provider.regist
 
 export function contractManifest(root, namespace, providers = []) {
   const contracts = contractDeclarations(contractEntry(root)).map(
-    ({ name, place, declarationHash, dataMethods }) => ({
+    ({ name, on, declarationHash, dataMethods }) => ({
       name,
-      place,
+      on,
       declarationHash,
       dataMethods,
     }),
@@ -229,11 +240,13 @@ export function contractManifest(root, namespace, providers = []) {
       owner: p.owner ?? namespace,
       name: p.name,
       declarationHash: p.declarationHash,
-      place: p.place,
+      on: p.on,
       dataMethods: p.dataMethods,
       registration: p.registration,
       unavailable: p.unavailable,
-      methods: Object.fromEntries(p.methods.map((method) => [method.member, contractTarget(p, method)])),
+      methods: Object.fromEntries(
+        p.on === "caller" ? [] : p.methods.map((method) => [method.member, contractTarget(p, method)]),
+      ),
     })),
   };
 }

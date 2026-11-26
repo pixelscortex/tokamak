@@ -50,7 +50,7 @@ fn caught_errors_and_abandoned_delegations_notify_the_native_owner() {
             let root = Arc::new(Bundle::new(source, None).unwrap());
             let result = pool.submit(root, "invoke", json!({}), Arc::new(ops)).unwrap().await;
             assert!(result.is_ok());
-            assert!(failures.lock().unwrap().iter().any(|error| error.contains(expected)),
+            assert!(failures.lock().unwrap().iter().any(|error| error.message.contains(expected)),
                 "{:?}", failures.lock().unwrap());
         }
     });

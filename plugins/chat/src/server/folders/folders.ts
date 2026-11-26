@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { fail, local, v } from "@tokamak/sdk";
+import { action, fail, v } from "@tokamak/sdk";
 import { mkdir, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
@@ -14,7 +14,8 @@ import { threadCreatorId } from "../_functions";
  * the first Send, before announcing it; anything that works in the folder
  * (an agent's turn) asks again, so it never starts without one.
  */
-export const resolve = local({
+export const resolve = action({
+  on: "caller",
   args: { threadId: v.id("threads") },
   handler: async (ctx, { threadId }) => {
     const thread = await ctx.runQuery(api.threads.get, { threadId });
@@ -42,7 +43,8 @@ export const resolve = local({
  * Turns a typed folder into the absolute path stored on a thread: expands `~`
  * and refuses anything that is not an existing folder on this computer.
  */
-export const check = local({
+export const check = action({
+  on: "caller",
   args: { path: v.string() },
   handler: async (_ctx, { path }) => {
     const full = expand(path.trim());
@@ -68,7 +70,7 @@ function home(): string {
 function appData(): string | undefined {
   const path = process.env.TOKAMAK_APP_DATA_DIR;
   if (path && isAbsolute(path)) return path;
-  // oxlint-disable-next-line no-console -- The local worker sends console output to the client's log.
+  // oxlint-disable-next-line no-console -- The Runner worker sends console output to the client's log.
   console.warn("chat: the client did not provide its data folder; using a temporary folder");
   return undefined;
 }

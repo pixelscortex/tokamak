@@ -650,3 +650,35 @@ test("SDK checker reports plain source diagnostics in agent environments", async
     expect(result.output, result.output).toMatch(/diagnostic-probe\.ts[(:]1[,:].*TS2322/);
   });
 }, 120000);
+
+test("the registry gates point names and keeps internal hook metadata out of ctx.call", async () => {
+  const { createRegistry, invokeFunction } = await import("../src/functions.ts");
+  const registry = createRegistry(
+    {
+      demo: {
+        check: query({
+          args: { name: v.string() },
+          async handler(ctx, { name }) {
+            expect(Object.hasOwn(ctx.call, "hookPoints")).toBe(false);
+            const original = { note: undefined };
+            expect(await ctx.point(name, original)).toBe(original);
+            return ctx.point(name, original, async () => {});
+          },
+        }),
+      },
+    },
+    {},
+    { "demo:check": ["declared"] },
+  );
+  const host = {
+    op(name) {
+      expect(name).toBe("auth.current");
+      return { user: null, device: null, depth: 0, hookPoints: ["other"] };
+    },
+  };
+
+  expect(await invokeFunction(registry, { name: "demo:check", args: { name: "declared" } }, host)).toBe(null);
+  await expect(
+    invokeFunction(registry, { name: "demo:check", args: { name: "other" } }, host),
+  ).rejects.toThrow('Point "other" is not declared by function "demo:check"');
+});

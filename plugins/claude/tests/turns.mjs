@@ -22,7 +22,7 @@ if (!live) await scanReplays("claude");
 
 const source = fileURLToPath(new URL("../", import.meta.url));
 const h = await agentHarness({ binary, name: "claude-turns" });
-const { ai } = h.api;
+const { ai, chat } = h.api;
 
 const wire = turnWire();
 const executable = () => join(h.scratch, "bin", "claude");
@@ -41,7 +41,7 @@ try {
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();
   const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
-  const address = runner ? undefined : await h.serve("local");
+  const address = runner ? undefined : await h.serve("local", { windowRouted: !live });
   const client = live
     ? await realClient(address)
     : await h.connect(address, { local: true, observe: wire.observe });
@@ -114,7 +114,7 @@ try {
 }
 
 async function aboutClaude(client) {
-  return (await client.local(ai.agents.list, {})).find(({ id }) => id === "claude")?.info;
+  return (await client.action(ai.agents.list, {})).find(({ id }) => id === "claude")?.info;
 }
 
 function caseFolder(name) {
@@ -191,9 +191,13 @@ async function discovery(client) {
   assert.deepEqual(readyState(old), [false, false]);
   assert.equal(old.install, "claude update");
   assert.equal(old.updateRequired, "Claude needs Claude Code 2.1.330 or later.");
-  const rejected = await client.local(ai.run.turn, {
-    threadId: "unused",
-    messageId: "unused",
+  const { threadId, messageId } = await client.mutation(chat.threads.start, {
+    text: "Check whether Claude needs an update",
+    folder: { kind: "chosen", path: h.home },
+  });
+  const rejected = await client.action(ai.run.turn, {
+    threadId,
+    messageId,
     folder: h.home,
     agentId: "claude",
   });

@@ -32,7 +32,7 @@ export function invocationHost(
       withPrograms:
         createPrograms &&
         (async (run) => {
-          if (closing || signal.aborted) throw new Error("Local function cancelled");
+          if (closing || signal.aborted) throw new Error("Caller action cancelled");
           if (programs !== outer) throw new Error("Program scopes cannot nest");
           const inner = createPrograms();
           scopes.add(inner);

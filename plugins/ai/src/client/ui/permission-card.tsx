@@ -36,7 +36,7 @@ export function PermissionCard(props: ComposerProps): JSX.Element {
     return current && current.id === question()?.id ? current.line : undefined;
   };
 
-  // A question from before the app quit is on the row but no longer in this local part: say so at once.
+  // A question from before the app quit is on the row but no longer in this window: say so at once.
   let shortcutsReadyAt = 0;
   createEffect(question, (asked) => {
     if (!asked) return;

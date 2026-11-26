@@ -2,7 +2,8 @@
 
 The Claude agent for `ai`. It draws no UI and publishes no parts. What a
 person sees of it is data it gives `ai` through the `agent` contract, drawn
-by ai's parts inside chat.
+by ai's parts inside chat. Its `info` and `start` caller actions discover
+and run the CLI on the sender's Runner.
 No Paper page of its own: its data shows on `App 1:1 · AI plugin` (the
 copy uses the test agent in its place).
 

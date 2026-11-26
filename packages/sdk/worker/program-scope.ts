@@ -18,7 +18,7 @@ export function invocationProcesses(signal: AbortSignal, spawn: SpawnProgram) {
   }
   signal.addEventListener("abort", onAbort, { once: true });
   const start: LocalProcess = ([command, ...args], options) => {
-    if (closed || signal.aborted) throw new Error("Local function cancelled");
+    if (closed || signal.aborted) throw new Error("Caller action cancelled");
     const program = spawn([command, ...args], options);
     const stop = (signal?: "SIGTERM" | "SIGKILL") =>
       program.stop(signal).finally(() => active.delete(finish));

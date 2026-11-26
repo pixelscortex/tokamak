@@ -4,6 +4,10 @@ Threads, messages, the composer and the folder a thread works in. Chat knows
 nothing about agents or code; `ai` and `code` add to its parts.
 Paper page: `App 1:1 · Chat plugin`.
 
+Folder checking and resolution, and deletion with machine cleanup, use caller
+actions. Without a Runner, Chat stores the chosen path as typed and deletes
+threads through the server mutation.
+
 ## Screens
 
 | Screen                                                             | Source                                                                    | Paper artboard               |
@@ -18,25 +22,23 @@ stopped reply line ("Stopped", "Failed · …"), a queued message (dashed box).
 
 ## Parts it offers
 
-Other plugins import these from `plugin:chat/client` and act on them with
-`before`, `after`, `prepend`, `append`, `wrap`, `replace` or `hide`
-(`packages/build/README.md`, "Extending a component"). Every action gets the
-component's props. The list of paths is generated in
-`plugins/chat/src/client/_generated/components.d.ts`.
+The compiler publishes every JSX tag under `parts` in `plugin:chat/client`.
+See `plugins/chat/src/client/_generated/components.d.ts` for the full tree.
+These are the paths used by the starter add-ons:
 
-| Part                                                                   | File                   | What may go there                                                                                       |
-| ---------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `Composer.top`                                                         | `ui/composer.tsx`      | Inside the tray, above the box: a card that needs the person (permission question). Hidden while empty. |
-| `Composer.box`                                                         | `ui/composer.tsx`      | The prompt and Send on the card tone. Siblings after it sit in the same tray (agent row).               |
-| `Composer.input`                                                       | `ui/composer.tsx`      | The text field.                                                                                         |
-| `Composer.tools`                                                       | `ui/composer.tsx`      | Small controls left of Send. Hidden while empty.                                                        |
-| `Composer.sendButton`                                                  | `ui/composer.tsx`      | Send. May be replaced (Stop).                                                                           |
-| `Message.avatar`, `Message.header`                                     | `ui/message.tsx`       | The author line: avatar, name, time. May be replaced (agent reply header).                              |
-| `Message.body`                                                         | `ui/message.tsx`       | The text. Before it: work lines; after it: cards.                                                       |
-| `Message.footer`                                                       | `ui/message.tsx`       | Under the message. Hidden while empty (change card, notices).                                           |
-| `Empty.icon`, `Empty.glyph`, `Empty.heading`, `Empty.folders`          | `ui/empty.tsx`         | The new thread's mark, heading (may be replaced) and folder choices.                                    |
-| `ThreadRow.row`, `status`, `title`, `age`, `detail`                    | `ui/thread-list.tsx`   | `status` is the 16 px lane before the title; a filled `detail` makes the row a double row.              |
-| `Header.icon`, `title`, `titleInput`, `folder`, `menu`, `deleteDialog` | `ui/thread-header.tsx` | After `title`: chips. Before `menu`: controls.                                                          |
+| Path under `parts`                       | File                   | What goes there                                                                                  |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `Composer.div.top`                       | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
+| `Composer.div.box`                       | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
+| `Composer.div.box.div.SendButton`        | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
+| `Empty.div.div.heading`                  | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
+| `Message.article.header`                 | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
+| `Message.article.body`                   | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
+| `Message.article.footer`                 | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
+| `ThreadRow.ListboxItem.span.span.status` | `ui/thread-list.tsx`   | Status icon in the lane before the title.                                                        |
+| `ThreadRow.ListboxItem.span.detail`      | `ui/thread-list.tsx`   | Agent detail inside the second line; helper rows after it.                                       |
+| `Header.div.title`                       | `ui/thread-header.tsx` | Branch chip after the title.                                                                     |
+| `Header.div.ThreadMenu`                  | `ui/thread-header.tsx` | Review toggle before the menu; review panel mount after it.                                      |
 
 Other hooks (not drawn): `holdSend` turns Send off in a composer, `onSent`
 announces each Send, `onDraftSubmit` handles a draft before Send.
