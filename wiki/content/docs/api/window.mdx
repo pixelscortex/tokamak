@@ -109,9 +109,27 @@ attachment running; removing the instance cleans it up.
 Use `in` to select an enclosing render function and `nth` for a 1-based
 position. Attachments run in install order, then `order`, plugin ID and export
 name. Missing targets after an owner update are skipped and reported. If an
-attachment throws, it is stopped and a warning names its plugin and export.
+attachment throws, it stops and an alert names its plugin and export.
 
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="attach" />
+
+## Plugin alerts
+
+The active view's **Plugin alerts** list reports:
+
+- A search that no longer matches its intended element or render function.
+- A layer that omits `Original` and covers another plugin's lower layer,
+  inside placement, attributes, or action on a descendant.
+- A `hide` that removes another plugin's action on the element or a descendant.
+- An addition, layer, attribute callback, attachment, or `when` that throws.
+  The alert names the plugin and export; the owner can still render.
+- Attribute problems: overwriting another plugin's value without reading
+  `current`, setting a forbidden attribute, or targeting an old owner that
+  must be rebuilt.
+
+Cover and hide alerts name both plugins and clear when the action no longer
+causes the loss. Multiple mounted instances share a single alert. Failures
+stay in the list until the failing plugin is removed or reloaded.
 
 ## State
 
