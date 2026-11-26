@@ -1,0 +1,106 @@
+packages/build/src/component-parts.ts
+  s_d056a7166f42ba::t_9f5ba4d523eae7 24,667-683,685-688,690,694-695,709
+  s_d056a7166f42ba::t_c01dd06e7413dd 34,40,90-98,148-151,165,234,280-289,296-297,401,408,411-415,424,429,435-451,461-464,491-507,638,650,658-666,684,689,691-692,752-758
+  s_d056a7166f42ba::t_6759ed899c759e 643,721
+  s_d056a7166f42ba::t_527aa3ce1ea757 693
+plugins/code/src/client/api.tsx
+  s_d056a7166f42ba::t_c01dd06e7413dd 3,119,133
+plugins/code/README.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 32,42-44
+packages/sdk/vitest.config.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 44-46,61,72,81
+plugins/chat/README.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 64-66
+packages/sdk/README.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 744-757
+design/ai.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 167-171
+design/chat.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 31,41-45,87-88
+packages/build/README.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 275-288
+plugins/ai/README.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 30-32
+skills/develop-tokamak-plugin/SKILL.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 121-125
+wiki/content/docs/api/window.mdx
+  s_d056a7166f42ba::t_c01dd06e7413dd 99-115
+packages/sdk/component-actions.ts
+  s_d056a7166f42ba::t_6759ed899c759e 23-31,297-302,307,320,326
+  s_d056a7166f42ba::t_1d34dd7813572a 181,187-188,190-191
+  s_d056a7166f42ba::t_c01dd06e7413dd 5,17-22,36,129,156-167,303-306,308-319,321,324-325,327
+  s_d056a7166f42ba::t_3c9a236fa8d0fd 168
+plugins/chat/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 116-117
+  s_d056a7166f42ba::t_30044799bb8851 118-120
+  s_d056a7166f42ba::t_f91a0a9033b3f7 121-133
+packages/sdk/client.tsx
+  s_d056a7166f42ba::t_c01dd06e7413dd 13,18,33-39,64-70,89-92,147,151,173,181-185,231,240-245,281,284-285,288-293,295,297,305,313-344,412,420-421,425-431,433-438,440
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 209-210
+  s_d056a7166f42ba::t_90663404294f57 211-213
+  s_d056a7166f42ba::t_81ef6aea289bfc 214-245
+packages/sdk/screen-search.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 10,51-53,65,67-68,70-71,75,77,96-98,127,133,162,164-165
+packages/sdk/tests/web/component-attach.test.tsx
+  s_d056a7166f42ba::t_c01dd06e7413dd 1-264
+plugins/code/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 51
+  s_d056a7166f42ba::t_38f2ec7504816e 52-54
+  s_d056a7166f42ba::t_8fbd3ff7ce48cf 55-65
+packages/sdk/tests/web/fixtures/parts/attrs-owner/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_9f5ba4d523eae7 20-22
+packages/build/tests/components.test.mjs
+  s_d056a7166f42ba::t_6759ed899c759e 26
+  s_d056a7166f42ba::t_c01dd06e7413dd 80-159,501-502,514,668-700
+  s_d056a7166f42ba::t_4fd77a8427ded6 701-702
+packages/build/src/contributions.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 50,58,71-91,100-130,132,151,312,320,323-328
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_d056a7166f42ba::t_c01dd06e7413dd 3,10,17,22-61
+  s_d056a7166f42ba::t_9a6c14df02819d 62
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_d056a7166f42ba::t_c01dd06e7413dd 3,26-31
+  s_d056a7166f42ba::t_6759ed899c759e 1
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 35
+  s_d056a7166f42ba::t_4cb25e76f9f847 36-38
+  s_7c9ae5172273e5::t_62452d34b2e5b6 39-42
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_d056a7166f42ba::t_c01dd06e7413dd 17-18
+packages/sdk/component-parts.tsx
+  s_d056a7166f42ba::t_6759ed899c759e 96
+  s_d056a7166f42ba::t_c01dd06e7413dd 9,97-179
+design/code.md
+  s_d056a7166f42ba::t_c01dd06e7413dd 38,41
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_7c9ae5172273e5::t_dfe7d4b64219ea 10-12
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_c9cf5ded011046 7
+plugins/ai/src/client/_generated/components.d.ts
+  s_7c9ae5172273e5::t_5b928d537295d1 150-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b096a784a1b6b8fc910c22b7369c32eb33501f8e",
+  "prompts": {},
+  "sessions": {
+    "s_7c9ae5172273e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21a1b-1e3b-7df1-9d8a-3447055152e6",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_d056a7166f42ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21a0e-f5c6-79f3-8a75-af9c48919c98",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
