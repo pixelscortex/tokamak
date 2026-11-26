@@ -64,8 +64,6 @@ export type {
   CallerActionContext,
   ActionTarget,
   MachineId,
-  MachineEntry,
-  MachineCreation,
   ActionOptions,
   MachineFailure,
   PluginCalls,

@@ -59,8 +59,7 @@ and streams replies from plugins through its reply API.
 
 ## Extending chat
 
-Import `parts` through `plugin:chat/client`. The compiler publishes paths for
-every JSX tag. See [Chat's design notes](../../design/chat.md#parts-it-offers)
+Use the typed `find` function from `plugin:chat/client` to target a JSX element by name. See [Chat's design notes](../../design/chat.md#parts-it-offers)
 for the parts used by starter add-ons. Each action and its live `when`
 receive the owning component's props.
 
@@ -78,16 +77,16 @@ import { onCleanup } from "solid-js";
 import { after, append, prepend, replace } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Row = after(chat.parts.Composer.div.box, AgentRow);
-export const Question = prepend(chat.parts.Composer.div.top, PermissionCard, {
+export const Row = after(chat.find("box"), AgentRow);
+export const Question = prepend(chat.find("top"), PermissionCard, {
   when: (c) => waiting(c.threadId),
 });
-export const Card = append(chat.parts.Message.article.footer, ChangeCard, {
+export const Card = append(chat.find("footer"), ChangeCard, {
   when: (m) => !m.next || m.next.role === "user",
 });
-export const Heading = replace(chat.parts.Empty.div.div.heading, AgentHeading);
-export const Status = append(chat.parts.ThreadRow.ListboxItem.span.span.status, StatusIcon);
-export const Branch = after(chat.parts.Header.div.title, BranchChip);
+export const Heading = replace(chat.find("heading"), AgentHeading);
+export const Status = append(chat.find("status"), StatusIcon);
+export const Branch = after(chat.find("title", { in: "Header" }), BranchChip);
 
 // After each Send, once the message is stored and the folder exists on this computer:
 // { threadId, messageId, text, folder, first }.

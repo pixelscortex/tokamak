@@ -11,6 +11,7 @@ import {
   type FunctionReference,
   type MachineId,
 } from "@tokamak/sdk";
+import { machines } from "@tokamak/sdk/unstable";
 import { api } from "./_generated/api";
 import { internal } from "./_generated/internal";
 import schema from "./schema";
@@ -24,7 +25,9 @@ const other = createApi<{ work: { where: FunctionReference<"action", {}, { runne
 export const create = action({
   args: { name: v.string(), member: v.optional(v.string()) },
   handler: async (ctx, { name, member }) => {
-    const machine = await ctx.machines.create({ name, ...(member === undefined ? {} : { member }) });
+    if ("machines" in ctx) throw new Error("Machine management leaked onto the action context");
+
+    const machine = await machines(ctx).create({ name, ...(member === undefined ? {} : { member }) });
     if (isFailure(machine)) return machine;
     return { ...machine, server: await ctx.server.url() };
   },
@@ -32,33 +35,39 @@ export const create = action({
 
 export const remove = action({
   args: { id: v.string() },
-  handler: (ctx, { id }) => ctx.machines.remove(id as MachineId),
+  handler: (ctx, { id }) => machines(ctx).remove(id as MachineId),
 });
 
 export const waitOnline = action({
   args: { id: v.string(), timeoutMs: v.number() },
-  handler: (ctx, { id, timeoutMs }) => ctx.machines.waitOnline(id as MachineId, { timeoutMs }),
+  handler: (ctx, { id, timeoutMs }) => machines(ctx).waitOnline(id as MachineId, { timeoutMs }),
 });
 
-export const list = query({ handler: (ctx) => ctx.machines.list() });
+export const list = query({
+  handler: (ctx) => {
+    if ("machines" in ctx) throw new Error("Machine management leaked onto the query context");
 
-export const all = internalAction({ handler: (ctx) => ctx.machines.listAll() });
+    return machines(ctx).list();
+  },
+});
+
+export const all = internalAction({ handler: (ctx) => machines(ctx).listAll() });
 
 export const unboundCount = action({
   handler: async (ctx) =>
     (await ctx.runAction(internal.work.all, {})).filter((entry) => !entry.member).length,
 });
 
-export const listAll = action({ handler: (ctx) => ctx.machines.listAll() });
+export const listAll = action({ handler: (ctx) => machines(ctx).listAll() });
 
 export const management = action({
   args: { operation: v.string(), id: v.string() },
   handler: async (ctx, { operation, id }) => {
     const machine = id as MachineId;
-    if (operation === "create") await ctx.machines.create({ name: "Unexpected machine" });
-    if (operation === "remove") await ctx.machines.remove(machine);
-    if (operation === "waitOnline") await ctx.machines.waitOnline(machine);
-    if (operation === "listAll") await ctx.machines.listAll();
+    if (operation === "create") await machines(ctx).create({ name: "Unexpected machine" });
+    if (operation === "remove") await machines(ctx).remove(machine);
+    if (operation === "waitOnline") await machines(ctx).waitOnline(machine);
+    if (operation === "listAll") await machines(ctx).listAll();
     if (operation === "url") await ctx.server.url();
     return null;
   },
@@ -73,7 +82,7 @@ export const anonymous = provide(auth.method, {
   signIn: internalAction({
     args: { id: v.string() },
     handler: async (ctx, { id }) => {
-      if (!(await ctx.machines.listAll()).some((entry) => entry.id === id)) return fail("MissingMachine");
+      if (!(await machines(ctx).listAll()).some((entry) => entry.id === id)) return fail("MissingMachine");
       const result = await ctx.runAction(api.work.callNote, {}, { on: id as MachineId });
       if (isFailure(result)) return fail(result.kind);
       return fail(result.user === null ? "AnonymousRunner" : "UnexpectedCaller");
@@ -83,7 +92,11 @@ export const anonymous = provide(auth.method, {
 
 export const store = mutation({
   args: { text: v.string() },
-  handler: ({ db }, { text }) => db.insert("lines", { text }),
+  handler: (ctx, { text }) => {
+    if ("machines" in ctx) throw new Error("Machine management leaked onto the mutation context");
+
+    return ctx.db.insert("lines", { text });
+  },
 });
 
 export const createAfterReload = action({
@@ -94,7 +107,7 @@ export const createAfterReload = action({
       if (rows.some(({ text }) => text === "reload finished")) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    return ctx.machines.create({ name: "After reload" });
+    return machines(ctx).create({ name: "After reload" });
   },
 });
 
@@ -112,9 +125,8 @@ export const run = action({
     for await (const line of child.stdout) output.push(line);
     const id = await ctx.runMutation(api.work.store, { text: await readFile(file, "utf8") });
     const { rows, call: queryCall } = await ctx.runQuery(api.work.rows, {});
-    const machines = await ctx.machines.list();
     return {
-      machines,
+      machines: await machines(ctx).list(),
       output,
       status: await child.exited,
       row: rows.find((row) => row._id === id),

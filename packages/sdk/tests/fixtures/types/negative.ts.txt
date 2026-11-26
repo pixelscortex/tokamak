@@ -1,6 +1,7 @@
 // Every marked line must produce a real compiler diagnostic, not an unused
 // suppression. The harness verifies diagnostic lines as well as nonzero exit.
 import { action, TokamakClient, createFunctions, type Id } from '@tokamak/sdk';
+import { machines } from '@tokamak/sdk/unstable';
 import { api } from '../feature/_generated/api';
 import schema from '../feature/schema';
 declare const client: TokamakClient;
@@ -27,14 +28,22 @@ mutation({ handler: ctx => ctx.db.insert('tasks', { title: 'x', done: false }) }
 mutation({ handler: ctx => ctx.db.patch(taskId, { done: 'yes' }) }); // reject
 mutation({ handler: ctx => ctx.db.replace(taskId, { title: 'x' }) }); // reject
 
+query({ handler: ctx => ctx.machines }); // reject
+mutation({ handler: ctx => ctx.machines }); // reject
+action({ handler: ctx => ctx.machines }); // reject
+
+query({ handler: ctx => machines(ctx).create({ name: 'forbidden' }) }); // reject
+mutation({ handler: ctx => machines(ctx).create({ name: 'forbidden' }) }); // reject
+
 action({
   on: "caller",
   handler: async (ctx) => {
-    await ctx.machines.list();
-    await ctx.machines.create({ name: "forbidden" }); // reject
-    await ctx.machines.remove(null as never); // reject
-    await ctx.machines.waitOnline(null as never); // reject
-    await ctx.machines.listAll(); // reject
+    ctx.machines; // reject
+    await machines(ctx).list();
+    await machines(ctx).create({ name: "forbidden" }); // reject
+    await machines(ctx).remove(null as never); // reject
+    await machines(ctx).waitOnline(null as never); // reject
+    await machines(ctx).listAll(); // reject
     await ctx.server.url(); // reject
   },
 });

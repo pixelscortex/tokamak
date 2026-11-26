@@ -3,7 +3,7 @@ import { createSignal, flush, onCleanup } from "solid-js";
 import { expect, test } from "vitest";
 import { after, ExtensionProvider } from "../../client";
 import { BenchmarkRow, RealisticRow } from "./fixtures/parts/owner/src/client/api";
-import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
+import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 import { host, layer } from "./fixtures/parts/extension-host";
 
 function PlainRow(props: { text: string }) {
@@ -120,7 +120,7 @@ test.each([
 
 test("loading an addition for another path leaves 7500 mounted elements alone", async () => {
   const [layers, setLayers] = createSignal<ReturnType<typeof layer>[]>([]);
-  const button = parts.Labels.section.button;
+  const button = find("button", { in: "Labels" });
   const addon = layer(
     "After",
     after(button, () => "unrelated"),

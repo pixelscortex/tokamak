@@ -1,4 +1,4 @@
-// Generated plugin screen paths. Commit this file.
+// Generated plugin screen search types. Commit this file.
 export * from "../api";
 type Props1 = Extract<NonNullable<{
   agentId: string | undefined;
@@ -72,12 +72,12 @@ type Props21 = Extract<NonNullable<Props20 & { readonly $row: { readonly item: i
 type Props22 = Extract<NonNullable<{ task: import("@tokamak/sdk/agent-turn").Task }>, object>;
 type Props23 = Extract<NonNullable<{ text: string }>, object>;
 type Props24 = Extract<NonNullable<{ turn: import("solid-js").Accessor<import("../lib/replies").Turn> }>, object>;
-type Props25 = Extract<NonNullable<Props19 & { readonly $row: { readonly item: () => { hasText: boolean; state: "running" | "done" | "failed"; type: "tool" | "helper"; title: string; startedAt: number; turnId: import("@tokamak/sdk").Id<"turns">; n: number; key: string; name?: string | undefined; kind?: "command" | "read" | "edit" | "search" | "web" | "other" | undefined; finishedAt?: number | undefined; detail?: string | undefined; _id: import("@tokamak/sdk").Id<"steps">; _creationTime: number; }; readonly index: () => number } }>, object>;
+type Props25 = Extract<NonNullable<Props19 & { readonly $row: { readonly item: () => { hasText: boolean; title: string; state: "done" | "running" | "failed"; type: "tool" | "helper"; startedAt: number; turnId: import("@tokamak/sdk").Id<"turns">; n: number; key: string; detail?: string | undefined; name?: string | undefined; kind?: "command" | "read" | "edit" | "search" | "web" | "other" | undefined; finishedAt?: number | undefined; _id: import("@tokamak/sdk").Id<"steps">; _creationTime: number; }; readonly index: () => number } }>, object>;
 type Props26 = Extract<NonNullable<{ text: string | null | undefined }>, object>;
 type Props27 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClient; turnId: import("../lib/replies").Turn["_id"] }>, object>;
 type Props28 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClient; turn: import("solid-js").Accessor<import("../lib/replies").Turn> }>, object>;
 type Props29 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClient; turnId: import("../lib/replies").Turn["_id"]; now: number }>, object>;
-type Props30 = Extract<NonNullable<Props29 & { readonly $row: { readonly item: () => import("@tokamak/sdk").Doc<import("@tokamak/sdk").ModelFromSchema<import("@tokamak/sdk").SchemaDefinition<{ choices: import("@tokamak/sdk").TableDefinition<{ updatedAt: import("@tokamak/sdk").Validator<number, false>; agent: import("@tokamak/sdk").Validator<{ id: string; name: string; } & {}, false>; model: import("@tokamak/sdk").Validator<string, true>; effort: import("@tokamak/sdk").Validator<string, true>; speed: import("@tokamak/sdk").Validator<string, true>; mode: import("@tokamak/sdk").Validator<string, true>; access: import("@tokamak/sdk").Validator<"full" | "ask", false>; threadId: import("@tokamak/sdk").Validator<string, false>; }, Record<never, never> & Record<"by_threadId", readonly ["threadId"]>>; turns: import("@tokamak/sdk").TableDefinition<{ threadId: import("@tokamak/sdk").Validator<string, false>; messageId: import("@tokamak/sdk").Validator<string, false>; replyId: import("@tokamak/sdk").Validator<string, true>; sender: import("@tokamak/sdk").Validator<{ id: string; name: string; device: string; } & {}, false>; agent: import("@tokamak/sdk").Validator<{ id: string; name: string; } & {}, false>; model: import("@tokamak/sdk").Validator<string, false>; modelName: import("@tokamak/sdk").Validator<string, true>; effort: import("@tokamak/sdk").Validator<string, true>; speed: import("@tokamak/sdk").Validator<string, true>; mode: import("@tokamak/sdk").Validator<string, true>; access: import("@tokamak/sdk").Validator<"full" | "ask", false>; state: import("@tokamak/sdk").Validator<"queued" | "running" | "waiting" | "done" | "stopped" | "failed" | "interrupted", false>; question: import("@tokamak/sdk").Validator<{ id: string; kind: string; action: string; subject: string; } & {}, true>; questionToken: import("@tokamak/sdk").Validator<string, true>; stoppingAt: import("@tokamak/sdk").Validator<number, true>; steers: import("@tokamak/sdk").Validator<string[], true>; steerOffsets: import("@tokamak/sdk").Validator<number[], true>; pendingSteer: import("@tokamak/sdk").Validator<string, true>; pendingSteerOffset: import("@tokamak/sdk").Validator<number, true>; error: import("@tokamak/sdk").Validator<string, true>; usage: import("@tokamak/sdk").Validator<{ inputTokens: number; outputTokens: number; } & { cachedInputTokens?: number | undefined; costUsd?: number | undefined; }, true>; text: import("@tokamak/sdk").Validator<string, true>; thinking: import("@tokamak/sdk").Validator<string, true>; actions: import("@tokamak/sdk").Validator<number, true>; current: import("@tokamak/sdk").Validator<{ type: "tool" | "helper"; title: string; startedAt: number; } & { name?: string | undefined; kind?: "command" | "read" | "edit" | "search" | "web" | "other" | undefined; }, true>; tasks: import("@tokamak/sdk").Validator<({ state: "running" | "done" | "pending"; text: string; } & {})[], true>; plan: import("@tokamak/sdk").Validator<string, true>; sessionId: import("@tokamak/sdk").Validator<string, true>; sessionHome: import("@tokamak/sdk").Validator<string, true>; replyToken: import("@tokamak/sdk").Validator<string, true>; startedAt: import("@tokamak/sdk").Validator<number, false>; finishedAt: import("@tokamak/sdk").Validator<number, true>; }, Record<never, never> & Record<"by_threadId_startedAt", readonly ["threadId", "startedAt"]> & Record<"by_threadId_state", readonly ["threadId", "state"]> & Record<"by_threadId_state_startedAt", readonly ["threadId", "state", "startedAt"]> & Record<"by_state", readonly ["state"]> & Record<"by_messageId", readonly ["messageId"]> & Record<"by_replyId", readonly ["replyId"]>>; steps: import("@tokamak/sdk").TableDefinition<{ turnId: import("@tokamak/sdk").Validator<import("@tokamak/sdk").Id<"turns">, false>; n: import("@tokamak/sdk").Validator<number, false>; key: import("@tokamak/sdk").Validator<string, false>; type: import("@tokamak/sdk").Validator<"tool" | "helper", false>; kind: import("@tokamak/sdk").Validator<"command" | "read" | "edit" | "search" | "web" | "other", true>; name: import("@tokamak/sdk").Validator<string, true>; title: import("@tokamak/sdk").Validator<string, false>; detail: import("@tokamak/sdk").Validator<string, true>; text: import("@tokamak/sdk").Validator<string, true>; state: import("@tokamak/sdk").Validator<"running" | "done" | "failed", false>; startedAt: import("@tokamak/sdk").Validator<number, false>; finishedAt: import("@tokamak/sdk").Validator<number, true>; }, Record<never, never> & Record<"by_turnId_n", readonly ["turnId", "n"]> & Record<"by_turnId_type_n", readonly ["turnId", "type", "n"]> & Record<"by_turnId_key", readonly ["turnId", "key"]>>; signs: import("@tokamak/sdk").TableDefinition<{ turnId: import("@tokamak/sdk").Validator<import("@tokamak/sdk").Id<"turns">, false>; at: import("@tokamak/sdk").Validator<number, false>; }, Record<never, never> & Record<"by_turnId", readonly ["turnId"]>>; sweeps: import("@tokamak/sdk").TableDefinition<{ at: import("@tokamak/sdk").Validator<number, false>; since: import("@tokamak/sdk").Validator<number, false>; }, Record<never, never>>; }>>, "steps">; readonly index: () => number } }>, object>;
+type Props30 = Extract<NonNullable<Props29 & { readonly $row: { readonly item: () => import("@tokamak/sdk").Doc<import("@tokamak/sdk").ModelFromSchema<import("@tokamak/sdk").SchemaDefinition<{ choices: import("@tokamak/sdk").TableDefinition<{ updatedAt: import("@tokamak/sdk").Validator<number, false>; agent: import("@tokamak/sdk").Validator<{ id: string; name: string; } & {}, false>; model: import("@tokamak/sdk").Validator<string, true>; effort: import("@tokamak/sdk").Validator<string, true>; speed: import("@tokamak/sdk").Validator<string, true>; mode: import("@tokamak/sdk").Validator<string, true>; access: import("@tokamak/sdk").Validator<"full" | "ask", false>; threadId: import("@tokamak/sdk").Validator<string, false>; }, Record<never, never> & Record<"by_threadId", readonly ["threadId"]>>; turns: import("@tokamak/sdk").TableDefinition<{ threadId: import("@tokamak/sdk").Validator<string, false>; messageId: import("@tokamak/sdk").Validator<string, false>; replyId: import("@tokamak/sdk").Validator<string, true>; sender: import("@tokamak/sdk").Validator<{ id: string; name: string; device: string; } & {}, false>; agent: import("@tokamak/sdk").Validator<{ id: string; name: string; } & {}, false>; model: import("@tokamak/sdk").Validator<string, false>; modelName: import("@tokamak/sdk").Validator<string, true>; effort: import("@tokamak/sdk").Validator<string, true>; speed: import("@tokamak/sdk").Validator<string, true>; mode: import("@tokamak/sdk").Validator<string, true>; access: import("@tokamak/sdk").Validator<"full" | "ask", false>; state: import("@tokamak/sdk").Validator<"done" | "queued" | "running" | "waiting" | "stopped" | "failed" | "interrupted", false>; question: import("@tokamak/sdk").Validator<{ id: string; kind: string; action: string; subject: string; } & {}, true>; questionToken: import("@tokamak/sdk").Validator<string, true>; stoppingAt: import("@tokamak/sdk").Validator<number, true>; steers: import("@tokamak/sdk").Validator<string[], true>; steerOffsets: import("@tokamak/sdk").Validator<number[], true>; pendingSteer: import("@tokamak/sdk").Validator<string, true>; pendingSteerOffset: import("@tokamak/sdk").Validator<number, true>; error: import("@tokamak/sdk").Validator<string, true>; usage: import("@tokamak/sdk").Validator<{ inputTokens: number; outputTokens: number; } & { cachedInputTokens?: number | undefined; costUsd?: number | undefined; }, true>; text: import("@tokamak/sdk").Validator<string, true>; thinking: import("@tokamak/sdk").Validator<string, true>; actions: import("@tokamak/sdk").Validator<number, true>; current: import("@tokamak/sdk").Validator<{ title: string; type: "tool" | "helper"; startedAt: number; } & { name?: string | undefined; kind?: "command" | "read" | "edit" | "search" | "web" | "other" | undefined; }, true>; tasks: import("@tokamak/sdk").Validator<({ state: "done" | "running" | "pending"; text: string; } & {})[], true>; plan: import("@tokamak/sdk").Validator<string, true>; sessionId: import("@tokamak/sdk").Validator<string, true>; sessionHome: import("@tokamak/sdk").Validator<string, true>; replyToken: import("@tokamak/sdk").Validator<string, true>; startedAt: import("@tokamak/sdk").Validator<number, false>; finishedAt: import("@tokamak/sdk").Validator<number, true>; }, Record<never, never> & Record<"by_threadId_startedAt", readonly ["threadId", "startedAt"]> & Record<"by_threadId_state", readonly ["threadId", "state"]> & Record<"by_threadId_state_startedAt", readonly ["threadId", "state", "startedAt"]> & Record<"by_state", readonly ["state"]> & Record<"by_messageId", readonly ["messageId"]> & Record<"by_replyId", readonly ["replyId"]>>; steps: import("@tokamak/sdk").TableDefinition<{ turnId: import("@tokamak/sdk").Validator<import("@tokamak/sdk").Id<"turns">, false>; n: import("@tokamak/sdk").Validator<number, false>; key: import("@tokamak/sdk").Validator<string, false>; type: import("@tokamak/sdk").Validator<"tool" | "helper", false>; kind: import("@tokamak/sdk").Validator<"command" | "read" | "edit" | "search" | "web" | "other", true>; name: import("@tokamak/sdk").Validator<string, true>; title: import("@tokamak/sdk").Validator<string, false>; detail: import("@tokamak/sdk").Validator<string, true>; text: import("@tokamak/sdk").Validator<string, true>; state: import("@tokamak/sdk").Validator<"done" | "running" | "failed", false>; startedAt: import("@tokamak/sdk").Validator<number, false>; finishedAt: import("@tokamak/sdk").Validator<number, true>; }, Record<never, never> & Record<"by_turnId_n", readonly ["turnId", "n"]> & Record<"by_turnId_type_n", readonly ["turnId", "type", "n"]> & Record<"by_turnId_key", readonly ["turnId", "key"]>>; signs: import("@tokamak/sdk").TableDefinition<{ turnId: import("@tokamak/sdk").Validator<import("@tokamak/sdk").Id<"turns">, false>; at: import("@tokamak/sdk").Validator<number, false>; }, Record<never, never> & Record<"by_turnId", readonly ["turnId"]>>; sweeps: import("@tokamak/sdk").TableDefinition<{ at: import("@tokamak/sdk").Validator<number, false>; since: import("@tokamak/sdk").Validator<number, false>; }, Record<never, never>>; }>>, "steps">; readonly index: () => number } }>, object>;
 type Props31 = Extract<NonNullable<{ step: import("../lib/replies").Step; now: number }>, object>;
 type Props32 = Extract<NonNullable<{ step: import("../lib/replies").Step }>, object>;
 type Props33 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClient; helper: import("../lib/replies").Helper; agentId: string }>, object>;
@@ -85,314 +85,66 @@ type Props34 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClien
 type Props35 = Extract<NonNullable<{ size?: 12 | 16 }>, object>;
 type Props36 = Extract<NonNullable<import("plugin:chat/client").ThreadRowProps>, object>;
 type Props37 = Extract<NonNullable<Parameters<typeof import("../api")["SavedAgentDetail"]>[0]>, object>;
-type Props38 = Extract<NonNullable<Props36 & { readonly $row: { readonly item: { readonly id: string; readonly name: string; readonly title: string; readonly state: "running" | "done" | "failed"; }; readonly index: () => number } }>, object>;
+type Props38 = Extract<NonNullable<Props36 & { readonly $row: { readonly item: { readonly id: string; readonly name: string; readonly title: string; readonly state: "done" | "running" | "failed"; }; readonly index: () => number } }>, object>;
 type Props39 = Extract<NonNullable<Props19 & { readonly $row: { readonly item: () => import("../lib/steers").BodyPiece; readonly index: number } }>, object>;
 type Props40 = Extract<NonNullable<{ text: string; sender: string }>, object>;
-export declare const parts: {
-  readonly "AgentMark": {
-    readonly "svg": import("@tokamak/sdk/client").ComponentPart<"ai.AgentMark.svg", Props1> & {
-      readonly "path": import("@tokamak/sdk/client").ComponentPart<"ai.AgentMark.svg.path", Props2>;
-    };
-  };
-  readonly "AgentPicker": {
-    readonly "Menu$2e$Root": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root", Props3> & {
-      readonly "PickerChip": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root.PickerChip", Props3>;
-      readonly "Menu$2e$Content": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root.Menu$2e$Content", Props3> & {
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root.Menu$2e$Content.div", Props3> & {
-          readonly "PickerColumns": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root.Menu$2e$Content.div.PickerColumns", Props3>;
-          readonly "PickerSettings": import("@tokamak/sdk/client").ComponentPart<"ai.AgentPicker.Menu$2e$Root.Menu$2e$Content.div.PickerSettings", Props3>;
-        };
-      };
-    };
-  };
-  readonly "PickerChip": {
-    readonly "Menu$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger", Props4> & {
-      readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.AgentMark", Props4>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.span", Props4>;
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.span$2", Props4> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.span$2.span", Props5>;
-      };
-      readonly "chipExtras": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.chipExtras", Props4>;
-      readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.PickerChip.Menu$2e$Trigger.Icon", Props4>;
-    };
-  };
-  readonly "PickerColumns": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div", Props6> & {
-      readonly "Menu$2e$RadioGroup": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup", Props6> & {
-        readonly "ColumnTitle": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup.ColumnTitle", Props6>;
-        readonly "ColumnTitle$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup.ColumnTitle$2", Props6> & {
-          readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup.ColumnTitle$2.AgentMark", Props6>;
-          readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup.ColumnTitle$2.span", Props6>;
-        };
-        readonly "AgentModels": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup.AgentModels", Props7>;
-      };
-      readonly "Menu$2e$RadioGroup$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup$2", Props6> & {
-        readonly "ColumnTitle": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup$2.ColumnTitle", Props6>;
-        readonly "Menu$2e$RadioItem": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.Menu$2e$RadioGroup$2.Menu$2e$RadioItem", Props8>;
-      };
-      readonly "extraColumns": import("@tokamak/sdk/client").ComponentPart<"ai.PickerColumns.div.extraColumns", Props6>;
-    };
-  };
-  readonly "ColumnTitle": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.ColumnTitle.div", Props9>;
-  };
-  readonly "AgentModels": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div", Props10> & {
-      readonly "Menu$2e$RadioItem": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.Menu$2e$RadioItem", Props10> & {
-        readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.Menu$2e$RadioItem.AgentMark", Props10>;
-      };
-      readonly "ColumnTitle": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.ColumnTitle", Props10> & {
-        readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.ColumnTitle.AgentMark", Props10>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.ColumnTitle.span", Props10>;
-      };
-      readonly "Menu$2e$RadioItem$2": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.Menu$2e$RadioItem$2", Props11> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.AgentModels.div.Menu$2e$RadioItem$2.span", Props11>;
-      };
-    };
-  };
-  readonly "PickerSettings": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div", Props12> & {
-      readonly "Choice": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.Choice", Props12>;
-      readonly "Choice$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.Choice$2", Props12>;
-      readonly "Choice$3": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.Choice$3", Props12>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.span", Props12>;
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.span$2", Props12> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.span$2.span", Props12>;
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.span$2.Icon", Props12>;
-        readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.PickerSettings.div.span$2.span$2", Props12>;
-      };
-    };
-  };
-  readonly "Choice": {
-    readonly "Menu$2e$RadioGroup": import("@tokamak/sdk/client").ComponentPart<"ai.Choice.Menu$2e$RadioGroup", Props13> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Choice.Menu$2e$RadioGroup.span", Props13>;
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.Choice.Menu$2e$RadioGroup.div", Props13> & {
-        readonly "Menu$2e$RadioItem": import("@tokamak/sdk/client").ComponentPart<"ai.Choice.Menu$2e$RadioGroup.div.Menu$2e$RadioItem", Props14>;
-      };
-    };
-  };
-  readonly "AgentRow": {
-    readonly "Row": import("@tokamak/sdk/client").ComponentPart<"ai.AgentRow.Row", Props15>;
-    readonly "OpenThreadRow": import("@tokamak/sdk/client").ComponentPart<"ai.AgentRow.OpenThreadRow", Props15>;
-  };
-  readonly "OpenThreadRow": {
-    readonly "Row": import("@tokamak/sdk/client").ComponentPart<"ai.OpenThreadRow.Row", Props16>;
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.OpenThreadRow.div", Props16> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.OpenThreadRow.div.span", Props16>;
-    };
-  };
-  readonly "Row": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.Row.div", Props17> & {
-      readonly "AgentPicker": import("@tokamak/sdk/client").ComponentPart<"ai.Row.div.AgentPicker", Props17>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Row.div.span", Props17>;
-      readonly "statusExtras": import("@tokamak/sdk/client").ComponentPart<"ai.Row.div.statusExtras", Props17>;
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.Row.div.span$2", Props17>;
-    };
-  };
-  readonly "AgentHeading": {
-    readonly "h2": import("@tokamak/sdk/client").ComponentPart<"ai.AgentHeading.h2", {}>;
-  };
-  readonly "PermissionCard": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div", Props15> & {
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div", Props15> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div.Icon", Props15>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div.span", Props15>;
-        readonly "code": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div.code", Props15>;
-      };
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.span", Props15>;
-      readonly "div$2": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div$2", Props15> & {
-        readonly "Tooltip$2e$Root": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div$2.Tooltip$2e$Root", Props18> & {
-          readonly "Tooltip$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div$2.Tooltip$2e$Root.Tooltip$2e$Trigger", Props18>;
-          readonly "Tooltip$2e$Content": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div$2.Tooltip$2e$Root.Tooltip$2e$Content", Props18> & {
-            readonly "Kbd": import("@tokamak/sdk/client").ComponentPart<"ai.PermissionCard.div.div$2.Tooltip$2e$Root.Tooltip$2e$Content.Kbd", Props18>;
-          };
-        };
-      };
-    };
-  };
-  readonly "ReplyCards": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyCards.div", Props19> & {
-      readonly "TasksCard": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyCards.div.TasksCard", Props19>;
-      readonly "PlanCard": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyCards.div.PlanCard", Props19>;
-      readonly "Usage": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyCards.div.Usage", Props19>;
-    };
-  };
-  readonly "TasksCard": {
-    readonly "section": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section", Props20> & {
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.div", Props20> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.div.span", Props20> & {
-          readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.div.span.Icon", Props20>;
-        };
-        readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.div.span$2", Props20>;
-      };
-      readonly "ul": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.ul", Props20> & {
-        readonly "TaskRow": import("@tokamak/sdk/client").ComponentPart<"ai.TasksCard.section.ul.TaskRow", Props21>;
-      };
-    };
-  };
-  readonly "TaskRow": {
-    readonly "li": import("@tokamak/sdk/client").ComponentPart<"ai.TaskRow.li", Props22> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.TaskRow.li.span", Props22> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.TaskRow.li.span.Icon", Props22>;
-        readonly "Spinning": import("@tokamak/sdk/client").ComponentPart<"ai.TaskRow.li.span.Spinning", Props22>;
-      };
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.TaskRow.li.span$2", Props22>;
-    };
-  };
-  readonly "PlanCard": {
-    readonly "section": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section", Props23> & {
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section.div", Props23> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section.div.span", Props23> & {
-          readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section.div.span.Icon", Props23>;
-        };
-        readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section.div.span$2", Props23>;
-      };
-      readonly "p": import("@tokamak/sdk/client").ComponentPart<"ai.PlanCard.section.p", Props23>;
-    };
-  };
-  readonly "Usage": {
-    readonly "p": import("@tokamak/sdk/client").ComponentPart<"ai.Usage.p", Props24>;
-  };
-  readonly "ReplyHeader": {
-    readonly "header": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyHeader.header", Props19> & {
-      readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyHeader.header.AgentMark", Props19>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyHeader.header.span", Props19>;
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyHeader.header.span$2", Props19>;
-    };
-  };
-  readonly "ReplyWork": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyWork.div", Props19> & {
-      readonly "Thinking": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyWork.div.Thinking", Props19>;
-      readonly "ActionsLine": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyWork.div.ActionsLine", Props19>;
-      readonly "HelperRow": import("@tokamak/sdk/client").ComponentPart<"ai.ReplyWork.div.HelperRow", Props25>;
-    };
-  };
-  readonly "Folded": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.Folded.div", Props9> & {
-      readonly "Collapsible$2e$Root": import("@tokamak/sdk/client").ComponentPart<"ai.Folded.div.Collapsible$2e$Root", Props9>;
-    };
-  };
-  readonly "FoldedText": {
-    readonly "p": import("@tokamak/sdk/client").ComponentPart<"ai.FoldedText.p", Props26>;
-  };
-  readonly "Thinking": {
-    readonly "Collapsible$2e$Root": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root", Props27> & {
-      readonly "Collapsible$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root.Collapsible$2e$Trigger", Props27> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root.Collapsible$2e$Trigger.Icon", Props27>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root.Collapsible$2e$Trigger.span", Props27>;
-      };
-      readonly "Collapsible$2e$Panel": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root.Collapsible$2e$Panel", Props27> & {
-        readonly "ThinkingText": import("@tokamak/sdk/client").ComponentPart<"ai.Thinking.Collapsible$2e$Root.Collapsible$2e$Panel.ThinkingText", Props27>;
-      };
-    };
-  };
-  readonly "ThinkingText": {
-    readonly "FoldedText": import("@tokamak/sdk/client").ComponentPart<"ai.ThinkingText.FoldedText", Props27>;
-  };
-  readonly "ActionsLine": {
-    readonly "Folded": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded", Props28> & {
-      readonly "Collapsible$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger", Props28> & {
-        readonly "Spinning": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.Spinning", Props28>;
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.Icon", Props28>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.span", Props28>;
-        readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.span$2", Props28>;
-        readonly "span$3": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.span$3", Props28>;
-        readonly "span$4": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Trigger.span$4", Props28>;
-      };
-      readonly "Collapsible$2e$Panel": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Panel", Props28> & {
-        readonly "Steps": import("@tokamak/sdk/client").ComponentPart<"ai.ActionsLine.Folded.Collapsible$2e$Panel.Steps", Props28>;
-      };
-    };
-  };
-  readonly "Steps": {
-    readonly "ul": import("@tokamak/sdk/client").ComponentPart<"ai.Steps.ul", Props29> & {
-      readonly "StepRow": import("@tokamak/sdk/client").ComponentPart<"ai.Steps.ul.StepRow", Props30>;
-    };
-  };
-  readonly "StepRow": {
-    readonly "li": import("@tokamak/sdk/client").ComponentPart<"ai.StepRow.li", Props31> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.StepRow.li.span", Props31> & {
-        readonly "StepIcon": import("@tokamak/sdk/client").ComponentPart<"ai.StepRow.li.span.StepIcon", Props31>;
-      };
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.StepRow.li.span$2", Props31>;
-      readonly "span$3": import("@tokamak/sdk/client").ComponentPart<"ai.StepRow.li.span$3", Props31>;
-    };
-  };
-  readonly "StepIcon": {
-    readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"ai.StepIcon.StatusIcon", Props32>;
-    readonly "StatusIcon$2": import("@tokamak/sdk/client").ComponentPart<"ai.StepIcon.StatusIcon$2", Props32>;
-    readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.StepIcon.Icon", Props32>;
-  };
-  readonly "HelperRow": {
-    readonly "Folded": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded", Props33> & {
-      readonly "Collapsible$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger", Props33> & {
-        readonly "Spinning": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger.Spinning", Props33>;
-        readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger.StatusIcon", Props33>;
-        readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger.AgentMark", Props33>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger.span", Props33>;
-        readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Trigger.span$2", Props33>;
-      };
-      readonly "Collapsible$2e$Panel": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Panel", Props33> & {
-        readonly "FoldedText": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Panel.FoldedText", Props33>;
-        readonly "HelperText": import("@tokamak/sdk/client").ComponentPart<"ai.HelperRow.Folded.Collapsible$2e$Panel.HelperText", Props33>;
-      };
-    };
-  };
-  readonly "HelperText": {
-    readonly "FoldedText": import("@tokamak/sdk/client").ComponentPart<"ai.HelperText.FoldedText", Props34>;
-  };
-  readonly "Spinning": {
-    readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Spinning.span", Props35> & {
-      readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"ai.Spinning.span.StatusIcon", Props35>;
-    };
-  };
-  readonly "ThreadStatusIcon": {
-    readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadStatusIcon.StatusIcon", Props36>;
-  };
-  readonly "ThreadDetail": {
-    readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadDetail.AgentMark", Props36>;
-    readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadDetail.span", Props36>;
-    readonly "detailExtras": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadDetail.detailExtras", Props36>;
-    readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadDetail.span$2", Props36>;
-  };
-  readonly "SavedAgentDetail": {
-    readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.SavedAgentDetail.AgentMark", Props37>;
-    readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.SavedAgentDetail.span", Props37>;
-  };
-  readonly "ThreadHelpers": {
-    readonly "ul": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul", Props36> & {
-      readonly "li": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li", Props38> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span", Props38> & {
-          readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span.span", Props38> & {
-            readonly "AgentMark": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span.span.AgentMark", Props38>;
-          };
-          readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span.span$2", Props38>;
-          readonly "span$3": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span.span$3", Props38>;
-          readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"ai.ThreadHelpers.ul.li.span.StatusIcon", Props38>;
-        };
-      };
-    };
-  };
-  readonly "StopButton": {
-    readonly "Button": import("@tokamak/sdk/client").ComponentPart<"ai.StopButton.Button", Props15>;
-    readonly "Button$2": import("@tokamak/sdk/client").ComponentPart<"ai.StopButton.Button$2", Props15>;
-  };
-  readonly "SteeredBody": {
-    readonly "body": import("@tokamak/sdk/client").ComponentPart<"ai.SteeredBody.body", Props19> & {
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.SteeredBody.body.div", Props39>;
-      readonly "Steer": import("@tokamak/sdk/client").ComponentPart<"ai.SteeredBody.body.Steer", Props39>;
-    };
-  };
-  readonly "Steer": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div", Props40> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.span", Props40> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.span.Icon", Props40>;
-      };
-      readonly "span$2": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.span$2", Props40> & {
-        readonly "Avatar": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.span$2.Avatar", Props40>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.span$2.span", Props40>;
-      };
-      readonly "p": import("@tokamak/sdk/client").ComponentPart<"ai.Steer.div.p", Props40>;
-    };
-  };
-};
+export declare const find: import("@tokamak/sdk/client").ScreenFind<{
+  "svg": Props1;
+  "path": Props2;
+  "Menu.Root": Props3;
+  "PickerChip": Props3;
+  "Menu.Content": Props3;
+  "div": [["AgentPicker" | "Menu.Root" | "Menu.Content", Props3], ["PickerColumns", Props6], ["ColumnTitle", Props9], ["AgentModels", Props10], ["PickerSettings", Props12], ["Choice" | "Menu.RadioGroup", Props13], ["OpenThreadRow", Props16], ["Row", Props17], ["PermissionCard", Props15], ["PermissionCard" | "div", Props15], ["PermissionCard" | "div", Props15], ["ReplyCards", Props19], ["TasksCard" | "section", Props20], ["PlanCard" | "section", Props23], ["ReplyWork", Props19], ["Folded", Props9], ["SteeredBody" | "body", Props39], ["Steer", Props40]];
+  "PickerColumns": Props3;
+  "PickerSettings": Props3;
+  "Menu.Trigger": Props4;
+  "AgentMark": [["PickerChip" | "Menu.Trigger", Props4], ["PickerColumns" | "div" | "Menu.RadioGroup" | "ColumnTitle", Props6], ["AgentModels" | "div" | "Menu.RadioItem", Props10], ["AgentModels" | "div" | "ColumnTitle", Props10], ["ReplyHeader" | "header", Props19], ["HelperRow" | "Folded" | "Collapsible.Trigger", Props33], ["ThreadDetail", Props36], ["SavedAgentDetail", Props37], ["ThreadHelpers" | "ul" | "li" | "span", Props38]];
+  "span": [["PickerChip" | "Menu.Trigger", Props4], ["PickerChip" | "Menu.Trigger", Props4], ["PickerChip" | "Menu.Trigger" | "span", Props5], ["PickerColumns" | "div" | "Menu.RadioGroup" | "ColumnTitle", Props6], ["AgentModels" | "div" | "ColumnTitle", Props10], ["AgentModels" | "div" | "Menu.RadioItem", Props11], ["PickerSettings" | "div", Props12], ["PickerSettings" | "div", Props12], ["PickerSettings" | "div" | "span", Props12], ["PickerSettings" | "div" | "span", Props12], ["Choice" | "Menu.RadioGroup", Props13], ["OpenThreadRow" | "div", Props16], ["Row" | "div", Props17], ["Row" | "div", Props17], ["PermissionCard" | "div", Props15], ["PermissionCard" | "div", Props15], ["TasksCard" | "section" | "div", Props20], ["TasksCard" | "section" | "div", Props20], ["TaskRow" | "li", Props22], ["TaskRow" | "li", Props22], ["PlanCard" | "section" | "div", Props23], ["PlanCard" | "section" | "div", Props23], ["ReplyHeader" | "header", Props19], ["ReplyHeader" | "header", Props19], ["Thinking" | "Collapsible.Root" | "Collapsible.Trigger", Props27], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["StepRow" | "li", Props31], ["StepRow" | "li", Props31], ["StepRow" | "li", Props31], ["HelperRow" | "Folded" | "Collapsible.Trigger", Props33], ["HelperRow" | "Folded" | "Collapsible.Trigger", Props33], ["Spinning", Props35], ["ThreadDetail", Props36], ["ThreadDetail", Props36], ["SavedAgentDetail", Props37], ["ThreadHelpers" | "ul" | "li", Props38], ["ThreadHelpers" | "ul" | "li" | "span", Props38], ["ThreadHelpers" | "ul" | "li" | "span", Props38], ["ThreadHelpers" | "ul" | "li" | "span", Props38], ["Steer" | "div", Props40], ["Steer" | "div", Props40], ["Steer" | "div" | "span", Props40]];
+  "chipExtras": Props4;
+  "Icon": [["PickerChip" | "Menu.Trigger", Props4], ["PickerSettings" | "div" | "span", Props12], ["PermissionCard" | "div", Props15], ["TasksCard" | "section" | "div" | "span", Props20], ["TaskRow" | "li" | "span", Props22], ["PlanCard" | "section" | "div" | "span", Props23], ["Thinking" | "Collapsible.Root" | "Collapsible.Trigger", Props27], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["StepIcon", Props32], ["Steer" | "div" | "span", Props40]];
+  "Menu.RadioGroup": [["PickerColumns" | "div", Props6], ["PickerColumns" | "div", Props6], ["Choice", Props13]];
+  "ColumnTitle": [["PickerColumns" | "div" | "Menu.RadioGroup", Props6], ["PickerColumns" | "div" | "Menu.RadioGroup", Props6], ["PickerColumns" | "div" | "Menu.RadioGroup", Props6], ["AgentModels" | "div", Props10]];
+  "AgentModels": Props7;
+  "Menu.RadioItem": [["PickerColumns" | "div" | "Menu.RadioGroup", Props8], ["AgentModels" | "div", Props10], ["AgentModels" | "div", Props11], ["Choice" | "Menu.RadioGroup" | "div", Props14]];
+  "extraColumns": Props6;
+  "Choice": [["PickerSettings" | "div", Props12], ["PickerSettings" | "div", Props12], ["PickerSettings" | "div", Props12]];
+  "Row": [["AgentRow", Props15], ["OpenThreadRow", Props16]];
+  "OpenThreadRow": Props15;
+  "AgentPicker": Props17;
+  "statusExtras": Props17;
+  "h2": {};
+  "code": Props15;
+  "Tooltip.Root": Props18;
+  "Tooltip.Trigger": Props18;
+  "Tooltip.Content": Props18;
+  "Kbd": Props18;
+  "TasksCard": Props19;
+  "PlanCard": Props19;
+  "Usage": Props19;
+  "section": [["TasksCard", Props20], ["PlanCard", Props23]];
+  "ul": [["TasksCard" | "section", Props20], ["Steps", Props29], ["ThreadHelpers", Props36]];
+  "TaskRow": Props21;
+  "li": [["TaskRow", Props22], ["StepRow", Props31], ["ThreadHelpers" | "ul", Props38]];
+  "Spinning": [["TaskRow" | "li" | "span", Props22], ["ActionsLine" | "Folded" | "Collapsible.Trigger", Props28], ["HelperRow" | "Folded" | "Collapsible.Trigger", Props33]];
+  "p": [["PlanCard" | "section", Props23], ["Usage", Props24], ["FoldedText", Props26], ["Steer" | "div", Props40]];
+  "header": Props19;
+  "Thinking": Props19;
+  "ActionsLine": Props19;
+  "HelperRow": Props25;
+  "Collapsible.Root": [["Folded" | "div", Props9], ["Thinking", Props27]];
+  "Collapsible.Trigger": [["Thinking" | "Collapsible.Root", Props27], ["ActionsLine" | "Folded", Props28], ["HelperRow" | "Folded", Props33]];
+  "Collapsible.Panel": [["Thinking" | "Collapsible.Root", Props27], ["ActionsLine" | "Folded", Props28], ["HelperRow" | "Folded", Props33]];
+  "ThinkingText": Props27;
+  "FoldedText": [["ThinkingText", Props27], ["HelperRow" | "Folded" | "Collapsible.Panel", Props33], ["HelperText", Props34]];
+  "Folded": [["ActionsLine", Props28], ["HelperRow", Props33]];
+  "Steps": Props28;
+  "StepRow": Props30;
+  "StepIcon": Props31;
+  "StatusIcon": [["StepIcon", Props32], ["StepIcon", Props32], ["HelperRow" | "Folded" | "Collapsible.Trigger", Props33], ["Spinning" | "span", Props35], ["ThreadStatusIcon", Props36], ["ThreadHelpers" | "ul" | "li" | "span", Props38]];
+  "HelperText": Props33;
+  "detailExtras": Props36;
+  "Button": [["StopButton", Props15], ["StopButton", Props15]];
+  "body": Props19;
+  "Steer": Props39;
+  "Avatar": Props40;
+}>;

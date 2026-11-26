@@ -4,8 +4,8 @@ import { expect, test, vi } from "vitest";
 import { createPluginLoader, type PluginAssets, type PluginModuleHost } from "../../../runtime/js/plugins";
 import { ExtensionProvider } from "../../client";
 import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
-import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
-import { loadActions, manifest, RenamedComposer, renamedParts } from "virtual:built-component-addon";
+import { find } from "./fixtures/parts/owner/src/client/_generated/components";
+import { changed, duplicate, loadActions, manifest, moved, warnings } from "virtual:built-component-addon";
 
 test.each([
   {
@@ -14,8 +14,21 @@ test.each([
     matches: true,
   },
   {
-    title: "an installed add-on skips renamed and shifted parts while its other placements render",
-    Screen: RenamedComposer,
+    title: "a rebuilt owner moves a named target without rebuilding the add-on",
+    Screen: moved.Composer,
+    findOwner: moved.find,
+    matches: true,
+  },
+  {
+    title: "a second match in a rebuilt owner leaves an add-on on its original element",
+    Screen: duplicate.Composer,
+    findOwner: duplicate.find,
+    matches: true,
+  },
+  {
+    title: "a rebuilt owner skips a missing name and refuses to repoint an nth match",
+    Screen: changed.Composer,
+    findOwner: changed.find,
     matches: false,
   },
   {
@@ -24,18 +37,18 @@ test.each([
     matches: true,
     lateOwner: true,
   },
-])("$title", async ({ Screen, matches, lateOwner }) => {
+])("$title", async ({ Screen, findOwner, matches, lateOwner }) => {
   const catalogEntry = structuredClone(manifest);
   // Model a stale catalog that names a missing export without changing the actual bundle.
   const contributions = catalogEntry.plugin.contributes["component-action"];
-  contributions.push({ ...contributions[0]!, id: "MissingBadge" });
+  contributions.push({ ...contributions.find(({ id }) => id === "Note")!, id: "MissingNote" });
   let ownerLoads = 0;
   let catalogChanged!: Parameters<PluginAssets["onPluginsChanged"]>[0];
   const host: PluginModuleHost = {
     importModule: (name, entry) => {
       if (name === "@plugins/owner/ui") {
         ownerLoads++;
-        return Promise.resolve({ parts: renamedParts });
+        return Promise.resolve(changed);
       }
       expect(name).toBe("@plugins/addon/ui");
       expect(entry.entries.ui?.code).toBe(manifest.entries.ui.code);
@@ -72,11 +85,7 @@ test.each([
   const dispose = render(
     () => (
       <ExtensionProvider
-        host={
-          lateOwner
-            ? loader
-            : { ...loader, partOwner: async () => ({ parts: matches ? parts : renamedParts }) }
-        }
+        host={lateOwner ? loader : { ...loader, partOwner: async () => ({ find: findOwner ?? find }) }}
         onAlerts={alerts}
       >
         <Screen label="Send" lifecycle={() => {}} />
@@ -90,7 +99,11 @@ test.each([
     expect(root.querySelector("button + small")?.textContent).toBe(matches ? "Built for Send" : undefined);
     expect(root.querySelector('[aria-label="replacement"]') !== null).toBe(matches);
     expect(root.querySelector('[aria-label="body"]') !== null).toBe(!matches);
-    expect(root.querySelector('[aria-label="notice"]') !== null).toBe(!matches);
+    expect(root.querySelector('[aria-label="detail"]')).not.toBeNull();
+    if (Screen === moved.Composer)
+      expect(root.querySelector('[data-part="send-slot"] button + small')?.textContent).toBe(
+        "Built for Send",
+      );
     expect([...root.querySelectorAll("span + small")].map((row) => row.textContent)).toEqual([
       "Profile 1: work of 2",
       "Profile 2: quick of 2",
@@ -116,14 +129,22 @@ test.each([
       });
     }
     if (!matches || lateOwner) {
-      const missing = expect.stringMatching(/addon.*missing screen part owner.Composer.section.SendButton/);
-      const shifted = expect.stringMatching(/addon.*different element.*owner.Composer.section.div/);
-      expect(alerts).toHaveBeenLastCalledWith(expect.arrayContaining([missing, shifted]));
+      const missing = expect.stringMatching(
+        /addon.*find\("SendButton"\).*matches no elements.*candidates: none/,
+      );
+      const shifted = expect.stringMatching(
+        /addon.*find\("div".*nth.*different element.*candidates: Composer › section › div/,
+      );
+      expect(alerts).toHaveBeenLastCalledWith([missing, shifted]);
       expect(
-        warn.mock.calls.filter(([message]) => /missing screen part|different element/.test(message)),
+        warn.mock.calls.filter(([message]) => /matches no elements|different element/.test(message)),
       ).toHaveLength(2);
     }
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/addon.*MissingBadge.*manifest/));
+    if (!matches) {
+      expect(warnings).toMatch(/Plugin "addon".*find\("SendButton"\).*matches no elements/);
+      expect(warnings).toMatch(/Plugin "addon".*find\("div".*different element/);
+    }
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/addon.*MissingNote.*manifest/));
   } finally {
     dispose();
     loader.dispose();

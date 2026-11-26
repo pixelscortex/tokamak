@@ -252,8 +252,10 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
     });
     await router.navigate({ href: "/p/fixture" });
     await waitFor(() => expect(target.textContent).toContain("one: query"));
-    expect(target.querySelector('[role="alert"][aria-label="Plugin alerts"]')?.textContent).toMatch(
-      /later.*refused.*first.*installed first/,
+    await waitFor(() =>
+      expect(target.querySelector('[role="alert"][aria-label="Plugin alerts"]')?.textContent).toMatch(
+        /later.*refused.*first.*installed first/,
+      ),
     );
     publish("two");
     await waitFor(() => expect(target.textContent).toContain("two: query"));
