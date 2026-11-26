@@ -30,6 +30,22 @@ proto run bun -- run app
 The app builds the starter set, starts the Runner, and connects automatically.
 New thread creates a Chat thread. No external agent is started. See [app/README.md](app/README.md) for browser development and checks.
 
+## Install and update the app
+
+On macOS, run this from the repository to install the app the first time and
+to update it after that:
+
+```sh
+./install.sh
+```
+
+It builds the release app first and stops if the build fails, leaving the
+installed app as it was. If Tokamak is running, it quits it and waits for it
+to stop. Then it replaces `/Applications/Tokamak.app`, moves the old copy to
+the Trash, and prints the commit it installed. It only replaces the app: the
+data folder (`~/Library/Application Support/com.pixelscortex.Tokamak`) is never
+touched, so threads, settings and installed plugins stay the same.
+
 ## Packages
 
 `packages/server` owns storage and plugin execution. `packages/engine` keeps

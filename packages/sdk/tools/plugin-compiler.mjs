@@ -1,8 +1,18 @@
 import { Visibility } from "../src/visibility.ts";
 import ts from "typescript";
-import { resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const generated = (root) => resolve(root, ".tokamak/types");
+
+export function serverConfigPath(directory, pluginRoot) {
+  return (
+    ts.findConfigFile(directory, (path) => {
+      const fromPlugin = relative(pluginRoot, path);
+      return !fromPlugin.startsWith(".." + sep) && ts.sys.fileExists(path);
+    }) ?? fileURLToPath(new URL("../tsconfig.plugin-server.json", import.meta.url))
+  );
+}
 
 export function pluginCompilerOptions(root, options) {
   // Resolve inherited paths at their declaring config, before adding our own.

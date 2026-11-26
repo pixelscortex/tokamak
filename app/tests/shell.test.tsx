@@ -239,12 +239,15 @@ test("the footer says what is true: connected, and to which server", async () =>
   }
 });
 
-test("with no plugins the stage explains what to do next", async () => {
-  const { dispose } = mount([], "/empty");
+test("with no plugins the stage explains what to do next and links to Settings → Plugins", async () => {
+  const user = userEvent.setup();
+  const { router, dispose } = mount([], "/empty");
   try {
     const empty = await screen.findByRole("status", { name: "No plugins" });
     expect(within(empty).getByRole("heading", { name: "No plugins installed" })).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
+    await user.click(within(empty).getByRole("button", { name: "Open Settings → Plugins" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/plugins"));
   } finally {
     dispose();
   }

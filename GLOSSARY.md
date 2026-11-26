@@ -148,8 +148,16 @@ A value held by the window, optionally kept per device or per member.
 _Avoid_: Database row, settings (when referring to state as a whole).
 
 **Starter set**:
-The plugins shipped together so a fresh local server can run threads, agents, code review, and sign-in.
+The plugins in `tokamak-plugins` that a fresh local server needs to run threads, agents, code review and sign-in.
 _Avoid_: Built-ins, core plugins, defaults.
+
+**Plugins folder**:
+The one folder the app loads plugin builds from, `plugins` in its data folder, with one child folder per plugin named by its id. The app ships with no plugins and creates the folder when missing.
+_Avoid_: Plugin directory, install location, bundle.
+
+**Install**:
+Place a plugin's build in the plugins folder as `<plugins folder>/<id>`, replacing the build that was there. A running app picks it up on reload.
+_Avoid_: Deploy, add, enable.
 
 **Reload**:
 Rebuild a plugin and swap it into the running workspace when ready.

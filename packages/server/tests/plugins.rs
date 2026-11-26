@@ -449,18 +449,34 @@ async fn plugin_without_exports_exposes_nothing_to_other_plugins() {
 }
 
 fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
+    let source = installation.0.join("source");
+    write_build_source(&source, plugin, false);
+    write_server_config(&source);
+    source
+}
+
+fn write_server_config(source: &std::path::Path) {
+    std::fs::write(
+        source.join("src/server/tsconfig.json"),
+        r#"{"extends":"@tokamak/sdk/tsconfig.server.json"}"#,
+    )
+    .unwrap();
+}
+
+fn write_build_source(source: &std::path::Path, plugin: Option<Value>, ui: bool) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
         .unwrap();
-    let source = installation.0.join("source");
     std::fs::create_dir_all(source.join("src/server")).unwrap();
     std::fs::create_dir_all(source.join("node_modules/@tokamak")).unwrap();
-    std::os::unix::fs::symlink(
-        root.join("packages/sdk"),
-        source.join("node_modules/@tokamak/sdk"),
-    )
-    .unwrap();
+    for package in ["sdk", "build", "ui", "runtime"] {
+        std::os::unix::fs::symlink(
+            root.join("packages").join(package),
+            source.join("node_modules/@tokamak").join(package),
+        )
+        .unwrap();
+    }
     std::fs::write(
         source.join("package.json"),
         r#"{"name":"@regression/inferred","version":"1.0.0","type":"module"}"#,
@@ -471,34 +487,62 @@ fn build_source(installation: &Installation, plugin: Option<Value>) -> PathBuf {
         "import { query } from '@tokamak/sdk'; export const answer = query({handler: () => 42});\n",
     )
     .unwrap();
-    std::fs::write(
-        source.join("src/server/tsconfig.json"),
-        json!({
-            "extends":root.join("tsconfig.json")
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let options = plugin.map_or(
-        json!({"ui":false}),
-        |plugin| json!({"ui":false,"plugin":plugin}),
-    );
+    let mut options = json!({});
+    if !ui {
+        options["ui"] = json!(false);
+    }
+    if let Some(plugin) = plugin {
+        options["plugin"] = plugin;
+    }
     std::fs::write(
         source.join("vite.config.ts"),
         format!(
-            "import {{tokamak}} from {}; export default {{plugins:[tokamak({options})]}};",
-            json!(root.join("packages/build/src/vite.ts"))
+            r#"import {{tokamak}} from "@tokamak/build/vite"; export default {{plugins:[tokamak({options})]}};"#
         ),
     )
     .unwrap();
-    source
+    if ui {
+        // Use the installed dependency trees, including their transitive dependencies.
+        std::fs::create_dir_all(source.join("node_modules/@solidjs")).unwrap();
+        std::fs::create_dir_all(source.join("node_modules/@types")).unwrap();
+        for (package, workspace) in [
+            ("@solidjs/web", "packages/build"),
+            ("solid-js", "packages/build"),
+            ("tailwindcss", "packages/ui"),
+            ("vite", "."),
+            ("@types/node", "."),
+        ] {
+            std::os::unix::fs::symlink(
+                root.join(workspace).join("node_modules").join(package),
+                source.join("node_modules").join(package),
+            )
+            .unwrap();
+        }
+        std::fs::create_dir_all(source.join("src/client")).unwrap();
+        std::fs::write(
+            source.join("src/client/tsconfig.json"),
+            r#"{"extends":"@tokamak/sdk/tsconfig.window.json"}"#,
+        )
+        .unwrap();
+    }
 }
+
+// Runs the builder linked into the plugin's own node_modules, from the plugin
+// folder, so nothing depends on the checkout as cwd. A temp folder has no
+// .prototools, so pass the checkout's pinned Bun version to proto directly.
 fn build_artifact(source: &std::path::Path) -> (bool, String) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let tools = std::fs::read_to_string(root.join(".prototools")).unwrap();
+    let bun = tools
+        .lines()
+        .find_map(|line| line.strip_prefix("bun = "))
+        .expect(".prototools pins bun")
+        .trim_matches('"');
     let output = std::process::Command::new("proto")
-        .args(["run", "bun", "--", "packages/build/src/build.ts"])
-        .arg(source.canonicalize().unwrap())
-        .current_dir(root)
+        .args(["run", "bun", "--"])
+        .env("PROTO_BUN_VERSION", bun)
+        .args(["node_modules/@tokamak/build/src/build.ts", "."])
+        .current_dir(source)
         .output()
         .unwrap();
     (
@@ -509,6 +553,106 @@ fn build_artifact(source: &std::path::Path) -> (bool, String) {
             String::from_utf8_lossy(&output.stderr)
         ),
     )
+}
+
+#[test]
+fn out_of_tree_plugin_with_a_page_builds() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("page");
+    write_build_source(&source, None, true);
+    write_server_config(&source);
+    std::fs::write(
+        source.join("plugin.ts"),
+        r#"import {definePlugin} from "@tokamak/sdk"; export default definePlugin({id:"page",version:"1.0.0"});"#,
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("src/client/api.tsx"),
+        r#"import {view} from "@tokamak/sdk/client";
+import {Button} from "@tokamak/ui";
+export const Page = view({route:"/hello"}, () => <Button class="text-ink">Hello</Button>);"#,
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("src/client/styles.css"),
+        r#"@import "tailwindcss/utilities.css" layer(utilities);
+@import "@tokamak/ui/theme.css" reference;"#,
+    )
+    .unwrap();
+    let (success, output) = build_artifact(&source);
+    assert!(success, "{output}");
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(source.join("dist/manifest.json")).unwrap()).unwrap();
+    assert_eq!(
+        manifest["entries"]["ui"],
+        json!({"code":"ui.js","map":"ui.js.map","css":"styles.css"})
+    );
+    assert_eq!(
+        manifest["plugin"]["contributes"]["view"],
+        json!([{"id":"Page","route":"/hello"}])
+    );
+    assert!(source.join("dist/ui.js").is_file());
+    let css = std::fs::read_to_string(source.join("dist/styles.css")).unwrap();
+    assert!(css.contains("var(--color-ink)"), "{css}");
+}
+
+#[test]
+fn out_of_tree_plugin_uses_a_neighbour_plugin() {
+    let temporary = tempfile::tempdir().unwrap();
+    // The owner has no server config, so the SDK must ignore this unrelated parent config.
+    std::fs::write(
+        temporary.path().join("tsconfig.json"),
+        r#"{"compilerOptions":{"moduleResolution":"Classic"}}"#,
+    )
+    .unwrap();
+    let owner = temporary.path().join("owner");
+    write_build_source(&owner, None, true);
+    std::fs::write(
+        owner.join("plugin.ts"),
+        r#"import {definePlugin} from "@tokamak/sdk"; export default definePlugin({id:"owner",version:"1.0.0"});"#,
+    )
+    .unwrap();
+    std::fs::write(
+        owner.join("src/server/api.ts"),
+        r#"export {answer} from "./ops";"#,
+    )
+    .unwrap();
+    std::fs::write(
+        owner.join("src/client/api.tsx"),
+        r#"export function Panel() { return <span>Owner</span>; }"#,
+    )
+    .unwrap();
+    let (success, output) = build_artifact(&owner);
+    assert!(success, "{output}");
+
+    let consumer = temporary.path().join("consumer");
+    write_build_source(&consumer, None, true);
+    write_server_config(&consumer);
+    std::fs::write(
+        consumer.join("plugin.ts"),
+        r#"import {definePlugin} from "@tokamak/sdk"; export default definePlugin({id:"consumer",version:"1.0.0",depends:["owner"]});"#,
+    )
+    .unwrap();
+    std::fs::write(
+        consumer.join("src/server/ops.ts"),
+        r#"import {action} from "@tokamak/sdk";
+import {api} from "plugin:owner/server";
+export const read = action({handler: ctx => ctx.use(api).answer({})});"#,
+    )
+    .unwrap();
+    std::fs::write(
+        consumer.join("src/client/api.tsx"),
+        r#"import {Panel} from "plugin:owner/client"; export function Page() { return <Panel />; }"#,
+    )
+    .unwrap();
+    let (success, output) = build_artifact(&consumer);
+    assert!(success, "{output}");
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(consumer.join("dist/manifest.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest["plugin"]["depends"], json!({"owner":"*"}));
+    let ui = std::fs::read_to_string(consumer.join("dist/ui.js")).unwrap();
+    assert!(ui.contains("@plugins/owner/ui"), "{ui}");
 }
 
 // Invalid export declarations must fail at the public build boundary, before
@@ -1227,10 +1371,31 @@ async fn revoke_member_over_http(address: std::net::SocketAddr, owner: &str, id:
 }
 
 #[test]
-fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let scratch = tempfile::tempdir_in(workspace.join("target")).unwrap();
-    let folder = scratch.path().join("hello");
+fn plugin_create_makes_a_plugin_that_builds_in_tokamak_plugins() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    // A tokamak-plugins layout: plugins/<id> and the links setup.sh makes in
+    // the repository's node_modules, pointing into this checkout.
+    let repo = tempfile::tempdir().unwrap();
+    for (name, target) in [
+        ("@tokamak/sdk", "packages/sdk"),
+        ("@tokamak/build", "packages/build"),
+        ("@tokamak/ui", "packages/ui"),
+        ("@tokamak/runtime", "packages/runtime"),
+        ("solid-js", "packages/build/node_modules/solid-js"),
+        ("@solidjs/web", "packages/build/node_modules/@solidjs/web"),
+        ("tailwindcss", "packages/ui/node_modules/tailwindcss"),
+        ("vite", "node_modules/vite"),
+        ("@types/node", "node_modules/@types/node"),
+    ] {
+        let link = repo.path().join("node_modules").join(name);
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(workspace.join(target), link).unwrap();
+    }
+    let folder = repo.path().join("plugins/hello");
+    std::fs::create_dir_all(folder.parent().unwrap()).unwrap();
     let create = || {
         std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
             .args(["plugin", "create"])
@@ -1245,11 +1410,45 @@ fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
         String::from_utf8_lossy(&created.stderr)
     );
     let skill = std::fs::read_to_string(folder.join("SKILL.md")).unwrap();
-    assert!(skill.contains("ctx.auth.user") && skill.contains("ctx.proc"));
+    assert_eq!(
+        skill,
+        std::fs::read_to_string(workspace.join("skills/develop-tokamak-plugin/SKILL.md")).unwrap()
+    );
+    let package = std::fs::read_to_string(folder.join("package.json")).unwrap();
+    assert!(!package.contains("@tokamak/"), "{package}");
     assert!(!create().status.success());
     assert_eq!(
         std::fs::read_to_string(folder.join("SKILL.md")).unwrap(),
         skill
+    );
+
+    // Build it as tokamak-plugins does: from the repository root, with the
+    // builder found through the link. A temp folder has no .prototools, so
+    // pass the checkout's pinned Bun version to proto directly.
+    let tools = std::fs::read_to_string(workspace.join(".prototools")).unwrap();
+    let bun = tools
+        .lines()
+        .find_map(|line| line.strip_prefix("bun = "))
+        .expect(".prototools pins bun")
+        .trim_matches('"');
+    let built = std::process::Command::new("proto")
+        .args(["run", "bun", "--"])
+        .env("PROTO_BUN_VERSION", bun)
+        .args(["node_modules/@tokamak/build/src/build.ts", "plugins/hello"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&built.stdout),
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(folder.join("dist/manifest.json")).unwrap()).unwrap();
+    assert_eq!(
+        manifest["plugin"]["contributes"]["view"],
+        json!([{"id":"Home","route":"/","title":"hello"}])
     );
 }
 

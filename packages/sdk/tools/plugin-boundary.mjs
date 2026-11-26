@@ -1,3 +1,4 @@
+import { clientEntry } from "./client-entry.mjs";
 import { readDescriptor } from "./plugin-descriptor.ts";
 import { Visibility } from "../src/visibility.ts";
 // One import policy for the SDK's Bun bundles and the public Vite builder.
@@ -17,7 +18,13 @@ import { isBuiltin } from "node:module";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { windowStateModule } from "../src/window-state-protocol.ts";
 import { isInternalReferenceModule, isServerModule, isServerRoot, serverDirectory } from "./server-files.mjs";
-import { generated, definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plugin-compiler.mjs";
+import {
+  generated,
+  definitionInfo,
+  pluginCompilerOptions,
+  runtimeExportNames,
+  serverConfigPath,
+} from "./plugin-compiler.mjs";
 
 import { contractDeclarations, contractPlacementMigration, importedContractEntry } from "./contracts.mjs";
 
@@ -64,9 +71,8 @@ export function featurePluginRoot(folder) {
       : folder;
 }
 
-function configuration(file) {
-  const path = ts.findConfigFile(dirname(file), ts.sys.fileExists);
-  if (!path) return { options: {} };
+function configuration(file, root) {
+  const path = serverConfigPath(dirname(file), root);
   const config = ts.readConfigFile(path, ts.sys.readFile);
   return ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(path));
 }
@@ -96,14 +102,6 @@ export function assertPluginResolution(root, importer, id, target, packageImport
   throw diagnostic(importer, id, target);
 }
 
-export function clientEntry(root) {
-  for (const entry of ["src/client/api.ts", "src/client/api.tsx", "src/client/main.tsx", "src/main.tsx"]) {
-    const file = resolve(root, entry);
-    if (existsSync(file)) return file;
-  }
-  return resolve(root, existsSync(resolve(root, "src/client")) ? "src/client/main.tsx" : "src/main.tsx");
-}
-
 function provider(root, id) {
   const reference = parsePluginSpecifier(id);
   if (!reference) throw new Error(`Invalid plugin specifier ${id}`);
@@ -125,7 +123,7 @@ function provider(root, id) {
 }
 
 function publicReferences(folder, entry) {
-  const options = pluginCompilerOptions(folder, configuration(entry).options);
+  const options = pluginCompilerOptions(folder, configuration(entry, folder).options);
   const backend = serverDirectory(folder);
   const authored = ts.sys
     .readDirectory(backend, [".ts"])
@@ -188,7 +186,7 @@ export function pluginReferenceSource(root, id, { publicOnly = false } = {}) {
   const target = provider(root, id);
   if (target.side === "tables")
     return tableReferenceSource(
-      tableReferences(target.folder, target.id, configuration(target.entry).options),
+      tableReferences(target.folder, target.id, configuration(target.entry, target.folder).options),
     );
   if (target.side === "contracts")
     return (
@@ -236,7 +234,11 @@ function declarePlugin(root, id, declared, depends, tableOwners) {
   const path = resolve(generated(root), target.id, `${target.side}.d.ts`);
   mkdirSync(dirname(path), { recursive: true });
   if (target.side === "tables") {
-    const tables = tableReferences(target.folder, target.id, configuration(target.entry).options);
+    const tables = tableReferences(
+      target.folder,
+      target.id,
+      configuration(target.entry, target.folder).options,
+    );
     writeFileSync(path, tableDeclarations(target.id, tables, Object.hasOwn(depends ?? {}, target.id)));
     return;
   }
@@ -338,7 +340,7 @@ export function checkPluginImports(root, depends = readDescriptor(root)?.depends
   const tableOwners = new Set();
   function checkFile(path) {
     const parsed = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
-    const options = configuration(path).options;
+    const options = configuration(path, root).options;
     const program = needsMigrationChecker(parsed)
       ? ts.createProgram([path], pluginCompilerOptions(root, options))
       : undefined;
@@ -580,8 +582,8 @@ export function bunPluginBoundary(root, { publicOnly = false } = {}) {
           target,
           bare &&
             Boolean(
-              ts.resolveModuleName(path, importer, configuration(importer).options, ts.sys).resolvedModule
-                ?.isExternalLibraryImport,
+              ts.resolveModuleName(path, importer, configuration(importer, root).options, ts.sys)
+                .resolvedModule?.isExternalLibraryImport,
             ),
         );
       });

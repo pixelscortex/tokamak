@@ -1,5 +1,5 @@
 {
-  "extends": "../../../../app/tsconfig.json",
+  "extends": "@tokamak/sdk/tsconfig.window.json",
   "compilerOptions": {
     "paths": {
       "plugin:*/contracts": ["../../.tokamak/types/*/contracts.d.ts"],

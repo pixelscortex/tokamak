@@ -3,20 +3,23 @@
 The app frame every plugin appears in (`app/src/shell`): top strip with tabs,
 the rail, the sidebar, the stage with its header and footer, and the panel.
 It also owns a few pages of its own: welcome, add a server, members, devices,
-and the sign-in and quit dialogs.
+plugins, and the sign-in and quit dialogs.
 Paper page: `App 1:1 · Shell`.
 
 ## Screens
 
-| Screen                                                             | Source                                                               | Paper artboard         |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------- |
-| The frame with every region filled (sidebar, header, panel)        | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`        |
-| Welcome: "This Mac is ready", open Chat, join a friend's server    | `welcome.tsx`                                                        | `Shell · welcome`      |
-| Add a server, step 1 of 4: the address                             | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server` |
-| Sign-in dialog over the "needs you to sign in" band                | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`      |
-| Members on a shared server                                         | `members.tsx`                                                        | `Shell · members`      |
-| Devices on a shared server: people's devices, then plugin machines | `devices.tsx`                                                        | `Shell · devices`      |
-| `/kit`: Input and Switch in every state (dark column)              | `packages/ui/src/kit/inputs.tsx`                                     | `Kit · Input, Switch`  |
+| Screen                                                             | Source                                                               | Paper artboard                |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
+| The frame with every region filled (sidebar, header, panel)        | `app/src/shell/frame.tsx`, `top-strip.tsx`, `rail.tsx`               | `Shell · frame`               |
+| Welcome: "This Mac is ready", open Chat, join a friend's server    | `welcome.tsx`                                                        | `Shell · welcome`             |
+| Add a server, step 1 of 4: the address                             | `connect/flow.tsx`, `connect/steps.tsx`, `connect/parts.tsx`         | `Shell · add a server`        |
+| Sign-in dialog over the "needs you to sign in" band                | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`             |
+| Members on a shared server                                         | `members.tsx`                                                        | `Shell · members`             |
+| Devices on a shared server: people's devices, then plugin machines | `devices.tsx`                                                        | `Shell · devices`             |
+| Plugins (desktop): the plugins folder and one loaded plugin        | `plugins.tsx`                                                        | `Shell · plugins`             |
+| Plugins: one loaded, one failed with its reason                    | `plugins.tsx`                                                        | `Shell · plugins, one failed` |
+| Plugins: an empty plugins folder                                   | `plugins.tsx`                                                        | `Shell · plugins, empty`      |
+| `/kit`: Input and Switch in every state (dark column)              | `packages/ui/src/kit/inputs.tsx`                                     | `Kit · Input, Switch`         |
 
 The kit artboard copies only the Input and Switch section of `/kit` (Controls
 tab, dark column), the first primitives with a Paper copy; the rest of the kit is
@@ -24,7 +27,9 @@ not drawn. Focus rings are drawn as the same 2 px gap and 2 px ring in a shadow.
 
 Not drawn yet: devices on This Mac ("Devices are managed on a shared server."), devices loading or reconnecting, members on This Mac ("Members are managed on a shared server."), the server menu, the settings menu, the search palette, connecting, can't reach a server (without the dialog), no
 plugins, nothing here, the quit dialog, the add-member and rename dialogs,
-connect steps 2 to 4, the frame without the rail or with the sidebar hidden.
+connect steps 2 to 4, the frame without the rail or with the sidebar hidden,
+the plugins page in the browser build (no "Reveal in Finder"), loading or with
+a failed read.
 
 ### Devices
 
@@ -47,6 +52,36 @@ connect steps 2 to 4, the frame without the rail or with the sidebar hidden.
   empty, or when the server answers 403 (a member who may not manage
   devices); no error shows. A failed stream retries quietly every second.
 - Can't reach the server: the page's `Unreachable` band covers both lists.
+
+### Plugins
+
+`plugins.tsx`, at `/settings/plugins`, opened from the Settings menu ("Plugins",
+shown on every server, under Members and Devices) and from the "No plugins
+installed" notice's "Open Settings → Plugins" button. It belongs to the shell,
+so it works when every plugin has failed. Read-only: no install, remove or
+switch-off; it never names an install script or a repository.
+
+- It reads `GET /plugins` (`pluginsFolder`, each plugin's `folder`, `skipped`
+  and `skippedFolders`, see `packages/server/PLUGINS.md`) and reads it again
+  whenever the window's plugin catalog changes (the plugin-changed event after
+  a reload).
+- Layout: the Devices column (`max-w-read`, `px-6 py-8`), an intro line, then
+  two groups under `text-label text-ink-3` labels: **Plugins folder** (the path
+  in `text-data`, ink) and **Installed**.
+- "Reveal in Finder" (ghost button) sits after the path only in the desktop app
+  on This Mac; it calls `reveal_plugins_folder`, which opens the Runner's
+  plugins folder (it takes no path). In the browser build, or for another
+  server, the path is plain text.
+- Rows: no hairline, `py-3`, a 16 px lead (plug icon in `ink-3`; the failed
+  icon in `removed` for a skipped folder), the name (`text-row` medium; the id
+  when the plugin has no name), then id and version in `text-data ink-3`
+  (the id only when the name differs), the reason (`text-row ink-2`) for a
+  failed one, and the folder (`text-data ink-3`). The trailing status is a
+  quiet `text-label`: "Loaded" in `ink-3`, "Failed" in `removed`. Loaded
+  plugins come first in catalog order, then skipped ones by key.
+- Empty: the folder, then "Plugin builds placed in this folder are loaded."
+- States: "Connecting…", "Loading plugins…", the `Unreachable` band, and a red
+  line when the read or the reveal fails.
 
 ## Parts it offers
 
@@ -104,7 +139,12 @@ edges (4 px when the panel is open).
   sidebar moves them.
 - Footer (`h-8`, connection, unsaved line): every page's bottom spacing,
   including chat's composer (`pb-4`).
-- `Unreachable` (a band, not a wall): Members and Devices reuse it.
+- `Unreachable` (a band, not a wall): Members, Devices and Plugins reuse it.
+- The catalog fields the Plugins page reads (`pluginsFolder`, `folder`,
+  `skipped`, `skippedFolders`): `readInstalled` in `plugins.tsx` and
+  `app/tests/plugins-page.test.ts`.
+- `NoPlugins` in `states.tsx`: its button opens the Plugins page;
+  `e2e/browser/plugins-page.spec.ts` follows it.
 - Device rows in `devices.tsx` (icon, name, label line, `LastSeen`): the plugin
   machines group uses the same row and the same `LastSeen`, so change both
   together.
@@ -121,6 +161,15 @@ form: the tabs as `variant="tab"`, the welcome choices, recent servers),
 button with a tooltip and keys) and `Notice`.
 
 ## Open questions
+
+- The three `Shell · plugins` artboards are copies of the browser test run
+  (`plugins page screens` in `e2e/browser/plugins-page.spec.ts`), so their
+  paths are the run's temporary folders, not `~/Library/Application Support/…`.
+- The rows break the System · rules row rule "no status words in rows": the
+  ticket asks for "Loaded" and "Failed" as words. The icon carries the state
+  too, so the word could go later.
+- "Reveal in Finder" is the macOS wording; the command also opens the folder on
+  Linux and Windows.
 
 - `Shell · devices` was not taken from the screens run (that needs a Rust
   build); it is `Shell · members` copied and edited to match `devices.tsx`,
