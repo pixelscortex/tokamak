@@ -1,38 +1,31 @@
 use std::path::{Path, PathBuf};
 use tauri::Manager;
-use tokamak_worker::runner::{Endpoint, Runner};
+use tokamak_worker::runner::{Endpoint, Folders, Runner};
 
 pub struct Host(Result<Runner, String>);
 
 pub fn start(app: &tauri::AppHandle) {
-    let runner = configuration(app).map(|(binary, directory, plugins)| {
+    let runner = configuration().map(|(binary, folders)| {
         // The supervisor uses the Tauri runtime, not the window's lifetime.
         let runtime = tauri::async_runtime::handle();
         let _entered = runtime.inner().enter();
-        Runner::start(binary, directory, plugins)
+        Runner::start(binary, folders.data, folders.plugins)
     });
     app.manage(Host(runner));
 }
 
-fn configuration(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
-    let directory = std::env::var_os("TOKAMAK_SERVER_DIR")
-        .map(PathBuf::from)
-        .or_else(|| {
-            directories::ProjectDirs::from("com", "pixelscortex", "Tokamak")
+fn configuration() -> Result<(PathBuf, Folders), String> {
+    let binary = binary()?;
+    let folders = Folders::resolve(
+        cfg!(debug_assertions),
+        std::env::var_os("TOKAMAK_SERVER_DIR").map(PathBuf::from),
+        std::env::var_os("TOKAMAK_PLUGIN_DIR").map(PathBuf::from),
+        |name| {
+            directories::ProjectDirs::from("com", "pixelscortex", name)
                 .map(|paths| paths.data_local_dir().to_owned())
-        })
-        .ok_or("Cannot locate application data directory")?;
-    let plugins = if let Some(directory) = std::env::var_os("TOKAMAK_PLUGIN_DIR") {
-        PathBuf::from(directory)
-    } else if cfg!(debug_assertions) {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins")
-    } else {
-        app.path()
-            .resource_dir()
-            .map_err(|e| e.to_string())?
-            .join("plugins")
-    };
-    Ok((binary()?, directory, plugins))
+        },
+    )?;
+    Ok((binary, folders))
 }
 
 fn binary() -> Result<PathBuf, String> {

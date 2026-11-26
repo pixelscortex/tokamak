@@ -34,7 +34,7 @@ tasks:
       persistent: true
       runInCI: false
   run:
-    command: "proto run bun -- run tauri dev"
+    command: "proto run bun -- scripts/dev-app.ts"
     options:
       cache: false
       persistent: true

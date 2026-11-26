@@ -1,3 +1,5 @@
+// Build the repo's plugins for dev tools and tests that pass a plugin folder
+// explicitly. These plugins are never bundled into the app.
 import { spawnSync } from "node:child_process";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
