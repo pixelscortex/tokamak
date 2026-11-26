@@ -1,0 +1,78 @@
+packages/server/tests/fixtures/plugin-machines/outsider/src/work.ts
+  s_90a7b31543204c::t_9eb112e341a33a 2,21,29,34,39
+packages/sdk/client.tsx
+  s_90a7b31543204c::t_9eb112e341a33a 18,356-358
+packages/server/tests/fixtures/plugin-machines/sandbox/src/work.ts
+  s_90a7b31543204c::t_9eb112e341a33a 14,28-30,38,43,46-52,54,61,67-70,85,95-99,110,129
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 124,126,129-131,145,150,153-154,156,186,192-193,195,204
+packages/sdk/screen-search.ts
+  s_90a7b31543204c::t_9eb112e341a33a 1-7,10-45,49,68-75,80-81,105,128-133,158-176,178-187,194
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_90a7b31543204c::t_9eb112e341a33a 8-17,31-36,118-124,128-135
+plugins/chat/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 51,54,62,65,79,100,105,107
+packages/sdk/tests/web/fixtures/parts/owner/src/client/api.tsx
+  s_90a7b31543204c::t_9eb112e341a33a 20
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_90a7b31543204c::t_9eb112e341a33a 20-23
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 13-14,16-17,22,30,32
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 16-17
+packages/build/README.md
+  s_90a7b31543204c::t_9eb112e341a33a 134-150
+packages/build/src/contributions.ts
+  s_90a7b31543204c::t_9eb112e341a33a 1-6,69,84-88,96-99,360-363,369,372-381,389-398
+packages/sdk/src/host.ts
+  s_90a7b31543204c::t_9eb112e341a33a 66-67,70
+packages/runner/README.md
+  s_90a7b31543204c::t_9eb112e341a33a 178-182
+packages/sdk/component-actions.ts
+  s_90a7b31543204c::t_9eb112e341a33a 2,92-131,149-152,155,161-163
+packages/server/tests/fixtures/action-placement/src/work.ts
+  s_90a7b31543204c::t_9eb112e341a33a 2,116-117
+packages/sdk/src/unstable.ts
+  s_90a7b31543204c::t_9eb112e341a33a 1-66
+packages/sdk/vitest.config.ts
+  s_90a7b31543204c::t_9eb112e341a33a 32,37-43,57,67-68,75
+packages/sdk/tests/fixtures/types/negative.ts.txt
+  s_90a7b31543204c::t_9eb112e341a33a 4,31-37,41-46
+plugins/code/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 25-27,36
+packages/build/tests/components.test.mjs
+  s_90a7b31543204c::t_9eb112e341a33a 80-238
+packages/sdk/package.json
+  s_90a7b31543204c::t_9eb112e341a33a 14
+packages/sdk/src/functions.ts
+  s_90a7b31543204c::t_9eb112e341a33a 21,212,307,310-312,355-359,442-443
+packages/sdk/src/internal/machine-scope.ts
+  s_90a7b31543204c::t_9eb112e341a33a 1-21
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 4,6
+plugins/ai/src/client/_generated/components.d.ts
+  s_90a7b31543204c::t_9eb112e341a33a 75,80,97,102,105,123-124,128-129
+packages/server/src/plugin-skill.md
+  s_90a7b31543204c::t_9eb112e341a33a 50-54
+  s_90a7b31543204c::t_ea8ccf273263d3 55,58-61
+packages/build/src/component-parts.ts
+  s_90a7b31543204c::t_9eb112e341a33a 9-11,15,27-29,50,52-55,61-67,104,332,353,355,358-360,365-368,376-377,579-585,625-636
+packages/sdk/README.md
+  s_90a7b31543204c::t_9eb112e341a33a 195-196,198-200,202,213-215,225-227,234-237,240,703-709
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "383879405719188cbaf8253621a6382a8df5dbcd",
+  "prompts": {},
+  "sessions": {
+    "s_90a7b31543204c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218ea-3b57-7d50-8381-f5a5cb8235ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
