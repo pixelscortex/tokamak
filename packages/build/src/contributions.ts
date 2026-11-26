@@ -1,4 +1,9 @@
-import type { ScreenSearch } from "../../sdk/screen-search.ts";
+import {
+  flattenAttributes,
+  isSearchAttribute,
+  unnamedTargetWarning,
+  type ScreenSearch,
+} from "../../sdk/screen-search.ts";
 import { parsePluginSpecifier } from "../../sdk/tools/plugin-boundary.mjs";
 import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
 import { componentParts, problem } from "./component-parts.ts";
@@ -62,6 +67,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
     );
     if (diagnostic) throw problem(call, ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
   }
+  const unnamed = new Set<string>();
   const searches = new Map<ts.CallExpression, Record<string, string | number>>();
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || !inSource(root, file.fileName)) continue;
@@ -76,7 +82,11 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
           if (!result.element) throw problem(node, result.reason);
           const { target, fingerprint } = result.element;
           searches.set(node, {
-            ...search,
+            name: search.name,
+            ...(search.in !== undefined ? { in: search.in } : {}),
+            ...(search.nth !== undefined ? { nth: search.nth } : {}),
+            // Manifest options are scalar, so ARIA entries keep their JSX names.
+            ...Object.fromEntries(flattenAttributes(search)),
             owner,
             target,
             ...(fingerprint ? { fingerprint } : {}),
@@ -84,6 +94,10 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
           const cuts = edits.get(file.fileName) ?? [];
           cuts.push([node.getStart(), node.end, `(${JSON.stringify({ target })})`]);
           edits.set(file.fileName, cuts);
+          if (result.unnamed && !unnamed.has(target)) {
+            unnamed.add(target);
+            warn(unnamedTargetWarning(plugin, search, target));
+          }
           // Only a search by position depends on telling the siblings apart.
           if (result.ambiguous && search.nth !== undefined)
             warn(
@@ -350,28 +364,45 @@ function searchArguments(call: ts.CallExpression): ScreenSearch {
   const name = unwrap(call.arguments[0]);
   const options = unwrap(call.arguments[1]);
   const fail = (node: ts.Node = call): never => {
-    throw problem(node, "Use a literal screen element name and literal in or positive integer nth filters");
+    throw problem(
+      node,
+      "Use a literal screen element name and literal in, type, href, role or aria filters, or a positive integer nth",
+    );
   };
   if (!name || !ts.isStringLiteralLike(name) || call.arguments.length > 2) return fail();
   const search: ScreenSearch = { name: name.text };
   if (options) {
     if (!ts.isObjectLiteralExpression(options)) return fail(options);
-    for (const property of options.properties) {
+    function literalProperty(property: ts.ObjectLiteralElementLike) {
       if (!ts.isPropertyAssignment(property)) return fail(property);
       const { name } = property;
-      const initializer = unwrap(property.initializer)!;
-      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
-      if (key === "in" && search.in === undefined && ts.isStringLiteralLike(initializer))
-        search.in = initializer.text;
+      if (!ts.isIdentifier(name) && !ts.isStringLiteral(name)) return fail(name);
+      return [name.text, unwrap(property.initializer)!] as const;
+    }
+
+    const seen = new Set<string>();
+    for (const property of options.properties) {
+      const [key, initializer] = literalProperty(property);
+      if (seen.has(key)) return fail(property);
+      seen.add(key);
+      if (key === "in" && ts.isStringLiteralLike(initializer)) search.in = initializer.text;
       else if (
         key === "nth" &&
-        search.nth === undefined &&
         ts.isNumericLiteral(initializer) &&
         Number.isSafeInteger(Number(initializer.text)) &&
         Number(initializer.text) > 0
       )
         search.nth = Number(initializer.text);
-      else return fail(property);
+      else if (isSearchAttribute(key) && ts.isStringLiteralLike(initializer)) search[key] = initializer.text;
+      else if (key === "aria" && ts.isObjectLiteralExpression(initializer)) {
+        const values = new Map<string, string>();
+        for (const entry of initializer.properties) {
+          const [name, value] = literalProperty(entry);
+          if (!name || values.has(name) || !ts.isStringLiteralLike(value)) return fail(entry);
+          values.set(name, value.text);
+        }
+        search.aria = Object.fromEntries(values);
+      } else return fail(property);
     }
   }
   return search;

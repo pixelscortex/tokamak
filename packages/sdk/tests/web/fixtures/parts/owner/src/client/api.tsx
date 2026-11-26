@@ -17,6 +17,7 @@ export const Composer = (props: ExampleProps) => (
     <SendButton {...props} />
     <div aria-label="body" />
     <div aria-label="detail" />
+    <select aria-label="Upload" />
   </section>
 );
 

@@ -10,15 +10,16 @@ type Props7 = Extract<NonNullable<Parameters<typeof import("../api")["BenchmarkR
 type Props8 = Extract<NonNullable<{ text: string; unloaded?: () => void }>, object>;
 type Props9 = Extract<NonNullable<Parameters<typeof import("../api")["RealisticRow"]>[0]>, object>;
 export declare const find: import("@tokamak/sdk/client").ScreenFind<{
-  "button": [["SendButton", Props1], ["Labels" | "section", Props4], ["RealisticRow" | "article" | "div", Props9]];
-  "section": [["Composer", Props2], ["Labels", Props4]];
+  "button": [["SendButton", Props1], ["Labels" | "section", Props4], ["RealisticRow" | "article" | "div", Props9, {"type":"button"}]];
+  "section": [["Composer", Props2, {"aria":{"label":"toolbar"}}], ["Labels", Props4]];
   "SendButton": Props2;
-  "div": [["Composer" | "section", Props2], ["Composer" | "section", Props2], ["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
+  "div": [["Composer" | "section", Props2, {"aria":{"label":"body"}}], ["Composer" | "section", Props2, {"aria":{"label":"detail"}}], ["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
+  "select": [["Composer" | "section", Props2, {"aria":{"label":"Upload"}}]];
   "main": Props3;
   "span": [["Labels" | "section", Props5], ["Labels" | "section" | "Region", Props4], ["BenchmarkRow" | "article" | "footer", Props7], ["RealisticRow" | "article" | "div" | "button", Props9]];
   "groups": Props4;
   "em": Props6;
-  "input": Props4;
+  "input": [["Labels" | "section", Props4, {"aria":{"label":"Search"}}]];
   "Region": Props4;
   "article": [["BenchmarkRow", Props7], ["RealisticRow", Props9]];
   "header": [["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
@@ -26,9 +27,9 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "time": [["BenchmarkRow" | "article" | "header", Props7], ["RealisticRow" | "article" | "header", Props9]];
   "p": [["BenchmarkRow" | "article" | "div", Props7], ["RealisticRow" | "article" | "div", Props9]];
   "footer": [["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
-  "small": Props8;
+  "small": [["RowStatus", Props8, {"aria":{"label":"Status"}}]];
   "RowStatus": Props9;
-  "a": Props9;
+  "a": [["RealisticRow" | "article" | "footer", Props9, {"href":"#status"}]];
   "svg": Props9;
   "path": Props9;
 }>;

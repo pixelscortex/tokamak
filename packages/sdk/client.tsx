@@ -15,6 +15,7 @@ export {
   type ComponentActionOptions,
 } from "./component-actions";
 import {
+  flattenAttributes,
   resolveScreenSearch,
   screenElements,
   screenTarget,
@@ -364,6 +365,9 @@ export function __defineScreenFind(plugin: string, packedTree: string) {
 }
 
 function resolveLegacyPart(node: unknown, owner: string, target: ReturnType<typeof screenTarget>) {
+  // A legacy owner has paths but no attributes to verify a filtered search.
+  if (target.search && flattenAttributes(target.search).length)
+    return resolveScreenSearch([], target.search, target);
   for (const key of target.target.slice(owner.length + 1).split("."))
     node =
       node && typeof node === "object" && Object.hasOwn(node, key)

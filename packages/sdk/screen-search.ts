@@ -1,10 +1,52 @@
-export type ScreenSearch = { name: string; in?: string; nth?: number };
+export const searchAttributes = ["type", "href", "role"] as const;
+type SearchAttribute = (typeof searchAttributes)[number];
+
+export type AttributeFilters = Partial<Record<SearchAttribute, string>> & {
+  aria?: Readonly<Record<string, string>>;
+};
+export type ScreenSearch = AttributeFilters & { name: string; in?: string; nth?: number };
 export type ScreenElement = { target: string; fingerprint?: string };
 export type ScreenTarget = ScreenElement & { search?: ScreenSearch };
-type Candidate = ScreenElement & { name: string; ancestors: readonly string[] };
+type Candidate = ScreenElement & {
+  name: string;
+  ancestors: readonly string[];
+  attributes?: Readonly<Record<string, string>>;
+  computed?: readonly string[];
+};
+
+export function isSearchAttribute(name: string): name is SearchAttribute {
+  return searchAttributes.some((key) => key === name);
+}
+
+export function isAriaAttribute(name: string) {
+  return name.startsWith("aria-") && name.length > 5;
+}
+
+export function flattenAttributes(filters: AttributeFilters) {
+  const attributes: [string, string][] = [];
+  for (const name of searchAttributes) {
+    const value = filters[name];
+    if (value !== undefined) attributes.push([name, value]);
+  }
+  for (const [name, value] of Object.entries(filters.aria ?? {})) attributes.push([`aria-${name}`, value]);
+  return attributes;
+}
+
+export function attributeFilters(options: Readonly<Record<string, string | number>>) {
+  const filters: AttributeFilters = {};
+  const aria: [string, string][] = [];
+  for (const [name, value] of Object.entries(options)) {
+    if (typeof value !== "string") continue;
+    if (isSearchAttribute(name)) filters[name] = value;
+    else if (isAriaAttribute(name)) aria.push([name.slice(5), value]);
+  }
+  if (aria.length) filters.aria = Object.fromEntries(aria);
+  return filters;
+}
 
 // Ordered pairs preserve source order even for names like "123". Leaves hold
 // just a fingerprint (or null); branches use "" for their own fingerprint.
+// With attributes, that fingerprint becomes [fingerprint, name, value, …].
 export type ScreenTree = readonly (string | null | ScreenTree)[];
 
 function segmentName(segment: string) {
@@ -23,11 +65,20 @@ export function screenElements(plugin: string, tree: ScreenTree) {
       const segment = branch[i] as string;
       const value = branch[i + 1]!;
       if (segment === "") {
+        const packed = typeof value === "object" && value !== null ? value : undefined;
+        let attributes: Record<string, string> | undefined;
+        if (packed) {
+          attributes = {};
+          for (let j = 1; j < packed.length; j += 2)
+            attributes[packed[j] as string] = packed[j + 1] as string;
+        }
+        const fingerprint = packed ? packed[0] : value;
         elements.push({
           target,
           name: ancestors.at(-1)!,
           ancestors: ancestors.slice(0, -1),
-          fingerprint: typeof value === "string" ? value : undefined,
+          fingerprint: typeof fingerprint === "string" ? fingerprint : undefined,
+          attributes,
         });
       } else {
         const name = segmentName(segment);
@@ -51,6 +102,7 @@ export function screenTarget(options: Readonly<Record<string, string | number>>)
       typeof name === "string"
         ? {
             name,
+            ...attributeFilters(options),
             in: typeof within === "string" ? within : undefined,
             nth: typeof nth === "number" ? nth : undefined,
           }
@@ -73,7 +125,12 @@ export function resolveScreenSearch(
 
   const { name, in: within, nth } = search;
   const named = elements.filter((element) => element.name === name);
-  const scoped = within === undefined ? named : named.filter((element) => element.ancestors.includes(within));
+  const attributes = flattenAttributes(search);
+  const scoped = named.filter(
+    (element) =>
+      (within === undefined || element.ancestors.includes(within)) &&
+      attributes.every(([key, value]) => element.attributes?.[key] === value),
+  );
   const matches = nth === undefined ? scoped : scoped.slice(nth - 1, nth);
   // A name says which element is meant, so a search without `nth` follows it
   // wherever the owner moves it. Only a position can come to mean another
@@ -98,18 +155,41 @@ export function resolveScreenSearch(
   return { reason: searchProblem(search, issue, scoped.length ? scoped : named) };
 }
 
+export function describeScreenSearch(search: ScreenSearch) {
+  const aria = Object.entries(search.aria ?? {})
+    .map(([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`)
+    .join(", ");
+  const filters = [
+    search.in === undefined ? undefined : `in: ${JSON.stringify(search.in)}`,
+    ...searchAttributes.flatMap((key) =>
+      search[key] === undefined ? [] : [`${key}: ${JSON.stringify(search[key])}`],
+    ),
+    aria ? `aria: { ${aria} }` : undefined,
+    search.nth === undefined ? undefined : `nth: ${search.nth}`,
+  ].filter(Boolean);
+  return `find(${JSON.stringify(search.name)}${filters.length ? `, { ${filters.join(", ")} }` : ""})`;
+}
+
+export function unnamedTargetWarning(plugin: string, search: ScreenSearch, target: string) {
+  return `Plugin "${plugin}": ${describeScreenSearch(search)} targets unnamed element ${target}; add data-part to name this element`;
+}
+
 function searchProblem(search: ScreenSearch, issue: string, options: readonly Candidate[]) {
-  const labels = options.map(({ ancestors, name }) => [...ancestors, name].join(" › "));
+  const filters = flattenAttributes(search);
+  const labels = options.map(({ ancestors, name, attributes, computed }) => {
+    const path = [...ancestors, name].join(" › ");
+    if (!filters.length) return path;
+    const details = [
+      ...Object.entries(attributes ?? {}).map(([key, value]) => `${key}=${JSON.stringify(value)}`),
+      ...(computed ?? []).map((key) => `${key}={…} (a filter cannot match a computed value)`),
+    ];
+    return details.length ? `${path} [${details.join(", ")}]` : `${path} [no static filter attributes]`;
+  });
   const candidates =
     labels
       .map((label, index) =>
         labels.indexOf(label) === labels.lastIndexOf(label) ? label : `${label} (match ${index + 1})`,
       )
       .join(", ") || "none";
-  const filters = [
-    search.in === undefined ? undefined : `in: ${JSON.stringify(search.in)}`,
-    search.nth === undefined ? undefined : `nth: ${search.nth}`,
-  ].filter(Boolean);
-  const description = `find(${JSON.stringify(search.name)}${filters.length ? `, { ${filters.join(", ")} }` : ""})`;
-  return `${description} ${issue}; candidates: ${candidates}. Narrow the search with in or nth`;
+  return `${describeScreenSearch(search)} ${issue}; candidates: ${candidates}. Narrow the search with in or nth`;
 }
