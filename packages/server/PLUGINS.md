@@ -4,6 +4,43 @@ The server can load a directory of built plugin projects, or directories
 containing their artifacts. This is a trusted personal-plugin system, not a
 malicious-code sandbox.
 
+## The plugins folder
+
+The app ships with no plugins. At startup it loads every build in its
+**plugins folder**, `plugins` inside its data folder, and creates the folder
+when it is missing. On macOS that is
+`~/Library/Application Support/com.pixelscortex.Tokamak/plugins`; a debug build
+uses `com.pixelscortex.Tokamak.dev`, so its data and plugins stay separate.
+`TOKAMAK_PLUGIN_DIR` overrides the folder.
+
+The folder holds one child folder per plugin, named by its id, with the build
+directly in it or under `dist`. Folders whose names start with a dot are
+ignored. To **install** a plugin is to place its build at
+`<plugins folder>/<id>`; a reload of that id, or the next start, loads it.
+
+A bad plugin never stops the others. A folder with source but no build, an
+invalid manifest, a duplicate id, a missing required plugin or a start-up
+failure skips that plugin and records a reason, such as `not built` or
+`needs chat, which is not installed`. `GET /plugins` (and
+`tokamak-server plugin list`) lists every reason under `skipped`. Fix the
+plugin and reload its id to try again. The rules are under
+[Loading and reload contract](#loading-and-reload-contract).
+
+### Installing from `tokamak-plugins`
+
+The plugins live in the `tokamak-plugins` repository and build against a
+Tokamak checkout. In that repository, `./setup.sh` links Tokamak's packages
+from `../tokamak` or `TOKAMAK_DIR`, and `./install.sh [--dev] [id…]` builds the
+named plugins (all of them with no id, owners first), places each build in the
+plugins folder in one step and asks a running app to reload it. `--dev`
+installs into the debug build's plugins folder. A failed build copies nothing.
+See that repository's README. The app itself knows nothing about the script:
+the plugins folder is the only thing they share.
+
+To install or update the app itself, run `./install.sh` at the Tokamak root.
+It replaces the app and never touches the data folder, so installed plugins
+stay.
+
 ## Build and run
 
 Declare static metadata through `definePlugin` (or pass its descriptor to
@@ -40,8 +77,11 @@ TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plug
 TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin reload acme.notes
 ```
 
-Create writes a descriptor, a sample query and a skill file in a new folder.
-Run `proto run bun -- install` in the checkout to link the SDK before building it.
+Create writes a new plugin that builds in `tokamak-plugins` without edits: a
+descriptor, a sample query and page, configs that extend Tokamak's packages by
+name, a `DESIGN.md` and the skill file (`skills/develop-tokamak-plugin/SKILL.md`).
+Run it from `tokamak-plugins` as `plugin create plugins/<id>`, then
+`./install.sh <id>`.
 
 To target a running desktop Runner, point `TOKAMAK_SERVER_DIR` at its private
 data directory. The CLI finds the address in `runner.json` and reads
