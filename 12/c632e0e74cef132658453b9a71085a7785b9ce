@@ -1,0 +1,34 @@
+plugins/ai/tests/agent-turn.test.ts
+  s_7bdd004021668d::t_f17f9c1f0164e2 73-78
+e2e/fake-agent/launch-settings.mjs
+  s_7bdd004021668d::t_f17f9c1f0164e2 12-21
+  s_7bdd004021668d::t_f538068b15d6a3 5,11,22-31,114-116,145,152-162,169-171,190,193-194,196-198
+plugins/claude/tests/turns.mjs
+  s_7bdd004021668d::t_f17f9c1f0164e2 14-19,131-134,138-140
+  s_7bdd004021668d::t_151f258513846d 96-110
+  s_7bdd004021668d::t_f538068b15d6a3 48-51,57-61,81-82,85-88,90-95,111-116,119-130,135
+plugins/codex/tests/e2e.mjs
+  s_7bdd004021668d::t_f17f9c1f0164e2 9-14,42-45,133-135,137-141,144-157,160,442-447,464-474
+plugins/claude/tests/replay.mjs
+  s_7bdd004021668d::t_f17f9c1f0164e2 22,78-79
+  s_7bdd004021668d::t_f538068b15d6a3 7,17-21,23-26,28-29,69-77
+  s_7bdd004021668d::t_151f258513846d 30-34
+packages/server/tests/ai-turns-driver.mjs
+  s_7bdd004021668d::t_79ccb56b992fd4 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "12c632e0e74cef132658453b9a71085a7785b9ce",
+  "prompts": {},
+  "sessions": {
+    "s_7bdd004021668d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21778-7e87-7e82-b90d-1586c02cb282",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
