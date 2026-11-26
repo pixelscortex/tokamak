@@ -19,6 +19,53 @@ const READY: &str = "Tokamak listening on ws://";
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Where the desktop app keeps its workspace data and installed plugins.
+pub struct Folders {
+    pub data: PathBuf,
+    pub plugins: PathBuf,
+}
+
+impl Folders {
+    /// Uses the platform data folder for `Tokamak.dev` in debug builds and
+    /// `Tokamak` in release builds, unless `server_dir` overrides it. Creates
+    /// the plugins folder under that data folder unless `plugin_dir` overrides it.
+    pub fn resolve(
+        debug: bool,
+        server_dir: Option<PathBuf>,
+        plugin_dir: Option<PathBuf>,
+        default_data: impl FnOnce(&str) -> Option<PathBuf>,
+    ) -> Result<Self, String> {
+        #[cfg(unix)]
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+        let name = if debug {
+            "Tokamak.dev"
+        } else {
+            "Tokamak"
+        };
+        let data = server_dir
+            .or_else(|| default_data(name))
+            .ok_or("Cannot locate application data directory")?;
+        let plugins = plugin_dir.unwrap_or_else(|| data.join("plugins"));
+
+        // Secure the data directory before creating its plugins folder. An
+        // existing directory may also need its owner write permission restored.
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        builder.mode(0o700);
+        builder
+            .create(&data)
+            .map_err(|e| format!("Cannot create data directory {}: {e}", data.display()))?;
+        #[cfg(unix)]
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("Cannot secure data directory {}: {e}", data.display()))?;
+        std::fs::create_dir_all(&plugins)
+            .map_err(|e| format!("Cannot create plugins directory {}: {e}", plugins.display()))?;
+        Ok(Self { data, plugins })
+    }
+}
+
 #[derive(Clone, Serialize)]
 pub struct Endpoint {
     pub http: String,

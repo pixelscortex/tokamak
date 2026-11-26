@@ -1,6 +1,5 @@
-import { buildStarterPlugins, installStarterPlugins } from "./starter-plugins";
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -20,7 +19,6 @@ const cross = target !== native;
 const suffix = target.includes("-windows-") ? ".exe" : "";
 const hostRequired = target.endsWith("-apple-darwin") || target.includes("-linux-");
 
-buildStarterPlugins();
 run("cargo", [
   "build",
   "--locked",
@@ -44,6 +42,3 @@ for (const binary of ["tokamak-runner", ...(hostRequired ? ["tokamak-plugin-host
     throw new Error(`Could not stage required sidecar: ${source}`, { cause });
   }
 }
-
-await rm(`${directory}/plugins`, { recursive: true, force: true });
-await installStarterPlugins(`${directory}/plugins`);

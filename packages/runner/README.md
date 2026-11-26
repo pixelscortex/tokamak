@@ -10,7 +10,7 @@ plugin's ID and its two local bundle hashes. Windows that use the same build
 share a process. The window reports its workspace address without credentials
 so the Runner can tell which installation superseded a build.
 
-The agent, turn hook, and thread deletion contracts in the bundled plugins
+The agent, turn hook, and thread deletion contracts in the Tokamak plugins
 use plain-data calls. Reloading an agent or Code does not restart ai or
 clear its session grants. Turn controls look up the active turn in ai's
 regular process. Hook calls have no agent channel; their caller can cancel a

@@ -30,8 +30,8 @@ Staging omits those files but keeps the manifest and hashes so the Runner can
 match its own installed copy.
 
 Legacy `--local-dir` mode requires a private `server.token`. Never pass a token
-in arguments. The app ships Chat, AI, Code,
-Claude, Codex and Password sign-in as its starter set.
+in arguments. The app ships with no plugins; see the [app README](../../app/README.md)
+for its plugin folder.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh

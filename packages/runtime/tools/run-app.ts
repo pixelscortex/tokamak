@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { buildStarterPlugins, installStarterPlugins } from "../../../app/scripts/starter-plugins.ts";
 import { ensure, localDirectory, status, stop } from "./local-server";
 import { serverBinaryCandidates } from "./server-binary";
 
@@ -20,6 +22,13 @@ if (command === "stop") {
   const running = await status(directory);
   console.log(running ? `Local server: pid ${running.pid}, ${running.url}` : "Local server not running");
 } else {
-  const running = await ensure(binary, resolve(root, "plugins"), directory, "plugins");
+  let plugins = process.env.TOKAMAK_PLUGIN_DIR;
+  if (plugins === undefined) {
+    plugins = resolve(root, "app/.dev/run-app/plugins");
+    buildStarterPlugins();
+    await rm(plugins, { recursive: true, force: true });
+    await installStarterPlugins(plugins);
+  }
+  const running = await ensure(binary, plugins, directory, "plugins");
   console.log(`Local server: pid ${running.pid}, ${running.url} (independent of desktop)`);
 }
