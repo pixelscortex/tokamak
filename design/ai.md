@@ -79,9 +79,9 @@ Launched turns use the project's settings and a private CLI home on the
 Runner. A thread resumes its previous agent session only when the same
 plugins contributed launch settings with the same stable identities; changing a
 per-turn key does not change the home. The launch request supplies an agent id,
-a fresh launch id, and the requested model when one was chosen. An `ended`
-point in a finalizer gives additions the same launch id on completion, setup
-failure, or stop without exposing credentials.
+a fresh launch id, and the requested model when one was chosen. Calling
+`point(ctx, "ended", { launchId })` in a finalizer gives additions the same
+launch id on completion, setup failure, or stop without exposing credentials.
 Deleting the thread from the Runner removes its local homes. The same setup
 messages cover missing or outdated CLIs, and turn errors hide launch values.
 An older desktop or Runner that cannot run turn hooks gets an update message

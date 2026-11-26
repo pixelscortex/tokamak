@@ -4,6 +4,7 @@ import {
   fail,
   isFailure,
   action,
+  point,
   v,
   type ArgsOf,
   type Id,
@@ -78,7 +79,7 @@ export const turn = action({
     let endedNotice: string | undefined;
     const result = await runTurn(ctx, args, launchId).finally(async () => {
       // A launch contribution can acquire resources even if another contribution fails.
-      await ctx.point("ended", { launchId }).catch((cause: unknown) => {
+      await point(ctx, "ended", { launchId }).catch((cause: unknown) => {
         endedNotice = hookRunnerUpdate(cause);
       });
     });
@@ -300,7 +301,8 @@ async function resolveLaunch(
 ): Promise<{ settings?: LaunchSettings; error?: string }> {
   const { agentId } = request;
   try {
-    const contributions = await ctx.point(
+    const contributions = await point(
+      ctx,
       "launch",
       { env: {}, args: [], request } as {
         env: Record<string, string>;

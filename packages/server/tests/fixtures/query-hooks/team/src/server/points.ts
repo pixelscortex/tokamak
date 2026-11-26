@@ -1,10 +1,10 @@
-import { createFunctions, v, type QueryContext } from "@tokamak/sdk";
+import { createFunctions, point, v, type QueryContext } from "@tokamak/sdk";
 import schema from "./schema";
 
 const { query, mutation, action } = createFunctions(schema);
 
-function choose(ctx: Pick<QueryContext<{}>, "point">, mode: string) {
-  return ctx.point("choose", { text: "owner", mode });
+function choose(ctx: Pick<QueryContext<{}>, "call">, mode: string) {
+  return point(ctx, "choose", { text: "owner", mode });
 }
 
 export const readPoint = query({
@@ -19,7 +19,7 @@ export const readPoint = query({
 export const savePoint = mutation({
   args: { rollback: v.boolean() },
   async handler(ctx, { rollback }) {
-    return ctx.point("save", { name: "owner-point", rollback }, async ({ name }) => {
+    return point(ctx, "save", { name: "owner-point", rollback }, async ({ name }) => {
       await ctx.db.insert("users", { name });
       if (rollback) throw new Error("rollback point");
       return name;
@@ -29,7 +29,7 @@ export const savePoint = mutation({
 
 export const actPoint = action({
   async handler(ctx) {
-    const result = await ctx.point("run", { count: 1 });
+    const result = await point(ctx, "run", { count: 1 });
     return result.count * 2;
   },
 });
@@ -38,7 +38,7 @@ export const catchPoint = mutation({
   async handler(ctx) {
     await ctx.db.insert("users", { name: "caught-point" });
     try {
-      await ctx.point("caught", { note: undefined as string | undefined }, async () => {});
+      await point(ctx, "caught", { note: undefined as string | undefined }, async () => {});
     } catch {
       await ctx.db.insert("users", { name: "caught-point-after" });
     }

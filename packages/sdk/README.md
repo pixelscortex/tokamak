@@ -1073,14 +1073,19 @@ plugin still loads; the server skips that hook and logs a warning.
 ### Hook a named point inside a function
 
 A query, mutation, or action can expose a named spot in its handler with
-`ctx.point`. Use a unique, nonempty string literal without `#`. A helper
-in the same module can take `ctx` and call a point if the compiler can trace it
-to exactly one exported handler. Points are not allowed in triggers or hook stages.
+`point(ctx, name, value)` from `@tokamak/sdk`. Use a unique, nonempty string literal
+without `#`. A helper in the same module can take `ctx` and call a point if the
+compiler can trace it to exactly one exported handler. Pass that handler’s
+context, or the inner context from its `withPrograms` callback: a point runs
+for the call whose context it is given, and fails once that call has ended.
+Points are not allowed in triggers or hook stages.
 
 ```ts
-const launch = await ctx.point("launch", { env: {} as Record<string, string>, args: [] as string[] });
+import { point } from "@tokamak/sdk";
 
-const rows = await ctx.point("load", { search }, (input) => load(input.search));
+const launch = await point(ctx, "launch", { env: {} as Record<string, string>, args: [] as string[] });
+
+const rows = await point(ctx, "load", { search }, (input) => load(input.search));
 ```
 
 The first form lets `before` hooks change the value. A value point cannot have
@@ -1088,7 +1093,7 @@ an `after` hook. In the second form, `before` hooks change the input, the owner
 runs its callback in its own process, and `after(ctx, result, input)` hooks can
 change the result. `input` in an after hook is the input the callback received.
 
-Use `ctx.point("launch", initial, { collect: true })` for a value point whose
+Use `point(ctx, "launch", initial, { collect: true })` for a value point whose
 owner needs to combine contributions. Each `before` hook receives the same
 initial value. The point returns a list of `{ plugin, value }` entries, one
 per hook, with the plugin ID supplied by the host. Without hooks it returns

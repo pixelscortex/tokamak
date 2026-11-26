@@ -15,6 +15,20 @@ function pointCall(checker, node) {
   );
 }
 
+function legacyPointCall(checker, node) {
+  if (!ts.isCallExpression(node)) return false;
+  const access = node.expression;
+  const member = ts.isPropertyAccessExpression(access)
+    ? access.name
+    : ts.isElementAccessExpression(access) && access.argumentExpression;
+  if (!member || member.text !== "point" || checker.getSymbolAtLocation(member)) return false;
+
+  const receiver = checker.getTypeAtLocation(access.expression);
+  return (
+    receiver.getProperty("call") || (ts.isIdentifier(access.expression) && access.expression.text === "ctx")
+  );
+}
+
 function referencedDeclaration(checker, node) {
   if (!(ts.isIdentifier(node) || ts.isStringLiteralLike(node))) return;
   if (ts.isDeclarationName(node) && !ts.isShorthandPropertyAssignment(node.parent)) return;
@@ -123,6 +137,8 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
   const calls = new Map();
   const references = [];
   function collect(node) {
+    if (legacyPointCall(checker, node))
+      throw new Error(`${sourceLocation(node)}: Import point from "@tokamak/sdk" and write point(ctx, ...).`);
     if (pointCall(checker, node)) calls.set(node, []);
     ts.forEachChild(node, collect);
   }
@@ -145,7 +161,7 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
     const error = (message) => {
       throw new Error(`${sourceLocation(call)}: ${message}`);
     };
-    const [name] = call.arguments;
+    const [, name] = call.arguments;
     if (!name || !ts.isStringLiteralLike(name))
       error("A point name must be a string literal; pass a literal name.");
     if (!name.text || name.text.includes("#")) error('A point name cannot be empty or contain "#".');
@@ -176,14 +192,14 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
 
 function pointTypes(checker, call, name, error, warn) {
   const signature = checker.getResolvedSignature(call);
-  if (![2, 3].includes(call.arguments.length) || !signature?.parameters[1])
-    error("A point takes a name, data, and an optional callback or { collect: true }.");
-  const input = checker.getTypeOfSymbolAtLocation(signature.parameters[1], call);
+  if (![3, 4].includes(call.arguments.length) || !signature?.parameters[2])
+    error("A point takes a context, name, data, and an optional callback or { collect: true }.");
+  const input = checker.getTypeOfSymbolAtLocation(signature.parameters[2], call);
   const invalid = () => error(`Point "${name}" requires plain data; describe it as data, or use \`after\`.`);
   let result;
-  if (call.arguments.length === 3) {
+  if (call.arguments.length === 4) {
     const option =
-      signature.parameters[2] && checker.getTypeOfSymbolAtLocation(signature.parameters[2], call);
+      signature.parameters[3] && checker.getTypeOfSymbolAtLocation(signature.parameters[3], call);
     const run = option?.getCallSignatures()[0];
     if (run) {
       result = checker.getAwaitedType(checker.getReturnTypeOfSignature(run));
