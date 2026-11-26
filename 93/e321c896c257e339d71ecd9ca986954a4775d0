@@ -1,0 +1,81 @@
+plugins/ai/package.json
+  s_333a5e89a2d6c0::t_f73abc8deb6ca4 21
+  s_333a5e89a2d6c0::t_e0fcccf23927ec 18
+  s_333a5e89a2d6c0::t_ee38b4af6b3e95 20
+e2e/browser/agent-picker.ts
+  s_333a5e89a2d6c0::t_42ebb927765efb 3-10,13-32,36-52,55-61
+  s_333a5e89a2d6c0::t_1da8911f9bcecc 53-54
+e2e/browser/thread-list.spec.ts
+  s_333a5e89a2d6c0::t_eda9810edc1c64 4,15
+  s_333a5e89a2d6c0::t_ee57cb06b2a3be 29-30
+design/chat.md
+  s_333a5e89a2d6c0::t_fbe4cba379d43a 62-64
+e2e/browser/ai.spec.ts
+  s_333a5e89a2d6c0::t_e9265c147a15de 7,27,29-30,57,59,209-211,300,354,371-372
+plugins/ai/src/client/ui/agent-row.tsx
+  s_333a5e89a2d6c0::t_fdf27aee7dd99c 1,20,23-25,27-28,134,149,151-160,162-163
+  s_3c3e6807a80329::t_cfc7b56e332332 7,31
+plugins/ai/tests/agent-row.test.tsx
+  s_333a5e89a2d6c0::t_0b4c44e8a8de08 17,40,44,46-49,71-72,137,146-147,149,166,182,246-261,264-265,267-278,286-301,309-310,312-323,325,332-335,343-348,350-352
+  s_333a5e89a2d6c0::t_e0fcccf23927ec 2,152,156-157,262-263,266,311,324,349
+  s_333a5e89a2d6c0::t_1da8911f9bcecc 279-285,302-308,326-331,336-342
+  s_3c3e6807a80329::t_cfc7b56e332332 18,45,245
+e2e/browser/ai-thread.spec.ts
+  s_333a5e89a2d6c0::t_bfcad5e623a32e 5,8,18,26-28,33-35,37-38,41,45-46,76-78,101-103,110-111,126-127,130-131,135,140-143,149-150,152,154
+  s_333a5e89a2d6c0::t_1da8911f9bcecc 29-31
+e2e/browser/code.spec.ts
+  s_333a5e89a2d6c0::t_b5264f1695f268 74
+design/ai.md
+  s_333a5e89a2d6c0::t_fbe4cba379d43a 23,31-64,73-76,109-113,115-118,144-150
+  s_333a5e89a2d6c0::t_a41c96f48f6b68 139
+  s_3c3e6807a80329::t_cfc7b56e332332 83,114
+plugins/ai/src/client/lib/icons.ts
+  s_333a5e89a2d6c0::t_174896697b4b53 37,39-44
+  s_333a5e89a2d6c0::t_8d637e722e11c3 38
+plugins/ai/src/client/styles.css
+  s_333a5e89a2d6c0::t_8d637e722e11c3 6
+  s_333a5e89a2d6c0::t_174896697b4b53 5,7-12
+plugins/ai/src/client/lib/choices.ts
+  s_333a5e89a2d6c0::t_17c9f31ad029aa 16-22,93,96,106-115,118
+e2e/browser/quit.spec.ts
+  s_333a5e89a2d6c0::t_ee57cb06b2a3be 61
+  s_333a5e89a2d6c0::t_eda9810edc1c64 8
+e2e/browser/screens.spec.ts
+  s_333a5e89a2d6c0::t_b5264f1695f268 21,197,259
+  s_333a5e89a2d6c0::t_ee57cb06b2a3be 7,151-156
+plugins/ai/src/client/ui/agent-picker.tsx
+  s_333a5e89a2d6c0::t_e2e300884d22b3 12,36-44,76,85,136,169,181,195-196,203,206,216,225,232,241-242,255,258,260-262
+  s_333a5e89a2d6c0::t_49293939bbc547 25-26,118,129,144-148,150-154
+  s_333a5e89a2d6c0::t_8e571804e91f13 1-10,13-24,27-35,45-56,58-62,65-68,84,86-114,116-117,119-128,130-135,137-143,149,155-163,172,190-194,197-202,204-205,207-215,217-224,226-231,233-240,243-254,256-257,259,263-265
+  s_333a5e89a2d6c0::t_8d637e722e11c3 11
+  s_333a5e89a2d6c0::t_1da8911f9bcecc 57
+  s_333a5e89a2d6c0::t_5479aa395ab04d 63-64,69-75,77-83
+  s_333a5e89a2d6c0::t_42ebb927765efb 115
+  s_333a5e89a2d6c0::t_7d11043d44cea7 164-168,170-171,173-180,182-189
+bun.lock
+  s_333a5e89a2d6c0::t_57a4dbd33ce6d9 129,131-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "93e321c896c257e339d71ecd9ca986954a4775d0",
+  "prompts": {},
+  "sessions": {
+    "s_333a5e89a2d6c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5437883f-9729-4270-b10f-4db7ab587e9d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_3c3e6807a80329": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21717-f345-7953-b663-129c38e1eb2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

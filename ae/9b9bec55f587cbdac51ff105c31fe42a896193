@@ -1,0 +1,19 @@
+plugins/ai/src/client/ui/agent-picker.tsx
+  s_333a5e89a2d6c0::t_f530e61740f083 203,260-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae9b9bec55f587cbdac51ff105c31fe42a896193",
+  "prompts": {},
+  "sessions": {
+    "s_333a5e89a2d6c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5437883f-9729-4270-b10f-4db7ab587e9d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
