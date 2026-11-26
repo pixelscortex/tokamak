@@ -1,0 +1,19 @@
+packages/server/tests/shutdown-driver.mjs
+  s_dcb5093083cc27::t_b38ac1ec536231 68-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0b876fc6205deaedb6beeb385a980333a550eb5",
+  "prompts": {},
+  "sessions": {
+    "s_dcb5093083cc27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21335-34ee-7761-be52-721efb85d0ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
