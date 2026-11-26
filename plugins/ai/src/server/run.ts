@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { randomBytes } from "node:crypto";
+import { platform } from "node:os";
 import {
   fail,
   isFailure,
@@ -11,7 +12,7 @@ import {
   type CallerActionContext,
 } from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
-import { agent, type Run, type Usage } from "../contracts";
+import { agent, type LaunchSettings, type Run, type Usage } from "../contracts";
 import { errorText, setupReason } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
@@ -76,24 +77,45 @@ export const turn = action({
     agentId = queued?.agent.id ?? agentId;
     const provider = await agent.get(agentId, ctx);
     if (!provider) return fail("NoAgent", { agentId });
-    const info = await infoOf(provider, true);
-    if (!info.installed)
-      return fail("NotInstalled", {
-        agent: provider.name,
-        ...(info.updateRequired && { updateRequired: info.updateRequired }),
-      });
-    if (!info.signedIn) return fail("SignedOut", { agent: provider.name });
+    const { settings: launchSettings, error: launchError } = await resolveLaunch(ctx);
+    // The normal catalog checks the person's own login. An isolated turn
+    // instead uses the choices from the window and lets its CLI validate them.
     // A queued turn keeps the settings it was queued with.
     const wanted = queued ?? { ...picked, access };
-    const { model, ...levels } = offered(info, wanted);
-    const settings = { model: model?.id ?? "default", ...levels, access: wanted.access ?? ("full" as const) };
+    let modelName: string | undefined;
+    let choices = {
+      model: wanted.model ?? "default",
+      effort: wanted.effort,
+      speed: wanted.speed,
+      mode: wanted.mode,
+    };
+    if (!launchError && !launchSettings) {
+      const info = await infoOf(provider, true);
+      if (!info.installed)
+        return fail("NotInstalled", {
+          agent: provider.name,
+          ...(info.updateRequired && { updateRequired: info.updateRequired }),
+        });
+      if (!info.signedIn) return fail("SignedOut", { agent: provider.name });
+      const { model, effort, speed, mode } = offered(info, wanted);
+      modelName = model?.name;
+      choices = { model: model?.id ?? "default", effort, speed, mode };
+    }
+    const { model, effort, speed, mode } = choices;
+    const settings = {
+      model,
+      ...(effort !== undefined && { effort }),
+      ...(speed !== undefined && { speed }),
+      ...(mode !== undefined && { mode }),
+      access: wanted.access ?? ("full" as const),
+    };
     const begun = await ctx.runMutation(api.turns.begin, {
       threadId,
       messageId,
       ...(hasLocalChannel(provider) && { folder }),
       agent: { id: provider.id, name: provider.name },
       ...settings,
-      ...(model !== undefined && { modelName: model.name }),
+      ...(modelName !== undefined && { modelName }),
       replyToken: replyToken ?? randomBytes(32).toString("hex"),
     });
     if (isFailure(begun)) return begun;
@@ -102,7 +124,9 @@ export const turn = action({
         begun;
       return failed;
     }
-    const { turnId, prompt, history, sessionId } = begun;
+    const { turnId, prompt, history } = begun;
+    // Isolated CLI state is discarded at the end; use the thread's history.
+    const sessionId = launchSettings ? undefined : begun.sessionId;
     const hooks = hooksFor(ctx, { threadId, turnId, folder });
     const writer = turnWriter(ctx, turnId);
     // The session this turn carries on (`turns:begin`: the thread's last turn was this agent's, on this
@@ -142,7 +166,7 @@ export const turn = action({
     });
     try {
       let ending: Pick<ArgsOf<typeof api.turns.finish>, "state" | "error" | "sessionId">;
-      const beforeError = lost === undefined ? await hooks.before() : lost;
+      const beforeError = lost ?? launchError ?? (await hooks.before());
       const lostBefore = lost;
       if (lostBefore !== undefined) {
         ending = { state: "interrupted", error: lostBefore };
@@ -159,6 +183,7 @@ export const turn = action({
             prompt,
             ...settings,
             history,
+            ...(launchSettings && { launchSettings }),
             ...(sessionId === undefined ? {} : { sessionId }),
           };
           const reports = { ...writer.reports, sessionChanged: questions.sessionChanged };
@@ -170,13 +195,19 @@ export const turn = action({
             control,
           );
           ending = result
-            ? { state: result.stopped ? "stopped" : "done", sessionId: result.sessionId }
+            ? {
+                state: result.stopped ? "stopped" : "done",
+                ...(!launchSettings && { sessionId: result.sessionId }),
+              }
             : { state: "stopped" };
         } catch (cause) {
-          const current = lost === undefined ? await infoAfterStartFailure(provider) : undefined;
+          const current =
+            lost === undefined && !launchSettings ? await infoAfterStartFailure(provider) : undefined;
           ending = {
             state: "failed",
-            error: (current && setupReason(provider.name, current)) ?? errorText(cause),
+            error: launchSettings
+              ? `${provider.name} could not finish the turn with its launch settings.`
+              : ((current && setupReason(provider.name, current)) ?? errorText(cause)),
           };
         }
       }
@@ -192,7 +223,7 @@ export const turn = action({
         ending = { ...ending, state: "failed", error: `Could not save the reply: ${errorText(broken)}` };
       // Force stop only closes the agent's program scope. Run after hooks before releasing the queue.
       const hookNotice =
-        hooks.stoppedBefore && lostBefore === undefined
+        launchError || (hooks.stoppedBefore && lostBefore === undefined)
           ? undefined
           : (lostBefore ?? beforeError ?? (lost === undefined ? await hooks.after() : hooks.notice()));
       let state;
@@ -229,6 +260,47 @@ export const turn = action({
     }
   },
 });
+
+/** Collect a fresh snapshot before even probing the agent's CLI. */
+async function resolveLaunch(
+  ctx: CallerActionContext,
+): Promise<{ settings?: LaunchSettings; error?: string }> {
+  try {
+    const contributions = await ctx.point(
+      "launch",
+      { env: {} as Record<string, string>, args: [] as string[] },
+      { collect: true },
+    );
+    const ignoreCase = platform() === "win32";
+    const env = new Map<string, { plugin: string; name: string; value: string }>();
+    const args: string[] = [];
+    for (const { plugin, value } of contributions) {
+      // The point validator checks the shape, but leaves index signatures open.
+      if (!value.env || typeof value.env !== "object" || Array.isArray(value.env))
+        throw new TypeError("Invalid launch environment");
+      for (const [name, setting] of Object.entries(value.env)) {
+        if (!name || /[=\0\r\n]/.test(name) || typeof setting !== "string" || setting.includes("\0"))
+          throw new TypeError("Invalid launch environment entry");
+        const key = ignoreCase ? name.toUpperCase() : name;
+        const previous = env.get(key);
+        if (previous && previous.plugin !== plugin) {
+          return {
+            error: `Could not start the turn: plugins "${previous.plugin}" and "${plugin}" both set ${name}.`,
+          };
+        }
+        env.set(key, { plugin, name, value: setting });
+      }
+      for (const arg of value.args) args.push(arg);
+    }
+    if (!env.size && !args.length) return {};
+    return {
+      settings: { env: Object.fromEntries([...env.values()].map(({ name, value }) => [name, value])), args },
+    };
+  } catch {
+    // Hook errors can contain the settings the hook was assembling.
+    return { error: "Could not prepare the agent's launch settings." };
+  }
+}
 
 /** Steers on the sender's window, and records the text only once the agent can receive it. */
 export const steer = action({

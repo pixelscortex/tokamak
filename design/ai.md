@@ -30,6 +30,10 @@ Not drawn yet: the thread list after several turns (its status icons show on the
 "Only Sam can run the agent here"), a picker menu open, a pending steer, queued messages, the
 expired question line, "Force stop".
 
+If two launch hooks set the same environment variable, the turn fails before
+the agent starts. The existing error reply names the two plugins and the
+variable. This error is not drawn on the Paper page.
+
 ## Parts it offers
 
 The compiler publishes every JSX tag under `parts` in `plugin:ai/client`,

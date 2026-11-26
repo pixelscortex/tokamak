@@ -100,10 +100,15 @@ export function killAfter(proc: RunningProcess, ms: number) {
   return () => clearTimeout(timer);
 }
 
-export function open(ctx: CallerActionContext, args: string[], cwd?: string) {
+export function open(
+  ctx: CallerActionContext,
+  args: string[],
+  cwd?: string,
+  env?: Readonly<Record<string, string>>,
+) {
   // Preserve the client environment so Claude can find its executable,
   // settings and existing Keychain or file login.
-  const proc = ctx.proc(["claude", ...args], { cwd });
+  const proc = ctx.proc(["claude", ...args], { cwd, ...(env && { env }) });
   const exited = proc.exited.catch(() => 127);
   // Both streams must drain, even on installs whose hooks write to stderr.
   void (async () => {
@@ -129,8 +134,13 @@ export function open(ctx: CallerActionContext, args: string[], cwd?: string) {
   return { proc, exited, send, control, close };
 }
 
-export async function usableVersion(ctx: CallerActionContext, timeout = 5_000) {
-  const answer = await agentCommand(ctx, ["claude", "--version"], timeout);
+export async function usableVersion(
+  ctx: CallerActionContext,
+  timeout = 5_000,
+  env?: Readonly<Record<string, string>>,
+) {
+  const args: ["claude", ...string[]] = ["claude", "--version", ...(env ? ["--bare"] : [])];
+  const answer = await agentCommand(ctx, args, timeout, env);
   if (answer === "missing") return answer;
   if (answer?.code !== 0) return;
   const version = answer.stdout.match(/(?:^|[^\w])v?(\d+\.\d+\.\d+)\b/i)?.[1];

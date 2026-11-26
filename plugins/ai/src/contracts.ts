@@ -6,6 +6,7 @@ export type {
   Answer,
   Helper,
   HistoryMessage,
+  LaunchSettings,
   Question,
   Run,
   StepState,

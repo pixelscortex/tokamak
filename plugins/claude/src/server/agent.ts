@@ -3,6 +3,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { agentInfoCache } from "@tokamak/sdk/agent-turn";
+import { withAgentLaunch } from "@tokamak/sdk/agent-launch";
 import { action, provide, type CallerActionContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { killAfter, minimumVersion, open, parse, signedIn, speeds, streamArgs, usableVersion } from "./wire";
@@ -128,14 +129,19 @@ async function choices(ctx: CallerActionContext): Promise<Pick<ai.Info, "models"
 const start = action({
   on: "caller",
   handler: async (ctx, run: ai.Run) => {
-    try {
-      const version = await usableVersion(ctx);
+    const startTurn = async (env?: Readonly<Record<string, string>>) => {
+      const version = await usableVersion(ctx, undefined, env);
       if (version === undefined) throw new Error("Could not check the Claude Code version");
       if (version !== "ready")
         throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
-      return await turn(ctx, run);
+      return turn(ctx, run, env);
+    };
+    try {
+      return run.launchSettings
+        ? await withAgentLaunch(run.launchSettings, "claude", ({ env }) => startTurn(env))
+        : await startTurn();
     } catch (error) {
-      discovery.invalidate();
+      if (!run.launchSettings) discovery.invalidate();
       throw error;
     }
   },

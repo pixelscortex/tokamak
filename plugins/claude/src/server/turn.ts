@@ -21,6 +21,8 @@ function launchArgs(run: Run, resume?: string) {
     ...(run.model && run.model !== "default" ? ["--model", run.model] : []),
     ...(run.effort ? ["--effort", run.effort] : []),
     ...(resume ? ["--resume", resume] : []),
+    // Even with a fresh config directory, don't let Claude try the OS keychain.
+    ...(run.launchSettings ? [...run.launchSettings.args, "--bare"] : []),
   ];
 }
 
@@ -43,8 +45,12 @@ function isInterrupted(message: Frame) {
   return message.terminal_reason === "aborted_streaming" || message.terminal_reason === "aborted_tools";
 }
 
-export async function turn(ctx: CallerActionContext, run: Run): Promise<TurnResult> {
-  const lifecycle = new Turn(ctx, run);
+export async function turn(
+  ctx: CallerActionContext,
+  run: Run,
+  env?: Readonly<Record<string, string>>,
+): Promise<TurnResult> {
+  const lifecycle = new Turn(ctx, run, env);
   try {
     try {
       return await lifecycle.play(run.sessionId);
@@ -61,6 +67,7 @@ export async function turn(ctx: CallerActionContext, run: Run): Promise<TurnResu
 class Turn {
   readonly #ctx: CallerActionContext;
   readonly #run: Run;
+  readonly #env?: Readonly<Record<string, string>>;
   #wire?: ReturnType<typeof open>;
   #permissions?: Permissions;
   #reports?: ReplyEvents;
@@ -72,9 +79,10 @@ class Turn {
   #sessionId?: string;
   stopping = false;
 
-  constructor(ctx: CallerActionContext, run: Run) {
+  constructor(ctx: CallerActionContext, run: Run, env?: Readonly<Record<string, string>>) {
     this.#ctx = ctx;
     this.#run = run;
+    this.#env = env;
     run.onSteer((text) => {
       if (this.#done || this.stopping) return;
       if (!this.#ready) {
@@ -120,7 +128,7 @@ class Turn {
     this.#pending.clear();
     this.#steerInterrupt = false;
     const run = this.#run;
-    const wire = open(this.#ctx, launchArgs(run, resume), run.folder);
+    const wire = open(this.#ctx, launchArgs(run, resume), run.folder, this.#env);
     this.#wire = wire;
     const permissions = new Permissions(run, wire.send);
     this.#permissions = permissions;
