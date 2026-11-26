@@ -1,0 +1,40 @@
+packages/sdk/caller/agent-launch.ts
+  s_4394c86410813a::t_22233c9fd7a536 22,25-31
+  s_4394c86410813a::t_0acc5acd302230 1-21,23-24,32-35
+packages/sdk/src/points.ts
+  s_4394c86410813a::t_708687af9966b2 9,12,23,26-27,29,37
+packages/sdk/tools/points.mjs
+  s_4394c86410813a::t_708687af9966b2 180,188-190,192-193
+  s_4394c86410813a::t_6d10970d471cc2 185,187,191
+packages/sdk/src/agent-command.ts
+  s_4394c86410813a::t_135d3e2fbf4207 10,17
+packages/sdk/src/host.ts
+  s_4394c86410813a::t_708687af9966b2 51
+packages/server/src/host/hooks.rs
+  s_4394c86410813a::t_708687af9966b2 65-81,175,210,222,228
+  s_4394c86410813a::t_b33f953a6b92c3 229-232,237,239,265,312-314,316-320
+packages/sdk/README.md
+  s_4394c86410813a::t_22233c9fd7a536 877-883
+  s_4394c86410813a::t_56d67d867a4a03 1038-1044
+packages/sdk/src/agent-turn.ts
+  s_4394c86410813a::t_c7b825988bf2d2 141-142
+  s_4394c86410813a::t_b4346c752322ea 117-121,204-216
+packages/sdk/package.json
+  s_4394c86410813a::t_dc058f192116c9 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee3fd987adaf6e24789c1177e32c8c5ce52ca401",
+  "prompts": {},
+  "sessions": {
+    "s_4394c86410813a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-2ad3-74e3-b933-e71855112b5c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
