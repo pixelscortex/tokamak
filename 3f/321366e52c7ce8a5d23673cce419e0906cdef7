@@ -1,0 +1,63 @@
+plugins/codex/src/server/agent.ts
+  s_6df2d1786f1946::t_cec3b7a99d753f 39-40,42-56
+plugins/ai-profiles/src/server/turn-profile.ts
+  s_6df2d1786f1946::t_cec3b7a99d753f 93
+e2e/fake-agent/profile-codex.mjs
+  s_6df2d1786f1946::t_3ca2b11e9c45ee 48-51
+  s_6df2d1786f1946::t_cefa0b73dbb4ad 3,41-47
+packages/sdk/src/agent-turn.ts
+  s_6df2d1786f1946::t_cec3b7a99d753f 117-123,129
+e2e/fake-agent/launch-settings.mjs
+  s_6df2d1786f1946::t_4115665b9cb931 50-55,61-62
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_6df2d1786f1946::t_3ca2b11e9c45ee 385-386
+  s_6df2d1786f1946::t_cefa0b73dbb4ad 10,14-16,384,387,421-424,429-432
+  s_6df2d1786f1946::t_2a0b07f33248a1 17,414-419
+plugins/agent-proxy/tests/proxy.test.ts
+  s_6df2d1786f1946::t_3c663d2011629e 208-214,224,235-236,238,242,246-247
+  s_6df2d1786f1946::t_c07dcaf3e78243 156-190,196-207
+  s_6df2d1786f1946::t_2a0b07f33248a1 215-223,225-234,237,239-241,243-245,248-249
+  s_6df2d1786f1946::t_3ca2b11e9c45ee 191-195
+packages/sdk/README.md
+  s_6df2d1786f1946::t_c07dcaf3e78243 954-957
+plugins/ai/src/server/run.ts
+  s_6df2d1786f1946::t_cec3b7a99d753f 311,318,332-342,344-349,363-371,389,405-406
+  s_6df2d1786f1946::t_2a0b07f33248a1 343
+  s_6df2d1786f1946::t_3ca2b11e9c45ee 325-326
+design/ai.md
+  s_6df2d1786f1946::t_c07dcaf3e78243 70-76
+design/agent-proxy.md
+  s_6df2d1786f1946::t_c07dcaf3e78243 49-53,81-83
+plugins/codex/tests/e2e.mjs
+  s_6df2d1786f1946::t_4115665b9cb931 47,136,145-152,157-160,162-163,165-175
+  s_6df2d1786f1946::t_37cd2fb7675020 161
+  s_6df2d1786f1946::t_3ca2b11e9c45ee 153-156
+  s_6df2d1786f1946::t_2a0b07f33248a1 137-144
+  s_6df2d1786f1946::t_cefa0b73dbb4ad 502
+e2e/fake-agent/profile-turns.mjs
+  s_6df2d1786f1946::t_cefa0b73dbb4ad 90-92,256-266,271-272,303,433
+plugins/ai/src/server/launch-args.ts
+  s_6df2d1786f1946::t_cec3b7a99d753f 53-59,71-79
+plugins/agent-proxy/src/server/proxy.ts
+  s_6df2d1786f1946::t_77ffea7c36cd19 21-66,79-80,178-184,194,303-304
+plugins/agent-proxy/tests/fake-companies/stream.ts
+  s_6df2d1786f1946::t_cefa0b73dbb4ad 37-55
+plugins/ai/src/server/_generated/api.ts
+  s_6df2d1786f1946::t_c1ad6c93810fc9 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f321366e52c7ce8a5d23673cce419e0906cdef7",
+  "prompts": {},
+  "sessions": {
+    "s_6df2d1786f1946": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21806-0f2c-7b91-9341-404a282e3f32",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
