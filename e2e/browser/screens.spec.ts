@@ -289,9 +289,8 @@ async function unlinkGo(folder: string) {
 // The Profiles screen in flow order (TKM-261, 262, 264, 265): adding a Claude
 // subscription, then a ChatGPT one, making profiles and dragging both in, the
 // subscription details, and removing; signed in against the fake Claude and
-// ChatGPT sign-ins. They run on a copy of the plugins with agent-proxy,
-// ai-profiles and claude added (browser.ts builds them), so Claude's own mark
-// is the logo and the other screens keep the rail they are drawn with.
+// ChatGPT sign-ins. The Profiles and picker captures load the real plugins
+// without the browser suite's fixture rail entries.
 test("profiles screens", async ({ browser }) => {
   test.setTimeout(180_000);
   const fake = await startFakeCompanies();
@@ -299,7 +298,9 @@ test("profiles screens", async ({ browser }) => {
   const shared = process.env.TOKAMAK_PLUGIN_DIR!;
   const folder = await mkdtemp(join(dirname(shared), "profiles-"));
   const plugins = join(folder, "plugins");
-  await cp(shared, plugins, { recursive: true });
+  for (const id of ["chat", "ai", "code", "basic-auth"]) {
+    await cp(join(shared, id), join(plugins, id), { recursive: true });
+  }
   await cp(process.env.TOKAMAK_E2E_EXTRA_PLUGINS!, plugins, { recursive: true });
   // The server reads the addresses from the installation's .env.local, beside its plugins.
   await writeFile(
