@@ -1,0 +1,176 @@
+packages/server/src/plugins/mod.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 28-30
+README.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 33-48
+packages/runner/tests/lifecycle.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 8,279-346
+  s_cb2e6045e6b3bc::t_eb7e26ff050b68 347
+packages/runner/README.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 13
+plugins/agent-proxy/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/build/package.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 8-10
+packages/sdk/tools/plugin-compiler.mjs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3-4,8-15
+  s_cb2e6045e6b3bc::t_ed9d1435f1b46f 16
+packages/ui/package.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 8
+plugins/code/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+app/src-tauri/src/runner.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3,5-6,9,13-17,22-29,31-33,58-91,95
+e2e/playwright.config.ts
+  s_cb2e6045e6b3bc::t_15f4fa82ba9f27 11
+app/moon.yml
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 37
+packages/sdk/tools/plugin-boundary.mjs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1,21-27,74-75,126,189,237-241,343,585-586
+packages/sdk/tools/placement.mjs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 13,81-89
+app/README.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 13-14,17-25,110-112
+install.sh
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-123
+e2e/browser/desktop.ts
+  s_cb2e6045e6b3bc::t_60744c16bba68e 22,85
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 35-36,39-40,61,92-94,160-162
+packages/build/README.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3,9-40
+  s_cb2e6045e6b3bc::t_c8176bf7347df5 41
+design/shell.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 6,11-22,30-32,56-85,142-147,165-172
+  s_cb2e6045e6b3bc::t_3da350191b8ba6 173
+packages/build/src/window-test-config.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 5-6,42
+app/tests/plugins-page.test.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-51
+app/tests/shell.test.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 242-244,249-250
+packages/runtime/tools/run-app.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 4-5,25-32
+packages/sdk/tsconfig.plugin-window.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-15
+packages/server/src/plugins/artifact.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 8,13
+packages/server/src/plugins/catalog.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 5-9,12,15-19,22-24,40,44-51,53-62,64-80,100-102,111-114,150-164,189-200,213,244-373,387-415,417-424,427-428
+packages/server/src/plugins/loading.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 378-381,589-594,599-605
+packages/server/src/plugins/manifest.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 113-131
+plugins/ai/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+plugins/ai-profiles/src/client/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/sdk/tools/bundle.mjs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 6,15-20,77,404-406,435
+plugins/codex/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/build/src/vite.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 141,145,147,149,156
+packages/server/PLUGINS.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 7-43,70-71,80-84,104-127,168-171
+skills/develop-tokamak-plugin/SKILL.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-125
+app/src-tauri/permissions/main-window.toml
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 10-14
+design/README.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 35-37
+packages/build/src/auth-dependencies.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 31,33-38
+packages/server/src/plugins/dependencies.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3-37,41-57,59-76,78-93,95-118,123,125-133,135-143,145-154,156-183,187,189,204,207-212
+plugins/chat/src/client/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+app/src-tauri/src/main.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 34
+GLOSSARY.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 151,154-160
+  s_cb2e6045e6b3bc::t_c5827904589d1e 161
+packages/server/src/service/plugin_control.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 10,186-191,195-198
+plugins/ai/src/client/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+plugins/ai-profiles/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+plugins/code/tests/vitest.config.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3-4
+skills/tokamak-design/SKILL.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-90
+plugins/chat/tests/extensions.test.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 10
+AGENTS.md
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 9-14,17,21-23
+  s_cb2e6045e6b3bc::t_117d40d686bbf9 24
+plugins/ai-profiles/tests/vitest.config.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3
+packages/worker/src/runner.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 22-68
+e2e/browser/plugins-page.spec.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-142
+packages/server/tests/schema_indexes.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1217-1218,1280
+packages/sdk/package.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 8-9
+app/scripts/starter-plugins.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-2
+app/src/shell/plugins.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-231
+packages/server/src/plugins/tests.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 40,42-45,78,80-89,134-135,139-140,145,151-152,157,163,169-170,175,182-190,199,222
+plugins/chat/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/server/tests/plugins.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 452-466,473-479,490-496,500,504-527,529-532,535-540,542-545,558-657,1374-1398,1413-1418,1424-1452,1497-1723
+packages/build/src/exports.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 6,22-23,25
+app/src/shell/states.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 6,107,109,116-118,120
+app/scripts/prepare-host.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/build/src/descriptor.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 4
+packages/server/src/scaffold.rs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3-6,8-11,24,29,31-76
+plugins/ai/tests/vitest.config.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 3
+app/src/shell/settings-menu.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 29,50
+packages/sdk/tsconfig.plugin-server.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-12
+app/scripts/dev-app.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-32
+plugins/chat/tests/vitest.config.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1,5-6,9,15-16,19,28,30-32,41
+plugins/basic-auth/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+plugins/claude/src/server/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+app/src/shell/pages.ts
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 41-48
+plugins/code/src/client/tsconfig.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 2
+packages/sdk/tools/client-entry.mjs
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 1-10
+app/src/router.tsx
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 9,27-28
+app/src-tauri/tauri.conf.json
+  s_cb2e6045e6b3bc::t_d48cbca1467f90 32-37,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6f515257dbc1250a390b7a6aefff015879a134d6",
+  "prompts": {},
+  "sessions": {
+    "s_cb2e6045e6b3bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ac81cd7-5d7d-4ae0-9966-f53bdd3c63a6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
