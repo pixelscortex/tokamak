@@ -196,7 +196,7 @@ function AgentModels(props: { agent: AgentEntry }): JSX.Element {
  * The bar under the columns: speed and mode when the agent offers them, the access level,
  * and the computer the turn runs on. Each choice is a short radio group laid out in a row
  * (the picked one carries the check), so the keys that move through the columns reach it.
- * Turns run on the sender's own computer today, so "Runs on" names it and offers nothing.
+ * Turns use caller placement, so "Runs on" names it and offers nothing.
  */
 function PickerSettings(props: { current: Resolved; change: (next: Change) => void }): JSX.Element {
   const me = auth.me();
