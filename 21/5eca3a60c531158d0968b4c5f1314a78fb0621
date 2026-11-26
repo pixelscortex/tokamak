@@ -1,0 +1,28 @@
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_c87cb51d820aca::t_e0c00ae2d3f8c0 82,85,135,419-421,455
+plugins/agent-proxy/tests/workspace.ts
+  s_c87cb51d820aca::t_e0c00ae2d3f8c0 16,132-173,175-180,190-194,237-246,253,263
+  s_c87cb51d820aca::t_a48f896b6fa6e6 4-15,174
+plugins/agent-proxy/tests/proxy.test.ts
+  s_c87cb51d820aca::t_a48f896b6fa6e6 1-349
+plugins/agent-proxy/tests/cli-sandbox.ts
+  s_c87cb51d820aca::t_a48f896b6fa6e6 1-83
+plugins/agent-proxy/tests/cli.test.ts
+  s_c87cb51d820aca::t_a48f896b6fa6e6 4,9,106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "215eca3a60c531158d0968b4c5f1314a78fb0621",
+  "prompts": {},
+  "sessions": {
+    "s_c87cb51d820aca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2176f-24c7-7be2-bc82-b9c05b3c6bfb",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
