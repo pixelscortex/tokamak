@@ -48,7 +48,7 @@ export interface HostOperations {
     result: (import("./functions").CallContext & { hookPoints?: readonly string[] }) | null;
   };
   "point.stage": {
-    args: { name: string; stage: "before" | "after"; args: JsonValue; result?: JsonValue };
+    args: { name: string; stage: "before" | "after" | "collect"; args: JsonValue; result?: JsonValue };
     result: JsonValue;
   };
   "crypto.hashPassword": { args: { password: string }; result: string };

@@ -39,8 +39,8 @@ export function agentTurns({ h, client, agent, model, effort, timeout }) {
           messageId,
           folder,
           agentId: agent.id,
-          model,
-          effort,
+          ...(model !== undefined && { model }),
+          ...(effort !== undefined && { effort }),
           ...settings,
         }),
         label,
@@ -151,6 +151,7 @@ async function storedReply({ client, ai, chat, args, label, isTurn }, result, st
   return {
     row,
     reply,
+    error: message.error,
     text: message.parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)

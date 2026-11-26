@@ -65,7 +65,12 @@ async function fixture(binary, scenario) {
         "--call-ms",
         "5000",
       ],
-      { stdout: "pipe", stderr: "pipe" },
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        // Keep stderr assertions focused on shutdown, not hosted HTTP configuration.
+        env: { ...Bun.env, TOKAMAK_PUBLIC_URL: "http://127.0.0.1" },
+      },
     );
     stderr = new Response(process.stderr).text();
     lines = createInterface({ input: Readable.fromWeb(process.stdout) });

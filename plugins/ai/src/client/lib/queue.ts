@@ -2,7 +2,7 @@ import { isFailure, type Id, type TokamakClient } from "@tokamak/sdk";
 import { resolveFolder } from "plugin:chat/client";
 import type { TurnView } from "../../server/_functions";
 import { runLocalTurn } from "./local-turn";
-import { errorText } from "../../shared/turn-shared";
+import { errorText, hookRunnerUpdate } from "../../shared/turn-shared";
 import { api, notice, reasonLine } from "./agents";
 import { onCallerAction, windowAction } from "./window-actions";
 
@@ -31,8 +31,9 @@ export function watchQueue(client: TokamakClient): () => void {
         })
         .catch(async (cause: unknown) => {
           if (closed) return;
-          notice.set(`The queue could not run: ${errorText(cause)}`);
-          await settle(client, head, `The queue could not run: ${errorText(cause)}`);
+          const reason = hookRunnerUpdate(cause) ?? `The queue could not run: ${errorText(cause)}`;
+          notice.set(reason);
+          await settle(client, head, reason);
         })
         .finally(() => {
           launching.delete(head.threadId);

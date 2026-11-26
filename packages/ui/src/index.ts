@@ -11,6 +11,8 @@ export { ScrollArea, type ScrollAreaProps } from "./scroll-area.tsx";
 export { Row, rowVariants, type RowProps, type RowKind } from "./row.tsx";
 export { StatusIcon, type Status } from "./status-icon.tsx";
 export { Textarea, type TextareaProps } from "./textarea.tsx";
+export { Input, inputVariants, type InputProps } from "./input.tsx";
+export { Switch, type SwitchProps } from "./switch.tsx";
 export * as Command from "./command.tsx";
 export * as Collapsible from "./collapsible.tsx";
 export * as Dialog from "./dialog.tsx";

@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-runner-and-quit"
+description = "Connect the main window to the Runner and coordinate quitting."
+commands.allow = ["tokamak_endpoint", "quit_listen", "quit_hold", "quit_cancel", "quit_confirm"]
+
+[[permission]]
+identifier = "allow-sign-in-return"
+description = "Listen for and cancel a subscription sign-in return and open its HTTPS page."
+commands.allow = ["sign_in_return_listen", "sign_in_return_cancel", "sign_in_open_browser"]

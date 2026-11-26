@@ -61,7 +61,7 @@ pub(in crate::host) async fn write_messages(
     Ok(())
 }
 
-pub(in crate::host) fn operation_reply(
+pub(crate) fn operation_reply(
     route: Option<(u64, u64)>,
     op: u64,
     result: Result<Value, engine::CallError>,

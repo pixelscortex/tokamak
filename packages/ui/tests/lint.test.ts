@@ -20,7 +20,7 @@ test.each([
   ["raw-color.tsx", "no-raw-colors", "text-ink-2, text-ink-3"],
   ["arbitrary-value.tsx", "no-arbitrary-values", "spacing 1 2 3 4 5 6 8 10 12 16"],
   ["off-scale.tsx", "no-unknown-classes", "Spacing steps are 1 2 3 4 5 6 8 10 12 16"],
-  ["restyle.tsx", "no-restyle", "Use a size (md, lg)"],
+  ["restyle.tsx", "no-restyle", "Use a size (sm, md, lg)"],
   ["corner.tsx", "concentric-radius", "Use rounded-md (12 px) here"],
   ["density.tsx", "density-inward", "Use density-dense or remove it here"],
 ])("%s fails with %s and names the alternative", (fixture, rule, alternative) => {
