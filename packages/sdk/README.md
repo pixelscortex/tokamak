@@ -713,9 +713,13 @@ Use `before` and `after` for siblings, `prepend` and `append` for children,
 `hide` to remove it. A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row
-as `$row.parent`. Use a literal name, and add `{ in: "Header" }` or a
-1-based `nth` if a name matches several elements. The window keeps the
-original match on owner updates when possible and follows a unique named
+as `$row.parent`. Use a literal name. Narrow it with `{ in: "Header" }` or
+with literal `type`, `href`, `role`, and `aria` filters, such as
+`chat.find("button", { aria: { label: "Stop" } })`. Attribute filters
+match only static strings and the typed API offers values for that name.
+Use a 1-based `nth` among the remaining matches. Both builds warn when
+an add-on finds a plain tag with no static `data-part` or `id` and ask the
+owner to add `data-part`. The window keeps the original match on owner updates when possible and follows a unique named
 match that has moved. It skips missing or ambiguous targets, and an `nth`
 target whose position another element took. See the [builder guide](../build/README.md#extending-a-screen)
 for the naming rules.
