@@ -1,0 +1,21 @@
+packages/host/src/http_action.rs
+  s_0669b2ba766ce6::t_5b6a35b6b1a923 280
+packages/server/src/websocket.rs
+  s_0669b2ba766ce6::t_fafd891f95d878 216,255,291-311
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df889645933e6be2e30170ea055bf48cb78182e5",
+  "prompts": {},
+  "sessions": {
+    "s_0669b2ba766ce6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-4307-74b3-958e-15d99f1d9472",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
