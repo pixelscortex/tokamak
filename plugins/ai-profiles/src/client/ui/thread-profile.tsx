@@ -112,7 +112,7 @@ export function PickerProfileColumn(props: PickerProps): JSX.Element {
         aria-label="Profile"
         value={selection.data()?.id ?? null}
         onValueChange={(profile) => void pick(profile)}
-        class="flex min-w-24 shrink-0 flex-col"
+        class="flex min-w-16 shrink-0 flex-col"
       >
         <div class="px-2 pt-2 pb-1 text-label text-ink-3 select-none">Profile</div>
         <For each={profiles.data() ?? []} keyed={(profile) => profile.id}>
