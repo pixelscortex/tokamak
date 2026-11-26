@@ -1,0 +1,19 @@
+plugins/ai-profiles/tests/desktop-returns.test.tsx
+  s_503e9e7253d05e::t_28865f480a0a28 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a11f6b8aba3bad1f9fc637d4c489b3bf5cc913f6",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
