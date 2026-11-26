@@ -47,6 +47,10 @@ function mount(initial: Layer[], rows?: string[]) {
     dispose();
     warn.mockRestore();
   });
+  function bump(id: string) {
+    setVersions((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+    flush();
+  }
   const reported = () => onAlerts.mock.lastCall?.[0] ?? [];
   const expectAlerts = (...messages: string[]) => waitFor(() => expect(reported()).toEqual(messages.sort()));
   return {
@@ -56,10 +60,10 @@ function mount(initial: Layer[], rows?: string[]) {
     setCatalog,
     setLabel,
     expectAlerts,
+    bump,
     reload(id: string) {
       block(id);
-      setVersions((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
-      flush();
+      bump(id);
     },
   };
 }
@@ -317,7 +321,7 @@ test("throwing actions raise one alert per export and leave the owner drawn", as
     throw new Error(reason);
   };
   const attachTarget = attach(composer, fail("attachment broke"));
-  const { root, expectAlerts, setLabel, reload, warn } = mount([
+  const { root, expectAlerts, setLabel, bump, reload, warn } = mount([
     contribution("Note", after(button, fail("addition broke")), "after", button, 0, "voice"),
     contribution("Wrap", layer(button, fail("layer broke")), "layer", button, 0, "voice"),
     contribution("Color", attrs(button, fail("attrs broke")), "attrs", button, 0, "voice"),
@@ -347,6 +351,9 @@ test("throwing actions raise one alert per export and leave the owner drawn", as
   setLabel("Still here");
   flush();
   expect(root.querySelector("button")?.textContent).toBe("Still here");
+  bump("owner");
+  await waitFor(() => expect(root.textContent).toContain("healthy"));
+  await expectAlerts(...messages);
   expect(warn.mock.calls.filter(([message]) => String(message).includes("broke"))).toHaveLength(5);
   reload("voice");
   await expectAlerts();

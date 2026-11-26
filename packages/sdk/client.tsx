@@ -97,6 +97,7 @@ export function ExtensionProvider(props: {
   const alerts = componentAlerts(
     (messages) => props.onAlerts?.(messages),
     (warning) => props.onAttributeWarning?.(warning),
+    (message) => console.warn(message),
   );
   const ownerTrees = new Map<string, () => ReadonlySet<string>>();
   const insideSlots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
@@ -196,6 +197,7 @@ export function ExtensionProvider(props: {
   });
   // Resolve historical addresses against the current owner before loading additions.
   let generation = 0;
+  let versions = new Map<string, number>();
   onCleanup(() => generation++);
   createEffect(
     () =>
@@ -206,6 +208,11 @@ export function ExtensionProvider(props: {
       })),
     (contributions) => {
       const revision = ++generation;
+      // Resolving against a new owner retires bindings, but the failing
+      // add-on is still installed at the same generation.
+      const nextVersions = new Map(contributions.map(({ plugin, version }) => [plugin, version]));
+      for (const [id, version] of versions) if (nextVersions.get(id) !== version) alerts.clear(id, true);
+      versions = nextVersions;
       const previous = new Map<string, string>();
       for (const c of contributions)
         previous.set(c.plugin, (previous.get(c.plugin) ?? "") + JSON.stringify(c));
