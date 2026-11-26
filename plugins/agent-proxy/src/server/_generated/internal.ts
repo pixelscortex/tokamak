@@ -16,6 +16,11 @@ type References = {
     readonly "checked": ReferenceFromDefinition<typeof import("../manage")["checked"]>;
     readonly "companyOf": ReferenceFromDefinition<typeof import("../manage")["companyOf"]>;
   };
+  readonly "sets": {
+    readonly "candidates": ReferenceFromDefinition<typeof import("../sets")["candidates"]>;
+    readonly "issue": ReferenceFromDefinition<typeof import("../sets")["issue"]>;
+    readonly "recordForward": ReferenceFromDefinition<typeof import("../sets")["recordForward"]>;
+  };
   readonly "signins": {
     readonly "begin": ReferenceFromDefinition<typeof import("../signins")["begin"]>;
     readonly "claimFinish": ReferenceFromDefinition<typeof import("../signins")["claimFinish"]>;
@@ -37,6 +42,9 @@ export const internal: References = createApi("agent-proxy", [
   "manage:accounts",
   "manage:checked",
   "manage:companyOf",
+  "sets:candidates",
+  "sets:issue",
+  "sets:recordForward",
   "signins:begin",
   "signins:claimFinish",
   "signins:connect",

@@ -76,7 +76,7 @@ export const setLabel = pluginOnly(
 );
 
 /**
- * Switched off, a subscription keeps its login, and the proxy (TKM-263) will
+ * Switched off, a subscription keeps its login, and the proxy will
  * skip it until it is switched on again.
  */
 export const setEnabled = pluginOnly(

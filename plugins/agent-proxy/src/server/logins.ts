@@ -9,7 +9,7 @@ import { companies } from "./companies";
  * The stored logins. Everything here is internal: no window and no other
  * plugin can call it, and nothing it returns leaves this plugin. The one way
  * to a usable login is `fresh`, which renews it first when it is about to run
- * out; the proxy (TKM-263) will call it before every request.
+ * out; the proxy calls it before forwarding a request.
  *
  * These take the member as `owner` instead of reading the caller: a proxy
  * request carries a turn key, with no member behind it. Every public or
@@ -33,7 +33,7 @@ const BACKOFF_MS = 60_000;
 const BACKOFF_CAP_MS = 30 * 60_000;
 /** A caller that lost the claim and has no usable login waits this long, this many times. */
 const WAIT_MS = 1_000;
-const WAITS = 5;
+const WAITS = CLAIM_MS / WAIT_MS;
 
 /**
  * The login for `account`, with the account's workspace id when the company
@@ -102,6 +102,7 @@ export const claim = internalMutation({
       .first();
     if (!row || row.owner !== args.owner) return { kind: "gone" as const };
     const now = Date.now();
+    if (row.expiresAt > now + RENEW_BEFORE_MS) return { kind: "fresh" as const };
     if ((row.renewingUntil ?? 0) > now) return { kind: "busy" as const };
     if ((row.retryAt ?? 0) > now) return { kind: "later" as const };
     const account = await ctx.db.get(args.account);
@@ -194,6 +195,7 @@ export const fresh = internalAction({
     if (good) return good;
     const claimed = await ctx.runMutation(internal.logins.claim, args);
     if (claimed.kind === "gone") return null;
+    if (claimed.kind === "fresh") return usable(await ctx.runQuery(internal.logins.read, args));
     if (claimed.kind === "later") return usable(login);
     if (claimed.kind === "busy") {
       // Renewal starts five minutes early, so the stored login usually still works.
@@ -202,7 +204,7 @@ export const fresh = internalAction({
         await new Promise((done) => setTimeout(done, WAIT_MS));
         const now = await ctx.runQuery(internal.logins.read, args);
         if (!now) return null;
-        if (now.refresh !== login.refresh) return usable(now);
+        if (usable(now) || (now.renewingUntil ?? 0) <= Date.now()) return usable(now);
       }
       return null;
     }

@@ -2,12 +2,12 @@
 
 This plugin owns a person's AI subscriptions, the provider accounts in them,
 their logins and the sign-in that makes them. It knows nothing about threads.
-The proxy itself (an inbound HTTP route) comes later (TKM-263); today other
-plugins read and change subscriptions through its exports.
+The inbound proxy sends Claude requests under a subscription the calling
+plugin put in the set for that turn.
 
 ## Exports
 
-All in `src/server/api.ts`, all plugin-only (`plugin:agent-proxy/server`): no
+The functions below are exported from `src/server/api.ts` and are plugin-only (`plugin:agent-proxy/server`): no
 window calls them directly, and none returns a login. Each answers for the
 calling member only, so another member of a shared server never sees or
 changes someone else's subscriptions. Every id is checked to be of the right
@@ -28,6 +28,9 @@ table; a malformed id, an id of another table, or another member's gets
 | `signOutAccount`     | mutation | `{ id }` of an account                                                  | `null`, or `fail("NotFound")`                                                                    |
 | `checkAgain`         | action   | `{ id }` of a subscription                                              | `SubscriptionView`, or `fail("Unreachable" \| "SignedOut")`                                      |
 | `removeSubscription` | mutation | `{ id }` of a subscription                                              | `null`, or `fail("NotFound")`                                                                    |
+| `registerSet`        | mutation | `{ subscriptions: string[], set?: string }`                             | `{ set }`; supply an existing set id to replace its ordered list                                 |
+| `turnKey`            | action   | `{ set }`                                                               | `{ address, key }` for one turn                                                                  |
+| `endTurnKey`         | mutation | `{ key }`                                                               | `null`; makes the key stop accepting requests                                                    |
 
 `finishSignIn` failures that keep the sign-in waiting: `Unreadable`,
 `WrongSignIn`, `Refused` (the company did not accept the code or refused the
@@ -35,6 +38,32 @@ sign-in; paste again or open the page again for a new code), `Unreachable`, `Oth
 in as another account), `OtherPlan` and `OtherCompany` (an added account on
 another plan or of another company) and `Busy` (another finish of it is running). Ones that
 end it: `AlreadyAdded`, `Gone`, `Expired`, `Cancelled`, `NotFound`.
+
+## Claude proxy
+
+Set `TOKAMAK_PUBLIC_URL` to the server origin reachable from the CLI. The
+turn launcher sets `ANTHROPIC_BASE_URL` to the returned address
+(`<origin>/plugins/agent-proxy/<set>`) and `ANTHROPIC_AUTH_TOKEN` to the
+returned key. The client can also send the key as `x-api-key`. Call
+`endTurnKey` when the turn finishes or is cancelled. One key can authenticate
+multiple requests on its set during that turn; keys expire after eight hours
+even if the caller never ends them. Only their SHA-256 hashes are stored.
+
+Each request picks the first enabled Claude subscription in set order that
+has a signed-in account with a usable login. It tries the accounts in signup
+order within each subscription, renews an expiring login first and skips
+accounts with a known quota reset still in the future. An upstream 429 that
+identifies an account quota window is streamed back as received and holds
+that account out of later requests until reset. The proxy does not retry
+an upstream request on another account. If no account can serve the request,
+the proxy returns a Claude-specific error.
+
+The proxy keeps the API method, path, query and body, uses the account's
+Bearer login in place of the turn key, drops `x-api-key`, and adds
+`oauth-2025-04-20` to the incoming `anthropic-beta` list if needed.
+`anthropic-version` defaults to `2023-06-01` if absent. It streams the
+upstream response back, and a downstream disconnect aborts the upstream
+request. Each forwarded request updates its subscription's last use.
 
 ## Several accounts, signing out, checking again, removing
 
@@ -174,10 +203,10 @@ next start, cancel or finish. Server actions have no `crypto.subtle`, so
 ## Renewal
 
 `logins:fresh` (internal) is the one way to a usable login: it renews the
-login when it runs out within five minutes, and the proxy will call it before
+login when it runs out within five minutes, and the proxy calls it before
 every request. Renewal is claimed on the login row, so one call at a time
 sends a refresh token to the company; a caller that loses the claim uses the
-stored login while it still works, or waits a few seconds for the new one.
+stored login while it still works, or waits for the active renewal to finish.
 Only a definite refusal signs out: for Claude HTTP 400 or 401 from the token
 endpoint; for ChatGPT, as Codex decides it, a 401, a 400 `invalid_grant`, or
 the codes `refresh_token_expired`, `refresh_token_reused` or
@@ -190,13 +219,14 @@ signs the same subscription in again in place. A 429 waits for its
 minute, doubling up to 30 minutes, and the account stays signed in. A plugin's
 server code has no timer that may use the network (`maintenance` is a
 mutation), so `renewLogins` runs only while a screen that shows subscriptions
-is open. The internal functions the proxy will call take the member as
+is open. The internal functions the proxy calls take the member as
 `owner`, since a proxy request has a turn key and no member behind it.
 
 ## Tables
 
 `subscriptions`, `accounts` (one login at the company, by its account id,
-with ChatGPT's workspace id),
+with ChatGPT's workspace id and Claude's known quota reset), `sets` (ordered
+subscription ids), `turnKeys` (hash, set, expiration and whether it ended),
 `logins` (access and refresh token, expiry, renewal claim and next try) and
 `signIns` (verifier, `state`, link, an optional subscription to repair, a
 finish claim). Every row has the `owner` member
@@ -302,7 +332,7 @@ try {
   headers on the HTTP 200. `signed-out` applies to one turn; pair it with
   `account.signIn = "refuse-renewal"` to make that turn's renewal fail.
   Models, plan and roles reads do not consume the queue.
-- `requests` records the method, path and query, headers, parsed JSON or form
+- `requests` records the method, path and query, headers, raw body text, parsed JSON or form
   (otherwise raw body), and the matched account. The in-memory log contains
   synthetic credentials; CLI test output masks credentials and session IDs.
 - `replay(fixture)` queues recorded replies in order by method and provider
@@ -313,7 +343,8 @@ The CLI probes use disposable homes, synthetic credentials, and a loopback
 blocking proxy. It prints every attempted outbound host and never forwards.
 The two API key probes use Claude's `--bare`, `ANTHROPIC_BASE_URL` and
 `ANTHROPIC_API_KEY`, or `codex exec` with `OPENAI_API_KEY` and a custom
-Responses provider. No proxy sits between the CLI and the fake.
+Responses provider. The proxy suite also runs Claude with `--bare` and
+`ANTHROPIC_AUTH_TOKEN` through a real Tokamak proxy to fake Claude.
 
 ## What the layer 2 tests do not show
 

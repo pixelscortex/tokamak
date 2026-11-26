@@ -8,6 +8,11 @@ type References = {
     readonly "signInAccount": ReferenceFromDefinition<typeof import("../manage")["signInAccount"]>;
     readonly "signOutAccount": ReferenceFromDefinition<typeof import("../manage")["signOutAccount"]>;
   };
+  readonly "sets": {
+    readonly "endTurnKey": ReferenceFromDefinition<typeof import("../sets")["endTurnKey"]>;
+    readonly "registerSet": ReferenceFromDefinition<typeof import("../sets")["registerSet"]>;
+    readonly "turnKey": ReferenceFromDefinition<typeof import("../sets")["turnKey"]>;
+  };
   readonly "signins": {
     readonly "cancelSignIn": ReferenceFromDefinition<typeof import("../signins")["cancelSignIn"]>;
     readonly "finishSignIn": ReferenceFromDefinition<typeof import("../signins")["finishSignIn"]>;
@@ -26,6 +31,9 @@ export const plugin: References = createApi("agent-proxy", [
   "manage:removeSubscription",
   "manage:signInAccount",
   "manage:signOutAccount",
+  "sets:endTurnKey",
+  "sets:registerSet",
+  "sets:turnKey",
   "signins:cancelSignIn",
   "signins:finishSignIn",
   "signins:startSignIn",

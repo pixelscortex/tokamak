@@ -6,3 +6,5 @@ export { listSubscriptions, setLabel, setEnabled, renewLogins } from "./subscrip
 export { startSignIn, finishSignIn, cancelSignIn } from "./signins";
 export { addAccount, signInAccount, signOutAccount, checkAgain, removeSubscription } from "./manage";
 export type { SignInView, SubscriptionView } from "./_functions";
+export { registerSet, turnKey, endTurnKey } from "./sets";
+export { proxy } from "./proxy";

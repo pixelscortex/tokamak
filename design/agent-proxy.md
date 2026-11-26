@@ -28,6 +28,22 @@ None.
 | Subscription details     | Each account's id, email, organisation, status and reason; "Add account" starts a sign-in with `addTo`; "Sign out" and "Sign in" on one account (`repairAccount`)                                                                                                                                                                   | `listSubscriptions`, `addAccount`, `signOutAccount`, `signInAccount` | `Profiles · subscription`, `Profiles · subscription · two accounts`, `Profiles · subscription · one signed out` |
 | Remove confirmation      | Removes the subscription, its accounts, their logins and any sign-in waiting for it                                                                                                                                                                                                                                                 | `removeSubscription`                                                 | `Profiles · remove`                                                                                             |
 
+## Claude proxy
+
+The plugin-only `registerSet` export stores an ordered list of subscriptions
+owned by the calling member and returns the set id. A caller can replace the
+list without changing the id. `turnKey` gives the caller a fresh key and the
+set's address under `/plugins/agent-proxy/<set>` on the configured public
+origin. The proxy accepts the key only for that set until `endTurnKey` or
+expiry. It stores a hash of the key and never returns a provider login.
+
+Each HTTP request tries the enabled Claude subscriptions in set order. It
+skips signed-out accounts and those with an active account quota limit and
+renews the chosen login if needed. It forwards the request with the
+subscription's OAuth headers, streams the answer back and records the last
+use. If no Claude account can be used, it names Claude in the error. When a
+key is missing or invalid, it names only the problem with the key.
+
 ## If you change X, check Y
 
 - `SubscriptionView` or `SignInView` (`src/server/_functions.ts`): every field
@@ -90,7 +106,7 @@ None.
   sign-ins; it never gets a login.
 - **Renewal only when something asks.** A plugin's server code has no timer
   that may use the network, so a login is renewed only when a screen that
-  lists subscriptions is open (it asks every minute) or, from TKM-263, when the
+  lists subscriptions is open (it asks every minute) or when the
   proxy is about to use it. A login nobody asks for can run out; the next ask
   renews it if its refresh token still works.
 - **Any plugin that depends on `agent-proxy` acts as the calling member.** Its
@@ -98,7 +114,8 @@ None.
   list their subscriptions and sign-ins (no logins, no verifiers), start,
   finish and cancel their sign-ins, label and switch their subscriptions, add
   an account to one, sign an account out, check one again, remove one, and
-  trigger renewal. It cannot reach another member's rows, nor any login.
+  trigger renewal. It can also register sets and issue or end keys for that
+  member. It cannot reach another member's rows or read any login.
 - **Logins sit in ordinary tables.** Whoever can read the server's database can
   read them (no secret store yet, TKM-292). When plugins can hook internal
   functions (Plugin API v2, decision D33), a hook on `logins:read` or
@@ -106,6 +123,9 @@ None.
   out of hookable functions, before that ships.
 
 ## Open questions
+
+- The Claude proxy works against fake Claude. The owner still needs to
+  confirm a Claude Code turn through it on a live subscription.
 
 - ChatGPT's return address is `http://localhost:1455/auth/callback`, as in
   CLIProxyAPI and Codex up to 0.150. Codex 0.170 sends

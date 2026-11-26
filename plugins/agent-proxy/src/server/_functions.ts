@@ -33,7 +33,7 @@ export const SIGN_IN_TTL_MS = 900000;
 export const isExpired = (signIn: { startedAt: number }, now: number) =>
   now - signIn.startedAt >= SIGN_IN_TTL_MS;
 
-type Table = "subscriptions" | "accounts" | "signIns";
+type Table = "subscriptions" | "accounts" | "signIns" | "sets";
 
 /**
  * `value` as an id of `table`, or null. The window and other plugins pass ids
@@ -49,7 +49,7 @@ export function idIn<T extends Table>(table: T, value: string): Id<T> | null {
 }
 
 /** The plain answer for an id that is malformed, of another table, gone, or another member's. */
-export const notFound = (what: "subscription" | "account" | "sign-in") =>
+export const notFound = (what: "subscription" | "account" | "sign-in" | "set") =>
   fail("NotFound", { message: `That ${what} is gone.` });
 
 /** What the window and other plugins may learn of a subscription: never the login. */

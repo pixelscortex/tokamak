@@ -26,7 +26,7 @@ export default defineSchema({
     plan: v.string(),
     enabled: v.boolean(),
     models: v.array(v.object({ id: v.string(), name: v.string() })),
-    /** When a turn last went through it; none until the proxy (TKM-263) uses it. */
+    /** When a turn last went through it; none until the proxy uses it. */
     lastUsedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_owner", ["owner"]),
@@ -46,6 +46,8 @@ export default defineSchema({
      */
     workspace: v.optional(v.string()),
     status: v.union(v.literal("ok"), v.literal("signed-out")),
+    /** When a known Claude account quota window resets, in milliseconds since epoch. */
+    limitedUntil: v.optional(v.number()),
     /**
      * The models this account's login may use, as last read; absent until a read
      * returned some. The subscription's `models` is the union of these (reads.ts).
@@ -57,6 +59,22 @@ export default defineSchema({
     .index("by_owner", ["owner"])
     .index("by_subscription", ["subscription"])
     .index("by_owner_account", ["owner", "accountId"]),
+
+  sets: defineTable({
+    owner: v.string(),
+    subscriptions: v.array(v.id("subscriptions")),
+  }),
+
+  /** The database never holds a raw turn key. */
+  turnKeys: defineTable({
+    owner: v.string(),
+    set: v.id("sets"),
+    hash: v.string(),
+    expiresAt: v.number(),
+    ended: v.optional(v.boolean()),
+  })
+    .index("by_hash", ["hash"])
+    .index("by_owner_expiry", ["owner", "expiresAt"]),
 
   /** The login itself. Only internal functions read this table. */
   logins: defineTable({
