@@ -6,6 +6,10 @@ const appURL = `http://127.0.0.1:${appPort}`;
 
 export default defineConfig({
   testDir: "./browser",
+  // Playwright's CLI matches paths by regex, so "screens.spec.ts" also matches "plugin-screens.spec.ts".
+  testMatch: process.env.TOKAMAK_E2E_FIXTURES_ONLY
+    ? ["**/{app,servers,sign-in,quit,screens}.spec.ts"]
+    : undefined,
   workers: 1,
   retries: 0,
   timeout: 90_000,

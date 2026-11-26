@@ -111,16 +111,19 @@ mixing development and production runtimes can produce a blank window.
 
 ## Disposable end-to-end fixture
 
-Build/install Chat and the UI fixture, then launch the desktop app:
+Build and install the integration fixture, then launch the desktop app:
 
 ```sh
 proto run bun -- app/scripts/integration-fixture.ts
 TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" TOKAMAK_PLUGIN_DIR="$PWD/app/.dev/integration/plugins" proto run bun -- run app
 ```
 
-In the window, check the live thread count and select `FixtureView` in Plugin
-views. Its `useQuery` uses the same Chat thread API. Create a thread and confirm
-both counts update. Change `Fixture revision one` in
+In the window, select `FixtureView` in Plugin views. Fill in a title and use
+`New fixture thread` to see the fixture's own query update the thread list and
+count. For hosted sign-in testing, pass `--with-fixture-sign-in` to the installer
+to add the fixture Password provider.
+
+Change `Fixture revision one` in
 `app/tests/fixtures/integration/src/client/api.tsx`, then in a second terminal:
 
 ```sh

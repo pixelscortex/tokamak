@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import { installFakeAgent, startRunner } from "../fake-agent/local.mjs";
 
 /** What the test desktop adds to the page. */
@@ -17,7 +17,10 @@ interface DesktopWindow {
  * a disposable workspace and every fake agent's command on its PATH. Returns the person's home folder
  * and the PATH folder holding those commands (unlink one to "uninstall" it).
  */
-export async function asDesktop(context: BrowserContext): Promise<{
+export async function asDesktop(
+  context: BrowserContext,
+  { beforeConfirm }: { beforeConfirm?: (page: Page) => Promise<void> } = {},
+): Promise<{
   home: string;
   bin: string;
   readonly endpoint: { ws: string; token: string };
@@ -76,6 +79,7 @@ export async function asDesktop(context: BrowserContext): Promise<{
           quitAnswers.push(command.slice("quit_".length));
           return null;
         case "quit_confirm":
+          await beforeConfirm?.(page);
           await runner.stop();
           quitAnswers.push("confirm");
           return null;
@@ -106,7 +110,7 @@ export async function asDesktop(context: BrowserContext): Promise<{
     let id = 0;
     const scope = window as unknown as DesktopWindow;
     scope.isTauri = true;
-    // The desktop opens a welcome page on its first start with the local server; these tests start on chat.
+    // Desktop tests open their target view directly instead of going through the welcome page.
     localStorage.setItem("tokamak.welcomed", "1");
     scope.__tokamakDesktopEvent = (channel: number, payload: unknown) => callbacks.get(channel)?.(payload);
     scope.__TAURI_INTERNALS__ = {

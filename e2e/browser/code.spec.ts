@@ -197,7 +197,7 @@ test("a turn's change card opens the review panel and the branch chip follows th
   const shared = await startHostedFixture({
     port: 0,
     ownerKey: randomBytes(32).toString("hex"),
-    extraPlugins: ["ai", "code", "fake-agent"],
+    extraPlugins: ["ai", "code", "fake-agent", "chat"],
   });
   try {
     const { home } = await asDesktop(context);

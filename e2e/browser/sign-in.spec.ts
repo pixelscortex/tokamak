@@ -22,7 +22,10 @@ test("the app-wide sign-in dialog draws the server form and remembers a device",
 }) => {
   const address = new URL(url).host;
   const methods = await request.get(`${url}/auth/methods`);
-  expect(await methods.json()).toMatchObject({ ownerSetup: true });
+  expect(await methods.json()).toMatchObject({
+    ownerSetup: true,
+    methods: [{ id: "fixture-sign-in", name: "Password" }],
+  });
 
   await page.goto("/p/integration-fixture");
   const status = page.getByRole("status", { name: "Connection status" });

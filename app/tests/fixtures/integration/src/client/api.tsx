@@ -1,25 +1,28 @@
-import { createSignal, For } from "solid-js";
-import { createApi, type FunctionReference } from "@tokamak/sdk";
-import { Region, state, view } from "@tokamak/sdk/client";
+import { createSignal, For, onCleanup } from "solid-js";
+import { onQuit, Region, state, view } from "@tokamak/sdk/client";
 import { useClient, useQuery } from "@tokamak/sdk/solid";
 import { Button, Icon, Row, RowList, icons } from "@tokamak/ui";
+import { api } from "../server/_generated/api";
 
-const api = createApi<{
-  threads: {
-    list: FunctionReference<"query", {}, { _id: string; title: string }[]>;
-    start: FunctionReference<
-      "mutation",
-      { text: string; folder: { kind: "own" } },
-      { threadId: string; messageId: string }
-    >;
-  };
-}>("chat");
 const revision = "Fixture revision one";
 
 export const FixtureView = view({ route: "/" }, () => {
   const client = useClient();
   const threads = useQuery(client, api.threads.list, () => ({}));
   const [title, setTitle] = createSignal("New thread");
+  const [work, setWork] = createSignal<"idle" | "running" | "stopped">("idle");
+  onCleanup(
+    onQuit(() =>
+      work() === "running"
+        ? {
+            message: "Fixture is still working",
+            async stop() {
+              setWork("stopped");
+            },
+          }
+        : undefined,
+    ),
+  );
   return (
     <section aria-label="Integration fixture" class="flex flex-col gap-4 p-8">
       <Region.Sidebar>
@@ -29,9 +32,7 @@ export const FixtureView = view({ route: "/" }, () => {
             <button
               {...attrs}
               type="button"
-              onClick={() =>
-                void client.mutation(api.threads.start, { text: title(), folder: { kind: "own" } })
-              }
+              onClick={() => void client.mutation(api.threads.start, { title: title() })}
             />
           )}
         >
@@ -61,6 +62,18 @@ export const FixtureView = view({ route: "/" }, () => {
           onInput={(event) => setTitle(event.currentTarget.value)}
         />
       </label>
+      <div>
+        <Button onClick={() => setWork("running")} disabled={work() === "running"}>
+          Start fixture work
+        </Button>
+        <output>
+          {work() === "running"
+            ? "Fixture work is running"
+            : work() === "stopped"
+              ? "Fixture work stopped"
+              : ""}
+        </output>
+      </div>
       <p role="alert">{threads.error()?.message}</p>
     </section>
   );
