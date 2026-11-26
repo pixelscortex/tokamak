@@ -1,0 +1,68 @@
+wiki/content/docs/api/window.mdx
+  s_894a11bd62bda4::t_20d771cfb1ad8d 69-72,75-77
+  s_894a11bd62bda4::t_733c83b5b61468 43,64-68,73-74,78-90,96
+packages/sdk/tests/web/fixtures/parts/attrs-owner/src/client/api.tsx
+  s_894a11bd62bda4::t_d948d7168fb2d9 1-36
+packages/sdk/tests/web/component-attributes.test.tsx
+  s_894a11bd62bda4::t_d948d7168fb2d9 7-8,124-146,283,297,318
+  s_894a11bd62bda4::t_733c83b5b61468 30-118,168-264,284-293,296,311-314
+  s_894a11bd62bda4::t_20d771cfb1ad8d 149,151,156,163,267,269-280,301,306,317,319
+  s_894a11bd62bda4::t_a36cf187c8f4c0 1-6,9-29,119-123,147-148,150,152-155,157-162,164-167,265-266,268,281-282,294-295,298-300,302-305,307-310,315-316
+packages/server/src/plugin-skill.md
+  s_894a11bd62bda4::t_733c83b5b61468 55,62-67
+packages/build/tests/components.test.mjs
+  s_894a11bd62bda4::t_20d771cfb1ad8d 404-423
+  s_894a11bd62bda4::t_733c83b5b61468 344-350,352-397
+  s_894a11bd62bda4::t_6da7fea797f732 26,337,398-403
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_894a11bd62bda4::t_9a60d29f5c3b8b 35-51
+  s_894a11bd62bda4::t_4a82dcc4d07b9e 12-29,31-34,52
+packages/build/README.md
+  s_894a11bd62bda4::t_733c83b5b61468 181-185,190-191,195-207
+  s_894a11bd62bda4::t_20d771cfb1ad8d 186-189,192-194
+packages/sdk/README.md
+  s_894a11bd62bda4::t_20d771cfb1ad8d 708-711,714-716
+  s_894a11bd62bda4::t_733c83b5b61468 703-707,712-713,717-729
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_894a11bd62bda4::t_20d771cfb1ad8d 114
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_894a11bd62bda4::t_20d771cfb1ad8d 1,5
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_cb4d381b455819::t_da77d628edd6d0 4-7,9-12
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_cb4d381b455819::t_737f78c3637136 3-5,7-9
+packages/sdk/tests/web/fixtures/parts/attrs-owner/package.json
+  s_894a11bd62bda4::t_e46672af5f95a4 1-5
+packages/sdk/tests/web/fixtures/parts/attrs-owner/plugin.ts
+  s_894a11bd62bda4::t_695943567a2c80 1-2
+packages/sdk/tests/web/fixtures/parts/attrs-owner/src/client/_generated/components.d.ts
+  s_cb4d381b455819::t_78e5278af21c8f 1-20
+packages/sdk/tests/web/fixtures/parts/attrs-owner/tsconfig.json
+  s_894a11bd62bda4::t_d3d281359fd06c 1-7
+packages/sdk/vitest.config.ts
+  s_894a11bd62bda4::t_0fde6d02cb9a7f 84-87,98-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3732e6fd6f20400791f3f6d90dca23405a54733f",
+  "prompts": {},
+  "sessions": {
+    "s_894a11bd62bda4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a219c7-ce3f-79a1-bae7-49da36eb6160",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_cb4d381b455819": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c77430d7-c0db-4498-9cbc-2cf3cd934536",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
