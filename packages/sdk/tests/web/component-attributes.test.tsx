@@ -404,16 +404,17 @@ test("enabling and disabling a layer applies and removes its Original props", as
   const [forward, setForward] = createSignal(false);
   const action = layer(button, (_, Original) => <Original once />, { when: forward });
   const { root } = mount([contribution("Wrap", action, "layer", button)]);
-  const plain = root.querySelector("button");
-  expect(plain?.dataset.once).toBe("false");
-  setForward(true);
-  await waitFor(() => expect(root.querySelector("button")?.dataset.once).toBe("true"));
-  const decorated = root.querySelector("button");
-  expect(decorated).not.toBe(plain);
-  setForward(false);
-  flush();
-  expect(root.querySelector("button")).not.toBe(decorated);
-  expect(root.querySelector("button")?.dataset.once).toBe("false");
+  await waitFor(() => expect(root.querySelector("button")?.dataset.once).toBe("false"));
+  // Flipping the layer changes the prop on the same mounted component: its
+  // own state (focus, typed text) must survive a condition that flips often.
+  await new Promise((resolve) => setTimeout(resolve));
+  const send = root.querySelector("button");
+  for (const on of [true, false, true, false]) {
+    setForward(on);
+    flush();
+    await waitFor(() => expect(root.querySelector("button")?.dataset.once).toBe(String(on)));
+    expect(root.querySelector("button")).toBe(send);
+  }
 });
 
 test("Original applies attributes after attrs, and a layer that covers Original drops them", async () => {

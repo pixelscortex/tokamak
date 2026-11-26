@@ -21,7 +21,9 @@ export type AttributeWarning = {
 
 export function warnAttribute(registry: PartRegistry, warning: AttributeWarning, message: string) {
   const { kind, plugin, target, attribute, otherPlugin } = warning;
-  const key = kind === "attr-conflict" ? JSON.stringify([target, attribute, otherPlugin]) : target;
+  // Once per attribute where one is named, so fixing the first bad key does
+  // not hide the next one.
+  const key = attribute === undefined ? target : JSON.stringify([target, attribute, otherPlugin]);
   registry.warn([kind, plugin, key], message, warning);
 }
 

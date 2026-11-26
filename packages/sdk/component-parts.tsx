@@ -855,7 +855,7 @@ function renderLayers(
 
   // A stage's owner lives outside the layer that requests it. Switching
   // between a wrapper and its fallback moves the stage without remounting it.
-  function stage(draw: typeof render, remountOnAttributes = false) {
+  function stage(draw: typeof render, mergeProps = false) {
     let users = 0;
     let dispose: (() => void) | undefined;
     let output: JSX.Element;
@@ -888,30 +888,11 @@ function renderLayers(
               );
             const children = () => readInput().input();
             const layers = () => readInput().attributes();
-            if (!remountOnAttributes) return draw(createMemo(children), layers);
-
-            // Keep the stage mounted as wrappers move it, except when Original
-            // starts or stops passing props. The plain component gets its own props.
-            const stageOwner = getOwner();
-            let disposeMount: (() => void) | undefined;
-            let decorated: boolean | undefined;
-            let drawn: JSX.Element;
-            onCleanup(() => disposeMount?.());
-            const current = createMemo(() => {
-              const forwarded = layers().length > 0;
-              if (forwarded !== decorated) {
-                disposeMount?.();
-                decorated = forwarded;
-                drawn = runWithOwner(stageOwner, () =>
-                  createRoot((cleanup) => {
-                    disposeMount = cleanup;
-                    return draw(children, layers, forwarded);
-                  }),
-                );
-              }
-              return drawn;
-            });
-            return <>{current()}</>;
+            // A component with a layer on it takes merged props for as long as
+            // the layer is installed, whether or not Original passes any right
+            // now. Switching per flip would remount the owner's component each
+            // time a layer's condition changed.
+            return draw(createMemo(children), layers, mergeProps);
           }),
         );
       }
