@@ -1,0 +1,19 @@
+e2e/browser/screens.spec.ts
+  s_8f45cf81ac6fad::t_5cd3b0e866c711 292-293,301-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca95d1eaa0013d1913c2e59a4d52299a048ef2ee",
+  "prompts": {},
+  "sessions": {
+    "s_8f45cf81ac6fad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a217e3-9793-77b3-913a-c592c3c24123",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
