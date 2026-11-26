@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import type { AttributeFilters } from "./screen-search";
 
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
+declare const renderFunctionBrand: unique symbol;
 declare const originalElementBrand: unique symbol;
 declare const elementAttributesBrand: unique symbol;
 declare const nativeAttributesBrand: unique symbol;
@@ -13,12 +14,26 @@ export interface ComponentPart<Target extends string, Props extends object, Attr
   readonly target: Target;
 }
 
-export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "layer" | "hide" | "attrs";
+export interface RenderFunction<Props extends object> {
+  readonly [renderFunctionBrand]: (props: Props) => void;
+  readonly target: string;
+  readonly renderTarget?: string;
+}
+
+export type ComponentActionKind =
+  | "before"
+  | "after"
+  | "prepend"
+  | "append"
+  | "layer"
+  | "hide"
+  | "attach"
+  | "attrs";
 
 export interface ComponentActionOptions<P extends object = any> {
   order?: number;
   /**
-   * Live condition, read with the props of the element's component, so one
+   * Live condition, read with the props of the owning component, so one
    * action can show for some instances only (one message, one thread).
    */
   when?: (props: P) => boolean;
@@ -111,7 +126,7 @@ export function isComponentAction(value: unknown): value is ComponentAction {
 
 export function defineComponentAction<K extends ComponentActionKind, P extends object>(
   kind: K,
-  target: Part<P>,
+  target: { readonly target: string },
   layer: ComponentAction<K>["layer"],
   options?: ComponentActionOptions<P>,
   attributes?: Attributes<any, any>,
@@ -138,6 +153,19 @@ export const after = insert("after");
 export const prepend = insert("prepend");
 export const append = insert("append");
 
+export function attach<P extends object>(
+  target: RenderFunction<P>,
+  fn: (props: NoInfer<P>) => JSX.Element | void,
+  options?: ComponentActionOptions<NoInfer<P>>,
+) {
+  return defineComponentAction(
+    "attach",
+    { target: target.renderTarget ?? target.target },
+    fn as Addition<P>, // A void callback returns undefined, which Solid can render.
+    options,
+  );
+}
+
 export function hide<P extends object>(target: Part<P>, options?: ComponentActionOptions<NoInfer<P>>) {
   return defineComponentAction("hide", target, undefined, options);
 }
@@ -150,15 +178,17 @@ export function layer<P extends object, A extends object>(
   return defineComponentAction("layer", target, draw as Layer<any, any>, options);
 }
 
-export function attrs<P extends object, A extends object, Values extends MutableAttributes<NoInfer<A>>>(
+export function attrs<P extends object, A extends object, Values extends object>(
   target: ComponentPart<string, P, A>,
   read: (
     props: NoInfer<P>,
     current: Readonly<MutableAttributes<NoInfer<A>>>,
   ) => Values &
-    (string extends keyof Values
+    MutableAttributes<NoInfer<A>> &
+    (string extends keyof NoInfer<Values>
       ? unknown
-      : Forbidden<ForbiddenAttribute | NativeEvents<A>> & UnknownKeys<Values, MutableAttributes<NoInfer<A>>>),
+      : Forbidden<ForbiddenAttribute | NativeEvents<A>> &
+          UnknownKeys<NoInfer<Values>, MutableAttributes<NoInfer<A>>>),
   options?: ComponentActionOptions<NoInfer<P>>,
 ) {
   return defineComponentAction("attrs", target, undefined, options, read as Attributes<any, any>);
@@ -264,18 +294,34 @@ type SearchAttributes<Name extends string, Type, Defaults> = Type extends string
         ? SearchAttributes<Name, Defaults[Name], never>
         : ElementAttributes<Name>;
 
-/** The compiler supplies source-ordered matches or a single props type.
- * New declarations infer native types from unaliased tag names. */
-export type ScreenFind<Names extends Record<string, object>, Defaults extends object = never> = <
-  Name extends keyof Names & string,
-  const Filters extends SearchOptions = {},
->(
+type ElementTarget<Names, Name extends string, Filters, Defaults> = Name extends keyof Names
+  ? ComponentPart<
+      string,
+      SearchField<Extract<Names[Name], object>, Filters, 1>,
+      SearchAttributes<Name, SearchField<Extract<Names[Name], object>, Filters, 3>, Defaults>
+    >
+  : unknown;
+type FunctionTarget<Functions, Name, Filters> =
+  Extract<keyof Filters, keyof AttributeFilters> extends never
+    ? Name extends keyof Functions
+      ? SearchField<Extract<Functions[Name], object>, Filters, 1> extends infer P extends object
+        ? [P] extends [never]
+          ? unknown
+          : RenderFunction<P>
+        : never
+      : unknown
+    : unknown;
+type FindFilters<Names, Name> = AllowedFilters<Name extends keyof Names ? Names[Name] : {}>;
+
+/** Separate match lists let a name carry both element and render function props. */
+export type ScreenFind<
+  Names extends Record<string, object>,
+  Functions extends Record<string, object> = {},
+  Defaults extends object = never,
+> = <Name extends (keyof Names | keyof Functions) & string, const Filters extends SearchOptions = {}>(
   name: Name,
   filters?: Filters &
-    AllowedFilters<Names[NoInfer<Name>]> &
-    CheckFilters<Filters, AllowedFilters<Names[NoInfer<Name>]>>,
-) => ComponentPart<
-  string,
-  SearchField<Names[Name], Filters, 1>,
-  SearchAttributes<Name, SearchField<Names[Name], Filters, 3>, Defaults>
->;
+    FindFilters<Names, NoInfer<Name>> &
+    CheckFilters<Filters, FindFilters<Names, NoInfer<Name>>>,
+) => { readonly target: string } & ElementTarget<Names, Name, Filters, Defaults> &
+  FunctionTarget<Functions, Name, Filters>;

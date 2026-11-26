@@ -7,4 +7,7 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "h1": P1;
   "p": P1;
   "FixtureBody": {};
+}, {
+  "FixtureBody": [[never, P1]];
+  "FixtureView": [[never, {}]];
 }, { "FixtureBody":P2 }>;

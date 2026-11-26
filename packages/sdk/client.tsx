@@ -10,10 +10,12 @@ export {
   attrs,
   hide,
   layer,
+  attach,
   type OriginalElement,
   type ElementAttributes,
   type ComponentAttributes,
   type ComponentPart,
+  type RenderFunction,
   type ScreenFind,
   type ComponentActionOptions,
 } from "./component-actions";
@@ -28,7 +30,13 @@ import {
 } from "./screen-search";
 import type { AttributeWarning } from "./component-attributes";
 export type { AttributeWarning } from "./component-attributes";
-import { PartActions, type LoadedPartAction, type PartObserver, type PartRegistry } from "./component-parts";
+import {
+  compareInstallOrder,
+  PartActions,
+  type LoadedPartAction,
+  type PartObserver,
+  type PartRegistry,
+} from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
 export { state, derived, type StateOptions, type WindowDerived, type WindowState } from "./window-state";
@@ -53,6 +61,13 @@ type CatalogExtension = ExtensionContribution & {
   ownerVersion: number;
   resolved?: ScreenElement;
 };
+type MountedAddon = {
+  signature: string;
+  catalog: string;
+  failed: boolean;
+  ready?: Promise<LoadedPartAction[]>;
+  stop(): void;
+};
 
 const partOwner = ({ options }: ExtensionContribution) =>
   typeof options.owner === "string" ? options.owner : String(options.target).split(".")[0]!;
@@ -71,7 +86,10 @@ export function ExtensionProvider(props: {
   function slot(target: string) {
     let signal = slots.get(target);
     if (!signal)
-      slots.set(target, (signal = createSignal<readonly LoadedPartAction[]>([], { ownedWrite: true })));
+      slots.set(
+        target,
+        (signal = createSignal<readonly LoadedPartAction[]>(current.get(target) ?? [], { ownedWrite: true })),
+      );
     return signal;
   }
 
@@ -126,11 +144,11 @@ export function ExtensionProvider(props: {
     const next = change(current.get(target) ?? []);
     if (next.length) current.set(target, next);
     else current.delete(target);
-    slot(target)[1](next);
+    slots.get(target)?.[1](next);
     for (const observer of observers.get(target) ?? []) observer.update(next);
   }
 
-  const plugins = new Map<string, { signature: string; catalog: string; stop(): void }>();
+  const plugins = new Map<string, MountedAddon>();
   const targets = new Map<string, Set<string>>();
   function clear(id: string) {
     for (const target of targets.get(id) ?? [])
@@ -152,13 +170,18 @@ export function ExtensionProvider(props: {
       if (!items) group.set(target, (items = []));
       items.push(part);
     }
-    targets.set(id, new Set(group.keys()));
+    for (const target of group.keys()) remember(id, target);
     for (const [target, added] of group)
       update(target, (items) =>
         [...items, ...added].sort(
           (a, b) => a.order - b.order || a.plugin.localeCompare(b.plugin) || a.id.localeCompare(b.id),
         ),
       );
+  }
+  function remember(id: string, target: string) {
+    let owned = targets.get(id);
+    if (!owned) targets.set(id, (owned = new Set()));
+    owned.add(target);
   }
   onCleanup(() => {
     for (const plugin of plugins.values()) plugin.stop();
@@ -205,7 +228,7 @@ export function ExtensionProvider(props: {
           entries.map(([id, owner]) => [
             id,
             {
-              elements: typeof owner?.find === "function" ? authoredElements.get(owner.find)?.() : undefined,
+              parts: typeof owner?.find === "function" ? authoredParts.get(owner.find) : undefined,
               legacy: owner?.parts,
             },
           ]),
@@ -214,10 +237,12 @@ export function ExtensionProvider(props: {
         const valid = contributions.flatMap((c): CatalogExtension[] => {
           const target = screenTarget(c.options);
           const owner = owners.get(partOwner(c));
-          if (!owner?.elements && !owner?.legacy) return [c];
-          const result = owner.elements
-            ? resolveScreenSearch(owner.elements, target.search, target)
-            : resolveLegacyPart(owner.legacy, partOwner(c), target);
+          if (!owner?.parts && !owner?.legacy) return [c];
+          const kind = c.options.action === "attach" ? "render function" : "element";
+          const result =
+            owner.parts || kind === "render function"
+              ? resolveScreenSearch(owner.parts?.(kind) ?? [], target.search, target, kind)
+              : resolveLegacyPart(owner.legacy, partOwner(c), target);
           if (!result.element) {
             rejected.push(`Plugin "${c.plugin}": ${result.reason}; skipping this addition`);
             return [];
@@ -253,21 +278,23 @@ export function ExtensionProvider(props: {
     }
     for (const [id, group] of groups) {
       if (plugins.has(id)) continue;
-      let failed = false;
-      const plugin = {
+      const plugin: MountedAddon = {
         signature: signatures.get(id)!,
         catalog: catalog.get(id)!,
-        stop: props.host.onError(id, (cause) => {
-          failed = true;
-          clear(id);
-          console.warn(`Extension ${id} failed: ${String(cause)}`);
-        }),
+        failed: false,
+        stop: () => {},
       };
       plugins.set(id, plugin);
-      void props.host.load(id).then(
+      plugin.stop = props.host.onError(id, (cause) => {
+        plugin.failed = true;
+        clear(id);
+        console.warn(`Extension ${id} failed: ${String(cause)}`);
+      });
+      plugin.ready = props.host.load(id).then(
         (exports) => {
-          if (plugins.get(id) !== plugin || failed) return;
+          if (plugins.get(id) !== plugin || plugin.failed) return [];
           const parts: LoadedPartAction[] = [];
+          const attachments: LoadedPartAction[] = [];
           for (const c of group) {
             const value = exports[c.id];
             if (
@@ -275,7 +302,7 @@ export function ExtensionProvider(props: {
               value.target === c.options.target &&
               componentActionKind(value) === c.options.action
             ) {
-              parts.push(loadedPart(c, value));
+              (c.options.action === "attach" ? attachments : parts).push(loadedPart(c, value));
             } else {
               console.warn(
                 `Component action ${id}/${c.id} does not match its manifest: expected ${c.options.action} for ${c.options.target}`,
@@ -283,8 +310,39 @@ export function ExtensionProvider(props: {
             }
           }
           if (parts.length) publish(id, parts);
+          return attachments;
         },
-        (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
+        (cause) => {
+          console.warn(`Extension ${id} failed: ${String(cause)}`);
+          return [];
+        },
+      );
+    }
+    const attachments = new Map<string, Set<MountedAddon>>();
+    for (const c of contributions) {
+      if (c.options.action !== "attach") continue;
+      const target = c.resolved?.target ?? String(c.options.target);
+      let addons = attachments.get(target);
+      if (!addons) attachments.set(target, (addons = new Set()));
+      addons.add(plugins.get(c.plugin)!);
+    }
+    const revision = generation;
+    for (const [target, addons] of attachments) {
+      // Start attachments on a target together so import timing cannot set
+      // their order. Placements and attachments on other targets do not wait.
+      void Promise.all([...addons].map(async (addon) => ({ addon, items: await addon.ready }))).then(
+        (ready) => {
+          if (revision !== generation) return;
+          const parts = ready
+            .flatMap(({ addon, items }) =>
+              addon.failed ? [] : (items ?? []).filter((item) => item.action.target === target),
+            )
+            .sort(compareInstallOrder);
+          for (const part of parts) remember(part.plugin, target);
+          const previous = current.get(target) ?? [];
+          if (parts.length !== previous.length || parts.some((part, i) => part !== previous[i]))
+            update(target, () => parts);
+        },
       );
     }
   }
@@ -351,6 +409,7 @@ export {
 } from "./regions";
 
 export {
+  attachRenderFunction as __attachRenderFunction,
   renderPart as __renderPart,
   renderPlainPart as __renderPlainPart,
   renderComponentPart as __renderComponentPart,
@@ -358,18 +417,27 @@ export {
   renderNativeText as __renderNativeText,
 } from "./component-parts";
 
-const authoredElements = new WeakMap<object, () => ReturnType<typeof screenElements>>();
+type ScreenKind = NonNullable<Parameters<typeof screenElements>[2]>;
+const authoredParts = new WeakMap<object, (kind: ScreenKind) => ReturnType<typeof screenElements>>();
 
 /** Generated by the client compiler. Production calls are resolved during the build. */
 export function __defineScreenFind(plugin: string, packedTree: string) {
-  let elements: ReturnType<typeof screenElements> | undefined;
-  const read = () => (elements ??= screenElements(plugin, JSON.parse(packedTree) as ScreenTree));
-  function find(name: string, filters?: Omit<ScreenSearch, "name">) {
-    const result = resolveScreenSearch(read(), { name, ...filters });
-    if (!result.element) throw new Error(result.reason);
-    return { target: result.element.target };
+  let tree: ScreenTree | undefined;
+  const cache = new Map<ScreenKind, ReturnType<typeof screenElements>>();
+  function read(kind: ScreenKind) {
+    let parts = cache.get(kind);
+    if (!parts) cache.set(kind, (parts = screenElements(plugin, (tree ??= JSON.parse(packedTree)), kind)));
+    return parts;
   }
-  authoredElements.set(find, read);
+  function find(name: string, filters?: Omit<ScreenSearch, "name">) {
+    const search = { name, ...filters };
+    const element = resolveScreenSearch(read("element"), search);
+    const render = resolveScreenSearch(read("render function"), search, undefined, "render function");
+    if (element.element) return { target: element.element.target, renderTarget: render.element?.target };
+    if (render.element) return { target: render.element.target };
+    throw new Error(element.reason);
+  }
+  authoredParts.set(find, read);
   return find;
 }
 

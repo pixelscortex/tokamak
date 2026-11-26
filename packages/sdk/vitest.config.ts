@@ -41,6 +41,9 @@ export default defineConfig({
             )
             .replace('<select aria-label="Upload" />', '<aside><select aria-label="Upload" /></aside>'),
           noUploadLabel: original.replace('<select aria-label="Upload" />', "<select />"),
+          noComposer:
+            original.replace("export const Composer", "const RenamedComposer") +
+            "\nexport { RenamedComposer as Composer };\n",
           duplicate: original.replace(
             "const Region =",
             "export const Other = (props: ExampleProps) => <SendButton {...props} />; const Region =",
@@ -55,6 +58,7 @@ export default defineConfig({
         const exports: string[] = [];
         let warnings = "";
         let filteredWarnings = "";
+        let attachmentWarnings = "";
         for (const [version, source] of Object.entries(versions)) {
           const root = resolve(fixtures, "owner/dist", version);
           const entry = resolve(root, "src/main.tsx");
@@ -65,6 +69,7 @@ export default defineConfig({
           const log = build(root);
           if (version === "changed") warnings = log;
           else if (version === "noUploadLabel") filteredWarnings = log;
+          else if (version === "noComposer") attachmentWarnings = log;
           else if (log.includes("skipping this addition")) throw new Error(log);
           exports.push(`export * as ${version} from ${JSON.stringify(resolve(root, "dist/ui.js"))};`);
         }
@@ -73,6 +78,7 @@ export default defineConfig({
           ${exports.join("\n")}
           export const warnings = ${JSON.stringify(warnings)};
           export const filteredWarnings = ${JSON.stringify(filteredWarnings)};
+          export const attachmentWarnings = ${JSON.stringify(attachmentWarnings)};
           export const loadActions = () => import(${JSON.stringify(resolve(addon, "dist/ui.js"))});
         `;
       },

@@ -113,4 +113,22 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "RowList.Root": [["ThreadList" | "nav", P18, {"aria":{"label":"Threads"}}]];
   "RowList.Group": P18;
   "ThreadRow": P19;
+}, {
+  "Chat": [[never, {}]];
+  "NewThread": [[never, P1]];
+  "OpenThread": [[never, P2]];
+  "ErrorLine": [[never, P4]];
+  "Composer": [[never, P5]];
+  "SendButton": [[never, P6]];
+  "Empty": [[never, P7]];
+  "FolderPicker": [[never, P8]];
+  "Choice": [[never, P10]];
+  "Message": [[never, P11]];
+  "Header": [[never, P12]];
+  "FolderChip": [[never, P13]];
+  "ThreadMenu": [[never, P14]];
+  "DeleteDialog": [[never, P15]];
+  "TitleInput": [[never, P16]];
+  "ThreadRow": [[never, P17]];
+  "ThreadList": [[never, P18]];
 }, { "ThreadList":P18; "Header":P20; "NewThread":P1; "OpenThread":P2; "Empty":P8; "ErrorLine":P4; "Composer":P21; "Message":P22; "top":"div"; "box":"div"; "tools":"span"; "SendButton":P6; "icon":"span"; "heading":"h2"; "FolderPicker":P8; "Choice":P10; "body":"div"; "footer":"div"; "TitleInput":P16; "FolderChip":P13; "ThreadMenu":P14; "DeleteDialog":P15; "status":"span"; "age":"span"; "detail":"span"; "ThreadRow":P23 } & A<typeof import("@tokamak/sdk/client"), "Region.Sidebar"|"Region.Header"> & A<typeof import("@tokamak/ui"), "ScrollArea"|"StatusIcon"|"Button"|"Icon"|"Dialog.Root"|"Dialog.Backdrop"|"Dialog.Content"|"Dialog.Title"|"Dialog.Description"|"Dialog.Close"|"Row"|"Avatar"|"Chip"|"Menu.Root"|"Menu.Trigger"|"Menu.Content"|"Menu.Item"|"Menu.Separator"|"Kbd"|"RowList.Root"|"RowList.Group"> & A<typeof import("@ui-sdk/solid/listbox"), "ListboxItem">>;

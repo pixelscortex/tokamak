@@ -17,4 +17,7 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "attr-input": [["AttributeScreen" | "main" | "attr-root", P2, {"type":"text"}]];
   "AttrButton": P2;
   "attr-row": P3;
+}, {
+  "AttrButton": [[never, P1]];
+  "AttributeScreen": [[never, P2]];
 }, { "attr-root":"article"; "attr-nested":"header"; "attr-input":"input"; "AttrButton":P1; "attr-row":"em" }>;

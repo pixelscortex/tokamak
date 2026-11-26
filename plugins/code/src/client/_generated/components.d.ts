@@ -48,4 +48,19 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "Button": [["ReviewToggle" | "div", P12], ["ReviewToggle" | "div", P12]];
   "Region.Panel": P12;
   "ReviewPanel": P12;
+}, {
+  "SnapshotNotice": [[never, P1]];
+  "ChangeCard": [[never, P1]];
+  "CardText": [[never, P3]];
+  "Counts": [[never, P4]];
+  "ReviewPanel": [[never, P5]];
+  "Note": [[never, P6]];
+  "TurnReview": [[never, P7]];
+  "FileCounts": [[never, P4]];
+  "FilePatch": [[never, P9]];
+  "PatchNote": [[never, P6]];
+  "PatchRow": [[never, P11]];
+  "BranchChip": [[never, P12]];
+  "ReviewToggle": [[never, P12]];
+  "ReviewPanelMount": [[never, P12]];
 }, { "CardText":P3; "Counts":P4; "Note":P6; "TurnReview":P7; "FileCounts":P4; "FilePatch":P9; "PatchNote":P6; "PatchRow":P11; "ReviewPanel":P5 } & A<typeof import("@tokamak/ui"), "Icon"|"Row"|"ScrollArea"|"FileName"|"Chip"|"Button"> & A<typeof import("@tokamak/sdk/client"), "Region.Panel">>;

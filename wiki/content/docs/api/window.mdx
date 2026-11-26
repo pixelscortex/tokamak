@@ -96,6 +96,23 @@ elements.
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="attrs" />
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="hide" />
 
+## Attach code to a component
+
+`attach(example.find("Composer"), TrackComposer, { when })` runs
+`TrackComposer` with the live props of each mounted `Composer` instance.
+Use effects, cleanup and context as in a normal component. Returned JSX is
+evaluated without drawing in place, so `Region.Panel` can still draw in the
+shell's panel. Hiding or layering an element inside `Composer` leaves the
+attachment running; removing the instance cleans it up.
+
+`attach` searches named render functions, while placements search elements.
+Use `in` to select an enclosing render function and `nth` for a 1-based
+position. Attachments run in install order, then `order`, plugin ID and export
+name. Missing targets after an owner update are skipped and reported. If an
+attachment throws, it is stopped and a warning names its plugin and export.
+
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="attach" />
+
 ## State
 
 Read a value with `value()` and update it with `value.set(next)` or a
