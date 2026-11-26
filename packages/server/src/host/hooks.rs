@@ -245,7 +245,11 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
             CallError::hook(
                 &hook.owner,
                 &hook.name,
-                stage.name(),
+                if collect {
+                    "collect"
+                } else {
+                    stage.name()
+                },
                 kind,
                 data,
                 &target.name,
@@ -598,4 +602,58 @@ fn validate_tuple(schema: &Json, value: &Json, path: &str) -> Result<(), String>
         return Err(format!("{path}: unexpected tuple items"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn collect_uses_original_args_and_attributes_each_result() {
+        let target = HookTarget {
+            name: "ai/run:turn#launch".into(),
+            args: Arc::new(json!({"kind": "string"})),
+            result: None,
+            chain: ["first", "second"]
+                .map(|owner| Hook {
+                    owner: owner.into(),
+                    name: "launch".into(),
+                    before: true,
+                    after: true,
+                })
+                .into(),
+            derived_result_warning: None,
+        };
+        let value = run_point(
+            &target,
+            &CallNote::default(),
+            json!({"stage": "collect", "args": "original"}),
+            |hook, stage, _, input| {
+                assert!(matches!(stage, Stage::Before));
+                assert_eq!(input["args"], "original");
+                std::future::ready(Ok(json!(hook.owner)))
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            value,
+            json!([
+                {"plugin": "first", "value": "first"},
+                {"plugin": "second", "value": "second"},
+            ])
+        );
+
+        let error = run_point(
+            &target,
+            &CallNote::default(),
+            json!({"stage": "collect", "args": "original"}),
+            |_, _, _, _| std::future::ready(Ok(Json::Null)),
+        )
+        .await
+        .unwrap_err();
+        let details = error.details.unwrap();
+        assert_eq!(details["stage"], "pointBefore");
+        assert_eq!(details["plugin"], "first");
+    }
 }
