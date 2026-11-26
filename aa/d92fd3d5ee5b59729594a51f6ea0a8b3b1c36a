@@ -1,0 +1,37 @@
+packages/server/src/scaffold.rs
+  s_1f03aec2ef7753::t_61d7fb9769133f 3-6,8-11,24,29,31-76
+packages/server/tests/plugins.rs
+  s_1f03aec2ef7753::t_86602be84ce98d 1374-1398,1413-1418,1424-1450,1452
+  s_1f03aec2ef7753::t_e2d10d3f539d2c 1451
+AGENTS.md
+  s_1f03aec2ef7753::t_611158c8ca2143 9-14,17,21-23
+  s_1f03aec2ef7753::t_4bd0f431dd382a 24
+skills/tokamak-design/SKILL.md
+  s_1f03aec2ef7753::t_375ad5d068a044 1-90
+GLOSSARY.md
+  s_1f03aec2ef7753::t_611158c8ca2143 151,154-160
+  s_1f03aec2ef7753::t_e56549b866f4ac 161
+packages/server/PLUGINS.md
+  s_1f03aec2ef7753::t_5952d8f9a97015 7-43,80-84
+skills/develop-tokamak-plugin/SKILL.md
+  s_1f03aec2ef7753::t_0fedbf02ea2571 1-57,61-125
+  s_1f03aec2ef7753::t_5ac34d3ccf1793 58-60
+design/README.md
+  s_1f03aec2ef7753::t_611158c8ca2143 35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aad92fd3d5ee5b59729594a51f6ea0a8b3b1c36a",
+  "prompts": {},
+  "sessions": {
+    "s_1f03aec2ef7753": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cca89181-b19a-419f-8005-7f8511cd0a57",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
