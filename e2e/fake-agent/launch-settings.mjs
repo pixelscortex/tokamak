@@ -30,7 +30,7 @@ export async function inheritPersonalEnv(h, agent, names) {
 }
 
 export async function installLaunchHook(h, id = "launch-first") {
-  await install(
+  await installAgentFixture(
     h,
     id,
     `
@@ -59,7 +59,7 @@ export const launch = hook(api.turn.points.launch, {
   };
 }
 
-async function install(h, id, source) {
+export async function installAgentFixture(h, id, source) {
   const folder = join(h.scratch, "sources", id);
   await mkdir(join(folder, "src/server"), { recursive: true });
   await symlink(join(workspace, "plugins/ai/node_modules"), join(folder, "node_modules"), "dir");
@@ -84,7 +84,7 @@ export default definePlugin({ id: "${id}", version: "1.0.0", depends: ["ai"] });
 }
 
 async function installRecordingAgent(h) {
-  await install(
+  await installAgentFixture(
     h,
     "recording-agent",
     `

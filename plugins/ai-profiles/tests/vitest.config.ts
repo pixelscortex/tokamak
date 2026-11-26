@@ -2,7 +2,11 @@ import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 import { windowTestConfig } from "../../../packages/build/src/window-test-config";
 
-const config = windowTestConfig(resolve(import.meta.dirname, ".."), "ai-profiles");
+const profiles = resolve(import.meta.dirname, "..");
+const config = windowTestConfig(profiles, "ai-profiles", {
+  "plugin:chat/client": resolve(profiles, "../chat/src/client/api.ts"),
+  "plugin:ai/client": resolve(profiles, "../ai/src/client/ui/thread-status.tsx"),
+});
 export default defineConfig({
   ...config,
   // ui-sdk's Switch reads its field context from a plain .js module; inline it so it

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { createApi, isFailure, type FunctionReference, type TokamakClient } from "@tokamak/sdk";
+import { createApi, isFailure, type FunctionReference, type Id, type TokamakClient } from "@tokamak/sdk";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { startFakeCompanies } from "../../agent-proxy/tests/fake-companies";
 import { builds, startWorkspace, type Workspace } from "../../agent-proxy/tests/workspace";
@@ -39,6 +39,17 @@ const manage = createApi<{
 /** The other spelling agent-proxy accepts for the same subscription id. */
 const otherForm = (id: string) =>
   id.startsWith("agent-proxy/") ? id.slice("agent-proxy/".length) : `agent-proxy/${id}`;
+
+const chat = createApi<{
+  threads: {
+    start: FunctionReference<
+      "mutation",
+      { text: string; folder: { kind: "own" } },
+      { threadId: Id<"chat.threads"> }
+    >;
+    remove: FunctionReference<"mutation", { threadId: Id<"chat.threads"> }, null>;
+  };
+}>("chat", ["threads:start", "threads:remove"]);
 
 const available = builds();
 if (!available.length)
@@ -316,5 +327,36 @@ describe.skipIf(!available.length).each(available)("$name", (build) => {
     await workspace.restart();
     owner = await workspace.owner();
     expect(await list(owner)).toEqual(before);
+  });
+  test("a thread inherits the saved profile, keeps it across a restart and loses it on deletion", async () => {
+    const { id: profile } = await create(owner, "Thread profile", "THRD");
+    await owner.mutation(api.profiles.add, { profile, subscription: subs[0]! });
+    const picks = api["thread-profiles"];
+    const start = () => owner.mutation(chat.threads.start, { text: "Hello", folder: { kind: "own" } });
+    const { threadId: before } = await start();
+    expect(await owner.query(picks.selection, { thread: before })).toBeNull();
+    await owner.mutation(picks.pick, { profile });
+    const { threadId: first } = await start();
+    const { threadId: second } = await start();
+    expect(await owner.query(picks.selection, { thread: first })).toMatchObject({
+      id: profile,
+      code: "THRD",
+    });
+
+    await workspace.restart();
+    owner = await workspace.owner();
+    expect(await owner.query(picks.selection, { thread: first })).toMatchObject({
+      id: profile,
+      code: "THRD",
+    });
+    expect(await owner.query(picks.selection, {})).toMatchObject({ id: profile });
+    const uses = () => owner.query(api.manage.usedBy, { id: subs[0]! });
+    expect((await uses()).find((use) => use.id === profile)?.threads).toBe(2);
+    await owner.mutation(chat.threads.remove, { threadId: first });
+    expect(await owner.query(picks.selection, { thread: first })).toBeNull();
+    expect((await uses()).find((use) => use.id === profile)?.threads).toBe(1);
+    await owner.mutation(api.profiles.discard, { profile });
+    expect(await owner.query(picks.selection, { thread: second })).toBeNull();
+    expect(await owner.query(picks.selection, {})).toBeNull();
   });
 });

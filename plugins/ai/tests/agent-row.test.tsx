@@ -28,6 +28,8 @@ const ready: Info = {
 };
 let installed: { id: string; name: string; info: Info }[] = [];
 let stored: JsonValue = null;
+let scoped: typeof installed | undefined;
+let requestedScope: JsonValue;
 let creator: JsonValue = { id: "local", name: "Sam" };
 let asked = 0;
 let hasMachine = true;
@@ -52,7 +54,7 @@ function client(): TokamakClient {
       return () => {};
     },
     query: async (name: string) => (name === "ai/turns:pending" ? active : answer(name)),
-    action: async (name: string) => {
+    action: async (name: string, args: { threadId?: string; draft?: boolean }) => {
       actions.push(name);
       if (name === "chat/folders:resolve") return "/fixture";
       if (!hasMachine) return fail("noMachine", null);
@@ -62,7 +64,10 @@ function client(): TokamakClient {
       if (name === "ai/run:turn") return { turnId, state: "done" };
       if (name !== "ai/agents:list") throw new Error(`Unexpected action ${name}`);
       asked += 1;
-      return structuredClone(installed) as unknown as JsonValue;
+      if (args.threadId || args.draft) requestedScope = args.threadId ?? "draft";
+      return structuredClone(
+        (args.threadId || args.draft) && scoped ? scoped : installed,
+      ) as unknown as JsonValue;
     },
   } as unknown as ClientTransport;
   return new TokamakClient(transport);
@@ -128,6 +133,8 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   stored = null;
+  scoped = undefined;
+  requestedScope = null;
   creator = { id: "local", name: "Sam" };
   asked = 0;
   hasMachine = true;
@@ -349,4 +356,20 @@ test("a stored model, level or speed no longer offered falls back to the first o
   await user.click(screen.getByRole("menuitemradio", { name: "Plan" }));
   await waitFor(() => expect(saved).toHaveLength(1));
   expect(saved[0]).toMatchObject({ model: "opus", effort: "low", speed: "standard", mode: "plan" });
+});
+
+test("a scoped catalog keeps the thread's current agent until an offered agent is selected", async () => {
+  const claude = { id: "claude", name: "Claude", info: ready };
+  const codex = { id: "codex", name: "Codex", info: ready };
+  installed = [claude, codex];
+  scoped = [claude];
+  stored = { agent: { id: "codex", name: "Codex" }, model: "opus", access: "full" };
+  mount(threadId);
+  await user.click(await screen.findByRole("button", { name: /^Agent: ?Codex/ }));
+  await screen.findByText("Codex · Not available");
+  expect(requestedScope).toBe(threadId);
+  expect(isHeld(composer(threadId))).toBe(true);
+  expect(saved).toEqual([]);
+  expect(screen.getByRole("menuitemradio", { name: "opus 5.5" })).toBeTruthy();
+  expect(screen.queryByRole("group", { name: "Codex" })).toBeNull();
 });

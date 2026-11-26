@@ -400,7 +400,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
      * default); resolves its WebSocket address. `shared` makes it a shared server.
      * `windowRouted` uses a separate desktop Runner so a test can observe the window bridge.
      */
-    async serve(label, { shared = false, pluginsDir = plugins, windowRouted = false } = {}) {
+    async serve(label, { shared = false, pluginsDir = plugins, windowRouted = false, env } = {}) {
       if (shared) await installBasicAuth(pluginsDir);
       if (useRunner && !windowRouted) {
         assert.ok(!shared, "A Runner serves a private workspace");
@@ -408,7 +408,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
           binary,
           plugins: pluginsDir,
           directory: join(scratch, label),
-          env: { ...localEnv, TOKAMAK_OWNER_NAME: "Sam" },
+          env: { ...localEnv, TOKAMAK_OWNER_NAME: "Sam", ...env },
         });
         cleanup.push(runner.stop);
         runners.set(runner.endpoint.ws, runner);
@@ -423,6 +423,7 @@ export async function agentHarness({ binary, name, ownerToken = "agent-harness-o
         ownerToken,
         servers,
         cleanup,
+        env,
         started: (server) => (child = server),
       });
       running.set(address, child);
