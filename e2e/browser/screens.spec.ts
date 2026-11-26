@@ -1,9 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, mkdir, mkdtemp, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { startHostedFixture } from "../hosted-fixture";
+import { startFakeCompanies } from "../../plugins/agent-proxy/tests/fake-companies";
+import { agentChip, pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 import { screenTree } from "./screen-tree";
 
@@ -15,13 +17,9 @@ test.skip(!out, "set TOKAMAK_SCREENS to a folder to take the screenshots");
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Message" });
 const conversation = (page: Page) => page.getByRole("log", { name: "Conversation" });
-const agentRow = (page: Page) => page.getByRole("group", { name: "Agent" });
 
 async function pick(page: Page, replay: string) {
-  await agentRow(page).getByRole("button").first().click();
-  await page.getByRole("menuitem", { name: "Fake agent" }).click();
-  await agentRow(page).getByRole("button").nth(1).click();
-  await page.getByRole("menuitem", { name: replay, exact: true }).click();
+  await pickAgentOption(page, "Fake agent", replay);
 }
 
 async function useFolder(page: Page, folder: string) {
@@ -151,6 +149,12 @@ test("thread screens", async ({ browser }) => {
     await page.goto("/");
     await pick(page, "work");
     await shot(page, "new-thread");
+    // The agent picker open over the new thread's composer.
+    await agentChip(page).click();
+    await expect(page.getByRole("menu")).toHaveCSS("opacity", "1");
+    await shot(page, "picker-open");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
 
     // A Git folder, so the branch, the change card and the review panel show.
     const folder = join(home, "invoices-app");
@@ -191,8 +195,7 @@ test("thread screens", async ({ browser }) => {
 
     // A turn that edits a file: the change card, then the review panel.
     await unlinkGo(folder);
-    await agentRow(page).getByRole("button").nth(1).click();
-    await page.getByRole("menuitem", { name: "edit", exact: true }).click();
+    await pick(page, "edit");
     const lines = Array.from(
       { length: 240 },
       (_, n) => `  const value${n} = format(rows[${n}], columns, { plain: true, locale: "en" });`,
@@ -254,10 +257,7 @@ test("thread screens", async ({ browser }) => {
     // Ask first: the permission question on the composer's tray, and the waiting thread.
     await page.getByRole("button", { name: /^New thread/ }).click();
     await pick(page, "ask-once");
-    await agentRow(page)
-      .getByRole("button", { name: /^Permission level/ })
-      .click();
-    await page.getByRole("menuitem", { name: "Ask first" }).click();
+    await pickAgentOption(page, "Access level", "Ask first");
     await send(page, "Push the branch");
     const question = page.getByRole("group", { name: "Permission question" });
     await expect(question).toBeVisible();
@@ -285,3 +285,248 @@ async function unlinkGo(folder: string) {
   const { unlink } = await import("node:fs/promises");
   await unlink(join(folder, "go")).catch(() => {});
 }
+
+// The Profiles screen in flow order (TKM-261, 262, 264, 265): adding a Claude
+// subscription, then a ChatGPT one, making profiles and dragging both in, the
+// subscription details, and removing; signed in against the fake Claude and
+// ChatGPT sign-ins. The Profiles and picker captures load the real plugins
+// without the browser suite's fixture rail entries.
+test("profiles screens", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const fake = await startFakeCompanies();
+  fake.addAccount("anthropic", "personal");
+  const shared = process.env.TOKAMAK_PLUGIN_DIR!;
+  const folder = await mkdtemp(join(dirname(shared), "profiles-"));
+  const plugins = join(folder, "plugins");
+  for (const id of ["chat", "ai", "code", "basic-auth"]) {
+    await cp(join(shared, id), join(plugins, id), { recursive: true });
+  }
+  await cp(process.env.TOKAMAK_E2E_EXTRA_PLUGINS!, plugins, { recursive: true });
+  // The server reads the addresses from the installation's .env.local, beside its plugins.
+  await writeFile(
+    join(folder, ".env.local"),
+    `TOKAMAK_AGENT_PROXY_ADDRESSES='${JSON.stringify(fake.addresses)}'\n`,
+  );
+  const context = await browser.newContext(screen);
+  let desktop: Awaited<ReturnType<typeof asDesktop>>;
+  try {
+    process.env.TOKAMAK_PLUGIN_DIR = plugins;
+    try {
+      desktop = await asDesktop(context);
+    } finally {
+      process.env.TOKAMAK_PLUGIN_DIR = shared;
+    }
+    // The catalog needs installed CLIs but no personal logins.
+    await writeFile(
+      join(desktop.bin, "claude"),
+      `#!/bin/sh
+if [ "$1" = --version ]; then echo '2.1.330 (Claude Code)'; else echo '{"loggedIn":false}'; fi
+`,
+      { mode: 0o700 },
+    );
+    await writeFile(
+      join(desktop.bin, "codex"),
+      `#!/bin/sh
+exec ${JSON.stringify(process.env.TOKAMAK_E2E_BUN)} ${JSON.stringify(join(process.cwd(), "e2e/fake-agent/profile-codex.mjs"))} "$@"
+`,
+      { mode: 0o700 },
+    );
+    /** The sign-in page the dialog's "Open sign-in page" asks the desktop to open. */
+    const signInPage = async () => {
+      await dialog.getByRole("button", { name: "Open sign-in page" }).click();
+      await expect.poll(() => desktop.opened.length).toBeGreaterThan(opened);
+      return desktop.opened[opened++]!;
+    };
+    let opened = 0;
+    const page = await context.newPage();
+    await page.goto("/p/ai-profiles");
+    const subscriptions = page.getByRole("region", { name: "Subscriptions" });
+    await expect(subscriptions.getByRole("button", { name: "Add subscription" })).toBeVisible();
+    // Blur the field typed in last and move the pointer off, so a shot shows no focus or hover.
+    const rest = () =>
+      Promise.all([
+        page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()),
+        page.mouse.move(5, 5),
+      ]);
+
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("button", { name: /Anthropic/ })).toBeVisible();
+    // The logos come from ai's agent list once the Runner answers.
+    await expect(dialog.locator("[data-mark=agent]")).toHaveCount(2);
+    await rest();
+    await shot(page, "profiles-add-company");
+    await dialog.getByRole("button", { name: /Anthropic/ }).click();
+    await expect(dialog.getByRole("button", { name: /Claude subscription/ })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-method");
+    await dialog.getByRole("button", { name: /Claude subscription/ }).click();
+    await expect(dialog.getByRole("button", { name: "Open sign-in page" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-sign-in");
+
+    // The person signs in on Claude's page in their browser and ends on the callback link.
+    const signedIn = await fetch(await signInPage(), { redirect: "manual" });
+    const callback = signedIn.headers.get("location")!;
+    // The address goes in the field the step shows, as on another device or when no return came.
+    await dialog.getByRole("textbox", { name: /Address the sign-in ended on/ }).fill(callback);
+    await rest();
+    await shot(page, "profiles-add-sign-in-pasted");
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connected" })).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Label" }).fill("Personal");
+    await rest();
+    await shot(page, "profiles-add-connected");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(subscriptions.getByRole("article", { name: "Claude Pro, Personal" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-subscriptions");
+
+    // A second sign-in, left waiting: the dialog closes and the card stays.
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    await dialog.getByRole("button", { name: /Anthropic/ }).click();
+    await dialog.getByRole("button", { name: /Claude subscription/ }).click();
+    await expect(dialog.getByRole("button", { name: "Open sign-in page" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close" }).click();
+    await expect(subscriptions.getByRole("article", { name: "Claude, awaiting sign-in" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-awaiting");
+
+    // The same steps for OpenAI (TKM-262), ending with a ChatGPT card beside the Claude one.
+    // Starting it replaces the waiting Claude sign-in (one new sign-in waits at a time).
+    fake.addAccount("openai", "chatgpt");
+    await subscriptions.getByRole("button", { name: "Add subscription" }).click();
+    await dialog.getByRole("button", { name: /OpenAI/ }).click();
+    await expect(dialog.getByRole("button", { name: /ChatGPT subscription/ })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-add-method-openai");
+    await dialog.getByRole("button", { name: /ChatGPT subscription/ }).click();
+    fake.nextSignIn("chatgpt");
+    const returned = await fetch(await signInPage(), { redirect: "manual" });
+    await dialog
+      .getByRole("textbox", { name: /Address the sign-in ended on/ })
+      .fill(returned.headers.get("location")!);
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connected" })).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Label" }).fill("Personal");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(subscriptions.getByRole("article", { name: "ChatGPT Plus, Personal" })).toBeVisible();
+    await rest();
+    await shot(page, "profiles-both-companies");
+
+    // The Profiles section (TKM-264): two profiles made with "New profile", then
+    // both cards dragged in with the mouse, as a person does it.
+    const section = page.getByRole("region", { name: "Profiles" });
+    async function newProfile(name: string, code: string, picture?: string) {
+      await section.getByRole("button", { name: "New profile" }).click();
+      const form = page.getByRole("dialog", { name: "New profile" });
+      await form.getByRole("textbox", { name: "Name" }).fill(name);
+      // Typed in lower case: the field shows it upper case.
+      await form.getByRole("textbox", { name: "Code" }).fill(code);
+      if (picture) {
+        await rest();
+        await shot(page, picture);
+      }
+      await form.getByRole("button", { name: "Create" }).click();
+      await expect(form).toHaveCount(0);
+    }
+    await newProfile("Personal", "pers", "profiles-new-profile");
+    await newProfile("Sandbox work", "sbox");
+    const claude = subscriptions.getByRole("article", { name: "Claude Pro, Personal" });
+    const chatgpt = subscriptions.getByRole("article", { name: "ChatGPT Plus, Personal" });
+    const box = (code: string) => section.locator(`[data-profile][aria-label^="${code},"]`);
+    /** Presses on a card's email line and carries it to the bottom of `code`'s box. */
+    async function carry(card: typeof claude, code: string) {
+      const from = (await card.boundingBox())!;
+      await page.mouse.move(from.x + 48, from.y + 64);
+      await page.mouse.down();
+      const to = (await box(code).boundingBox())!;
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height - 8, { steps: 12 });
+    }
+    for (const [card, code] of [
+      [claude, "PERS"],
+      [chatgpt, "PERS"],
+      [chatgpt, "SBOX"],
+    ] as const) {
+      await carry(card, code);
+      await page.mouse.up();
+    }
+    await expect(box("PERS").getByRole("listitem")).toHaveCount(2);
+    await expect(box("SBOX").getByRole("listitem")).toHaveCount(1);
+    await rest();
+    await shot(page, "profiles-profiles");
+
+    const chat = await context.newPage();
+    try {
+      await chat.goto("/");
+      await agentChip(chat).click();
+      const menu = chat.getByRole("menu");
+      const profile = menu.getByRole("group", { name: "Profile", exact: true });
+      await profile.getByRole("menuitemradio", { name: "PERS", exact: true }).click();
+      const codex = menu.getByRole("group", { name: "Codex", exact: true });
+      await expect(codex.getByRole("menuitemradio", { name: "Fake GPT", exact: true })).toBeVisible();
+      await expect(menu.getByRole("group", { name: "Claude", exact: true })).toBeVisible();
+      await codex.getByRole("menuitemradio", { name: "Fake GPT", exact: true }).click();
+      await chat.mouse.move(5, 5);
+      await shot(chat, "profiles-codex-picker");
+    } finally {
+      await chat.close();
+    }
+
+    // Pointing at a profile dims the cards it does not hold: Claude's, for SBOX.
+    await box("SBOX").hover();
+    await expect(subscriptions.locator("article[data-dimmed]")).toHaveCount(1);
+    await shot(page, "profiles-hover-profile");
+
+    // Carrying the Claude card: the box that holds it fades and says "added"; the other
+    // rings and shows where it would land.
+    await carry(claude, "SBOX");
+    await expect(box("PERS")).toHaveAttribute("data-added", "");
+    await expect(box("SBOX")).toHaveAttribute("data-target", "");
+    await shot(page, "profiles-dragging");
+    await page.mouse.up();
+    await expect(claude.getByText("SBOX")).toBeVisible();
+
+    // The subscription details (TKM-265): one account, then a second added
+    // through the same sign-in, then that one signed out. "Used by" names both profiles.
+    await subscriptions.getByRole("button", { name: "Claude Pro, Personal details" }).click();
+    const details = page.getByRole("region", { name: "Claude Pro details" });
+    await expect(details.getByText("personal@example.test")).toBeVisible();
+    await expect(details.getByRole("region", { name: "Used by" }).getByRole("listitem")).toHaveCount(2);
+    await rest();
+    await shot(page, "profiles-details");
+    fake.addAccount("anthropic", "work");
+    await details.getByRole("button", { name: "Add account" }).click();
+    fake.nextSignIn("work");
+    const added = await fetch(await signInPage(), { redirect: "manual" });
+    await dialog
+      .getByRole("textbox", { name: /Address the sign-in ended on/ })
+      .fill(added.headers.get("location")!);
+    await dialog.getByRole("button", { name: "Continue" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(details.getByText("work@example.test")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-two-accounts");
+    await details.getByRole("listitem").filter({ hasText: "work@example.test" }).getByRole("button").click();
+    await expect(details.getByText("Signed out")).toBeVisible();
+    await rest();
+    await shot(page, "profiles-details-signed-out");
+
+    // Back to the cards, and the remove confirmation: it names the profiles that lose it.
+    await page
+      .getByRole("navigation", { name: "Breadcrumb" })
+      .getByRole("button", { name: "Profiles" })
+      .click();
+    await subscriptions.getByRole("button", { name: "Remove Claude Pro, Personal" }).click();
+    await expect(dialog.getByText(/PERS/)).toBeVisible();
+    await rest();
+    await shot(page, "profiles-remove");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    await context.close();
+    await fake.stop();
+    await unlink(join(folder, ".env.local"));
+  }
+});

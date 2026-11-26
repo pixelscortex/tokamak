@@ -280,6 +280,17 @@ class ServerOnlyError extends Error {
   }
 }
 
+/** Bind the typed action calls to a request-scoped host bridge. */
+export function bindActionCall(bridge: HostBridge, kind: FunctionKind) {
+  return (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
+    callHost(bridge, "plugin.call", {
+      name: reference[functionName],
+      args: jsonSnapshot(input, "nested call args"),
+      kind,
+      ...(options?.on === undefined ? {} : { on: options.on }),
+    });
+}
+
 function actionContext(
   bridge: HostBridge,
   auth: AuthContext | null,
@@ -292,15 +303,7 @@ function actionContext(
     return operation();
   };
   const machine = requireActionMachine;
-  const run =
-    (expected: FunctionKind) =>
-    (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
-      callHost(bridge, "plugin.call", {
-        name: reference[functionName],
-        args: jsonSnapshot(input, "nested call args"),
-        kind: expected,
-        ...(options?.on === undefined ? {} : { on: options.on }),
-      });
+  const run = (kind: FunctionKind) => bindActionCall(bridge, kind);
   const context: CallerActionContext = Object.freeze({
     call,
     point: bindPoint(bridge, pointScope),

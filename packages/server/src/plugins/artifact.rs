@@ -45,7 +45,12 @@ impl Artifact {
                 .entries
                 .server
                 .as_ref()
-                .is_some_and(|entry| name == &entry.code || name == &entry.map);
+                .is_some_and(|entry| name == &entry.code || name == &entry.map)
+                || manifest
+                    .entries
+                    .http
+                    .as_ref()
+                    .is_some_and(|entry| name == &entry.code || name == &entry.map);
             assets.insert(
                 name.clone(),
                 asset(&root, name, &manifest.hashes, previous, whole_backend)?,
@@ -92,6 +97,7 @@ impl Artifact {
             bundle,
             assets,
             permissions,
+            http_slots: Arc::default(),
         })
     }
 
@@ -150,6 +156,23 @@ impl Artifact {
             bundle,
             worker_entry,
         ))
+    }
+
+    pub(crate) fn http_action(&self, path: &str) -> Option<crate::http_actions::Route> {
+        let entry = self.manifest.entries.http.as_ref()?;
+        let (pattern, params) = crate::http_actions::match_path(&entry.paths, path)?;
+        Some(crate::http_actions::Route {
+            code: self.assets.get(&entry.code)?.clone(),
+            pattern: pattern.to_owned(),
+            params,
+            slots: self.http_slots.clone(),
+            permissions: self
+                .permissions
+                .iter()
+                .filter(|permission| permission.starts_with("net:"))
+                .cloned()
+                .collect(),
+        })
     }
 
     /// Only explicitly declared UI files are downloadable. No arbitrary paths,

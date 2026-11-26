@@ -119,3 +119,4 @@ export type { MessageConnection, ClientWebSocket } from "./transport";
 export type { Request, Event } from "./protocol";
 
 export type { Id, JsonValue, JsonObject } from "./values";
+export { httpAction, type HttpActionContext, type HttpActionDefinition } from "./http-action";

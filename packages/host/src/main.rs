@@ -7,6 +7,8 @@ mod builtins;
     any(target_os = "linux", target_os = "macos")
 ))]
 mod fs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod http_action;
 #[cfg(all(
     feature = "local-runtime",
     any(target_os = "linux", target_os = "macos")
@@ -51,6 +53,12 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Some(mode) if mode == "--actions" => action_process::run().await,
+        Some(mode) if mode == "--http-action" => {
+            let bundle = args
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Expected an HTTP action bundle path"))?;
+            http_action::run(std::path::Path::new(&bundle)).await
+        }
         Some(mode) if mode == "--inspect-actions" => {
             let bundle = args
                 .next()

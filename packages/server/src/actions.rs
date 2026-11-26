@@ -27,6 +27,8 @@ pub(crate) use runner_upstream::runner_hashes;
 
 pub type RunnerFuture = Pin<Box<dyn Future<Output = Result<Json, engine::CallError>> + Send>>;
 pub(crate) type RunnerDispatch = Arc<dyn Fn(RunnerAction) -> RunnerFuture + Send + Sync>;
+mod http;
+pub(crate) use http::HttpCalls;
 mod machines;
 use machines::Selection;
 pub(crate) use machines::{Machines, Owner as MachineOwner};
@@ -549,6 +551,7 @@ pub(crate) struct ActionContext {
 }
 
 pub(crate) struct NestedCall {
+    pub http_root: bool,
     pub note: CallNote,
     pub generation: Option<Arc<Loaded>>,
     pub lifetime: Option<CancellationToken>,
@@ -558,6 +561,23 @@ pub(crate) struct NestedCall {
     pub kind: FunctionKind,
     pub contract: Option<String>,
     pub reply: oneshot::Sender<Result<Json, crate::protocol::CallError>>,
+}
+
+impl NestedCall {
+    async fn send(
+        commands: &mpsc::WeakSender<Command>,
+        call: Self,
+        wait: oneshot::Receiver<Result<Json, CallError>>,
+    ) -> Result<Json, CallError> {
+        commands
+            .upgrade()
+            .ok_or("server is closed")?
+            .try_send(Command::RunFunction(call))
+            .map_err(|e| format!("nested call not admitted: {e}"))?;
+        // The coordinator owns finalization once a mutation starts.
+        wait.await
+            .map_err(|_| "server closed before nested call completed")?
+    }
 }
 
 pub(crate) fn operations(
@@ -740,10 +760,10 @@ pub(crate) fn register_nested_calls(
                     .ok_or("nested call requires args")?
                     .clone();
                 let (reply, wait) = oneshot::channel();
-                commands
-                    .upgrade()
-                    .ok_or("server is closed")?
-                    .try_send(Command::RunFunction(NestedCall {
+                NestedCall::send(
+                    &commands,
+                    NestedCall {
+                        http_root: false,
                         note,
                         generation,
                         lifetime,
@@ -753,13 +773,11 @@ pub(crate) fn register_nested_calls(
                         kind,
                         contract: None,
                         reply,
-                    }))
-                    .map_err(|e| format!("nested call not admitted: {e}"))?;
-                // Once admitted, disconnect/shutdown cannot retract a mutation's
-                // commit. The coordinator owns finalization and the writer barrier.
-                wait.await
-                    .map_err(|_| "server closed before nested call completed".to_owned())?
-                    .map_err(|error| error.map_text(|text| environment.redact(text)).into())
+                    },
+                    wait,
+                )
+                .await
+                .map_err(|error| error.map_text(|text| environment.redact(text)).into())
             }
         })?;
     }
@@ -811,10 +829,10 @@ fn register_plugin_call(
             target.kind.check_requested(&payload)?;
             if target.kind != FunctionKind::Action {
                 let (reply, wait) = oneshot::channel();
-                commands
-                    .upgrade()
-                    .ok_or("server is closed")?
-                    .try_send(Command::RunFunction(NestedCall {
+                return NestedCall::send(
+                    &commands,
+                    NestedCall {
+                        http_root: false,
                         note,
                         generation: Some(loaded),
                         lifetime,
@@ -824,12 +842,14 @@ fn register_plugin_call(
                         kind: target.kind,
                         contract: contract.map(str::to_owned),
                         reply,
-                    }))
-                    .map_err(|e| format!("nested call not admitted: {e}"))?;
-                return wait
-                    .await
-                    .map_err(|_| "server closed before plugin call completed")?
-                    .map_err(Into::into);
+                    },
+                    wait,
+                )
+                .await
+                .map_err(Into::into);
+            }
+            if note.is_http() {
+                note.check_anonymous_scope(&target, &owner)?;
             }
             let note = note.enter(name, Some(&target.args), &args)?;
             let on = requested_placement(&payload)?;

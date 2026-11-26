@@ -1,5 +1,6 @@
 export {
   list as listThreads,
+  start as startThread,
   get as getThread,
   creator as threadCreator,
   rename,

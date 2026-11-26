@@ -27,6 +27,7 @@ impl From<CallDepthLimit> for engine::CallError {
 pub(crate) struct CallNote {
     pub auth: Option<AuthContext>,
     thread_id: Option<String>,
+    http_owner: Option<std::sync::Arc<str>>,
     depth: usize,
     window_continuation: bool,
     hooks: HookBudget,
@@ -128,6 +129,29 @@ impl CallNote {
         let mut note = self.clone();
         note.depth = depth;
         Ok(note.with_args(validator, args))
+    }
+
+    pub(crate) fn for_http(mut self, owner: std::sync::Arc<str>) -> Self {
+        self.http_owner = Some(owner);
+        self
+    }
+
+    pub(crate) fn is_http(&self) -> bool {
+        self.http_owner.is_some()
+    }
+
+    pub(crate) fn check_anonymous_scope(
+        &self,
+        target: &crate::plugins::Target,
+        caller: &str,
+    ) -> Result<(), String> {
+        if self.auth.is_some()
+            || (self.http_owner.as_deref() == Some(caller) && target.owner == caller)
+        {
+            Ok(())
+        } else {
+            target.check_anonymous_scope(caller)
+        }
     }
 
     pub fn with_root_args(self, validator: &Value, args: &Value) -> Self {

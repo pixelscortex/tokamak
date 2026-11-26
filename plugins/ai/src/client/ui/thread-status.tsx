@@ -1,11 +1,11 @@
 import { For, Show, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import { useClient } from "@tokamak/sdk/client";
+import { useClient, useQuery } from "@tokamak/sdk/client";
 import type { ThreadRowProps } from "plugin:chat/client";
 import { StatusIcon, rowVariants } from "@tokamak/ui";
-import { modelLabel } from "../lib/agents";
+import { api, modelLabel } from "../lib/agents";
 import { AgentMark } from "./agent-mark";
-import { followThread, iconFor, statusOf } from "../lib/thread-status";
+import { followThread, iconFor, isWorking, statusOf } from "../lib/thread-status";
 
 /**
  * The icon before a thread's title in chat's list (Paper "Threads · C"):
@@ -32,8 +32,28 @@ export function ThreadDetail(props: ThreadRowProps): JSX.Element {
     <>
       <AgentMark agentId={status()?.agent.id} size={12} label={status()?.agent.name} />
       <span class="shrink-0 text-data">{modelLabel(status()?.agent.name, status()?.model)}</span>
+      <span data-part="detailExtras" class="contents" />
       <span class="truncate text-label">· {folderName(props.thread)}</span>
     </>
+  );
+}
+
+export const hasLiveThreadDetail = (threadId: string) => isWorking(statusOf(threadId));
+
+/** Agent and model from the most recent turn, or the choices on a thread without turns. */
+export function SavedAgentDetail(props: ThreadRowProps): JSX.Element {
+  const choices = useQuery(useClient(), api.choices.get, () => ({ threadId: props.thread._id }));
+  const agent = () => statusOf(props.thread._id)?.agent ?? choices.data()?.agent;
+  const model = () => modelLabel(agent()?.name, statusOf(props.thread._id)?.model ?? choices.data()?.model);
+  return (
+    <Show when={agent()}>
+      {(entry) => (
+        <>
+          <AgentMark agentId={entry().id} label={entry().name} size={12} />
+          <span class="shrink-0 text-data">{model() ?? entry().name}</span>
+        </>
+      )}
+    </Show>
   );
 }
 
