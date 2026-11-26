@@ -83,10 +83,11 @@ type NativeSite = readonly [
   hole?: number | null,
   authored?: number,
 ];
-type RenderHole = (
-  id: number,
-  render: () => JSX.Element | (() => JSX.Element),
-) => () => JSX.Element | (() => JSX.Element);
+type HoleValue = JSX.Element | (() => JSX.Element);
+type RenderHole = {
+  (id: number, render: () => HoleValue): () => HoleValue;
+  (id: number, render: () => HoleValue, text: true): HoleValue;
+};
 
 function matches(
   registry: PartRegistry,
@@ -99,7 +100,11 @@ function matches(
   return false;
 }
 
-const plainHole: RenderHole = (_id, render) => render;
+function plainHole(_id: number, render: () => HoleValue): () => HoleValue;
+function plainHole(_id: number, render: () => HoleValue, text: true): HoleValue;
+function plainHole(_id: number, render: () => HoleValue, text?: true) {
+  return text ? render() : render;
+}
 const plainSpread = (props: object) => props;
 
 // Native templates own their DOM nodes. Additions get their own insertion
@@ -183,10 +188,11 @@ export function renderNativePart(
   create: (refs: Element[], hole: RenderHole, authored?: number) => JSX.Element,
   children: readonly NativeSite[],
   original?: number,
+  rootHole?: number | null,
 ) {
   const registry = useContext(PartActions);
   if (!registry) return create([], plainHole);
-  if (!children.length)
+  if (!children.length && rootHole == null)
     return renderPart(target, fingerprint, props, row, (contents) => {
       const element = create([], plainHole) as Element;
       nativeContents(
@@ -201,12 +207,17 @@ export function renderNativePart(
     const refs: Element[] = [];
     const active: ReturnType<typeof createSignal<boolean>>[] = [];
 
-    const hole: RenderHole = (id, render) => {
+    function hole(id: number, render: () => HoleValue): () => HoleValue;
+    function hole(id: number, render: () => HoleValue, text: true): HoleValue;
+    function hole(id: number, render: () => HoleValue, text?: true) {
       let state = active[id];
       if (!state) active[id] = state = createSignal(true, { ownedWrite: true });
       const [shown] = state;
+      // Native text's existing insert tracks this guard directly. It must
+      // stop writing to its parent while a layer has supplied other children.
+      if (text) return shown() ? render() : undefined;
       return createMemo(() => (shown() ? untrack(render) : undefined));
-    };
+    }
 
     function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean) {
       if (typeof id === "number") {

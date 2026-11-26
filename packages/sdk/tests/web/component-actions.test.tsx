@@ -761,3 +761,45 @@ test("an error in children supplied by a layer falls back to the original", asyn
     warn.mock.calls.flat().filter((message) => /projector\/Custom.*broken projection/.test(message)),
   ).toHaveLength(1);
 });
+
+test("a native text binding stays out of an override and resumes with the latest value", async () => {
+  const [text, setText] = createSignal("original");
+  const [changed, setChanged] = createSignal(true);
+  const target = find("p", { in: "BenchmarkRow" });
+  const root = document.createElement("div");
+  const actions = [
+    contribution(
+      "Text",
+      layer(
+        target,
+        (_, Original) => (
+          <Original>
+            <mark>custom</mark>
+          </Original>
+        ),
+        { when: changed },
+      ),
+      "layer",
+      target,
+    ),
+  ];
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <BenchmarkRow text={text()} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.querySelector("p")?.textContent).toBe("custom"));
+  const node = root.querySelector("p");
+  setText("live");
+  flush();
+  expect(node?.textContent).toBe("custom");
+  setChanged(false);
+  flush();
+  expect(root.querySelector("p")).toBe(node);
+  expect(node?.textContent).toBe("live");
+});

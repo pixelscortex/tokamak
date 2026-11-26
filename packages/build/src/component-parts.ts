@@ -368,9 +368,15 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (erased(node)) continue;
           output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
         }
-        type Site = { node: Element; part: Part; children: Site[]; holes: Element[] };
+        type Site = {
+          node: Element;
+          part: Part;
+          children: Site[];
+          holes: Element[];
+          text: ts.JsxExpression[];
+        };
         const native = new Set<Element>();
-        const nativeRoots = new Map<Element, { table: string; authored: string[] }>();
+        const nativeRoots = new Map<Element, { table: string; authored: string[]; hole: number | null }>();
         const holes = new Map<Element, number>();
         const addresses = new Map<string, { variable: string; suffixes: string[] }>();
         const addressesByPart = new Map<Part, string>();
@@ -433,13 +439,17 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             return;
           const children: Site[] = [];
           const holes: Element[] = [];
+          const text: ts.JsxExpression[] = [];
           if (ts.isJsxElement(node))
             for (const child of node.children) {
               if (ts.isJsxText(child)) continue;
               if (ts.isJsxExpression(child)) {
                 if (!child.expression) continue;
                 const type = checker.getTypeAtLocation(child.expression);
-                if (type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike)) continue;
+                if (type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike)) {
+                  text.push(child);
+                  continue;
+                }
                 return;
               }
               if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) return;
@@ -464,7 +474,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
           )
             return;
-          return { node, part, children, holes };
+          return { node, part, children, holes, text };
         }
         for (const node of [...elements.keys()].reverse()) {
           if (erased(node) || native.has(node)) continue;
@@ -484,7 +494,11 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
               ts.isJsxElement(site.node) && site.node.children.length
                 ? authored.push(`case ${authored.length + 1}: return ${authoredChildren(site.node)};`)
                 : 0;
-            const grouped = site.holes.length ? nextHole++ : null;
+            const grouped = site.holes.length || site.text.length ? nextHole++ : null;
+            for (const { expression } of site.text) {
+              output.prependLeft(expression!.getStart(source), `__tokamakHole(${grouped}, () => (`);
+              output.appendLeft(expression!.end, "), true)");
+            }
             for (const hole of site.holes) holes.set(hole, grouped!);
             const children = site.children.map((child) => {
               let ref: number | null = null;
@@ -504,7 +518,11 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           const name = `__tokamakIsland${nativeRoots.size + 1}`;
           const data = serialize(site, null, true);
           tables.push(`const ${name} = ${data};`);
-          nativeRoots.set(node, { table: name, authored });
+          nativeRoots.set(node, {
+            table: name,
+            authored,
+            hole: site.holes.length || site.text.length ? 0 : null,
+          });
         }
         // Edit in JSX postorder so adjacent boundaries at the same offset
         // close the previous sibling before opening the next one.
@@ -523,7 +541,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           );
           output.appendLeft(
             node.end,
-            ` : (() => { switch (__tokamakChild) { ${island.authored.join(" ")} } })(), ${island.table}, 1)${container ? "}" : ""}`,
+            ` : (() => { switch (__tokamakChild) { ${island.authored.join(" ")} } })(), ${island.table}, 1, ${island.hole})${container ? "}" : ""}`,
           );
         }
         if (tables.length) output.prepend(tables.join("\n") + "\n");
