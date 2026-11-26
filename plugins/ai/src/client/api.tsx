@@ -2,13 +2,15 @@
  * ai's window entry: it extends chat through the elements chat publishes and
  * imports no agent plugin. Agents reach `ai` only through `plugin:ai/contracts`.
  */
-import { after, append, before, prepend, replace } from "@tokamak/sdk/client";
+import { after, append, before, prepend, layer, useClient } from "@tokamak/sdk/client";
+import { Show } from "solid-js";
 import * as chat from "plugin:chat/client";
 import { AgentRow } from "./ui/agent-row";
 import { SteeredBody } from "./ui/turn-steers";
 import { hasSteers } from "./lib/steers";
 import { StopButton } from "./ui/turn-controls";
-import { AgentHeading } from "./ui/heading";
+import { refreshAgents } from "./lib/agents";
+import { newThreadChoices } from "./lib/choices";
 import { ReplyCards } from "./ui/reply-cards";
 import { ReplyHeader } from "./ui/reply-header";
 import { ReplyWork } from "./ui/reply-work";
@@ -25,19 +27,26 @@ listenForSends();
 /** The agent row sits under the composer box, inside the composer's tray. */
 export const Agent = after(chat.find("box"), AgentRow);
 /** "What should Claude work on?" in place of "Start a conversation". */
-export const Heading = replace(chat.find("heading"), AgentHeading);
+export const Heading = layer(chat.find("heading"), (_props, Original) => {
+  void refreshAgents(useClient());
+  return (
+    <Show when={newThreadChoices()?.agent} fallback={<Original />}>
+      {(agent) => <Original>What should {agent().name} work on?</Original>}
+    </Show>
+  );
+});
 /** The permission question, on the composer's tray above the prompt, while the sender's turn waits. */
 export const Permission = prepend(chat.find("top"), PermissionCard, {
   when: (composer) => questionFor(composer.threadId) !== undefined,
 });
 
 /** An agent's reply: "✳ Claude  opus 5.5" in place of chat's author line. */
-export const ReplyAuthor = replace(chat.find("header"), ReplyHeader, { when: isAgentReply });
+export const ReplyAuthor = layer(chat.find("header"), ReplyHeader, { when: isAgentReply });
 /** Above the reply's text: thinking, the actions line and helper rows. */
 export const Work = before(chat.find("body"), ReplyWork, { when: isAgentReply });
 /** Under the reply's text: Tasks, the plan card and usage. */
 export const Cards = after(chat.find("body"), ReplyCards, { when: isAgentReply });
-export const Stop = replace(chat.find("SendButton"), StopButton, {
+export const Stop = layer(chat.find("SendButton"), StopButton, {
   when: (props) => Boolean(activeFor(props.threadId)),
 });
 
@@ -45,7 +54,7 @@ export const Stop = replace(chat.find("SendButton"), StopButton, {
  * A reply the person steered: its text cut where each follow-up arrived, the
  * follow-up drawn between as their own message. Other replies keep chat's body.
  */
-export const Steers = replace(chat.find("body"), SteeredBody, {
+export const Steers = layer(chat.find("body"), SteeredBody, {
   when: (props) => isAgentReply(props) && hasSteers(shownTurn(props)),
 });
 

@@ -112,7 +112,6 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "OpenThreadRow": Props15;
   "AgentPicker": Props17;
   "statusExtras": Props17;
-  "h2": {};
   "code": Props15;
   "Tooltip.Root": Props18;
   "Tooltip.Trigger": Props18;

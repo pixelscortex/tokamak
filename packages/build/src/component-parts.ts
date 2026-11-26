@@ -270,6 +270,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         )
           return;
         const tag = opening.tagName;
+        const original =
+          ts.isPropertyAccessExpression(tag) && tag.name.text === "Children" ? tag.expression : tag;
+        if (brand(checker.getTypeAtLocation(original), "originalElementBrand")) {
+          ts.forEachChild(node, (child) => visit(child, scope));
+          return;
+        }
         const builtin = solidTag(tag);
         if (builtin && solidBuiltins.has(builtin)) {
           const callback = builtin === "For" || builtin === "Index" ? childCallback(node) : undefined;
@@ -391,9 +397,15 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (erased(node)) continue;
           output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
         }
-        type Site = { node: Element; part: Part; children: Site[]; holes: Element[] };
+        type Site = {
+          node: Element;
+          part: Part;
+          children: Site[];
+          holes: Element[];
+          text: ts.JsxExpression[];
+        };
         const native = new Set<Element>();
-        const nativeRoots = new Map<Element, string>();
+        const nativeRoots = new Map<Element, { table: string; rootHole: boolean }>();
         const holes = new Map<Element, number>();
         const addresses = new Map<string, { variable: string; suffixes: string[] }>();
         function address({ target }: Part) {
@@ -423,13 +435,17 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             return;
           const children: Site[] = [];
           const holes: Element[] = [];
+          const text: ts.JsxExpression[] = [];
           if (ts.isJsxElement(node))
             for (const child of node.children) {
               if (ts.isJsxText(child)) continue;
               if (ts.isJsxExpression(child)) {
                 if (!child.expression) continue;
                 const type = checker.getTypeAtLocation(child.expression);
-                if (type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike)) continue;
+                if (type.flags & (ts.TypeFlags.StringLike | ts.TypeFlags.NumberLike)) {
+                  text.push(child);
+                  continue;
+                }
                 return;
               }
               if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) return;
@@ -454,7 +470,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
           )
             return;
-          return { node, part, children, holes };
+          return { node, part, children, holes, text };
         }
         for (const node of [...elements.keys()].reverse()) {
           if (erased(node) || native.has(node)) continue;
@@ -470,26 +486,39 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           function serialize(site: Site, ref: number | null = null, root = false): string {
             native.add(site.node);
             const grouped = site.holes.length ? nextHole++ : null;
+            const node = site.node;
+            if (
+              site.text.length === 1 &&
+              ts.isJsxElement(node) &&
+              node.children.every(
+                (child) =>
+                  ts.isJsxExpression(child) ||
+                  (ts.isJsxText(child) && /^\s*[\r\n]\s*$/.test(child.getFullText(source))),
+              )
+            ) {
+              const tag = node.openingElement.tagName.getText(source);
+              const value = site.text[0]!.expression!;
+              // Let Solid keep special native element semantics, such as
+              // resynchronizing a select when its option's text changes.
+              const special = /^(option|textarea|script|style|title)$/.test(tag);
+              output.prependLeft(value.getStart(source), special ? "[" : "__tokamakScalarText(");
+              output.appendLeft(value.end, special ? "]" : ")");
+            }
+            if (ref !== null) {
+              const opening = ts.isJsxElement(node) ? node.openingElement : node;
+              output.appendLeft(opening.attributes.end, ` ref={(__el) => { __tokamakRefs[${ref}] = __el; }}`);
+            }
             for (const hole of site.holes) holes.set(hole, grouped!);
-            const children = site.children.map((child) => {
-              let ref: number | null = null;
-              if (site.holes.some((hole) => hole.end <= child.node.pos)) {
-                ref = nextRef++;
-                const opening = ts.isJsxElement(child.node) ? child.node.openingElement : child.node;
-                output.appendLeft(
-                  opening.attributes.end,
-                  ` ref={(__el) => { __tokamakRefs[${ref}] = __el; }}`,
-                );
-              }
-              return serialize(child, ref);
-            });
+            const children = site.children.map((child) =>
+              serialize(child, site.holes.some((hole) => hole.end <= child.node.pos) ? nextRef++ : null),
+            );
             if (root) return `[${children.join(",")}]`;
             return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null ? `,${ref},${grouped}` : ""}]`;
           }
           const name = `__tokamakIsland${nativeRoots.size + 1}`;
           const data = serialize(site, null, true);
           tables.push(`const ${name} = ${data};`);
-          nativeRoots.set(node, name);
+          nativeRoots.set(node, { table: name, rootHole: !!site.holes.length });
         }
         // Edit in JSX postorder so adjacent boundaries at the same offset
         // close the previous sibling before opening the next one.
@@ -506,7 +535,10 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             node.getStart(source),
             `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole) => `,
           );
-          output.appendLeft(node.end, `, ${island})${container ? "}" : ""}`);
+          output.appendLeft(
+            node.end,
+            `, ${island.table}${island.rootHole ? ", 0" : ""})${container ? "}" : ""}`,
+          );
         }
         if (tables.length) output.prepend(tables.join("\n") + "\n");
         output.prepend(

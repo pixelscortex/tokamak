@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import type { AttributeFilters } from "./screen-search";
 
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
+declare const originalElementBrand: unique symbol;
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
 
 export interface ComponentPart<Target extends string, Props extends object> {
@@ -9,7 +10,7 @@ export interface ComponentPart<Target extends string, Props extends object> {
   readonly target: Target;
 }
 
-export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "wrap" | "replace" | "hide";
+export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "layer" | "hide";
 
 export interface ComponentActionOptions<P extends object = any> {
   order?: number;
@@ -21,11 +22,24 @@ export interface ComponentActionOptions<P extends object = any> {
 }
 
 type Part<P extends object> = ComponentPart<string, P>;
-type Layer<P extends object> = (props: P) => JSX.Element;
+type Addition<P extends object> = (props: P) => JSX.Element;
+
+type OriginalProps = {
+  readonly children?: JSX.Element;
+  readonly [attribute: `${string}-${string}`]: never;
+};
+
+export interface OriginalElement {
+  readonly [originalElementBrand]?: true;
+  <P extends OriginalProps>(props: P & Record<Exclude<keyof P, "children">, never>): JSX.Element;
+  Children(): JSX.Element;
+}
+
+type Layer<P extends object> = (props: P, Original: OriginalElement) => JSX.Element;
 export type ComponentAction<K extends ComponentActionKind = ComponentActionKind> = Readonly<{
   [componentActionBrand]: K;
   target: string;
-  layer?: Layer<any>;
+  layer?: K extends "layer" ? Layer<any> : Addition<any>;
   when?: (props: any) => boolean;
 }>;
 export function isComponentAction(value: unknown): value is ComponentAction {
@@ -35,7 +49,7 @@ export function isComponentAction(value: unknown): value is ComponentAction {
 export function defineComponentAction<K extends ComponentActionKind, P extends object>(
   kind: K,
   target: Part<P>,
-  layer: Layer<any> | undefined,
+  layer: ComponentAction<K>["layer"],
   options?: ComponentActionOptions<P>,
 ): ComponentAction<K> {
   return Object.freeze({
@@ -49,7 +63,7 @@ export function defineComponentAction<K extends ComponentActionKind, P extends o
 function insert<K extends "before" | "after" | "prepend" | "append">(kind: K) {
   return <P extends object>(
     target: Part<P>,
-    ui: Layer<NoInfer<P>>,
+    ui: Addition<NoInfer<P>>,
     options?: ComponentActionOptions<NoInfer<P>>,
   ) => defineComponentAction(kind, target, ui, options);
 }
@@ -63,20 +77,12 @@ export function hide<P extends object>(target: Part<P>, options?: ComponentActio
   return defineComponentAction("hide", target, undefined, options);
 }
 
-export function wrapPart<P extends object>(
+export function layer<P extends object>(
   target: Part<P>,
-  wrapper: Layer<NoInfer<P> & { readonly children: JSX.Element }>,
+  draw: Layer<NoInfer<P>>,
   options?: ComponentActionOptions<NoInfer<P>>,
 ) {
-  return defineComponentAction("wrap", target, wrapper, options);
-}
-
-export function replacePart<P extends object>(
-  target: Part<P>,
-  replacement: Layer<NoInfer<P>>,
-  options?: ComponentActionOptions<NoInfer<P>>,
-) {
-  return defineComponentAction("replace", target, replacement, options);
+  return defineComponentAction("layer", target, draw, options);
 }
 
 export function componentActionKind<K extends ComponentActionKind>(action: ComponentAction<K>): K {

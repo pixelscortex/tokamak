@@ -2,8 +2,8 @@ import { within } from "@testing-library/dom";
 import { render } from "@solidjs/web";
 import { createSignal, flush, onCleanup } from "solid-js";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { ExtensionProvider, replace, wrap } from "../../client";
-import { host, layer, type Layer } from "./fixtures/parts/extension-host";
+import { ExtensionProvider, layer } from "../../client";
+import { host, layer as contribution, type Layer } from "./fixtures/parts/extension-host";
 import { Composer } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
@@ -24,7 +24,7 @@ function mount(layers: Layer[], label = () => "Send", lifecycle = (_event: strin
 }
 
 function details(name: string, unmounted: () => void) {
-  return wrap(button, (props) => {
+  return layer(button, (props, Original) => {
     const [open, setOpen] = createSignal(false, { ownedWrite: true });
     onCleanup(unmounted);
     return (
@@ -37,7 +37,7 @@ function details(name: string, unmounted: () => void) {
             {name} for {props.label}
           </p>
         )}
-        {props.children}
+        <Original />
       </div>
     );
   });
@@ -47,23 +47,28 @@ test("a wrapper keeps its open state when another wrapper's condition flips", as
   const [label, setLabel] = createSignal("Send");
   const frameUnmounted = vi.fn();
   const detailsUnmounted = vi.fn();
-  const frame = wrap(
+  const frame = layer(
     button,
-    (props) => {
+    (_props, Original) => {
       onCleanup(frameUnmounted);
-      return <aside>{props.children}</aside>;
+      return (
+        <aside>
+          <Original />
+        </aside>
+      );
     },
     { when: (props) => props.label === "Send" },
   );
   const { root, scope } = mount(
     [
-      layer("Frame", frame, "wrap", button, 1),
-      layer("Details", details("Details", detailsUnmounted), "wrap", button, 0, "details"),
+      contribution("Frame", frame, "layer", button, 1),
+      contribution("Details", details("Details", detailsUnmounted), "layer", button, 0, "details"),
     ],
     label,
   );
   const trigger = await scope.findByRole("button", { name: "Details" });
-  expect(root.querySelector("aside button")?.textContent).toBe("Send");
+  const original = scope.getByRole("button", { name: "Send" });
+  expect(root.querySelector("aside")?.contains(original)).toBe(true);
   trigger.click();
   flush();
   expect(scope.getByText("Details for Send")).toBeTruthy();
@@ -71,6 +76,7 @@ test("a wrapper keeps its open state when another wrapper's condition flips", as
   setLabel("Post");
   flush();
   expect(root.querySelector("aside")).toBeNull();
+  expect(scope.getByRole("button", { name: "Post" })).toBe(original);
   expect(scope.getByText("Details for Post")).toBeTruthy();
   expect(frameUnmounted).toHaveBeenCalledTimes(1);
   expect(detailsUnmounted).not.toHaveBeenCalled();
@@ -87,11 +93,11 @@ test("an open wrapper survives replacing and restoring the element inside it", a
   const [replacing, setReplacing] = createSignal(false);
   const unmounted = vi.fn();
   const lifecycle = vi.fn();
-  const replacement = replace(button, () => <button type="button">Replacement</button>, { when: replacing });
+  const replacement = layer(button, () => <button type="button">Replacement</button>, { when: replacing });
   const { scope } = mount(
     [
-      layer("Details", details("Details", unmounted), "wrap", button),
-      layer("Replacement", replacement, "replace", button),
+      contribution("Details", details("Details", unmounted), "layer", button),
+      contribution("Replacement", replacement, "layer", button),
     ],
     undefined,
     lifecycle,
@@ -123,11 +129,19 @@ test("both neighboring wrappers stay open when the middle wrapper's condition fl
   const [framed, setFramed] = createSignal(true);
   const outerUnmounted = vi.fn();
   const innerUnmounted = vi.fn();
-  const frame = wrap(button, (props) => <aside>{props.children}</aside>, { when: framed });
+  const frame = layer(
+    button,
+    (_props, Original) => (
+      <aside>
+        <Original />
+      </aside>
+    ),
+    { when: framed },
+  );
   const { root, scope } = mount([
-    layer("Outer", details("Outer", outerUnmounted), "wrap", button, 0),
-    layer("Frame", frame, "wrap", button, 1),
-    layer("Inner", details("Inner", innerUnmounted), "wrap", button, 2),
+    contribution("Outer", details("Outer", outerUnmounted), "layer", button, 0),
+    contribution("Frame", frame, "layer", button, 1),
+    contribution("Inner", details("Inner", innerUnmounted), "layer", button, 2),
   ]);
   const outer = await scope.findByRole("button", { name: "Outer" });
   const inner = scope.getByRole("button", { name: "Inner" });
@@ -150,4 +164,27 @@ test("both neighboring wrappers stay open when the middle wrapper's condition fl
   expect(scope.getByText("Inner for Send")).toBeTruthy();
   expect(outerUnmounted).not.toHaveBeenCalled();
   expect(innerUnmounted).not.toHaveBeenCalled();
+});
+
+test("a reactive branch can unload and remount the original", async () => {
+  const [active, setActive] = createSignal(false);
+  const lifecycle = vi.fn();
+  const stop = layer(button, (_, Original) => (active() ? <b>Stop</b> : <Original />));
+  const { scope } = mount([contribution("Stop", stop, "layer", button)], undefined, lifecycle);
+  const original = scope.getByRole("button", { name: "Send" });
+  setActive(true);
+  await scope.findByText("Stop");
+  lifecycle.mockClear();
+
+  setActive(false);
+  flush();
+  const restored = scope.getByRole("button", { name: "Send" });
+  expect(restored).not.toBe(original);
+  expect(lifecycle.mock.calls).toEqual([["send mounted"]]);
+
+  setActive(true);
+  flush();
+  expect(scope.getByText("Stop")).toBeTruthy();
+  expect(scope.queryByRole("button", { name: "Send" })).toBeNull();
+  expect(lifecycle.mock.calls).toEqual([["send mounted"], ["send unloaded"]]);
 });

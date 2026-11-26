@@ -106,7 +106,10 @@ test("another plugin adds to chat's composer, message, empty thread, list row an
   );
   try {
     // The empty thread's heading is replaced; its folder choices stay.
-    await waitFor(() => screen.getByRole("heading", { name: "What should Probe work on?" }));
+    const heading = await screen.findByRole("heading", { name: "What should Probe work on?" });
+    expect(heading.tagName).toBe("H2");
+    expect(heading.getAttribute("data-part")).toBe("heading");
+    expect(heading.className).toBe("text-read font-semibold text-ink");
     expect(screen.queryByText("Start a conversation")).toBeNull();
     expect(screen.getByRole("radio", { name: "No folder" })).toBeTruthy();
 

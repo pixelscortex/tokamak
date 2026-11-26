@@ -8,8 +8,8 @@ export {
   prepend,
   append,
   hide,
-  wrapPart as wrap,
-  replacePart as replace,
+  layer,
+  type OriginalElement,
   type ComponentPart,
   type ScreenFind,
   type ComponentActionOptions,
@@ -48,7 +48,6 @@ type CatalogExtension = ExtensionContribution & {
   ownerVersion: number;
   resolved?: ScreenElement;
 };
-const actionTarget = (c: CatalogExtension) => c.resolved?.target ?? String(c.options.target);
 
 const partOwner = ({ options }: ExtensionContribution) =>
   typeof options.owner === "string" ? options.owner : String(options.target).split(".")[0]!;
@@ -85,7 +84,17 @@ export function ExtensionProvider(props: {
     alerts();
   }
 
+  const layerWarnings = new Map<string, Set<string>>();
   const registry: PartRegistry = {
+    warn(key, message) {
+      const [kind, plugin, target] = key;
+      let warnings = layerWarnings.get(plugin);
+      if (!warnings) layerWarnings.set(plugin, (warnings = new Set()));
+      const id = JSON.stringify([kind, target]);
+      if (warnings.has(id)) return;
+      warnings.add(id);
+      console.warn(message);
+    },
     mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
     read: (target) => slot(target)[0],
     observe(target, observer) {
@@ -120,6 +129,7 @@ export function ExtensionProvider(props: {
     for (const target of targets.get(id) ?? [])
       update(target, (items) => items.filter((c) => c.plugin !== id));
     targets.delete(id);
+    layerWarnings.delete(id);
 
     // A reloaded add-on reports its stale targets again; a removed one has none.
     let forgotten = false;
@@ -147,8 +157,7 @@ export function ExtensionProvider(props: {
     for (const plugin of plugins.values()) plugin.stop();
     plugins.clear();
   });
-  // Resolve the catalog before arbitrating replacements: different historical
-  // addresses can now point to one element in the current owner.
+  // Resolve historical addresses against the current owner before loading additions.
   let generation = 0;
   onCleanup(() => generation++);
   createEffect(
@@ -215,21 +224,18 @@ export function ExtensionProvider(props: {
   );
 
   function apply(contributions: CatalogExtension[], catalog: Map<string, string>, rejected: string[]) {
-    const { accepted, refused } = resolveReplacements(contributions);
-    for (const message of rejected) refused.add(message);
-    for (const message of refused) if (!reported.has(message)) console.warn(message);
-    const changed = refused.size !== reported.size || [...refused].some((message) => !reported.has(message));
-    reported = refused;
+    const skipped = new Set(rejected);
+    for (const message of skipped) if (!reported.has(message)) console.warn(message);
+    const changed = skipped.size !== reported.size || [...skipped].some((message) => !reported.has(message));
+    reported = skipped;
     if (changed) alerts();
 
     const groups = new Map<string, CatalogExtension[]>();
-    for (const c of accepted) {
+    for (const c of contributions) {
       const group = groups.get(c.plugin) ?? [];
       group.push(c);
       groups.set(c.plugin, group);
     }
-    // A competing replacement can change the accepted exports without changing
-    // this plugin's version. Include the accepted catalog entries as well.
     const signatures = new Map([...groups].map(([id, group]) => [id, JSON.stringify(group)]));
     for (const [id, plugin] of plugins) {
       if (plugin.signature !== signatures.get(id)) {
@@ -279,48 +285,26 @@ export function ExtensionProvider(props: {
 }
 
 function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAction {
+  let warned = false;
   return {
     id: c.id,
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
+    installOrder: c.installOrder,
     action: c.resolved ? { ...action, target: c.resolved.target } : action,
     fingerprint: c.resolved ? c.resolved.fingerprint : screenTarget(c.options).fingerprint,
     enabled(props) {
       try {
         return action.when?.(props) ?? true;
       } catch (cause) {
-        console.warn(`Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
+        if (!warned) console.warn(`Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
+        warned = componentActionKind(action) === "layer";
         return false;
       }
     },
   };
 }
 
-function isReplacement(c: ExtensionContribution) {
-  return c.kind === "component-action" && c.options.action === "replace";
-}
-
-function resolveReplacements(contributions: CatalogExtension[]) {
-  const winners = new Map<string, CatalogExtension>();
-  const refused = new Set<string>();
-  // Resolve from the catalog, before any module loads or when accessors run.
-  for (const c of contributions) {
-    if (!isReplacement(c)) continue;
-    const target = actionTarget(c);
-    const first = winners.get(target);
-    if (!first || (c.installOrder ?? Infinity) < (first.installOrder ?? Infinity)) winners.set(target, c);
-  }
-  const accepted = contributions.filter((c) => {
-    if (!isReplacement(c)) return true;
-    const winner = winners.get(actionTarget(c))!;
-    if (winner === c) return true;
-    refused.add(
-      `Replacement from ${c.plugin} (${c.id}) refused for ${actionTarget(c)}: ${winner.plugin} (${winner.id}) installed first`,
-    );
-    return false;
-  });
-  return { accepted, refused };
-}
 /** Registrations belong to the calling plugin owner, even when its view leaves. */
 export interface Shortcuts {
   /**
@@ -347,7 +331,11 @@ export {
   type RegionName,
 } from "./regions";
 
-export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";
+export {
+  renderPart as __renderPart,
+  renderNativePart as __renderNativePart,
+  renderNativeText as __renderNativeText,
+} from "./component-parts";
 
 const authoredElements = new WeakMap<object, () => ReturnType<typeof screenElements>>();
 

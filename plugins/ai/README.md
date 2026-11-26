@@ -52,7 +52,7 @@ publishes and imports no agent plugin: agents (`claude`, `codex`, the test
   a card, then usage, small ("12.4k in · 1.1k out · $0.04").
 - All drawn from one live `turns:replies({ threadId })` per thread, shared by
   every reply in the window (`lib/replies.ts`), through
-  `replace(chat.find("header"))`, `before(chat.find("body"))` and
+  `layer(chat.find("header"))`, `before(chat.find("body"))` and
   `after(chat.find("body"))`, each `when` the message is an agent's reply.
   What a folded part opens to (`turns:steps`, `turns:thinking`,
   `turns:helper`) is read only while it is open.

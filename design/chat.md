@@ -31,7 +31,7 @@ These are the searches used by the starter add-ons:
 | `chat.find("top")`                     | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
 | `chat.find("box")`                     | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
 | `chat.find("SendButton")`              | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
-| `chat.find("heading")`                 | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
+| `chat.find("heading")`                 | `ui/empty.tsx`         | Agent heading when an agent is available; chat supplies the default.                             |
 | `chat.find("header")`                  | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
 | `chat.find("body")`                    | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
 | `chat.find("footer")`                  | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
@@ -71,7 +71,7 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - `Message` spacing (`gap-2`, `pb-12`) or the header height (`h-5`): `ai`
   reply header (also `h-5`), `ai` cards (`pt-2`, relies on the 8 px gap),
   `code` change card and notices in `footer`.
-- The body's text style or the author line (avatar, name): `ai` replaces the
+- The body's text style or the author line (avatar, name): `ai` layers over the
   body of a steered reply and draws each steer as the person's message with
   the same classes (`plugins/ai/src/client/ui/turn-steers.tsx`).
 - `ThreadRow` box (`min-h-8`, `px-row`, `py-1`) or the lead lane (`w-4`):
@@ -82,7 +82,7 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - The header layout (`gap-2`, chip after the title, `flex-1` before the menu):
   `code` branch chip (`ms-2`), layout control and review panel mount.
 - The empty state heading style (`text-read font-semibold`): `ai`
-  `AgentHeading` repeats it and must match.
+  changes the text through `Original` and inherits the heading markup and style.
 - Removing or renaming any part: every action on it in `ai` and `code`
   breaks at build time; update `design/ai.md` and `design/code.md`.
 

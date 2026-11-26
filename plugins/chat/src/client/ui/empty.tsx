@@ -17,7 +17,7 @@ export interface EmptyProps {
 
 /**
  * The new thread before its first Send (Paper "Chat · empty thread"): an
- * `icon`, a `heading` other plugins may replace, and the `folders` to work in.
+ * `icon`, a `heading` other plugins may layer over, and the `folders` to work in.
  * The composer sits below it on the page.
  */
 export const Empty = (props: EmptyProps) => (

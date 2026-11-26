@@ -247,10 +247,9 @@ test("the SDK has no component marking helper and actions require a part", async
       root,
       "old-component",
       `
-import { component, replace, wrap } from "@tokamak/sdk/client";
+import { component, layer, replace, wrap } from "@tokamak/sdk/client";
 const Card = () => <div />;
-export const oldWrap = wrap(Card, ({ children }) => children);
-export const oldReplace = replace(Card, () => null);
+export const badTarget = layer(Card, () => null);
 `,
     );
     const check = spawnSync(
@@ -260,8 +259,8 @@ export const oldReplace = replace(Card, () => null);
     );
     const diagnostics = check.stdout + check.stderr;
     expect(check.status, diagnostics).not.toBe(0);
-    expect(diagnostics).toContain("has no exported member 'component'");
-    for (const line of [4, 5])
-      expect(diagnostics).toMatch(new RegExp(`api\\.tsx\\(${line},\\d+\\): error[^\\n]+Part`));
+    for (const helper of ["component", "replace", "wrap"])
+      expect(diagnostics).toContain(`has no exported member '${helper}'`);
+    expect(diagnostics).toMatch(/api\.tsx\(4,\d+\): error[^\n]+Part/);
   });
 }, 30_000);

@@ -22,12 +22,12 @@ export function clientSurface(
   pluginId: () => string,
   placement: (id: string) => SourceEdit[] = () => [],
   catalog?: string,
-): Plugin {
+): Plugin[] {
   let directory: string;
   let program: ts.Program;
   let parts: ReturnType<typeof componentParts>;
   let windowState: ReturnType<typeof windowStateTransform>;
-  return {
+  const surface: Plugin = {
     name: "tokamak-client-surface",
     enforce: "pre",
     generateBundle: {
@@ -90,4 +90,67 @@ export function clientSurface(
         };
     },
   };
+  return [surface, nativeText()];
+}
+
+function nativeText(): Plugin {
+  return {
+    name: "tokamak-native-text",
+    enforce: "post",
+    transform(code, id) {
+      if (!code.includes("__tokamakScalarText(")) return;
+      // Solid already located the parent in the cloned template. Change the
+      // generated scalar insert so its effect owns a movable Text node.
+      const source = ts.createSourceFile(id, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      const inserts = new Set<string>();
+      for (const statement of source.statements) {
+        if (
+          !ts.isImportDeclaration(statement) ||
+          statement.moduleSpecifier.getText(source).slice(1, -1) !== "@solidjs/web"
+        )
+          continue;
+        const imports = statement.importClause?.namedBindings;
+        if (imports && ts.isNamedImports(imports))
+          for (const binding of imports.elements)
+            if ((binding.propertyName ?? binding.name).text === "insert") inserts.add(binding.name.text);
+      }
+      const output = new MagicString(code);
+      let uncompiled = false;
+      function visit(node: ts.Node) {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+          const name = node.expression.text;
+          if (name === "__tokamakScalarText") uncompiled = true;
+          const body = inserts.has(name) && scalarTextBinding(node.arguments[1]);
+          if (body) {
+            const value = body.arguments[0]!;
+            output.overwrite(node.expression.getStart(source), node.expression.end, "__tokamakText");
+            output.overwrite(body.getStart(source), value.getStart(source), "(");
+            output.overwrite(value.end, body.end, ")");
+            visit(value);
+            return;
+          }
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+      if (uncompiled) throw new Error(`Solid did not compile a native text binding in ${id}`);
+      if (!output.hasChanged()) return;
+      output.prepend('import { __renderNativeText as __tokamakText } from "@tokamak/sdk/client";\n');
+      return { code: output.toString(), map: output.generateMap({ source: id, hires: true }) };
+    },
+  };
+}
+
+function scalarTextBinding(read: ts.Expression | undefined) {
+  if (!read || !ts.isArrowFunction(read)) return;
+  const first = ts.isBlock(read.body) && read.body.statements.length === 1 && read.body.statements[0];
+  let body = ts.isBlock(read.body) ? first && ts.isReturnStatement(first) && first.expression : read.body;
+  while (body && ts.isParenthesizedExpression(body)) body = body.expression;
+  if (
+    body &&
+    ts.isCallExpression(body) &&
+    ts.isIdentifier(body.expression) &&
+    body.expression.text === "__tokamakScalarText"
+  )
+    return body;
 }

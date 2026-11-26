@@ -52,7 +52,13 @@ generated references in `src/server/_generated/` and component declarations in
   `find("button", { aria: { label: "Stop" } })`. They match only static string
   attributes; `nth` counts the remaining matches. Both builds warn and ask
   for `data-part` when a search reaches a plain tag with no static name.
-  The actions are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
+  The actions are `before`, `after`, `prepend`, `append`, `layer`, and `hide`.
+  Use `layer(target, (props, Original) => <Original>New text</Original>)` to change
+  contents while keeping the owner's markup. `<Original />` draws the next layer
+  (or the owner); draw it at most once. Use `<Original.Children />` once inside
+  `<Original>` to keep the children supplied by an outer layer or the owner's
+  children with inside additions. If no layer draws the original element, it
+  unloads. Layers stack by install order; `before` and `after` stay outside the stack.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.
   Use `state` for window values, `derived` for computed values, and

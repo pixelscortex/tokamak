@@ -74,7 +74,7 @@ exported for clients starting a staged message.
 
 ```tsx
 import { onCleanup } from "solid-js";
-import { after, append, prepend, replace } from "@tokamak/sdk/client";
+import { after, append, prepend, layer } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
 export const Row = after(chat.find("box"), AgentRow);
@@ -84,7 +84,9 @@ export const Question = prepend(chat.find("top"), PermissionCard, {
 export const Card = append(chat.find("footer"), ChangeCard, {
   when: (m) => !m.next || m.next.role === "user",
 });
-export const Heading = replace(chat.find("heading"), AgentHeading);
+export const Heading = layer(chat.find("heading"), (_, Original) => (
+  <Original>What should we work on?</Original>
+));
 export const Status = append(chat.find("status"), StatusIcon);
 export const Branch = after(chat.find("title", { in: "Header" }), BranchChip);
 

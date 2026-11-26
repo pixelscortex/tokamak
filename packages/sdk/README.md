@@ -672,9 +672,35 @@ import * as chat from "plugin:chat/client";
 export const Cost = after(chat.find("box"), (props) => <small>{props.draft.length} characters</small>);
 ```
 
-Use `before` and `after` for siblings, `prepend` and `append` for children,
-`wrap` to surround an element, `replace` to substitute another element, or
-`hide` to remove it. A placement and its optional live `when` function
+Use `before` and `after` for siblings, `prepend` and `append` for children, and
+`hide` to remove an element.
+
+```tsx
+import { layer } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Heading = layer(chat.find("heading"), (_, Original) => (
+  <Original>What should we work on?</Original>
+));
+```
+
+Use `layer(target, (props, Original) => …)` to take over the element.
+Render `<Original />` to draw the next layer down, or the owner's element
+at the bottom. Pass children to change the contents without changing the
+element or its attributes. Put `<Original.Children />` inside `<Original>` to
+draw the contents that would appear without this layer: the children supplied
+by an outer layer, or the owner's contents with other plugins' `prepend` and
+`append`. Draw `Original` and `Original.Children` at most once per layer.
+If no layer draws `Original`, the owner's element is unloaded. While a layer
+supplies the contents, the owner's plain tags inside keep their DOM nodes,
+but components inside mount again each time the contents change hands, so
+their own state starts over. A layer with a
+false `when` passes through.
+Layers run outermost first by plugin install order, then `order` (default
+0), plugin ID, and export name. `before` and `after` stay outside all layers;
+`hide` also removes those sibling additions.
+
+A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row
 as `$row.parent`. Use a literal name. Narrow it with `{ in: "Header" }` or

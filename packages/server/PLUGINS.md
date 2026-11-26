@@ -72,7 +72,7 @@ plugin IDs in installation order. Plugins with no history are ordered after
 their dependencies, choosing the lowest plugin ID when more than one can come
 next. Later scans preserve recorded order, remove absent plugins, and append
 new IDs. The catalog exposes each plugin's zero-based position as `installOrder`.
-The window uses it to choose the first installed replacement for an element.
+The window uses it to stack layers on an element, with the first installed plugin outermost.
 
 The catalog reserves `tokamak.host` for core metadata and `auth` for caller
 identity. A plugin manifest cannot use either ID.
