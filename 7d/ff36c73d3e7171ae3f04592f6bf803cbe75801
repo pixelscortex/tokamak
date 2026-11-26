@@ -1,0 +1,19 @@
+app/scripts/starter-plugins.ts
+  s_262cd94f783a6b::t_195aacd5e51093 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7dff36c73d3e7171ae3f04592f6bf803cbe75801",
+  "prompts": {},
+  "sessions": {
+    "s_262cd94f783a6b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21336-9ced-7ed2-aa29-fc6cf65c996d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
