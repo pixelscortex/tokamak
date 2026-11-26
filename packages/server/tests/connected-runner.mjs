@@ -262,11 +262,13 @@ try {
   await assertRefused(wrongFile, /refused the device key/i);
 
   const { child: machine, logs: machineLogs } = startMachine(keyFile, proxyAddress);
+  assert.ok((await presence(true)).lastSeen);
+  // Read the arguments once the Runner is online: right after the spawn, Linux
+  // can still show the parent's arguments before the exec.
   const ps = Bun.spawnSync(["ps", "-p", String(machine.pid), "-o", "args="]);
   const args = ps.stdout.toString();
-  assert.ok(args.includes("--key-file"));
+  assert.ok(args.includes("--key-file"), `Runner arguments: ${args}`);
   assert.ok(!args.includes(key), "The persisted key is absent from process arguments");
-  assert.ok((await presence(true)).lastSeen);
 
   let launches = 0;
   const window = await connect(address, {
