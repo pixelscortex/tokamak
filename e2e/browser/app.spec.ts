@@ -7,8 +7,7 @@ const connected = (page: Page) =>
 const rail = (page: Page) => page.getByRole("navigation", { name: "Views" });
 const tabs = (page: Page) => page.getByRole("navigation", { name: "Open pages" });
 
-// Chat is installed too and, being first in the catalog, owns "/". These tests open
-// the fixture by its address so chat never mounts (it creates a thread on first use).
+// Use the fixture's explicit route so the tests exercise the same view in either install mode.
 const fixtureHome = "/p/integration-fixture";
 const windowStateRoute = `${fixtureHome}/window-state`;
 

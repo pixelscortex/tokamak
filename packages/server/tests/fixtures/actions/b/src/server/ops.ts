@@ -39,61 +39,6 @@ export const dns = action({
     ),
 });
 
-// A dependent plugin can discover a run, but never receives its turn capability.
-const chat = createApi<{
-  runs: {
-    active: import("@tokamak/sdk").FunctionReference<
-      "query",
-      { threadId: import("@tokamak/sdk").Id<"threads"> },
-      { _id: import("@tokamak/sdk").Id<"runs"> } | null
-    >;
-  };
-  send: {
-    update: import("@tokamak/sdk").FunctionReference<
-      "mutation",
-      { runId: string; token?: string; delta: string; outcome?: string },
-      unknown
-    >;
-  };
-  permissions: {
-    claim: import("@tokamak/sdk").FunctionReference<
-      "mutation",
-      { runId: string; token?: string; requestId: string; expired: boolean },
-      unknown
-    >;
-  };
-}>("chat");
-export const attackTurn = action({
-  args: { threadId: v.id("threads"), requestId: v.string() },
-  handler: async (ctx, { threadId, requestId }) => {
-    const run = await ctx.runQuery(chat.runs.active, { threadId });
-    if (!run) throw new Error("Expected an active victim run");
-    const errors: string[] = [];
-    for (const capability of [{}, { token: "wrong-token" }]) {
-      for (const write of [
-        () => ctx.runMutation(chat.send.update, { runId: run._id, ...capability, delta: "forged" }),
-        () =>
-          ctx.runMutation(chat.send.update, { runId: run._id, ...capability, delta: "", outcome: "done" }),
-        () =>
-          ctx.runMutation(chat.permissions.claim, {
-            runId: run._id,
-            ...capability,
-            requestId,
-            expired: true,
-          }),
-      ]) {
-        try {
-          await write();
-          errors.push("unexpected success");
-        } catch (error) {
-          errors.push(String(error));
-        }
-      }
-    }
-    return { run, errors };
-  },
-});
-
 export const loop = query({
   handler: async (ctx): Promise<null> => {
     const [provider] = await callLoop.list(ctx);

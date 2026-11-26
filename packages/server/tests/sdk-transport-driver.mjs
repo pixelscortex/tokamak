@@ -1,4 +1,4 @@
-import { installBasicAuth, signInMember } from "../../../e2e/fake-agent/harness.mjs";
+import { installSignInFixture, signInMember } from "./sign-in-fixture.mjs";
 // TKM7 end-to-end driver: identical public SDK calls over native messages and
 // real headless WebSockets. Native stdin/stdout is only a test host bridge to
 // Rust Session; it does not emulate the database, dispatcher, or SDK transport.
@@ -259,7 +259,7 @@ export default definePlugin({ id: "internal-test", version: "1.0.0" });`,
       assert.equal(await within(build.exited, `${id} fixture build`), 0);
       await cp(join(source, "dist"), join(root, "plugins", id), { recursive: true });
     }
-    await installBasicAuth(join(root, "plugins"));
+    await installSignInFixture(join(root, "plugins"));
     const web = join(root, "web");
     await mkdir(web);
     await writeFile(join(web, "index.html"), "Fixture");
