@@ -277,7 +277,7 @@ impl Upstream {
             {
                 pending.remove(&id);
             }
-            return Err(error.to_string().into());
+            return Err(error.to_string());
         }
         receive.await.map_err(|_| "HTTP action input closed".into())
     }

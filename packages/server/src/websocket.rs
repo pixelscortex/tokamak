@@ -213,22 +213,7 @@ async fn serve_inner(
     let (runner_control, worker) = runner.map_or((None, None), |(control, worker)| {
         (Some(Arc::from(control)), Some(worker))
     });
-    if web.is_some()
-        && access
-            .as_ref()
-            .is_none_or(|access| access.token.chars().count() < 32)
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Hosted mode requires an access token of at least 32 characters",
-        ));
-    }
-    if !listener.local_addr()?.ip().is_loopback() && (web.is_none() || access.is_none()) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "unauthenticated POC must bind loopback",
-        ));
-    }
+    let listen = check_listener_address(&listener, access.as_ref(), web.is_some())?;
     // Revocation is persisted before cleanup. Retry it before serving clients
     // in case the previous process stopped between those steps.
     server
@@ -267,7 +252,7 @@ async fn serve_inner(
         stopping.clone(),
         web,
         public_origin,
-        listener.local_addr()?,
+        listen,
     )?;
     // Catch-all plugin paths belong in a fallback router so Axum can keep
     // the core asset and reload paths registered independently.
@@ -301,6 +286,27 @@ async fn serve_inner(
         flush_last_seen(identities).await;
     }
     result
+}
+
+fn check_listener_address(
+    listener: &TcpListener,
+    access: Option<&LocalAccess>,
+    hosted: bool,
+) -> io::Result<SocketAddr> {
+    if hosted && access.is_none_or(|access| access.token.chars().count() < 32) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Hosted mode requires an access token of at least 32 characters",
+        ));
+    }
+    let listen = listener.local_addr()?;
+    if !listen.ip().is_loopback() && (!hosted || access.is_none()) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "unauthenticated POC must bind loopback",
+        ));
+    }
+    Ok(listen)
 }
 
 fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
