@@ -21,6 +21,7 @@ for await (const line of createInterface({ input: process.stdin })) {
   if (method === "initialize") reply({});
   else if (method === "initialized") continue;
   else if (method === "account/read") reply({ account: null, requiresOpenaiAuth: true });
+  else if (method === "thread/inject_items") reply({});
   else if (method === "thread/start" || method === "thread/resume") {
     assert.ok(config.includes('model_provider="tokamak_profile"'));
     assert.match(provider, /wire_api="responses", requires_openai_auth=false, supports_websockets=false/);
