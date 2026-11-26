@@ -11,6 +11,7 @@
     },
     "./client": "./client.tsx",
     "./window-state-host": "./window-state-host.ts",
+    "./unstable": "./src/unstable.ts",
     "./agent-turn": "./src/agent-turn.ts",
     "./internal/contracts": "./src/internal/contracts.ts"
   },
