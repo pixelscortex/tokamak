@@ -1,0 +1,60 @@
+packages/sdk/tools/http-actions.mjs
+  s_0669b2ba766ce6::t_3837aa3eac6372 1,9-10,34
+packages/host/src/http_action.js
+  s_0669b2ba766ce6::t_3837aa3eac6372 48
+  s_0669b2ba766ce6::t_11df4db336b99c 2,40-47
+packages/server/src/http_actions.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 20-23,28,32-33,35,269-274,306,374,401-405,407,414-417,530-533,542-576,584-585,606-619,623-633,638
+  s_0669b2ba766ce6::t_2149c5125dcae6 34,406
+packages/worker/src/lib.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 49-54
+packages/server/src/service/http_actions.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 2,9,21,23-32,34-35
+  s_0669b2ba766ce6::t_0eb0f5837e42f0 33
+packages/server/src/host/process_frames.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 64
+packages/server/src/actions.rs
+  s_0669b2ba766ce6::t_3837aa3eac6372 30-31,566-582,763-765,776,778-780,832-834,845,847-852
+  s_0669b2ba766ce6::t_7079dd17c9581a 554,766,777,835,846
+packages/server/src/environment.rs
+  s_0669b2ba766ce6::t_3837aa3eac6372 62-66,68
+  s_0669b2ba766ce6::t_4ad23cc1f37f90 67
+packages/server/src/identity/call.rs
+  s_0669b2ba766ce6::t_3837aa3eac6372 30,134-155
+  s_0669b2ba766ce6::t_4df106a6001e39 156
+packages/server/src/service/action_coordination.rs
+  s_0669b2ba766ce6::t_3837aa3eac6372 291-294,312,320-321
+  s_0669b2ba766ce6::t_457135fd64a292 283,290,319
+packages/sdk/src/functions.ts
+  s_0669b2ba766ce6::t_0cef3c38ec8438 319-329,342
+packages/sdk/src/http-action.ts
+  s_0669b2ba766ce6::t_0cef3c38ec8438 1,43-45
+  s_0669b2ba766ce6::t_3837aa3eac6372 2-3,10-12,34-42,46-49
+  s_0669b2ba766ce6::t_51a902a9e1dd61 50
+packages/server/src/host.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 390
+  s_0669b2ba766ce6::t_3837aa3eac6372 338
+packages/server/src/service/mod.rs
+  s_0669b2ba766ce6::t_ecf0ee69f6c1fb 226
+packages/server/src/actions/http.rs
+  s_0669b2ba766ce6::t_3837aa3eac6372 1-48,50-62,64,66-73,75-105
+  s_0669b2ba766ce6::t_51f4c658ff8cdc 49,63,65,74
+packages/host/src/http_action.rs
+  s_0669b2ba766ce6::t_764bfa29cb4222 4,9-12,21-25,34-35,60,92,104-109,121,132,141,164,168-179,187-188,200-205,211-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a9d1f3847e727eed30f61afd68054adb9a5b006",
+  "prompts": {},
+  "sessions": {
+    "s_0669b2ba766ce6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-4307-74b3-958e-15d99f1d9472",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
