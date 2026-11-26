@@ -1,0 +1,19 @@
+packages/sdk/tests/web/component-actions.test.tsx
+  s_90a7b31543204c::t_cfba73eb9929dc 3,5-14,835-848,887-888,890-903,905-925,927-939,941-985,987-1001
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1ea10fd4d01019ec1d87e40fbe8e361172a95ff",
+  "prompts": {},
+  "sessions": {
+    "s_90a7b31543204c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218ea-3b57-7d50-8381-f5a5cb8235ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
