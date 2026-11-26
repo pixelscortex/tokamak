@@ -5,18 +5,17 @@ pub(super) const TRANSACTIONS_MAP: &str = "transactions.js.map";
 
 impl Artifact {
     pub fn read(directory: &Path) -> Result<Self, Error> {
-        Self::read_reusing(directory, None)
+        Self::read_reusing(directory, Manifest::read(directory)?, None)
     }
 
     pub(super) fn read_reusing(
         directory: &Path,
+        manifest: Manifest,
         previous: Option<&Artifact>,
     ) -> Result<Self, Error> {
         let root = directory
             .canonicalize()
             .map_err(|e| invalid(e.to_string()))?;
-
-        let manifest = Manifest::read(&root)?;
 
         let names = manifest.validate()?;
         let transactions = [TRANSACTIONS, TRANSACTIONS_MAP];

@@ -1214,8 +1214,8 @@ fn startup_skips_required_dependents_before_applying_their_schemas_and_grants() 
         let log = local_startup_log(&installation).await;
         for line in [
             "Skipping plugin alpha:",
-            "Skipping plugin beta: requires alpha, which did not load",
-            "Skipping plugin delta: requires beta, which did not load",
+            "Skipping plugin beta: needs alpha, which was skipped",
+            "Skipping plugin delta: needs beta, which was skipped",
         ] {
             assert!(log.contains(line), "{log}");
         }
@@ -1277,7 +1277,7 @@ fn reload_isolates_skipped_plugins_and_recovers_them_after_row_repair() {
         );
         assert_eq!(
             catalog["skipped"]["dependent"],
-            "requires alpha, which did not load"
+            "needs alpha, which was skipped"
         );
 
         repair
