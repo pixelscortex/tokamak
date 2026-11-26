@@ -1,0 +1,21 @@
+install.sh
+  s_85abbd30b86e10::t_287c946e5b9c3a 1-123
+README.md
+  s_85abbd30b86e10::t_ed4c881af45466 33-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d81fbc8f348649d2a019ba83d498eacc74a1284b",
+  "prompts": {},
+  "sessions": {
+    "s_85abbd30b86e10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7982de7e-1cf0-41f6-b2b5-fc39a5890534",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
