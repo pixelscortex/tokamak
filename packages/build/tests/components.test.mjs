@@ -209,6 +209,33 @@ test("find filters by static type, href, role and ARIA before counting positions
   });
 }, 30_000);
 
+test("a filter matches a quoted literal in braces, and never a value a later spread can replace", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      export const Form = (props: { rest: object }) => (
+        <form><input type={"file"} /><input type="text" {...props.rest} /><input type="text" /></form>
+      );
+    `,
+    );
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        'export const File = after(owner.find("input", { type: "file" }), () => null);' +
+        'export const Text = after(owner.find("input", { type: "text" }), () => null);',
+    );
+    built(addon);
+    const targets = (await manifest(addon)).plugin.contributes["component-action"].map(
+      (entry) => entry.target,
+    );
+    expect(targets).toEqual(["owner.Form.form.input", "owner.Form.form.input$3"]);
+  });
+}, 30_000);
+
 test("wrong names fail both TypeScript and the builder; ambiguous and dynamic searches fail the builder", async () => {
   await scratch(async (root) => {
     built(await source(root, "owner", screen));

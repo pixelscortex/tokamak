@@ -49,15 +49,19 @@ function child(parent: Tree, name: string, node: ts.Node, fixed = false) {
 
 function tagIdentity(opening: ts.JsxOpeningLikeElement, part: Part) {
   // Only what says which element this is; anything else is an ordinary edit.
-  const attributes = opening.attributes.properties
-    .flatMap((attribute) => {
+  const properties = opening.attributes.properties;
+  const lastSpread = properties.map(ts.isJsxSpreadAttribute).lastIndexOf(true);
+  const attributes = properties
+    .flatMap((attribute, index) => {
       if (!ts.isJsxAttribute(attribute)) return [];
       const name = attribute.name.getText();
       const value = attribute.initializer;
       const expression = value && ts.isJsxExpression(value) ? value.expression : value;
       const text = expression && ts.isStringLiteralLike(expression) ? expression.text : null;
       if (isSearchAttribute(name) || isAriaAttribute(name)) {
-        if (value && ts.isStringLiteral(value)) (part.attributes ??= []).push(name, value.text);
+        // A later spread can replace the value when the screen runs, so only
+        // a literal that nothing can override is safe to search by.
+        if (text !== null && index > lastSpread) (part.attributes ??= []).push(name, text);
         else (part.computed ??= []).push(name);
       }
       if (isSearchAttribute(name) || name === "name" || name === "for") return [[name, text]];

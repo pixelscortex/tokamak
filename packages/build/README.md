@@ -135,7 +135,10 @@ You can also narrow a name by static `type`, `href`, `role`, and `aria-*`
 attributes. Write ARIA keys without the prefix, for example
 `find("button", { aria: { label: "Stop" } })`. The typed API offers the
 attribute filters and values the owner writes for that name. Computed JSX
-values, class, style, data attributes and text cannot match a filter.
+values, class, style, data attributes and text cannot match a filter, and
+neither can an attribute written before a spread, which can replace it. A
+value is matched as written in the source: `aria-label="Save &amp; quit"` is
+found with `"Save &amp; quit"`.
 
 Filters must all match. If the search is still ambiguous, use `nth` to select
 a 1-based position among the remaining matches in source order. The name
