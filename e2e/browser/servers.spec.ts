@@ -4,7 +4,13 @@ import { test, expect, type Page } from "@playwright/test";
 const footer = (page: Page) => page.getByRole("status", { name: "Connection status" });
 const flow = (page: Page) => page.getByRole("region", { name: "Add a server" });
 
-test("add a server, switch to it, chat there and remove it", async ({ page }) => {
+async function createFixtureThread(page: Page, title: string) {
+  await page.getByRole("textbox", { name: "New thread title" }).fill(title);
+  await page.getByRole("button", { name: "New fixture thread" }).click();
+  await expect(page.getByRole("listbox", { name: "Fixture threads" })).toContainText(title);
+}
+
+test("add a server, switch to it, create a thread there and remove it", async ({ page }) => {
   await page.goto("/p/integration-fixture");
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
 
@@ -39,37 +45,26 @@ test("add a server, switch to it, chat there and remove it", async ({ page }) =>
   await expect(footer(page)).toHaveText("127.0.0.1:43124");
   await page
     .getByRole("navigation", { name: "Views" })
-    .getByRole("link", { name: "Chat", exact: true })
+    .getByRole("link", { name: "FixtureView", exact: true })
     .click();
-  const editor = page.getByRole("textbox", { name: "Message" });
-  const text = `A message on the shared server ${crypto.randomUUID().slice(0, 8)}`;
-  await editor.fill(text);
-  await editor.press("Enter");
-  await expect(
-    page.getByRole("log", { name: "Conversation" }).getByText(text, { exact: true }),
-  ).toBeVisible();
+  const title = `A thread on the shared server ${crypto.randomUUID()}`;
+  await createFixtureThread(page, title);
   await page.getByRole("button", { name: /^Server: 127\.0\.0\.1:43124/ }).click();
   await page.getByRole("menuitem", { name: "Remove this server" }).click();
   await expect(footer(page)).toHaveText("127.0.0.1:43123");
+  await expect(page.getByRole("status", { name: "Fixture thread count" })).toHaveText(
+    /Fixture live threads: \d+/,
+  );
+  await expect(page.getByRole("listbox", { name: "Fixture threads" })).toBeVisible();
+  await expect(page.getByRole("listbox", { name: "Fixture threads" })).not.toContainText(title);
 });
 
-test("a hosted browser writes messages without a local part", async ({ page }) => {
+test("a hosted browser creates a thread without a local part", async ({ page }) => {
   await page.addInitScript(
     (token) => localStorage.setItem("tokamak.access-token", token),
     process.env.TOKAMAK_E2E_HOSTED_TOKEN!,
   );
-  await page.goto("http://127.0.0.1:43124/p/chat");
+  await page.goto("http://127.0.0.1:43124/p/integration-fixture");
   await expect(footer(page)).toHaveText("127.0.0.1:43124");
-  await page
-    .getByRole("navigation", { name: "Chat threads" })
-    .getByRole("button", { name: /New thread/ })
-    .click();
-  await expect(page.getByRole("heading", { name: "Start a conversation" })).toBeVisible();
-  const editor = page.getByRole("textbox", { name: "Message" });
-  const text = "A message from the hosted browser";
-  await editor.fill(text);
-  await editor.press("Enter");
-  await expect(
-    page.getByRole("log", { name: "Conversation" }).getByText(text, { exact: true }),
-  ).toBeVisible();
+  await createFixtureThread(page, `A thread from the hosted browser ${crypto.randomUUID()}`);
 });

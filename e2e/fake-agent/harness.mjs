@@ -287,8 +287,7 @@ export async function installBasicAuth(plugins) {
 }
 
 /** Adds a member and issues a device key only after their first password change. */
-export async function signInMember(address, ownerKey, username) {
-  const method = "basic-auth";
+export async function signInMember(address, ownerKey, username, method = "basic-auth") {
   const password = "temporary member password";
   const user = await post(address, "/members", ownerKey, {
     method,

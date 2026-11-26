@@ -62,8 +62,10 @@ The `App 1:1` artboards are copies of the running app at 1728 × 1117 in the
 dark theme, built from the app itself rather than redrawn by hand:
 
 1. `TOKAMAK_SCREENS=<folder> TOKAMAK_E2E_PORT=1550 CARGO_BUILD_JOBS=2 proto run bun -- e2e/browser.ts screens.spec.ts --project chromium`
-   takes each screen (`e2e/browser/screens.spec.ts`) and writes `<name>.png`
+   takes the shell and plugin screens (`e2e/browser/screens.spec.ts` and
+   `e2e/browser/plugin-screens.spec.ts`) and writes `<name>.png`
    and `<name>.json`, the laid-out tree with computed styles (`e2e/browser/screen-tree.ts`).
+   Add `--fixtures-only` to capture just the shell.
 2. `proto run bun -- e2e/paper-html.ts <folder>/<name>.json` turns a tree
    into HTML for Paper's `write_html`: every box placed at the size the
    browser gave it, colours as hex, Geist and Geist Mono, one text box per

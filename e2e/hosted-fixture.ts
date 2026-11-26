@@ -17,7 +17,7 @@ export async function startHostedFixture({
   const directory = await mkdtemp(`${root}/app/.dev/serve-hosted-`);
   try {
     await mkdir(`${directory}/plugins`);
-    for (const id of ["chat", "basic-auth", ...extraPlugins]) {
+    for (const id of ["fixture", "fixture-sign-in", ...extraPlugins]) {
       await cp(`${process.env.TOKAMAK_PLUGIN_DIR}/${id}`, `${directory}/plugins/${id}`, { recursive: true });
     }
     const child = spawn(
