@@ -1,0 +1,33 @@
+packages/ui/README.md
+  s_f25a3a73ba783c::t_73129ffaf2f24f 6-7
+packages/ui/src/input.tsx
+  s_7485715999886d::t_b0558413003de9 12,70-73
+packages/ui/src/switch.tsx
+  s_7485715999886d::t_65e44ef014fff9 8-10,17-23,56-59,67-68
+packages/ui/tests/fields.test.tsx
+  s_f25a3a73ba783c::t_e1c2ac9642a3a9 86-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2077c9a7061a8e79b887a9ed6c8dd0f840a5043",
+  "prompts": {},
+  "sessions": {
+    "s_7485715999886d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2132c-ae1f-70c2-8083-631a89ad02aa",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_f25a3a73ba783c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc1e9c2e-987a-409a-bf2b-65354272e8a9",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
