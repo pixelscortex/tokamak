@@ -1,0 +1,46 @@
+packages/sdk/component-attributes.ts
+  s_cb881b6d973425::t_d6b2dde085e158 34-36,119
+  s_cb881b6d973425::t_4f12ccef1eb9a0 22-27,31-33
+packages/sdk/tests/web/component-attributes.test.tsx
+  s_cb881b6d973425::t_58c8818cd1d9eb 31,44,71,264,275,297-300,347,359,398-409
+packages/sdk/component-alerts.ts
+  s_cb881b6d973425::t_4f12ccef1eb9a0 78
+  s_cb881b6d973425::t_2541a9bcf8113f 1-28,32-77,79-108,111-115
+  s_cb881b6d973425::t_36960b8bc6fbef 29-31,109-110
+packages/sdk/README.md
+  s_cb881b6d973425::t_8826ac2f6d54ad 758-775
+skills/develop-tokamak-plugin/SKILL.md
+  s_cb881b6d973425::t_8826ac2f6d54ad 126-132
+packages/sdk/client.tsx
+  s_cb881b6d973425::t_4f12ccef1eb9a0 31,97-104,106-116,123-124,151-155,243-247
+  s_cb881b6d973425::t_d6b2dde085e158 117-119,125-127,156-158,166,248-254,278,320,377-378,390,395
+packages/sdk/component-parts.tsx
+  s_cb881b6d973425::t_d6b2dde085e158 835-836
+  s_cb881b6d973425::t_9abec0355c2a6a 22,90-97,167-169,628,632,649-650,655-663,732-741,818-834,837-843,845-866,894,901-937,950,1016-1020,1022-1023,1038,1043,1048,1053,1064,1067,1119-1120
+packages/sdk/tests/web/component-alerts.test.tsx
+  s_cb881b6d973425::t_58c8818cd1d9eb 3-275
+  s_cb881b6d973425::t_e94d2a22571f87 1-2,276-353
+packages/build/README.md
+  s_cb881b6d973425::t_8826ac2f6d54ad 289-306
+packages/sdk/screen-search.ts
+  s_cb881b6d973425::t_4f12ccef1eb9a0 65-69
+wiki/content/docs/api/window.mdx
+  s_cb881b6d973425::t_8826ac2f6d54ad 112,116-132
+  s_cb881b6d973425::t_d2f488c05209b1 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f31f4d790c6b0ee5bc534d977cd2ba0c414d1ae3",
+  "prompts": {},
+  "sessions": {
+    "s_cb881b6d973425": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21a3e-ed5d-7fd1-b022-831280f8d958",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
