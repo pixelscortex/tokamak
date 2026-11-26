@@ -1,0 +1,34 @@
+plugins/agent-proxy/README.md
+  s_47f8a7a5ed8ebc::t_d02b850f2a4a1b 49-53
+plugins/agent-proxy/src/server/schema.ts
+  s_47f8a7a5ed8ebc::t_bb89d17f3057a2 77
+design/agent-proxy.md
+  s_47f8a7a5ed8ebc::t_d02b850f2a4a1b 36,39-45,50-51
+  s_47f8a7a5ed8ebc::t_90df6735250826 65-66
+plugins/agent-proxy/src/server/proxy.ts
+  s_47f8a7a5ed8ebc::t_bb89d17f3057a2 139-142
+plugins/agent-proxy/src/server/sets.ts
+  s_47f8a7a5ed8ebc::t_bb89d17f3057a2 1,19-20,53,149-156,158-162,164-165,167-173,175-176,178-182,184-195,201-202,204,208,213,222
+  s_47f8a7a5ed8ebc::t_dfc4d8fd1d6a14 144-148,157,174
+  s_47f8a7a5ed8ebc::t_d02b850f2a4a1b 183
+plugins/agent-proxy/src/server/_generated/internal.ts
+  s_47f8a7a5ed8ebc::t_5c6210bed00b09 25,53
+plugins/agent-proxy/tests/proxy.test.ts
+  s_47f8a7a5ed8ebc::t_1a30cbf9d628e3 490-493,496-500,504-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38abd290909efa76c62ef2c03a6cb0eb3062a2f8",
+  "prompts": {},
+  "sessions": {
+    "s_47f8a7a5ed8ebc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a217b7-b3e4-7ea2-a235-5c70cb9e719a",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
