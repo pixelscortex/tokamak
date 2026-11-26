@@ -871,6 +871,11 @@ function renderLayer(
         <Errored
           fallback={(cause) => {
             warn(cause());
+            // The fallback draws the lower stage even though the layer did not.
+            if (claim) {
+              claim[1](true);
+              onCleanup(() => claim[1](false));
+            }
             return next(read, attributes);
           }}
         >

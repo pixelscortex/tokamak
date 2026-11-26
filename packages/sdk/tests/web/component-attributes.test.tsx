@@ -279,9 +279,12 @@ test("Original forwards a live prop to the owner's component", async () => {
 });
 
 test("Original applies attributes after attrs, and a layer that covers Original drops them", async () => {
-  const [cover, setCover] = createSignal(false);
+  const [cover, setCover] = createSignal<"original" | "cover" | "error">("original");
   const outer = layer(article, (props, Original) => <Original class="opacity-50" title={props.label} />);
-  const inner = layer(article, (_, Original) => (cover() ? <b>Covered</b> : <Original />));
+  const inner = layer(article, (_, Original) => {
+    if (cover() === "error") throw new Error("broken cover");
+    return cover() === "cover" ? <b>Covered</b> : <Original />;
+  });
   const { root, setLabel, warnings } = mount([
     contribution(
       "Color",
@@ -302,7 +305,12 @@ test("Original applies attributes after attrs, and a layer that covers Original 
   expect(root.querySelector("article")?.title).toBe("live title");
   expect(warnings).not.toHaveBeenCalled();
 
-  setCover(true);
+  setCover("error");
+  flush();
+  expect(root.querySelector("article")?.className).toBe("flex color opacity-50");
+  expect(warnings).not.toHaveBeenCalled();
+
+  setCover("cover");
   flush();
   expect(root.querySelector("article")).toBeNull();
   expect(root.querySelector("b")?.textContent).toBe("Covered");
@@ -313,7 +321,7 @@ test("Original applies attributes after attrs, and a layer that covers Original 
     otherPlugin: "cover",
     target: article.target,
   });
-  setCover(false);
+  setCover("original");
   flush();
   expect(root.querySelector("article")?.className).toBe("flex color opacity-50");
 });
