@@ -1,4 +1,5 @@
 import { action, fail, internalQuery, isFailure, mutation, query, v } from "@tokamak/sdk";
+import { machines } from "@tokamak/sdk/unstable";
 import { readProjectFile } from "./read-project";
 import { api } from "./_generated/api";
 import { internal } from "./_generated/internal";
@@ -112,7 +113,8 @@ export const callerPoint = action({
   async handler(ctx, { verifyPipeline }) {
     const result = await ctx.point("load", { search: "owner" }, ({ search }) => "loaded:" + search);
     if (verifyPipeline) {
-      if (!Array.isArray(await ctx.machines.list())) throw new Error("Caller machine list unavailable");
+      if ("machines" in ctx) throw new Error("Machine management leaked onto the caller action context");
+      if (!Array.isArray(await machines(ctx).list())) throw new Error("Caller machine list unavailable");
       const marker = await ctx.runQuery(api.work.marker, {});
       await ctx.runMutation(api.work.store, { text: "pipeline:" + marker });
     }

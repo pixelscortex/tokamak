@@ -5,7 +5,16 @@ import { createPluginLoader, type PluginAssets, type PluginModuleHost } from "..
 import { ExtensionProvider } from "../../client";
 import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
-import { changed, duplicate, loadActions, manifest, moved, warnings } from "virtual:built-component-addon";
+import {
+  changed,
+  duplicate,
+  filteredWarnings,
+  loadActions,
+  manifest,
+  moved,
+  noUploadLabel,
+  warnings,
+} from "virtual:built-component-addon";
 
 test.each([
   {
@@ -17,6 +26,12 @@ test.each([
     title: "a rebuilt owner moves a named target without rebuilding the add-on",
     Screen: moved.Composer,
     findOwner: moved.find,
+    matches: true,
+  },
+  {
+    title: "removing a static filter attribute skips the addition and raises one alert",
+    Screen: noUploadLabel.Composer,
+    findOwner: noUploadLabel.find,
     matches: true,
   },
   {
@@ -100,10 +115,24 @@ test.each([
     expect(root.querySelector('[aria-label="replacement"]') !== null).toBe(matches);
     expect(root.querySelector('[aria-label="body"]') !== null).toBe(!matches);
     expect(root.querySelector('[aria-label="detail"]')).not.toBeNull();
-    if (Screen === moved.Composer)
+    expect(root.querySelector('select[aria-label="Upload"] + small')?.textContent).toBe(
+      Screen === noUploadLabel.Composer ? undefined : "Upload for Send",
+    );
+    if (Screen === moved.Composer) {
+      expect(root.querySelector('aside select[aria-label="Upload"] + small')?.textContent).toBe(
+        "Upload for Send",
+      );
       expect(root.querySelector('[data-part="send-slot"] button + small')?.textContent).toBe(
         "Built for Send",
       );
+    }
+    if (Screen === noUploadLabel.Composer) {
+      expect(root.querySelector("select + small")).toBeNull();
+      const missingAttribute =
+        /Plugin "addon": find\("select", \{ aria: \{ "label": "Upload" \} \}\) matches no elements/;
+      expect(alerts).toHaveBeenCalledExactlyOnceWith([expect.stringMatching(missingAttribute)]);
+      expect(filteredWarnings).toMatch(missingAttribute);
+    }
     expect([...root.querySelectorAll("span + small")].map((row) => row.textContent)).toEqual([
       "Profile 1: work of 2",
       "Profile 2: quick of 2",

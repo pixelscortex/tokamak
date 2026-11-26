@@ -77,6 +77,165 @@ test("find resolves the placements and stores the literal search with the found 
   });
 }, 30_000);
 
+test("find filters by static type, href, role and ARIA before counting positions", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      const computed = () => "email";
+      const Menu = () => <nav />;
+      export const Header = (props: { title: string }) =>
+        <section><button aria-label="Start" /><button aria-label="Stop" aria-live="polite" /></section>;
+      export const Footer = (props: { count: number }) =>
+        <section><button aria-label="Save" /><button aria-label="Stop" aria-live="off" /></section>;
+      export const Other = () => <div role="row" />;
+      export const Panel = (props: { title: string }) => (
+        <main>
+          <input type="text" /><input type="file" /><input type={computed()} />
+          <a href="/home" /><a href="/settings" />
+          <div role="row" /><div role="status" /><div role="row" />
+          <span data-part="named" role="note" /><span id="identified" /><Menu />
+        </main>
+      );
+    `,
+    );
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        `
+      export const File = after(owner.find("input", { type: "file" }), ({ title }) => title);
+      export const SameFile = after(owner.find("input", { type: "file", nth: 1 }), () => null);
+      export const Link = after(owner.find("a", { href: "/settings" }), () => null);
+      export const Status = after(owner.find("div", { role: "status" }), () => null);
+      export const SecondRow = after(owner.find("div", { in: "Panel", role: "row", nth: 2 }), () => null);
+      export const Stop = after(owner.find("button", { aria: { label: "Stop", live: "polite" } }), ({ title }) => title);
+      export const LastStop = after(owner.find("button", { aria: { label: "Stop" }, nth: 2 }), ({ count }) => count);
+      export const Named = after(owner.find("named", { role: "note" }), () => null);
+      export const Identified = after(owner.find("identified"), () => null);
+      export const Component = after(owner.find("Menu"), () => null);
+    `,
+    );
+    const first = build(addon);
+    expect(first.status, first.stderr).toBe(0);
+    const placements = (await manifest(addon)).plugin.contributes["component-action"];
+    expect(placements.map(({ target }) => target)).toEqual([
+      "owner.Panel.main.input$2",
+      "owner.Panel.main.input$2",
+      "owner.Panel.main.a$2",
+      "owner.Panel.main.div$2",
+      "owner.Panel.main.div$3",
+      "owner.Header.section.button$2",
+      "owner.Footer.section.button$2",
+      "owner.Panel.main.named",
+      "owner.Panel.main.identified",
+      "owner.Panel.main.Menu",
+    ]);
+    expect(placements[4]).toMatchObject({ name: "div", in: "Panel", role: "row", nth: 2 });
+    expect(placements[5]).toMatchObject({ name: "button", "aria-label": "Stop", "aria-live": "polite" });
+
+    built(
+      await source(
+        root,
+        "second",
+        imports + 'export const File = after(owner.find("input", { type: "file" }), () => null);',
+      ),
+    );
+    const rebuilt = build(owner);
+    expect(rebuilt.status, rebuilt.stderr).toBe(0);
+    for (const log of [first.stderr, rebuilt.stderr]) {
+      expect(
+        log.match(/Plugin "addon":.*targets unnamed element owner\.Panel\.main\.input\$2;/g),
+      ).toHaveLength(1);
+      expect(log).toContain(
+        'find("input", { type: "file" }) targets unnamed element owner.Panel.main.input$2; add data-part',
+      );
+      expect(log).not.toMatch(/targets unnamed element.*(?:named|identified|Menu);/);
+    }
+    expect(rebuilt.stderr.match(/Plugin "second":.*targets unnamed element/g)).toHaveLength(1);
+
+    const entry = resolve(addon, "src/main.tsx");
+    await writeFile(
+      entry,
+      imports +
+        `
+      // @ts-expect-error: absent value for an available key
+      owner.find("input", { type: "email" });
+      // @ts-expect-error: href exists on a different name
+      owner.find("input", { type: "file", href: "/settings" });
+      // @ts-expect-error: unknown filter even when a valid filter is present
+      owner.find("input", { type: "file", class: "file" });
+      // @ts-expect-error: only ARIA keys authored on button are allowed
+      owner.find("button", { aria: { label: "Stop", hidden: "true" } });
+      // @ts-expect-error: only ARIA values authored on button are allowed
+      owner.find("button", { aria: { live: "assertive" } });
+      // @ts-expect-error: a component with no attributes offers no aria filter
+      owner.find("Menu", { aria: {} });
+    `,
+    );
+    const program = ts.createProgram(
+      [entry],
+      pluginCompilerOptions(addon, {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: ts.JsxEmit.Preserve,
+        jsxImportSource: "@solidjs/web",
+      }),
+    );
+    expect(
+      program.getSemanticDiagnostics(program.getSourceFile(entry)).map(({ messageText }) => messageText),
+    ).toEqual([]);
+
+    await writeFile(
+      entry,
+      imports + 'export const Bad = after(owner.find("input", { type: "email" }), () => null);',
+    );
+    const failure = build(addon);
+    expect(failure.status).not.toBe(0);
+    expect(failure.stderr).toContain('find("input", { type: "email" }) matches no elements; candidates:');
+    expect(failure.stderr).toContain('input [type="text"]');
+    expect(failure.stderr).toContain('input [type="file"]');
+    expect(failure.stderr).toContain("input [type={…} (a filter cannot match a computed value)]");
+
+    await writeFile(
+      entry,
+      imports + 'const type = "file"; export const Bad = after(owner.find("input", { type }), () => null);',
+    );
+    const nonliteral = build(addon);
+    expect(nonliteral.status).not.toBe(0);
+    expect(nonliteral.stderr).toContain("Use a literal screen element name");
+  });
+}, 30_000);
+
+test("a filter matches a quoted literal in braces, and never a value a later spread can replace", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      export const Form = (props: { rest: object }) => (
+        <form><input type={"file"} /><input type="text" {...props.rest} /><input type="text" /></form>
+      );
+    `,
+    );
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        'export const File = after(owner.find("input", { type: "file" }), () => null);' +
+        'export const Text = after(owner.find("input", { type: "text" }), () => null);',
+    );
+    built(addon);
+    const targets = (await manifest(addon)).plugin.contributes["component-action"].map(
+      (entry) => entry.target,
+    );
+    expect(targets).toEqual(["owner.Form.form.input", "owner.Form.form.input$3"]);
+  });
+}, 30_000);
+
 test("wrong names fail both TypeScript and the builder; ambiguous and dynamic searches fail the builder", async () => {
   await scratch(async (root) => {
     built(await source(root, "owner", screen));

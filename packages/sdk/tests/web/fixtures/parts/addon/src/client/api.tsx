@@ -17,3 +17,7 @@ export const Nested = after(find("em"), ({ $row }) => (
     Group {$row.parent.index() + 1}: {$row.parent.item} / {$row.index}: {$row.item()}
   </small>
 ));
+
+export const UploadNote = after(find("select", { aria: { label: "Upload" } }), ({ label }) => (
+  <small>Upload for {label}</small>
+));

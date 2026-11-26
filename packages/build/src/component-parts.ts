@@ -6,9 +6,13 @@ import ts from "typescript";
 import { brand, importModule, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
 import { partProps } from "./part-props.ts";
 import {
+  attributeFilters,
+  isAriaAttribute,
+  isSearchAttribute,
   resolveScreenSearch,
   screenElements,
   screenTarget,
+  unnamedTargetWarning,
   type ScreenSearch,
   type ScreenTree,
 } from "../../sdk/screen-search.ts";
@@ -20,6 +24,9 @@ type Part = {
   fingerprint?: string;
   ambiguous?: boolean;
   row?: string;
+  unnamed?: boolean;
+  attributes?: string[];
+  computed?: string[];
 };
 type Tree = {
   part?: Part;
@@ -40,16 +47,24 @@ function child(parent: Tree, name: string, node: ts.Node, fixed = false) {
   return tree;
 }
 
-function tagIdentity(opening: ts.JsxOpeningLikeElement) {
+function tagIdentity(opening: ts.JsxOpeningLikeElement, part: Part) {
   // Only what says which element this is; anything else is an ordinary edit.
-  const attributes = opening.attributes.properties
-    .flatMap((attribute) => {
+  const properties = opening.attributes.properties;
+  const lastSpread = properties.map(ts.isJsxSpreadAttribute).lastIndexOf(true);
+  const attributes = properties
+    .flatMap((attribute, index) => {
       if (!ts.isJsxAttribute(attribute)) return [];
       const name = attribute.name.getText();
       const value = attribute.initializer;
       const expression = value && ts.isJsxExpression(value) ? value.expression : value;
       const text = expression && ts.isStringLiteralLike(expression) ? expression.text : null;
-      if (/^(role|type|name|for|href)$/.test(name)) return [[name, text]];
+      if (isSearchAttribute(name) || isAriaAttribute(name)) {
+        // A later spread can replace the value when the screen runs, so only
+        // a literal that nothing can override is safe to search by.
+        if (text !== null && index > lastSpread) (part.attributes ??= []).push(name, text);
+        else (part.computed ??= []).push(name);
+      }
+      if (isSearchAttribute(name) || name === "name" || name === "for") return [[name, text]];
       // A static ARIA value tells siblings apart; a computed one is state.
       return /^aria-/.test(name) && text !== null ? [[name, text]] : [];
     })
@@ -86,7 +101,7 @@ function assignParts(
     }
     counts.set(name, (counts.get(name) ?? 0) + 1);
     if (child.opening) {
-      const identity = JSON.stringify(tagIdentity(child.opening));
+      const identity = JSON.stringify(tagIdentity(child.opening, child.part!));
       identities.set(child, identity);
       const key = name + ":" + identity;
       times.set(key, (times.get(key) ?? 0) + 1);
@@ -314,6 +329,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         const type = scope.type();
         const part: Part = {
           target: "",
+          unnamed: named === undefined && /^[a-z][\w-]*$/.test(tagName),
           props: scope.props,
           type: scope.row ? alias(`${type} & { readonly $row: ${scope.row.type()} }`) : type,
           row: scope.row?.value(),
@@ -334,16 +350,22 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
   assignParts(tree, plugin, paths);
 
   function compactParts(node: Tree): ScreenTree {
+    const fingerprint = node.part?.fingerprint ?? null;
     return [
-      ...(node.part ? ["", node.part.fingerprint ?? null] : []),
+      ...(node.part ? ["", node.part.attributes ? [fingerprint, ...node.part.attributes] : fingerprint] : []),
       ...[...node.children].flatMap(([key, child]) => [
         key,
-        child.part && !child.children.size ? (child.part.fingerprint ?? null) : compactParts(child),
+        child.part && !child.children.size && !child.part.attributes
+          ? (child.part.fingerprint ?? null)
+          : compactParts(child),
       ]),
     ];
   }
   const compact = compactParts(tree);
-  const elements = screenElements(plugin, compact);
+  const elements = screenElements(plugin, compact).map((element) => {
+    const computed = paths.get(element.target)?.computed;
+    return computed ? { ...element, computed } : element;
+  });
   // Pack the shape into a string so the bundle keeps its compact layout.
   const packed = JSON.stringify(compact);
 
@@ -351,7 +373,8 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
     resolve(search: ScreenSearch) {
       const result = resolveScreenSearch(elements, search);
-      return { ...result, ambiguous: result.element && paths.get(result.element.target)?.ambiguous };
+      const part = result.element && paths.get(result.element.target);
+      return { ...result, ambiguous: part?.ambiguous, unnamed: part?.unnamed };
     },
     transform(
       source: ts.SourceFile,
@@ -553,11 +576,13 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       const shape = [...names]
         .map(([name, matches]) => {
           const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
-          const entries = matches.map(
-            (element) =>
-              `[${[...new Set(element.ancestors)].map((name) => JSON.stringify(name)).join(" | ") || "never"}, ${props(element)}]`,
-          );
-          return `  ${JSON.stringify(name)}: ${matches.length === 1 ? props(matches[0]!) : `[${entries.join(", ")}]`};\n`;
+          const entries = matches.map((element) => {
+            const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
+            const filters = element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
+            return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
+          });
+          const only = matches[0]!;
+          return `  ${JSON.stringify(name)}: ${matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
         })
         .join("");
       const previous = readOptional(path);
@@ -597,12 +622,18 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                 : !previous.target.startsWith(plugin + ".")
             )
               continue;
-            const { reason } = resolveScreenSearch(elements, previous.search, previous);
-            if (!reason) continue;
-            const message = `Plugin "${installed.id}": ${reason}; skipping this addition`;
-            if (reported.has(message)) continue;
-            reported.add(message);
-            warn(message);
+            const { reason, element } = resolveScreenSearch(elements, previous.search, previous);
+            if (reason) {
+              const message = `Plugin "${installed.id}": ${reason}; skipping this addition`;
+              if (reported.has(message)) continue;
+              reported.add(message);
+              warn(message);
+            } else if (previous.search && element && paths.get(element.target)?.unnamed) {
+              const key = JSON.stringify([installed.id, element.target]);
+              if (reported.has(key)) continue;
+              reported.add(key);
+              warn(unnamedTargetWarning(installed.id, previous.search, element.target));
+            }
           }
         }
       }
