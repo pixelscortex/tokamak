@@ -222,7 +222,8 @@ async fn serve_inner(
         .map_err(io::Error::other)?;
     let public_origin = match &web {
         Some(web) => web.public_origin.clone(),
-        None => crate::web::configured_public_url()?,
+        None => crate::web::configured_public_url()?
+            .or_else(|| cfg!(feature = "local-runtime").then(|| format!("http://{listen}"))),
     };
     server
         .machines()

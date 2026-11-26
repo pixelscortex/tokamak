@@ -63,15 +63,10 @@ pub(crate) fn router(
     server: Arc<Server>,
     stopping: CancellationToken,
     web: Option<crate::web::HostedWeb>,
-    public_origin: Option<String>,
+    server_url: Option<String>,
     listen: std::net::SocketAddr,
 ) -> io::Result<Router> {
     let config = Arc::new(config::Config::load()?);
-    let server_url = if web.is_none() && cfg!(feature = "local-runtime") {
-        Some(format!("http://{listen}"))
-    } else {
-        public_origin
-    };
     if server_url.is_none() {
         eprintln!(
             "TOKAMAK_PUBLIC_URL is unset; HTTP actions cannot read ctx.serverUrl on this hosted Server"
