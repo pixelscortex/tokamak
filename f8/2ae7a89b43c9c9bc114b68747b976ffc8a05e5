@@ -1,0 +1,57 @@
+packages/sdk/component-parts.tsx
+  s_d056a7166f42ba::t_33321377eda366 259-271,273-293,295-301,304-327,449-475,695-698,912-914
+  s_d056a7166f42ba::t_35d25a88b97506 436-438,491,497,513-514,519,533-538,543-548,552-553,562-564,574-583,595-605,612,693-694,699,865,909-911
+  s_d056a7166f42ba::t_25d6eb2c449f89 651,682,684-690,731-732,749,751-752,773,804-829,840-850,852
+packages/build/README.md
+  s_d056a7166f42ba::t_cdca3c866259f1 189-191,210-214
+  s_d056a7166f42ba::t_5467dbdf39524b 215
+packages/sdk/client.tsx
+  s_d056a7166f42ba::t_35d25a88b97506 355
+  s_d056a7166f42ba::t_0f91a94a2bfc17 15
+packages/sdk/tests/web/fixtures/parts/attrs-owner/src/client/api.tsx
+  s_d056a7166f42ba::t_cdca3c866259f1 1,12-27,34-40
+packages/build/tests/components.test.mjs
+  s_d056a7166f42ba::t_cdca3c866259f1 15,347,386-393
+packages/sdk/component-attributes.ts
+  s_d056a7166f42ba::t_33321377eda366 128,144-145,149-150,156-159
+  s_d056a7166f42ba::t_3d30c06c8d21c1 3,7,15,44,50-53,58-62,65-66,116-117,122-123,130-131,143,146-148,151,261-264,270-272,305-308,324
+packages/sdk/tests/web/component-attributes.test.tsx
+  s_d056a7166f42ba::t_ea50dc3a28c3ca 215-216,219
+  s_d056a7166f42ba::t_ef2707e704bddf 414
+  s_d056a7166f42ba::t_094ba122fd7b88 237-241
+  s_d056a7166f42ba::t_cdca3c866259f1 5-12,172,177,194,196,210-211,213-214,220-222,226-236,242-256,258-274,282-330
+  s_d056a7166f42ba::t_054ec8a71ffc38 331,404,407-413,417-418
+  s_d056a7166f42ba::t_4c07adeb93eaab 415
+  s_d056a7166f42ba::t_0f91a94a2bfc17 3,257,275-281
+  s_d056a7166f42ba::t_7c1ef64da81ecb 403,405-406,416
+  s_d056a7166f42ba::t_54593d9554b0e1 332
+packages/sdk/tests/web/fixtures/parts/attrs-owner/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_094ba122fd7b88 3-11,13-20
+packages/sdk/component-actions.ts
+  s_d056a7166f42ba::t_33321377eda366 7,40-45,49,58,68-73,77,85,87,159-161,172,177,243,258-260,267-268
+  s_d056a7166f42ba::t_ea50dc3a28c3ca 56
+  s_d056a7166f42ba::t_0f91a94a2bfc17 242,244-253,255-257,261-265,269,280
+packages/build/src/contributions.ts
+  s_d056a7166f42ba::t_33321377eda366 1,318-320,328-341,343-344,352,369-373
+packages/build/src/component-parts.ts
+  s_d056a7166f42ba::t_33321377eda366 341,620,625,627
+  s_d056a7166f42ba::t_ea50dc3a28c3ca 211
+  s_d056a7166f42ba::t_35d25a88b97506 586,773
+  s_d056a7166f42ba::t_0f91a94a2bfc17 347-352,354-358,603-606,609-619,621-624,628-629,634-652,659
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f82ae7a89b43c9c9bc114b68747b976ffc8a05e5",
+  "prompts": {},
+  "sessions": {
+    "s_d056a7166f42ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21a0e-f5c6-79f3-8a75-af9c48919c98",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
