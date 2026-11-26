@@ -1,0 +1,25 @@
+packages/ui/README.md
+  s_f25a3a73ba783c::t_612dbe15b78888 5-10
+packages/ui/src/button.tsx
+  s_f25a3a73ba783c::t_74655f7b34c282 11-13
+packages/ui/src/kit/controls.tsx
+  s_f25a3a73ba783c::t_839b0a91604716 72-81
+packages/ui/tests/primitives.test.tsx
+  s_f25a3a73ba783c::t_a692e3e5e3cc64 263-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e49bfc50e55971afc4fcb61b0c2ba2c335e788b6",
+  "prompts": {},
+  "sessions": {
+    "s_f25a3a73ba783c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc1e9c2e-987a-409a-bf2b-65354272e8a9",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
