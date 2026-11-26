@@ -11,23 +11,24 @@ import { turn } from "./fake-companies/stream";
 import { builds, startWorkspace, type Workspace } from "./workspace";
 
 type Ref<K extends "action" | "mutation" | "query", A, R> = FunctionReference<K, A, R>;
+type Company = "anthropic" | "openai";
 type Set = { set: string };
 type Key = { key: string };
 type Address = Key & { address: string };
 type Id = { id: string };
-type Subscription = Id & { accounts: Id[]; lastUsedAt?: number };
+type Subscription = Id & { accounts: Id[]; lastUsedAt?: number; status: string };
 type Failure = { failed: true; kind: string };
 const api = createApi<{
   turns: {
     register: Ref<"mutation", { set?: string; subscriptions: string[] }, Set | Failure>;
-    key: Ref<"action", Set, Address | Failure>;
+    key: Ref<"action", Set & { company?: Company }, Address | Failure>;
     remove: Ref<"mutation", Set, null | Failure>;
     end: Ref<"mutation", Key, null>;
   };
 }>("turn-caller", ["turns:register", "turns:key", "turns:end", "turns:remove"]);
 const profiles = createApi<{
   subscriptions: {
-    startSignIn: Ref<"action", { company: "anthropic"; method: "subscription" }, Id & { link: string }>;
+    startSignIn: Ref<"action", { company: Company; method: "subscription" }, Id & { link: string }>;
     finishSignIn: Ref<"action", Id & { pasted: string }, Subscription>;
     setEnabled: Ref<"mutation", Id & { enabled: boolean }, null>;
     list: Ref<"query", Record<string, never>, { subscriptions: Subscription[] }>;
@@ -73,7 +74,7 @@ const rejected = async (response: Response, status: number, message: string) => 
 const available = builds();
 if (!available.length) console.log("Skipping: build both server binaries and plugin hosts to test the proxy");
 
-describe.skipIf(!available.length).each(available)("Claude proxy on the $name", (build) => {
+describe.skipIf(!available.length).each(available)("Subscription proxy on the $name", (build) => {
   let fake: Awaited<ReturnType<typeof startFakeCompanies>>;
   let workspace: Workspace;
   let client: TokamakClient;
@@ -92,11 +93,11 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
     for (const secret of secrets) expect(output.includes(secret)).toBe(false);
   });
 
-  async function signIn(id: string, expired = false, as = client) {
-    const account = fake.addAccount("anthropic", id, { signIn: expired ? "expired" : "success" });
+  async function signIn(id: string, expired = false, as = client, company: Company = "anthropic") {
+    const account = fake.addAccount(company, id, { signIn: expired ? "expired" : "success" });
     secrets.push(account.accessToken, account.refreshToken);
     const start = await as.action(profiles.subscriptions.startSignIn, {
-      company: "anthropic",
+      company,
       method: "subscription",
     });
     fake.nextSignIn(id);
@@ -115,14 +116,186 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
     return result;
   }
 
-  async function key(set: Set) {
-    const result = await client.action(api.turns.key, set);
+  async function key(set: Set, company?: Company) {
+    const result = await client.action(api.turns.key, { ...set, ...(company && { company }) });
     if ("failed" in result) throw new Error(result.kind);
     secrets.push(result.key);
     return result;
   }
 
   const messages = () => fake.requests.filter(({ path }) => path.startsWith("/anthropic/v1/messages"));
+
+  const signInOpenai = (id: string, expired = false) => signIn(id, expired, client, "openai");
+  const responses = () =>
+    fake.requests.filter(({ path }) => path.startsWith("/openai/backend-api/codex/responses"));
+  const codexModel = "gpt-5-codex";
+  const codexBody = `{ "model": "${codexModel}",
+ "stream": true, "input": "héllo" }
+`;
+  const respond = (address: Address, path = "/responses") =>
+    fetch(address.address + path, {
+      method: "POST",
+      body: codexBody,
+      headers: {
+        authorization: `Bearer ${address.key}`,
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        "chatgpt-account-id": "untrusted-workspace",
+        "openai-beta": "responses=test",
+        originator: "tokamak",
+        session_id: "old-session",
+        "session-id": "session",
+        "thread-id": "thread",
+        "x-codex-turn-state": "turn-state",
+        cookie: "private=local",
+        "anthropic-version": "not-openai",
+        "openai-organization": "untrusted-organization",
+      },
+    });
+
+  test("streams ChatGPT SSE with the selected account while Claude uses its own account in the same set", async () => {
+    const claude = await signIn("mixed-claude");
+    const first = await signInOpenai("mixed-openai-first");
+    const second = await signInOpenai("mixed-openai-second");
+    const set = await register([claude.subscription.id, first.subscription.id, second.subscription.id]);
+    const [openai, anthropic] = await Promise.all([key(set, "openai"), key(set)]);
+    const path = "/responses?label=a%20b&label=%2B";
+    const [codex, claudeTurn] = await Promise.all([respond(openai, path), stream(anthropic)]);
+    expect([codex.status, claudeTurn.status]).toEqual([200, 200]);
+    expect(codex.headers.get("content-type")).toBe("text/event-stream");
+    const reader = codex.body!.getReader();
+    const initial = await reader.read();
+    expect(initial.done).toBe(false);
+    const decoder = new TextDecoder();
+    let actual = decoder.decode(initial.value, { stream: true });
+    expect(actual).toContain("event: response.created");
+    expect(actual).not.toContain("event: response.completed");
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      actual += decoder.decode(chunk.value, { stream: true });
+    }
+    expect(actual + decoder.decode()).toBe(turn("openai", codexModel, false).join(""));
+    expect(await claudeTurn.text()).toContain("message_stop");
+    expect(messages().at(-1)?.account).toBe(claude.account.id);
+    const sent = responses().at(-1)!;
+    expect(sent).toMatchObject({
+      method: "POST",
+      path: "/openai/backend-api/codex" + path,
+      rawBody: codexBody,
+      account: first.account.id,
+      headers: {
+        authorization: `Bearer ${first.account.accessToken}`,
+        "chatgpt-account-id": first.account.id,
+        "openai-beta": "responses=test",
+        originator: "tokamak",
+        session_id: "old-session",
+        "session-id": "session",
+        "thread-id": "thread",
+        "x-codex-turn-state": "turn-state",
+      },
+    });
+    for (const name of ["cookie", "anthropic-version", "openai-organization", "x-api-key"])
+      expect(sent.headers).not.toHaveProperty(name);
+    expect(JSON.stringify(sent)).not.toContain(openai.key);
+    const { subscriptions } = await client.query(profiles.subscriptions.list, {});
+    expect(subscriptions.find(({ id }) => id === first.subscription.id)?.lastUsedAt).toBeGreaterThan(0);
+    expect(subscriptions.find(({ id }) => id === second.subscription.id)?.lastUsedAt).toBeUndefined();
+
+    const baseline = fake.requests.length;
+    await rejected(
+      await respond({ ...openai, key: anthropic.key }),
+      401,
+      "Turn key belongs to a different company.",
+    );
+    await rejected(
+      await stream({ ...anthropic, key: openai.key }),
+      401,
+      "Turn key belongs to a different company.",
+    );
+    expect((await stream(openai)).status).toBe(404);
+    expect((await respond(anthropic)).status).toBe(404);
+    expect(
+      (await fetch(openai.address + "/responses", { headers: { authorization: `Bearer ${openai.key}` } }))
+        .status,
+    ).toBe(404);
+    for (const route of ["/models", "/responses/compact", "/v1/models"]) {
+      expect((await respond(openai, route)).status).toBe(404);
+    }
+    await client.mutation(api.turns.end, { key: openai.key });
+    await rejected(await respond(openai), 401, "Turn key has ended.");
+    const onlyClaude = await key(await register([claude.subscription.id]), "openai");
+    const onlyOpenai = await key(await register([first.subscription.id]));
+    await rejected(await respond(onlyClaude), 403, "No usable ChatGPT subscription in this set.");
+    await rejected(await stream(onlyOpenai), 403, "No usable Claude subscription in this set.");
+    expect(fake.requests).toHaveLength(baseline);
+  });
+
+  test("renews an expired ChatGPT login and only replays a 401 with the rotated or next login", async () => {
+    const first = await signInOpenai("codex-expired", true);
+    const second = await signInOpenai("codex-fallback");
+    const address = await key(await register([first.subscription.id, second.subscription.id]), "openai");
+    const before = fake.requests.length;
+    const initial = await respond(address);
+    expect(initial.status).toBe(200);
+    await initial.text();
+    const rotated = first.account.accessToken;
+    secrets.push(rotated, first.account.refreshToken);
+    expect(fake.requests.slice(before).map(({ path, account }) => [path, account])).toEqual([
+      ["/openai/oauth/token", first.account.id],
+      ["/openai/backend-api/codex/responses", first.account.id],
+    ]);
+
+    first.account.rejectedAccess = { token: rotated };
+    const replacement = await respond(address);
+    expect(replacement.status).toBe(200);
+    await replacement.text();
+    expect(
+      responses()
+        .slice(-2)
+        .map(({ headers }) => headers.authorization),
+    ).toEqual([`Bearer ${rotated}`, `Bearer ${first.account.accessToken}`]);
+    secrets.push(first.account.accessToken, first.account.refreshToken);
+
+    first.account.rejectedAccess = { token: first.account.accessToken };
+    first.account.signIn = "refuse-renewal";
+    const fallback = await respond(address);
+    expect(fallback.status).toBe(200);
+    await fallback.text();
+    expect(
+      responses()
+        .slice(-2)
+        .map(({ account, rawBody }) => [account, rawBody]),
+    ).toEqual([
+      [first.account.id, codexBody],
+      [second.account.id, codexBody],
+    ]);
+    const { subscriptions } = await client.query(profiles.subscriptions.list, {});
+    expect(subscriptions.find(({ id }) => id === first.subscription.id)?.status).toBe("signed-out");
+  });
+
+  test("holds out ChatGPT accounts after 429 and chooses the next eligible account", async () => {
+    const first = await signInOpenai("codex-capped");
+    const second = await signInOpenai("codex-spare");
+    const address = await key(await register([first.subscription.id, second.subscription.id]), "openai");
+    fake.script(first.account.id, [{ kind: "bare-limit", retryAfter: "37" }]);
+    fake.script(second.account.id, [{ kind: "bare-limit" }]);
+    const before = responses().length;
+    for (let i = 0; i < 2; i++) {
+      const response = await respond(address);
+      expect(response.status).toBe(429);
+      await response.text();
+    }
+    const held = await respond(address);
+    await rejected(held, 429, "ChatGPT subscriptions in this set are rate limited.");
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThanOrEqual(35);
+    expect(Number(held.headers.get("retry-after"))).toBeLessThanOrEqual(37);
+    expect(
+      responses()
+        .slice(before)
+        .map(({ account }) => account),
+    ).toEqual([first.account.id, second.account.id]);
+  });
 
   test("fills the first account, swaps credentials, preserves the request and streams unchanged bytes", async () => {
     const { account, subscription } = await signIn("first");

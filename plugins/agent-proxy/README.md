@@ -39,34 +39,29 @@ in as another account), `OtherPlan` and `OtherCompany` (an added account on
 another plan or of another company) and `Busy` (another finish of it is running). Ones that
 end it: `AlreadyAdded`, `Gone`, `Expired`, `Cancelled`, `NotFound`.
 
-## Claude proxy
+## Subscription proxy
 
-Set `TOKAMAK_PUBLIC_URL` to the server origin reachable from the CLI. The
-turn launcher sets `ANTHROPIC_BASE_URL` to the returned address
-(`<origin>/plugins/agent-proxy/<set>`) and `ANTHROPIC_AUTH_TOKEN` to the
-returned key. The client can also send the key as `x-api-key`. Call
-`endTurnKey` when the turn finishes or is cancelled. One key can authenticate
-multiple requests on its set during that turn. Keys expire after 15 minutes
-without activity and at most eight hours after issue. The first forwarded
-request and then at most one per minute reset the idle deadline. Only key hashes
-are stored. A key with a lease keeps its subscription snapshot if the set is
-deleted; a key without a lease requires the set to exist.
+Set `TOKAMAK_PUBLIC_URL` to the server origin reachable from both CLIs.
+`turnKey({ set, lease, company })` issues a company-bound key for that set.
+For Claude, the address remains `<origin>/plugins/agent-proxy/<set>`;
+the launcher supplies it as `ANTHROPIC_BASE_URL` and the key as
+`ANTHROPIC_AUTH_TOKEN`. For Codex, the address adds `/openai`; the launcher
+sets a Responses provider whose bearer is the turn key. The upstream is
+`https://chatgpt.com/backend-api/codex/responses` with the selected login's
+bearer and `chatgpt-account-id`. See [the route and header allowlists](../../design/agent-proxy.md#subscription-proxy).
 
-Each request picks the first enabled Claude subscription in set order that
-has a signed-in account with a usable login. It tries the accounts in signup
-order within each subscription, renews an expiring login first and skips
-accounts with a known quota reset still in the future. An upstream 429 that
-identifies an account quota window is streamed back as received and holds
-that account out of later requests until reset. The proxy does not retry
-an upstream request on another account. If no account can serve the request,
-the proxy returns a Claude-specific error.
+Both routes stream the response, preserve query and request body, and abort
+the upstream on downstream disconnect. Each request tries the first usable
+account of its company in set order and renews logins that are about to
+expire. A rejected login gets one renewal and replay; a refused renewal
+signs the account out and the replay can use the next account. HTTP 429
+holds the account out of subsequent requests until reset. A successful
+forward updates the subscription's last use.
 
-The proxy keeps the API method, path, query and body, uses the account's
-Bearer login in place of the turn key, drops `x-api-key`, and adds
-`oauth-2025-04-20` to the incoming `anthropic-beta` list if needed.
-`anthropic-version` defaults to `2023-06-01` if absent. It streams the
-upstream response back, and a downstream disconnect aborts the upstream
-request. Each forwarded request updates its subscription's last use.
+Call `endTurnKey` when the turn ends. The database stores only the key
+hash. Keys expire after 15 minutes without activity and no later than eight
+hours after issue. A key with a lease keeps its subscription snapshot if the
+set is deleted; a key without a lease requires the set to exist.
 
 ## Several accounts, signing out, checking again, removing
 
@@ -228,7 +223,7 @@ is open. The internal functions the proxy calls take the member as
 ## Tables
 
 `subscriptions`, `accounts` (one login at the company, by its account id,
-with ChatGPT's workspace id and Claude's known quota reset), `sets` (ordered
+with ChatGPT's workspace id and the known quota reset), `sets` (ordered
 subscription ids), `turnKeys` (hash, set, expiration and whether it ended),
 `logins` (access and refresh token, expiry, renewal claim and next try) and
 `signIns` (verifier, `state`, link, an optional subscription to repair, a

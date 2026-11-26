@@ -11,6 +11,8 @@ import {
   type Model,
 } from "./_functions";
 import { challenge, randomToken } from "./pkce";
+import { company } from "./schema";
+import type { Company } from "./addresses";
 
 const setId = v.string();
 const ownerId = v.string();
@@ -67,8 +69,8 @@ export const removeSet = pluginOnly(
 /** The raw credential only crosses the boundary back to the calling plugin. */
 export const turnKey = pluginOnly(
   action({
-    args: { set: setId, lease: v.optional(v.string()) },
-    handler: async (ctx, { set, lease }) => {
+    args: { set: setId, lease: v.optional(v.string()), company: v.optional(company) },
+    handler: async (ctx, { set, lease, company = "anthropic" }) => {
       const owner = ownerOf(ctx.auth);
       const origin = await ctx.server.url();
       if (!origin)
@@ -77,11 +79,13 @@ export const turnKey = pluginOnly(
       const saved = await ctx.runMutation(internal.sets.issue, {
         owner,
         set,
+        company,
         hash: challenge(key),
         ...(lease !== undefined && { lease }),
       });
       if (!saved) return notFound("set");
-      return { address: new URL(`/plugins/agent-proxy/${saved}`, origin).href, key };
+      const suffix = company === "openai" ? "/openai" : "";
+      return { address: new URL(`/plugins/agent-proxy/${saved}${suffix}`, origin).href, key };
     },
   }),
 );
@@ -112,8 +116,8 @@ export const endTurnKey = pluginOnly(
 );
 
 export const issue = internalMutation({
-  args: { owner: ownerId, set: setId, hash: hashValue, lease: v.optional(v.string()) },
-  handler: async (ctx, { owner, set, hash, lease }) => {
+  args: { owner: ownerId, set: setId, hash: hashValue, lease: v.optional(v.string()), company },
+  handler: async (ctx, { owner, set, hash, lease, company }) => {
     const id = idIn("sets", set);
     const row = id && (await ctx.db.get(id));
     if (!row || row.owner !== owner) return null;
@@ -127,13 +131,15 @@ export const issue = internalMutation({
     if (lease !== undefined) {
       for (const id of row.subscriptions) {
         const subscription = await ctx.db.get(id);
-        if (subscription?.owner === owner && subscription.enabled) snapshot.push(id);
+        if (subscription?.owner === owner && subscription.company === company && subscription.enabled)
+          snapshot.push(id);
       }
     }
     await ctx.db.insert("turnKeys", {
       owner,
       set: row._id,
       hash,
+      company,
       expiresAt: now + TURN_KEY_TTL_MS,
       ...(lease !== undefined && { lease, subscriptions: snapshot }),
     });
@@ -143,7 +149,7 @@ export const issue = internalMutation({
 
 async function validKey(
   ctx: Pick<QueryContext<Model>, "db">,
-  { set, hash }: { set: string; hash: string },
+  { set, hash, company }: { set: string; hash: string; company: Company },
   now: number,
 ) {
   const key = await ctx.db
@@ -152,13 +158,14 @@ async function validKey(
     .first();
   if (!key) return { error: "Unknown turn key." };
   if (key.set !== idIn("sets", set)) return { error: "Turn key belongs to a different set." };
+  if ((key.company ?? "anthropic") !== company) return { error: "Turn key belongs to a different company." };
   if (key.ended) return { error: "Turn key has ended." };
   const activeAt = key.lastAcceptedAt ?? key.expiresAt - TURN_KEY_TTL_MS;
   if (key.expiresAt <= now || activeAt + TURN_KEY_IDLE_MS <= now) return { error: "Turn key has expired." };
   return { key };
 }
 
-const keyArgs = { set: setId, hash: hashValue };
+const keyArgs = { set: setId, hash: hashValue, company };
 
 export const candidates = internalQuery({
   args: keyArgs,
@@ -175,7 +182,14 @@ export const candidates = internalQuery({
       subscriptions = row.subscriptions;
     }
 
-    const availability = await eligibleAccounts(ctx, key.owner, subscriptions, now, snapshot !== undefined);
+    const availability = await eligibleAccounts(
+      ctx,
+      key.owner,
+      subscriptions,
+      args.company,
+      now,
+      snapshot !== undefined,
+    );
     return { ok: true as const, owner: key.owner, touch: needsTouch(key, now), ...availability };
   },
 });
@@ -200,6 +214,7 @@ async function eligibleAccounts(
   ctx: QueryContext<Model>,
   owner: string,
   subscriptions: readonly Id<"subscriptions">[],
+  company: Company,
   now: number,
   snapshot: boolean,
 ) {
@@ -211,7 +226,7 @@ async function eligibleAccounts(
       !subscription ||
       (!snapshot && !subscription.enabled) ||
       subscription.owner !== owner ||
-      subscription.company !== "anthropic"
+      subscription.company !== company
     )
       continue;
     const members = await ctx.db
@@ -219,7 +234,8 @@ async function eligibleAccounts(
       .withIndex("by_subscription", (q) => q.eq("subscription", id))
       .collect();
     for (const account of members) {
-      if (account.owner !== owner || account.status !== "ok") continue;
+      if (account.owner !== owner || account.status !== "ok" || (company === "openai" && !account.workspace))
+        continue;
       const until = account.limitedUntil ?? 0;
       if (until <= now) accounts.push({ id: account._id, subscription: id });
       else earliestReset = earliestReset ? Math.min(earliestReset, until) : until;

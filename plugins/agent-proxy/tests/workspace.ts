@@ -158,7 +158,7 @@ export const remove = mutation({
   handler: (ctx, args) => ctx.use(proxy).removeSet(args),
 });
 export const key = action({
-  args: { set: v.string() },
+  args: { set: v.string(), company: v.optional(v.union(v.literal("anthropic"), v.literal("openai"))) },
   handler: (ctx, args) => ctx.use(proxy).turnKey(args),
 });
 export const end = mutation({

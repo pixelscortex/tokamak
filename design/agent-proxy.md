@@ -28,15 +28,17 @@ None.
 | Subscription details     | Each account's id, email, organisation, status and reason; "Add account" starts a sign-in with `addTo`; "Sign out" and "Sign in" on one account (`repairAccount`)                                                                                                                                                                   | `listSubscriptions`, `addAccount`, `signOutAccount`, `signInAccount` | `Profiles · subscription`, `Profiles · subscription · two accounts`, `Profiles · subscription · one signed out` |
 | Remove confirmation      | Removes the subscription, its accounts, their logins and any sign-in waiting for it                                                                                                                                                                                                                                                 | `removeSubscription`                                                 | `Profiles · remove`                                                                                             |
 
-## Claude proxy
+## Subscription proxy
 
 The plugin-only `registerSet` export stores an ordered list of subscriptions
 owned by the calling member and returns the set id. A caller can replace the
 list without changing the id. `removeSet` is plugin-only and owner-scoped;
 removing a set prevents new keys and invalidates keys without a snapshot. The plugin-only `turnKey`
-gives the caller a fresh key and the set's address under
-`/plugins/agent-proxy/<set>` on the configured public origin. The proxy stores
-only a hash and accepts the key only for that set. Keys have a 15 minute idle
+gives the caller a fresh company-bound key and its address on the configured
+public origin. Claude keeps `/plugins/agent-proxy/<set>`; ChatGPT uses
+`/plugins/agent-proxy/<set>/openai`. Keys issued before the company field
+existed still serve Claude. The proxy stores only a hash and accepts the key
+only for its set and company. Keys have a 15 minute idle
 window from issue or the last recorded request, and expire no later than eight
 hours after issue. The proxy records the first forwarded request and then at
 most one per minute. AI Profiles calls `endTurnKey` when a turn ends, including
@@ -44,20 +46,36 @@ on stop or failure. It can end a key by the turn's random lease ID without
 keeping or passing the raw key after launch. If a process crashes, the idle
 deadline still applies.
 
-The proxy accepts only POST to `/v1/messages` and
-`/v1/messages/count_tokens`, and GET to `/v1/models` and `/v1/models/<id>`.
-Keys with a lease capture the enabled subscriptions and set order when issued.
-Edits and deletion affect future leases; keys without a lease continue to use
-the current set. Each request skips deleted or signed-out accounts and accounts with an
-active rate limit. It forwards with
-the subscription's OAuth headers, streams the answer, and records last use
-only on a 2xx response. An upstream 401 forces a renewal and allows one
-replay. If Claude refuses renewal, the account is signed out and the replay
-uses the next available account. A 429 holds the account out of later
-requests. If every candidate is held out, the proxy returns 429 with the
-earliest reset in `Retry-After`. A set with no usable Claude subscription
-otherwise returns 403. A missing or invalid key names only the problem with
-the key.
+| Company   | Methods and paths after the returned address                                          | Upstream                                          |
+| --------- | ------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Anthropic | POST `/v1/messages`, `/v1/messages/count_tokens`; GET `/v1/models`, `/v1/models/<id>` | `https://api.anthropic.com` with the same path    |
+| OpenAI    | POST `/responses`                                                                     | `https://chatgpt.com/backend-api/codex/responses` |
+
+The Codex launcher uses a custom HTTP Responses provider. The picker already
+has the ChatGPT models read at sign-in or Check again, so the turn proxy
+does not expose models, account, or login endpoints for OpenAI. It preserves
+the query, body and streamed response. It forwards these Codex headers when
+present: `content-type`, `content-encoding`, `accept`, `accept-encoding`,
+`user-agent`, `openai-beta`, `originator`, `version`, `session_id`,
+`session-id`, `thread-id`, `x-client-request-id`, `x-openai-subagent`,
+`x-codex-installation-id`, `x-codex-routing-hint`, `x-codex-turn-state`,
+`x-codex-turn-metadata`, `x-codex-parent-thread-id`, `x-codex-window-id`,
+`x-codex-beta-features` and `x-openai-internal-codex-responses-lite`.
+It defaults an absent originator to `codex_cli_rs`. It always replaces
+Authorization and ChatGPT-Account-Id with the chosen account's access token
+and stored workspace id.
+
+Keys with a lease capture the company’s enabled subscriptions in set order.
+Edits and deletion affect future leases; keys without a lease use the current
+set. Both companies pick the first eligible account for their path and skip
+deleted, signed-out or rate-limited accounts. The proxy renews expiring logins
+before sending and records last use only on a 2xx response. A 401 forces one
+renewal and allows one replay. If the company refuses renewal, the account
+is signed out and the replay uses the next eligible account of that company.
+A 429 is returned to the CLI and holds the account out of later requests.
+When every candidate is held out, the proxy returns 429 with the earliest
+reset in Retry-After. A set with no usable subscription for the company
+otherwise returns 403.
 
 ## If you change X, check Y
 

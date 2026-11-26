@@ -1,7 +1,7 @@
 import { httpAction, type HttpActionContext, type Id } from "@tokamak/sdk";
 import type {} from "@tokamak/sdk/web";
 import { internal } from "./_generated/internal";
-import { companyAddresses } from "./addresses";
+import { companyAddresses, type Company } from "./addresses";
 import { OAUTH_BETA } from "./claude";
 import { retryAfter } from "./company";
 import { turnKeyHash } from "./sets";
@@ -18,33 +18,35 @@ function requestKey(headers: Headers) {
   return key && turnKeyHash(key);
 }
 
-function accountLimit(response: Response): number {
+function accountLimit(response: Response, company: Company): number {
   const now = Date.now();
   let rejected = response.status === 429;
   let reset = 0;
-  for (const prefix of [
-    "anthropic-ratelimit-unified",
-    "anthropic-ratelimit-unified-5h",
-    "anthropic-ratelimit-unified-7d",
-  ]) {
+  for (const prefix of company === "openai"
+    ? []
+    : ["anthropic-ratelimit-unified", "anthropic-ratelimit-unified-5h", "anthropic-ratelimit-unified-7d"]) {
     if (response.headers.get(`${prefix}-status`)?.toLowerCase() !== "rejected") continue;
     rejected = true;
     const at = Number(response.headers.get(`${prefix}-reset`)) * 1000;
     if (Number.isFinite(at) && at > now) reset = Math.max(reset, at);
   }
   if (!rejected) return 0;
-  const unified = Number(response.headers.get("anthropic-ratelimit-unified-reset")) * 1000;
+  const unified =
+    company === "anthropic" ? Number(response.headers.get("anthropic-ratelimit-unified-reset")) * 1000 : 0;
   if (Number.isFinite(unified) && unified > now) reset = Math.max(reset, unified);
   const wait = retryAfter(response);
   return reset || now + (wait !== undefined && Number.isFinite(wait) ? Math.max(1000, wait) : 60_000);
 }
 
-function unavailable({ accounts, earliestReset }: { accounts: unknown[]; earliestReset: number }) {
+function unavailable(
+  { accounts, earliestReset }: { accounts: unknown[]; earliestReset: number },
+  name: string,
+) {
   if (!accounts.length && earliestReset)
-    return error(429, "rate_limit_error", "Claude subscriptions in this set are rate limited.", {
+    return error(429, "rate_limit_error", `${name} subscriptions in this set are rate limited.`, {
       "retry-after": String(Math.max(1, Math.ceil((earliestReset - Date.now()) / 1000))),
     });
-  return error(403, "permission_error", "No usable Claude subscription in this set.");
+  return error(403, "permission_error", `No usable ${name} subscription in this set.`);
 }
 
 function claudeHeaders(incoming: Headers, access: string) {
@@ -67,15 +69,56 @@ function claudeHeaders(incoming: Headers, access: string) {
   return headers;
 }
 
-function allows(method: string, path: string | undefined) {
-  if (!path) return false;
-  if (method === "POST") return path === "v1/messages" || path === "v1/messages/count_tokens";
-  return method === "GET" && (path === "v1/models" || /^v1\/models\/[\w.-]+$/.test(path));
+// HTTP Responses headers from Codex's core client and CLIProxyAPI's Codex executor.
+const codexHeaders = [
+  "content-type",
+  "content-encoding",
+  "accept",
+  "accept-encoding",
+  "user-agent",
+  "openai-beta",
+  "originator",
+  "version",
+  "session_id",
+  "session-id",
+  "thread-id",
+  "x-client-request-id",
+  "x-openai-subagent",
+  "x-codex-installation-id",
+  "x-codex-routing-hint",
+  "x-codex-turn-state",
+  "x-codex-turn-metadata",
+  "x-codex-parent-thread-id",
+  "x-codex-window-id",
+  "x-codex-beta-features",
+  "x-openai-internal-codex-responses-lite",
+];
+
+function openaiHeaders(incoming: Headers, access: string, workspace: string) {
+  const headers = new Headers();
+  for (const name of codexHeaders) {
+    const value = incoming.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  headers.set("authorization", `Bearer ${access}`);
+  headers.set("chatgpt-account-id", workspace);
+  if (!headers.has("originator")) headers.set("originator", "codex_cli_rs");
+  return headers;
 }
 
-function targetUrl(base: string, path: string, requestUrl: string) {
-  // Match decoded segments, then preserve the original spelling and query on the wire.
-  const remainder = path.slice(path.indexOf("/", 1));
+function provider(method: string, path: string | undefined) {
+  if (!path) return;
+  if (method === "POST" && path === "openai/responses")
+    return { company: "openai", name: "ChatGPT", upstream: "/codex/responses" } as const;
+  if (allowsClaude(method, path)) return { company: "anthropic", name: "Claude" } as const;
+}
+
+function allowsClaude(method: string, path: string) {
+  if (method === "POST") return path === "v1/messages" || path === "v1/messages/count_tokens";
+  return method === "GET" && (path === "v1/models" || /^v1\/models\/(?!\.{1,2}$)[\w.-]+$/.test(path));
+}
+
+function targetUrl(base: string, remainder: string, requestUrl: string) {
   const query = requestUrl.indexOf("?");
   return base.replace(/\/$/, "") + remainder + (query === -1 ? "" : requestUrl.slice(query));
 }
@@ -91,9 +134,10 @@ async function recordForward(
   candidate: Candidate,
   credential: Credential,
   response: Response,
+  company: Company,
 ) {
   const account = { owner, account: candidate.id };
-  const limitedUntil = accountLimit(response);
+  const limitedUntil = accountLimit(response, company);
   if (response.ok || limitedUntil)
     await ctx.runMutation(internal.sets.recordForward, {
       ...account,
@@ -112,25 +156,33 @@ function replaced(before: Credential, after: Credential & { renewed: boolean }) 
 export const proxy = httpAction({
   path: "/:set/*",
   async handler(ctx, request) {
-    if (!allows(request.method, ctx.params["*"]))
-      return error(404, "not_found_error", "Claude API endpoint not found.");
+    const endpoint = provider(request.method, ctx.params["*"]);
+    if (!endpoint) return error(404, "not_found_error", "API endpoint not found.");
+    const { company, name } = endpoint;
     const hash = requestKey(request.headers);
     if (!hash) return error(401, "authentication_error", "Missing or invalid turn key.");
 
     let response: Response | undefined;
     try {
-      const args = { set: ctx.params.set!, hash };
+      const args = { set: ctx.params.set!, hash, company };
       const candidates = () => ctx.runQuery(internal.sets.candidates, args);
       const route = await candidates();
       if (!route.ok) return error(401, "authentication_error", route.error);
       const { owner } = route;
       const addresses = await companyAddresses(ctx);
-      const url = targetUrl(addresses.anthropic.api, ctx.path, request.url);
+      // Match decoded segments, but keep the original Claude path spelling on the wire.
+      const path =
+        endpoint.company === "openai" ? endpoint.upstream : ctx.path.slice(ctx.path.indexOf("/", 1));
+      const url = targetUrl(addresses[company].api, path, request.url);
       // The server buffers and bounds HTTP action uploads. Keep those bytes for one retry.
       const body = request.body ? await request.arrayBuffer() : undefined;
       const lookup = (candidate: Candidate) => ({ owner, account: candidate.id });
 
-      async function send(candidate: Candidate, { access, expiresAt }: Credential) {
+      async function send(
+        candidate: Candidate,
+        { access, expiresAt, workspace }: Credential & { workspace?: string },
+      ) {
+        if (company === "openai" && !workspace) return null;
         // Recheck after renewal: the turn or the account may have changed meanwhile.
         const current = await candidates();
         if (!current.ok) return { error: error(401, "authentication_error", current.error) };
@@ -143,12 +195,15 @@ export const proxy = httpAction({
         await discard(response);
         response = await fetch(url, {
           method: request.method,
-          headers: claudeHeaders(request.headers, access),
+          headers:
+            workspace && company === "openai"
+              ? openaiHeaders(request.headers, access, workspace)
+              : claudeHeaders(request.headers, access),
           body,
           redirect: "manual",
           signal: request.signal,
         });
-        await recordForward(ctx, owner, candidate, { access, expiresAt }, response);
+        await recordForward(ctx, owner, candidate, { access, expiresAt }, response, company);
         return { upstream: response };
       }
 
@@ -182,13 +237,13 @@ export const proxy = httpAction({
         const retry = await next(current.accounts.filter(({ id }) => id !== account.account));
         if (retry?.upstream) return retry.upstream;
         await discard(upstream);
-        return retry?.error ?? unavailable(current);
+        return retry?.error ?? unavailable(current, name);
       }
 
       const first = await next(route.accounts);
       if (!first) {
         const current = await candidates();
-        return current.ok ? unavailable(current) : error(401, "authentication_error", current.error);
+        return current.ok ? unavailable(current, name) : error(401, "authentication_error", current.error);
       }
       if (first.error) return first.error;
       if (first.upstream.status !== 401) return first.upstream;
@@ -196,7 +251,7 @@ export const proxy = httpAction({
     } catch {
       await discard(response)?.catch(() => {});
       // Fetch and host errors may carry request details. Never surface those.
-      return error(502, "api_error", "The Claude request could not be forwarded.");
+      return error(502, "api_error", `The ${name} request could not be forwarded.`);
     }
   },
 });

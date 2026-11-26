@@ -46,7 +46,7 @@ export default defineSchema({
      */
     workspace: v.optional(v.string()),
     status: v.union(v.literal("ok"), v.literal("signed-out")),
-    /** When a known Claude account quota window resets, in milliseconds since epoch. */
+    /** When a known account quota window resets, in milliseconds since epoch. */
     limitedUntil: v.optional(v.number()),
     /**
      * The models this account's login may use, as last read; absent until a read
@@ -70,6 +70,8 @@ export default defineSchema({
     owner: v.string(),
     set: v.id("sets"),
     hash: v.string(),
+    // Existing keys without a company were issued for Claude.
+    company: v.optional(company),
     // Older keys use the live set until they expire.
     subscriptions: v.optional(v.array(v.id("subscriptions"))),
     lease: v.optional(v.string()),
