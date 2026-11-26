@@ -1,0 +1,19 @@
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_bbb3cd361869a9::t_91c61f8da84807 31-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10a74fe81691429f274ad251a9e2cfb7192189f9",
+  "prompts": {},
+  "sessions": {
+    "s_bbb3cd361869a9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5edd9cc-b210-4c2f-b1cb-c84b82ea62cc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+plugins/agent-proxy/tests/workspace.ts
+  s_7a30246af0730e::t_3b6df71757e46b 4,51-57,60-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c048692e5004a9131bfc30acbf903ff1972be56",
+  "prompts": {},
+  "sessions": {
+    "s_7a30246af0730e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee930ffb-1991-4f90-9d86-2ea7a4c66c5e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+design/ai-profiles.md
+  s_7a30246af0730e::t_cdef4634c05054 71-73,85-88,137-146,148-149,182-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c85552c49f25519084e293a072e81c06d6c81966",
+  "prompts": {},
+  "sessions": {
+    "s_7a30246af0730e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee930ffb-1991-4f90-9d86-2ea7a4c66c5e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

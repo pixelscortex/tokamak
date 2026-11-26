@@ -1,0 +1,26 @@
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_bbb3cd361869a9::t_b119cb00434ea2 54-59,246-255,301
+  s_bbb3cd361869a9::t_6d85742278567b 445-447
+plugins/ai-profiles/src/server/profile-uses.ts
+  s_bbb3cd361869a9::t_d71f1dd9e3453a 1-37
+plugins/ai-profiles/src/server/_generated/api.ts
+  s_bbb3cd361869a9::t_0fed63e2b0a07b 4-10,22-26
+plugins/ai-profiles/src/server/manage.ts
+  s_bbb3cd361869a9::t_4b9f668297b551 1-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "09fe04c275ae9348f881ad6413904aaf0289cad6",
+  "prompts": {},
+  "sessions": {
+    "s_bbb3cd361869a9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5edd9cc-b210-4c2f-b1cb-c84b82ea62cc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
