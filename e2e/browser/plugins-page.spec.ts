@@ -67,7 +67,9 @@ test("a loaded fixture and a skipped folder, and the list follows a reload", asy
   // A second broken folder and a reload: the page catches up without a restart.
   await mkdir(join(folder, "bad-manifest", "dist"), { recursive: true });
   await writeFile(join(folder, "bad-manifest", "dist", "manifest.json"), "not json");
-  const reload = await fetch(`${desktop.endpoint.http}/plugins/integration-fixture/reload`, {
+  // The Runner answers HTTP on the same address as its socket.
+  const http = new URL(desktop.endpoint.ws).origin.replace(/^ws/, "http");
+  const reload = await fetch(`${http}/plugins/integration-fixture/reload`, {
     method: "POST",
     headers: { Authorization: `Bearer ${desktop.endpoint.token}` },
   });
