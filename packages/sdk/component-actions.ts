@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
+declare const originalElementBrand: unique symbol;
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
 
 export interface ComponentPart<Target extends string, Props extends object> {
@@ -28,6 +29,7 @@ type OriginalProps = {
 };
 
 export interface OriginalElement {
+  readonly [originalElementBrand]?: true;
   <P extends OriginalProps>(props: P & Record<Exclude<keyof P, "children">, never>): JSX.Element;
   Children(): JSX.Element;
 }

@@ -3,6 +3,7 @@
  * imports no agent plugin. Agents reach `ai` only through `plugin:ai/contracts`.
  */
 import { after, append, before, prepend, layer, useClient } from "@tokamak/sdk/client";
+import { Show } from "solid-js";
 import * as chat from "plugin:chat/client";
 import { AgentRow } from "./ui/agent-row";
 import { SteeredBody } from "./ui/turn-steers";
@@ -28,11 +29,11 @@ export const Agent = after(chat.find("box"), AgentRow);
 /** "What should Claude work on?" in place of "Start a conversation". */
 export const Heading = layer(chat.find("heading"), (_props, Original) => {
   void refreshAgents(useClient());
-  const heading = () => {
-    const agent = newThreadChoices()?.agent;
-    return agent ? `What should ${agent.name} work on?` : "Start a conversation";
-  };
-  return <Original>{heading()}</Original>;
+  return (
+    <Show when={newThreadChoices()?.agent} fallback={<Original />}>
+      {(agent) => <Original>What should {agent().name} work on?</Original>}
+    </Show>
+  );
 });
 /** The permission question, on the composer's tray above the prompt, while the sender's turn waits. */
 export const Permission = prepend(chat.find("top"), PermissionCard, {

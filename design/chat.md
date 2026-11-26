@@ -31,7 +31,7 @@ These are the searches used by the starter add-ons:
 | `chat.find("top")`                     | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
 | `chat.find("box")`                     | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
 | `chat.find("SendButton")`              | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
-| `chat.find("heading")`                 | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
+| `chat.find("heading")`                 | `ui/empty.tsx`         | Agent heading when an agent is available; chat supplies the default.                             |
 | `chat.find("header")`                  | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
 | `chat.find("body")`                    | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
 | `chat.find("footer")`                  | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |

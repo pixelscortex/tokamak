@@ -50,10 +50,12 @@ check is reactive and receives the declaring component's props, including
 Use `layer(target, (props, Original) => …)` to take over the element.
 Render `<Original />` to draw the next layer down, or the owner's element
 at the bottom. Pass children to change the contents without changing the
-element or its attributes. Put `<Original.Children />` among your children
-to draw the owner's contents, including other plugins' `prepend` and
-`append`. Draw `Original` at most once per layer. If no layer draws it, the
-owner's element is unloaded. A layer with a false `when` passes through.
+element or its attributes. Put `<Original.Children />` inside `<Original>` to
+draw the contents that would appear without this layer: the children supplied
+by an outer layer, or the owner's contents with other plugins' `prepend` and
+`append`. Draw `Original` and `Original.Children` at most once per layer.
+If no layer draws `Original`, the owner's element is unloaded. A layer with a
+false `when` passes through.
 Layers run outermost first by plugin install order, then `order` (default
 0), plugin ID, and export name. `before` and `after` stay outside all layers;
 `hide` also removes those sibling additions.

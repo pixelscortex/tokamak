@@ -1,4 +1,4 @@
-import { expect, onTestFinished, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
@@ -494,7 +494,17 @@ test("a native layer changes contents without changing the element, and can proj
   const toolbar = find("section", { in: "Composer" });
   const root = document.createElement("div");
   const lifecycle = vi.fn();
+  const body = find("div", { in: "Composer", nth: 1 });
+  const [showSibling, setShowSibling] = createSignal(true);
   const actions = [
+    contribution(
+      "BodySibling",
+      after(body, () => <i>included</i>, { when: showSibling }),
+      "after",
+      body,
+      0,
+      "companion",
+    ),
     contribution(
       "Lead",
       prepend(toolbar, () => <em>lead</em>),
@@ -547,8 +557,10 @@ test("a native layer changes contents without changing the element, and can proj
 
   setProject(true);
   flush();
-  expect(root.querySelector("[data-projection]")?.textContent).toBe("leadSendtail");
+  expect(root.querySelector("[data-projection]")?.textContent).toBe("leadSendincludedtail");
   expect(root.querySelector("section")).toBe(owner);
+  setShowSibling(false);
+  flush();
   setLabel("Post");
   flush();
   expect(root.textContent).toBe("newleadPosttail");
@@ -765,6 +777,7 @@ test("an error in children supplied by a layer falls back to the original", asyn
 test("a native text binding stays out of an override and resumes with the latest value", async () => {
   const [text, setText] = createSignal("original");
   const [changed, setChanged] = createSignal(true);
+  const [project, setProject] = createSignal(false);
   const target = find("p", { in: "BenchmarkRow" });
   const root = document.createElement("div");
   const actions = [
@@ -774,7 +787,7 @@ test("a native text binding stays out of an override and resumes with the latest
         target,
         (_, Original) => (
           <Original>
-            <mark>custom</mark>
+            <mark>custom{project() && <Original.Children />}</mark>
           </Original>
         ),
         { when: changed },
@@ -798,8 +811,190 @@ test("a native text binding stays out of an override and resumes with the latest
   setText("live");
   flush();
   expect(node?.textContent).toBe("custom");
+  setProject(true);
+  flush();
+  expect(node?.textContent).toBe("customlive");
+  setText("live again");
+  flush();
+  expect(node?.textContent).toBe("customlive again");
   setChanged(false);
   flush();
   expect(root.querySelector("p")).toBe(node);
-  expect(node?.textContent).toBe("live");
+  expect(node?.textContent).toBe("live again");
+});
+
+test.each([
+  {
+    parent: find("header", { in: "RealisticRow" }),
+    child: find("b", { in: "RealisticRow" }),
+    selector: "header",
+    sibling: "b + i",
+    screen: () => <RealisticRow text="test" />,
+  },
+  {
+    parent: find("section", { in: "Composer" }),
+    child: find("div", { in: "Composer", nth: 1 }),
+    selector: "section",
+    sibling: '[aria-label="body"] + i',
+    screen: () => <Composer label="Send" lifecycle={vi.fn()} />,
+  },
+])(
+  "restores descendant placements after overriding $selector",
+  async ({ parent, child, selector, sibling, screen }) => {
+    const [on, setOn] = createSignal(false);
+    const root = document.createElement("div");
+    onTestFinished(
+      render(
+        () => (
+          <ExtensionProvider
+            host={host([
+              contribution(
+                "Added",
+                after(child, () => <i>Added</i>),
+                "after",
+                child,
+                0,
+                "companion",
+              ),
+              contribution(
+                "Content",
+                layer(parent, (_, Original) => <Original>custom</Original>, { when: on }),
+                "layer",
+                parent,
+              ),
+            ])}
+          >
+            {screen()}
+          </ExtensionProvider>
+        ),
+        root,
+      ),
+    );
+    await waitFor(() => expect(root.querySelector(sibling)?.textContent).toBe("Added"));
+    const element = root.querySelector(selector);
+    setOn(true);
+    flush();
+    expect(element?.textContent).toBe("custom");
+    setOn(false);
+    flush();
+    expect(root.querySelector(selector)).toBe(element);
+    expect(root.querySelector(sibling)?.textContent).toBe("Added");
+  },
+);
+
+describe.each([
+  {
+    path: "native",
+    target: find("header", { in: "RealisticRow" }),
+    render: () => <RealisticRow text="test" />,
+    selector: "header",
+    owner: "Person10:00Ready",
+  },
+  {
+    path: "component",
+    target: find("Region"),
+    render: () => <Labels labels={[]} />,
+    selector: "main",
+    owner: "Body",
+  },
+])("Original.Children on a $path element", ({ target, render: screen, selector, owner }) => {
+  function mount(actions: Layer[]) {
+    const root = document.createElement("div");
+    onTestFinished(
+      render(() => <ExtensionProvider host={host(actions)}>{screen()}</ExtensionProvider>, root),
+    );
+    return root;
+  }
+
+  test("projects the children passed by the previous layer", async () => {
+    const Outer = layer(target, (_, Original) => <Original>X</Original>);
+    const Inner = layer(target, (_, Original) => (
+      <Original>
+        Y<Original.Children />
+      </Original>
+    ));
+    const root = mount([
+      contribution("Outer", Outer, "layer", target, 0, "outer", 1),
+      contribution("Inner", Inner, "layer", target, 0, "inner", 2),
+    ]);
+    await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe("YX"));
+  });
+
+  test("draws nothing outside Original", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const Outside = layer(target, (_, Original) => (
+      <aside>
+        <Original.Children />
+        <Original />
+      </aside>
+    ));
+    const root = mount([contribution("Outside", Outside, "layer", target)]);
+    await waitFor(() => expect(root.querySelector("aside")?.textContent).toBe(owner));
+    expect(warn.mock.calls.filter(([message]) => String(message).includes("Original.Children"))).toHaveLength(
+      1,
+    );
+  });
+
+  test("draws the contents only once, with both inside placements", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const Twice = layer(target, (_, Original) => (
+      <Original>
+        <Original.Children />
+        <Original.Children />
+      </Original>
+    ));
+    const root = mount([
+      contribution(
+        "Lead",
+        prepend(target, () => "lead/"),
+        "prepend",
+        target,
+      ),
+      contribution(
+        "Tail",
+        append(target, () => "/tail"),
+        "append",
+        target,
+      ),
+      contribution("Twice", Twice, "layer", target),
+    ]);
+    await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe(`lead/${owner}/tail`));
+    expect(warn.mock.calls.filter(([message]) => String(message).includes("Original.Children"))).toHaveLength(
+      1,
+    );
+  });
+});
+
+test("reloading a plugin allows its layer warnings to be reported again", async () => {
+  const target = find("SendButton");
+  const [version, setVersion] = createSignal(0);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  onTestFinished(() => warn.mockRestore());
+  const Broken = layer(target, () => {
+    throw new Error("again");
+  });
+  const root = document.createElement("div");
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider
+          host={{
+            ...host([contribution("Broken", Broken, "layer", target, 0, "reloaded")]),
+            version: (id) => (id === "reloaded" ? version() : 0),
+          }}
+        >
+          <Composer label="Send" lifecycle={vi.fn()} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  const warnings = () => warn.mock.calls.filter(([message]) => /reloaded\/Broken.*again/.test(message));
+  await waitFor(() => expect(warnings()).toHaveLength(1));
+  setVersion(1);
+  flush();
+  await waitFor(() => expect(warnings()).toHaveLength(2));
+  expect(root.textContent).toBe("Send");
 });

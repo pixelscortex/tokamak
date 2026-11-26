@@ -83,12 +83,15 @@ export function ExtensionProvider(props: {
     alerts();
   }
 
-  const layerWarnings = new Set<string>();
+  const layerWarnings = new Map<string, Set<string>>();
   const registry: PartRegistry = {
     warn(key, message) {
-      const id = JSON.stringify(key);
-      if (layerWarnings.has(id)) return;
-      layerWarnings.add(id);
+      const [kind, plugin, target] = key;
+      let warnings = layerWarnings.get(plugin);
+      if (!warnings) layerWarnings.set(plugin, (warnings = new Set()));
+      const id = JSON.stringify([kind, target]);
+      if (warnings.has(id)) return;
+      warnings.add(id);
       console.warn(message);
     },
     mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
@@ -125,6 +128,7 @@ export function ExtensionProvider(props: {
     for (const target of targets.get(id) ?? [])
       update(target, (items) => items.filter((c) => c.plugin !== id));
     targets.delete(id);
+    layerWarnings.delete(id);
 
     // A reloaded add-on reports its stale targets again; a removed one has none.
     let forgotten = false;
@@ -326,7 +330,11 @@ export {
   type RegionName,
 } from "./regions";
 
-export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";
+export {
+  renderPart as __renderPart,
+  renderNativePart as __renderNativePart,
+  renderNativeText as __renderNativeText,
+} from "./component-parts";
 
 const authoredElements = new WeakMap<object, () => ReturnType<typeof screenElements>>();
 

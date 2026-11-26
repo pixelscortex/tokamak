@@ -319,3 +319,25 @@ test("an Index callback exposes its accessor item and numeric index", async () =
     );
   });
 }, 30_000);
+
+test("a renamed Original parameter and its Children are private to the layer", async () => {
+  await scratch(async (root) => {
+    built(await source(root, "owner", screen));
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        `
+        export const Frame = layer(owner.find("title", { in: "Header" }), (_, Keep) => (
+          <Keep><i data-part="badge">New</i><Keep.Children /></Keep>
+        ));
+      `,
+    );
+    built(addon);
+    const types = await readFile(resolve(addon, "src/_generated/components.d.ts"), "utf8");
+    expect(types).toContain('"badge"');
+    expect(types).not.toMatch(/"Keep(?:[^"]*)"/);
+    const ui = await readFile(resolve(addon, "dist/ui.js"), "utf8");
+    expect(ui).not.toContain('"Keep');
+  });
+}, 30_000);

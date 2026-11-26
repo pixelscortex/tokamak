@@ -3,6 +3,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createRenderEffect,
   createRoot,
   createSignal,
   getOwner,
@@ -67,7 +68,7 @@ export interface PartObserver {
 
 export interface PartRegistry {
   mismatch(plugin: string, target: string): void;
-  warn(key: readonly string[], message: string): void;
+  warn(key: readonly [kind: string, plugin: string, target: string], message: string): void;
   read(target: string): () => readonly LoadedPartAction[];
   observe(target: string, observer: PartObserver): void;
   unobserve(target: string, observer: PartObserver): void;
@@ -81,10 +82,11 @@ type NativeSite = readonly [
   children: readonly NativeSite[],
   ref?: number | null,
   hole?: number | null,
-  authored?: number,
 ];
 type HoleValue = JSX.Element | (() => JSX.Element);
-type RenderHole = (id: number, render: () => HoleValue, text?: true) => HoleValue | (() => HoleValue);
+type RenderHole = (id: number, render: () => HoleValue) => () => HoleValue;
+type ParkedHoles = Map<Text, () => HoleValue>;
+type HoleState = boolean | ParkedHoles;
 
 function matches(
   registry: PartRegistry,
@@ -97,14 +99,14 @@ function matches(
   return false;
 }
 
-const plainHole: RenderHole = (_id, render, text) => (text ? render() : render);
+const plainHole: RenderHole = (_id, render) => render;
 const plainSpread = (props: object) => props;
 
 // Native templates own their DOM nodes. Additions get their own insertion
 // ranges, so changing one path leaves the other nodes and observers alone.
-function nativeRange(parent: Element, before: Node | null, original?: Element) {
-  const start = parent.ownerDocument.createTextNode("");
-  const end = parent.ownerDocument.createTextNode("");
+function nativeRange(parent: ParentNode, before: Node | null, original?: Element) {
+  const start = parent.ownerDocument!.createTextNode("");
+  const end = parent.ownerDocument!.createTextNode("");
   parent.insertBefore(start, original ?? before);
   parent.insertBefore(end, before);
   onCleanup(() => {
@@ -117,48 +119,74 @@ function nativeRange(parent: Element, before: Node | null, original?: Element) {
   return end;
 }
 
-function nativeContents(
-  element: Element,
-  contents: Contents,
-  authored?: ChildOverride,
-  resume?: () => void,
-  suspend?: () => void,
-) {
+type NativeContents = {
+  resume(): void;
+  suspend(park?: ParkedHoles): void;
+  project(parent: ParentNode, nodes: Node[]): void;
+};
+
+function nativeContents(element: Element, contents: Contents, children?: NativeContents) {
   const { prepend, append, native } = contents;
-  function additions() {
-    if (prepend) insert(element, prepend(), nativeRange(element, element.firstChild));
-    if (append) insert(element, append(), nativeRange(element, null));
-  }
-  if (!native) return additions();
+  if (!native) return nativeAdditions(element, prepend, append);
   if (
     element.namespaceURI === "http://www.w3.org/1999/xhtml" &&
     /^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/.test(element.localName)
   )
     return;
 
-  // Keep the template untouched in the pass-through branch. When its
-  // children are overridden, retire native observers and holes before
-  // parking the template's children so no live insert still owns them.
   const changed = createMemo(() => !!native.read());
   createEffect(
     () => {
       const owner = getOwner();
       if (!changed()) {
-        resume?.();
-        onSettled(() => {
-          runWithOwner(owner, additions);
-        });
+        onSettled(() =>
+          runWithOwner(owner, () => {
+            children?.resume();
+            nativeAdditions(element, prepend, append);
+          }),
+        );
         return;
       }
-      suspend?.();
+      // Component holes unload before moving children. Leave an anchor for each
+      // direct hole so projection can mount it in its new parent on demand.
+      const holes: ParkedHoles = new Map();
+      children?.suspend(holes);
       let restore: (() => void) | undefined;
       onCleanup(() => restore?.());
       onSettled(() => {
-        const children = Array.from(element.childNodes);
-        native.capture(authored ?? (() => children));
+        const parked = Array.from(element.childNodes);
+        let projection: (() => void) | undefined;
+        native.capture(() => {
+          const anchor = element.ownerDocument.createTextNode("");
+          const owner = getOwner();
+          let live = true;
+          const stop = () => {
+            live = false;
+            projection?.();
+            projection = undefined;
+          };
+          onCleanup(stop);
+          onSettled(() => {
+            if (!live || !anchor.parentNode) return;
+            const parent = anchor.parentNode;
+            runWithOwner(owner, () =>
+              createRoot((dispose) => {
+                projection = dispose;
+                children?.project(parent, parked);
+                for (const [marker, draw] of holes) {
+                  if (marker.parentNode === parent)
+                    insert(parent, () => untrack(draw), nativeRange(parent, marker));
+                }
+              }),
+            );
+          });
+          return [...parked, anchor];
+        });
         element.replaceChildren();
         restore = () => {
-          element.replaceChildren(...children);
+          projection?.();
+          // Observers must see the restored DOM the next time they register.
+          element.replaceChildren(...parked.filter((node) => !holes.has(node as Text)));
           native.capture(() => undefined);
         };
         runWithOwner(owner, () =>
@@ -173,73 +201,90 @@ function nativeContents(
   );
 }
 
+const textEffect = { sync: true, transparent: true };
+
+export function renderNativeText(parent: Element, read: () => string | number, before: Node | null = null) {
+  let node: Text | undefined;
+  createRenderEffect(
+    read,
+    (value) => {
+      const text = String(value ?? "");
+      if (node) node.data = text;
+      else node = parent.insertBefore(parent.ownerDocument.createTextNode(text), before);
+    },
+    textEffect,
+  );
+}
+
+function nativeAdditions(element: Element, prepend?: ChildOverride, append?: ChildOverride) {
+  if (prepend) insert(element, prepend(), nativeRange(element, element.firstChild));
+  if (append) insert(element, append(), nativeRange(element, null));
+}
+
 export function renderNativePart(
   target: string,
   fingerprint: string | null | undefined,
   props: object,
   row: (() => object) | undefined,
-  create: (refs: Element[], hole: RenderHole, authored?: number) => JSX.Element,
+  create: (refs: Element[], hole: RenderHole) => JSX.Element,
   children: readonly NativeSite[],
-  original?: number,
-  rootHole?: number | null,
+  rootHole?: number,
 ) {
   const registry = useContext(PartActions);
   if (!registry) return create([], plainHole);
-  if (!children.length && typeof rootHole !== "number")
+  if (!children.length)
     return renderPart(target, fingerprint, props, row, (contents) => {
       const element = create([], plainHole) as Element;
-      nativeContents(
-        element,
-        contents,
-        contents.native && original ? () => create([], plainHole, original) : undefined,
-      );
+      nativeContents(element, contents);
       return element;
     });
 
   return renderPart(target, fingerprint, props, row, (contents) => {
     const refs: Element[] = [];
-    const active: ReturnType<typeof createSignal<boolean>>[] = [];
-
-    const hole: RenderHole = (id, render, text) => {
+    const active: ReturnType<typeof createSignal<HoleState>>[] = [];
+    let element: Element;
+    const hole: RenderHole = (id, render) => {
       let state = active[id];
-      if (!state) active[id] = state = createSignal(true, { ownedWrite: true });
+      if (!state) active[id] = state = createSignal<HoleState>(true, { ownedWrite: true });
       const [shown] = state;
-      // Native text's existing insert tracks this guard directly. It must
-      // stop writing to its parent while a layer has supplied other children.
-      if (text) return shown() ? render() : undefined;
-      return createMemo(() => (shown() ? untrack(render) : undefined));
+      return createMemo(() => {
+        const value = shown();
+        if (value === true) return untrack(render);
+        if (value === false) return undefined;
+        const marker = element.ownerDocument.createTextNode("");
+        value.set(marker, render);
+        return marker;
+      });
     };
 
-    function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean) {
+    function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: HoleState) {
       if (typeof id === "number") {
         const state = active[id];
         if (!state) active[id] = createSignal(enabled, { ownedWrite: true });
         else state[1](enabled);
       }
-      for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled);
+      for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled === true);
     }
 
-    const element = create(refs, hole) as Element;
-    const scope = { registry, refs, owner: getOwner(), props, row, setHoles, create };
-    let bindings = registerNative(element, children, scope);
+    element = create(refs, hole) as Element;
+    const scope = { registry, refs, owner: getOwner(), props, row, setHoles };
+    let bindings: NativeBinding[] | undefined = registerNative(element, children, scope);
     onCleanup(() => stopNative(bindings));
-    if (contents.native) {
-      nativeContents(
-        element,
-        contents,
-        original ? () => create([], plainHole, original) : undefined,
-        () => {
-          if (bindings.length) return;
-          for (const state of active) state?.[1](true);
+    if (contents.native)
+      nativeContents(element, contents, {
+        resume() {
+          if (bindings) return;
+          setHoles(rootHole, children, true);
           bindings = registerNative(element, children, scope);
         },
-        () => {
+        suspend(park) {
           stopNative(bindings);
-          bindings = [];
-          for (const state of active) state?.[1](false);
+          bindings = undefined;
+          setHoles(rootHole, children, park ?? false);
         },
-      );
-    } else nativeContents(element, contents);
+        project: (parent, nodes) => projectNative(parent, nodes, children, scope),
+      });
+    else nativeContents(element, contents);
     return element;
   });
 }
@@ -250,24 +295,44 @@ type NativeScope = {
   owner: ReturnType<typeof getOwner>;
   props: object;
   row: (() => object) | undefined;
-  create(refs: Element[], hole: RenderHole, authored?: number): JSX.Element;
-  setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean): void;
+  setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: HoleState): void;
 };
 
-function registerNative(node: Element, sites: readonly NativeSite[], scope: NativeScope) {
-  let child = node.firstElementChild;
+function registerNative(
+  node: ParentNode,
+  sites: readonly NativeSite[],
+  scope: NativeScope,
+  projected?: Node[],
+) {
+  let child = projected
+    ? (projected.find((candidate): candidate is Element => candidate.nodeType === 1) ?? null)
+    : node.firstElementChild;
   const bindings: NativeBinding[] = [];
   for (let i = 0; i < sites.length; i++) {
     const site = sites[i]!;
     const ref = site[3];
     const element = typeof ref === "number" ? scope.refs[ref] : child;
-    if (!element || (typeof ref === "number" && element.parentElement !== node)) continue;
+    if (!element || (typeof ref === "number" && element.parentNode !== node)) continue;
     if (i + 1 < sites.length && typeof sites[i + 1]![3] !== "number") child = element.nextElementSibling;
     const binding = new NativeBinding(scope, element, site);
     bindings.push(binding);
     binding.start();
   }
   return bindings;
+}
+
+function projectNative(parent: ParentNode, nodes: Node[], sites: readonly NativeSite[], scope: NativeScope) {
+  // Only direct holes need their insertions rebuilt. Inside a moved element,
+  // existing insertion ranges still point to their original parent.
+  function showHoles(shown: boolean) {
+    for (const [, , descendants, , hole] of sites) scope.setHoles(hole, descendants, shown);
+  }
+  showHoles(true);
+  const bindings = registerNative(parent, sites, scope, nodes);
+  onCleanup(() => {
+    stopNative(bindings);
+    showHoles(false);
+  });
 }
 
 function stopNative(bindings: NativeBinding[] | undefined) {
@@ -303,7 +368,7 @@ class NativeBinding implements PartObserver {
     this.dispose?.();
     this.dispose = undefined;
     const { registry, owner, props, row, setHoles } = this.scope;
-    const [target, fingerprint, children, , hole, authored] = this.site;
+    const [target, fingerprint, children, , hole] = this.site;
     const actions = installed.filter((item) => matches(registry, target, fingerprint, item));
     if (!actions.length) {
       if (typeof hole === "number" || children.length) setHoles(hole, children, true);
@@ -314,15 +379,15 @@ class NativeBinding implements PartObserver {
       const kind = componentActionKind(action);
       return kind === "hide" || kind === "layer";
     });
-    const deactivate = () => {
-      setHoles(hole, children, false);
+    const deactivate = (park?: ParkedHoles) => {
       stopNative(this.inner);
       this.inner = undefined;
+      setHoles(hole, children, park ?? false);
     };
     if (destructive) deactivate();
 
     const element = this.element;
-    const parent = element.parentElement!;
+    const parent = element.parentNode! as ParentNode;
     const next = element.nextSibling;
     const placementProps = row ? merge(props, { $row: row() }) : props;
     runWithOwner(owner, () =>
@@ -334,15 +399,13 @@ class NativeBinding implements PartObserver {
             if (destructive) setHoles(hole, children, true);
             this.registerChildren();
           };
-          if (destructive) onCleanup(deactivate);
+          if (destructive) onCleanup(() => deactivate());
           if (contents.native) {
-            nativeContents(
-              element,
-              contents,
-              authored ? () => this.scope.create([], plainHole, authored) : undefined,
-              activate,
-              deactivate,
-            );
+            nativeContents(element, contents, {
+              resume: activate,
+              suspend: deactivate,
+              project: (parent, nodes) => projectNative(parent, nodes, children, this.scope),
+            });
           } else {
             activate();
             nativeContents(element, contents);
@@ -618,6 +681,8 @@ function renderLayer(
 
   function activeLayer() {
     let claimed = false;
+    let childrenClaimed = false;
+    const Outlet = createContext(false);
     const [failed, setFailed] = createSignal(false, { ownedWrite: true });
     const owner = getOwner();
     const Original: OriginalElement = Object.assign(
@@ -635,7 +700,7 @@ function renderLayer(
         });
         if (!("children" in passed)) return next(read);
         const children: LayerContents = {
-          draw: () => passed.children,
+          draw: () => <Outlet value={true}>{passed.children}</Outlet>,
           fail(cause) {
             // Children render at the bottom of the stack. Report their
             // failure back to the layer that supplied them.
@@ -649,7 +714,27 @@ function renderLayer(
         };
         return next(() => children);
       },
-      { Children: () => authored() },
+      {
+        Children() {
+          const inside = useContext(Outlet);
+          if (!inside || childrenClaimed) {
+            registry.warn(
+              ["children", item.plugin, target],
+              `Component layer ${item.plugin}/${item.id} must draw Original.Children once inside Original for ${target}`,
+            );
+            return undefined;
+          }
+          childrenClaimed = true;
+          onCleanup(() => {
+            childrenClaimed = false;
+          });
+          const previous = () => {
+            const inherited = read();
+            return inherited ? drawContents(inherited) : authored();
+          };
+          return <>{previous()}</>;
+        },
+      },
     );
     return (
       <Show when={!failed()} fallback={next(read)}>

@@ -255,6 +255,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         )
           return;
         const tag = opening.tagName;
+        const original =
+          ts.isPropertyAccessExpression(tag) && tag.name.text === "Children" ? tag.expression : tag;
+        if (brand(checker.getTypeAtLocation(original), "originalElementBrand")) {
+          ts.forEachChild(node, (child) => visit(child, scope));
+          return;
+        }
         const builtin = solidTag(tag);
         if (builtin && solidBuiltins.has(builtin)) {
           const callback = builtin === "For" || builtin === "Index" ? childCallback(node) : undefined;
@@ -376,14 +382,11 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           text: ts.JsxExpression[];
         };
         const native = new Set<Element>();
-        const nativeRoots = new Map<Element, { table: string; authored: string[]; hole: number | null }>();
+        const nativeRoots = new Map<Element, { table: string; rootHole: boolean }>();
         const holes = new Map<Element, number>();
         const addresses = new Map<string, { variable: string; suffixes: string[] }>();
-        const addressesByPart = new Map<Part, string>();
-        function address(part: Part) {
-          const cached = addressesByPart.get(part);
-          if (cached) return cached;
-          const segments = part.target.split(".");
+        function address({ target }: Part) {
+          const segments = target.split(".");
           const prefix = segments.slice(0, 2).join(".");
           let group = addresses.get(prefix);
           if (!group) {
@@ -391,39 +394,9 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             addresses.set(prefix, group);
           }
           const index = group.suffixes.push(segments.slice(2).join(".")) - 1;
-          const reference = `${group.variable}[${index}]`;
-          addressesByPart.set(part, reference);
-          return reference;
+          return `${group.variable}[${index}]`;
         }
         const tables: string[] = [];
-        const beforeTemplates = output.clone();
-
-        // Native templates retain their real nodes for pass-through. An
-        // explicit children override can project the authored JSX independently,
-        // without moving live template insertion points into another element.
-        function authoredChildren(node: ts.JsxElement) {
-          const start = node.openingElement.end;
-          const end = node.closingElement.getStart(source);
-          if (node.children.every(ts.isJsxText)) return `<>${source.text.slice(start, end)}</>`;
-          const branch = beforeTemplates.clone();
-          for (const [child, part] of elements!) {
-            if (child.pos >= start && child.end <= end && !erased(child))
-              transformElement(child, part, address(part), branch, source, mounts?.get(child));
-          }
-          closeScopes(branch, start, end);
-          return `<>${branch.slice(start - 1, end + 1).slice(1, -1)}</>`;
-        }
-
-        function closeScopes(branch: MagicString, start = 0, end = source.end) {
-          for (const { node } of bindings.get(source) ?? []) {
-            if (node.pos >= start && node.end <= end && !erased(node) && !ts.isBlock(node))
-              branch.appendLeft(node.end, "); }");
-          }
-          for (const { node, item, index } of rows.get(source) ?? []) {
-            if (node.pos >= start && node.end <= end && !erased(node))
-              branch.appendLeft(node.end, `)(${item}, ${index})`);
-          }
-        }
         function collect(node: Element): Site | undefined {
           const opening = ts.isJsxElement(node) ? node.openingElement : node;
           const part = elements!.get(node);
@@ -487,42 +460,42 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             continue;
           let nextRef = 0;
           let nextHole = 0;
-          const authored: string[] = [];
           function serialize(site: Site, ref: number | null = null, root = false): string {
             native.add(site.node);
-            const contents =
-              ts.isJsxElement(site.node) && site.node.children.length
-                ? authored.push(`case ${authored.length + 1}: return ${authoredChildren(site.node)};`)
-                : 0;
-            const grouped = site.holes.length || site.text.length ? nextHole++ : null;
-            for (const { expression } of site.text) {
-              output.prependLeft(expression!.getStart(source), `__tokamakHole(${grouped}, () => (`);
-              output.appendLeft(expression!.end, "), true)");
+            const grouped = site.holes.length ? nextHole++ : null;
+            const node = site.node;
+            if (
+              site.text.length === 1 &&
+              ts.isJsxElement(node) &&
+              node.children.every(
+                (child) =>
+                  ts.isJsxExpression(child) ||
+                  (ts.isJsxText(child) && /^\s*[\r\n]\s*$/.test(child.getFullText(source))),
+              )
+            ) {
+              const tag = node.openingElement.tagName.getText(source);
+              const value = site.text[0]!.expression!;
+              // Let Solid keep special native element semantics, such as
+              // resynchronizing a select when its option's text changes.
+              const special = /^(option|textarea|script|style|title)$/.test(tag);
+              output.prependLeft(value.getStart(source), special ? "[" : "__tokamakScalarText(");
+              output.appendLeft(value.end, special ? "]" : ")");
+            }
+            if (ref !== null) {
+              const opening = ts.isJsxElement(node) ? node.openingElement : node;
+              output.appendLeft(opening.attributes.end, ` ref={(__el) => { __tokamakRefs[${ref}] = __el; }}`);
             }
             for (const hole of site.holes) holes.set(hole, grouped!);
-            const children = site.children.map((child) => {
-              let ref: number | null = null;
-              if (site.holes.some((hole) => hole.end <= child.node.pos)) {
-                ref = nextRef++;
-                const opening = ts.isJsxElement(child.node) ? child.node.openingElement : child.node;
-                output.appendLeft(
-                  opening.attributes.end,
-                  ` ref={(__el) => { __tokamakRefs[${ref}] = __el; }}`,
-                );
-              }
-              return serialize(child, ref);
-            });
+            const children = site.children.map((child) =>
+              serialize(child, site.holes.some((hole) => hole.end <= child.node.pos) ? nextRef++ : null),
+            );
             if (root) return `[${children.join(",")}]`;
-            return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null || contents ? `,${ref},${grouped}` : ""}${contents ? `,${contents}` : ""}]`;
+            return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null ? `,${ref},${grouped}` : ""}]`;
           }
           const name = `__tokamakIsland${nativeRoots.size + 1}`;
           const data = serialize(site, null, true);
           tables.push(`const ${name} = ${data};`);
-          nativeRoots.set(node, {
-            table: name,
-            authored,
-            hole: site.holes.length || site.text.length ? 0 : null,
-          });
+          nativeRoots.set(node, { table: name, rootHole: !!site.holes.length });
         }
         // Edit in JSX postorder so adjacent boundaries at the same offset
         // close the previous sibling before opening the next one.
@@ -537,11 +510,11 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           const container = ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
           output.appendLeft(
             node.getStart(source),
-            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole, __tokamakChild) => __tokamakChild === undefined ? `,
+            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole) => `,
           );
           output.appendLeft(
             node.end,
-            ` : (() => { switch (__tokamakChild) { ${island.authored.join(" ")} } })(), ${island.table}, 1, ${island.hole})${container ? "}" : ""}`,
+            `, ${island.table}${island.rootHole ? ", 0" : ""})${container ? "}" : ""}`,
           );
         }
         if (tables.length) output.prepend(tables.join("\n") + "\n");
@@ -553,7 +526,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
             .join(""),
         );
-        closeScopes(output);
+        for (const { node } of bindings.get(source) ?? []) {
+          if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
+        }
+        for (const { node, item, index } of rows.get(source) ?? []) {
+          if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
+        }
         output.prepend(
           'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
         );

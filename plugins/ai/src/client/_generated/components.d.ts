@@ -89,7 +89,6 @@ type Props38 = Extract<NonNullable<Props36 & { readonly $row: { readonly item: {
 type Props39 = Extract<NonNullable<Props19 & { readonly $row: { readonly item: () => import("../lib/steers").BodyPiece; readonly index: number } }>, object>;
 type Props40 = Extract<NonNullable<{ text: string; sender: string }>, object>;
 export declare const find: import("@tokamak/sdk/client").ScreenFind<{
-  "Original": {};
   "svg": Props1;
   "path": Props2;
   "Menu.Root": Props3;
