@@ -138,24 +138,22 @@ export function tokamak(
         if (options.backend === false && plugin.exports !== undefined)
           throw new Error("Plugin exports require a backend");
         if (options.backend !== false) {
-          // SDK discovery/checking is Bun-only. Invoke its existing pinned entry
-          // even if Vite itself was launched through Node's standard CLI.
+          // Reuse the builder's Bun from any cwd. The checkout pins Bun for Node's Vite CLI.
           const transactions = resolve(server, "dist/transactions.js");
           await rm(transactions, { force: true });
           await rm(`${transactions}.map`, { force: true });
+          const usingBun = !!process.versions.bun;
           const bundled = spawnSync(
-            "proto",
+            usingBun ? process.execPath : "proto",
             [
-              "run",
-              "bun",
-              "--",
+              ...(usingBun ? [] : ["run", "bun", "--"]),
               fileURLToPath(new URL("../../sdk/tools/bundle.mjs", import.meta.url)),
               server,
               "--plugin",
               plugin.id,
               ...(options.plugin ? ["--depends", JSON.stringify(plugin.depends ?? {})] : []),
             ],
-            { stdio: "inherit" },
+            { stdio: "inherit", ...(usingBun ? {} : { cwd: import.meta.dirname }) },
           );
           if (bundled.error) throw bundled.error;
           if (bundled.status !== 0) throw new Error("SDK backend bundling failed");

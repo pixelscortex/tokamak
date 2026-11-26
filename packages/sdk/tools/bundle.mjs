@@ -3,6 +3,7 @@ import { Visibility } from "../src/visibility.ts";
 // Bun's parser scans module exports without executing feature code on the build
 // machine. Namespace registration at runtime and mapped TS types use the same
 // definition brand, so aliases/reexports/wrapped builders need no AST heuristics.
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { basename, join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,12 @@ import { httpActionEntry } from "./http-actions.mjs";
 import { buildLocalBundle, transactionSources } from "./worker.mjs";
 import { bunPluginBoundary, checkPluginImports, featurePluginRoot } from "./plugin-boundary.mjs";
 import ts from "typescript";
-import { definitionInfo, pluginCompilerOptions, runtimeExportNames } from "./plugin-compiler.mjs";
+import {
+  definitionInfo,
+  pluginCompilerOptions,
+  runtimeExportNames,
+  serverConfigPath,
+} from "./plugin-compiler.mjs";
 
 import { isServerRoot, isServerModule } from "./server-files.mjs";
 import {
@@ -68,7 +74,7 @@ function apiType(modules, typeAt) {
 
 function discoverReferences(root, pluginRoot, sources, virtual) {
   const config = ts.getParsedCommandLineOfConfigFile(
-    ts.findConfigFile(root, ts.sys.fileExists) ?? join(sdkRoot, "../..", "tsconfig.json"),
+    serverConfigPath(root, pluginRoot),
     {},
     { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} },
   );
@@ -395,9 +401,9 @@ if (import.meta.main) {
   ) {
     throw new Error("sdk:bundle expects a feature folder and optional --plugin <id> [--depends <json>]");
   }
-  // Moon runs the task in packages/sdk/. Arguments are workspace-relative for stable use
-  // from either the repository root or the feature's own moon configuration.
-  const feature = resolve(sdkRoot, "../..", folder);
+  // Moon runs in packages/sdk/ and also accepts workspace-relative arguments.
+  const fromCwd = resolve(folder);
+  const feature = existsSync(fromCwd) ? fromCwd : resolve(sdkRoot, "../..", folder);
   // Bun's generated module comments/debug IDs must not depend on caller cwd.
   process.chdir(feature);
   await bundleFeature(feature, namespace, true, depends && JSON.parse(depends));
@@ -426,9 +432,7 @@ async function checkFeature(root, pluginRoot, temporary, generated, files, entry
   // Inherit resolution options unchanged, including paths relative to the
   // config that declared them. A build-only SDK alias or TS-extension opt-in
   // would accept code that generated-reference consumers cannot type-check.
-  const parentConfig = (await Bun.file(join(root, "tsconfig.json")).exists())
-    ? join(root, "tsconfig.json")
-    : join(sdkRoot, "../..", "tsconfig.json");
+  const parentConfig = serverConfigPath(root, pluginRoot);
   const inherited = ts.getParsedCommandLineOfConfigFile(
     parentConfig,
     {},

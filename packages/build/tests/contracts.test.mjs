@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "bun:test";
 import { build, built, source, workspace } from "./plugin-fixtures.mjs";
@@ -139,6 +139,7 @@ test("a server provider must declare its contract owner as a dependency", async 
 
 test("the plugin build points dependencies on basic-auth to auth", async () => {
   await fixture(async (_owner, provider, implementation) => {
+    await symlink(join(workspace, "plugins/basic-auth"), join(provider, "../basic-auth"), "dir");
     await writeFile(join(provider, "plugin.ts"), descriptor("line-provider", 'depends: ["basic-auth"],'));
     await writeFile(implementation, "export {};");
     const result = build(provider);

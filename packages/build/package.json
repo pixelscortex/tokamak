@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     "./vite": "./src/vite.ts",
-    "./css": "./src/css.ts"
+    "./css": "./src/css.ts",
+    "./window-test-config": "./src/window-test-config.ts",
+    "./client-surface": "./src/client-surface.ts"
   },
   "dependencies": {
     "@solidjs/vite-plugin": "3.0.0",

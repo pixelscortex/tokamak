@@ -1,10 +1,43 @@
 # Tokamak artifact build
 
-Build a plugin's server artifact from the repository root:
+Build a plugin artifact by passing its folder to the builder:
 
 ```sh
 proto run bun -- packages/build/src/build.ts plugins/chat
 ```
+
+## Building outside the checkout
+
+Install the Tokamak checkout's workspace dependencies with
+`proto run bun -- install --frozen-lockfile`. In the plugin or its parent
+workspace's `node_modules/@tokamak/`, link `sdk`, `build`, `ui` and `runtime`
+to the checkout's corresponding `packages/` directories. Keep the links pointing
+to the real checkout so the builder and SDK can resolve their installed tools
+(Vite, TypeScript, the Solid compiler and Tailwind's compiler and scanner).
+
+Install the third-party packages that plugin source imports in the plugin
+workspace. For a Solid window, use `solid-js@2.0.0` and `@solidjs/web@2.0.0`;
+for window type checking, also install `vite@8.3.6` and `@types/node@26.6.6`.
+Stylesheets that import Tailwind need `tailwindcss` there too (the bundled
+plugins use `4.3.5`). A setup using the checkout's existing installs can
+symlink these individual dependency directories instead.
+
+```sh
+bun node_modules/@tokamak/build/src/build.ts <plugin-folder>
+```
+
+Use Bun 1.4.4, as pinned by the checkout. The plugin folder can be absolute or
+relative to the current directory.
+Extend `@tokamak/sdk/tsconfig.server.json` for server code and
+`@tokamak/sdk/tsconfig.window.json` for window code. If the plugin has no server
+config, the builder uses the SDK's server base. Window tests can import
+`@tokamak/build/window-test-config` and `@tokamak/build/client-surface`.
+
+Keep source for plugins imported as `plugin:<id>/server` or `plugin:<id>/client`
+in sibling folders named by ID. The builder looks for dependency manifests
+beside the plugin, in the configured plugin catalog, or in `TOKAMAK_PLUGIN_DIR`.
+
+## Artifacts
 
 The builder reads literal `plugin.ts` metadata, bundles `src/server/` through the
 SDK compiler, derives public function references and provider contracts, and

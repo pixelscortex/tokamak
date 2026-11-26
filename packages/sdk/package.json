@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./tsconfig.server.json": "./tsconfig.plugin-server.json",
+    "./tsconfig.window.json": "./tsconfig.plugin-window.json",
     "./solid": "./solid.ts",
     "./web": {
       "types": "./web.d.ts"
