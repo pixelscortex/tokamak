@@ -32,7 +32,7 @@ export function loadMarks(client: TokamakClient): void {
   ).join("");
   asked = client.action(ai.agents.list, { windowId }, { on: "caller" }).then(
     (list) => {
-      if (isFailure(list)) {
+      if (isFailure(list) || !Array.isArray(list)) {
         asked = undefined;
         return;
       }

@@ -55,7 +55,7 @@ let answers: Record<string, JsonValue> = {};
 const calls: [string, JsonValue][] = [];
 const listeners = new Set<() => void>();
 
-/** A desktop window: its local part lists both agents' marks, as ai does on the person's computer. */
+/** A desktop window: its Runner lists both agents’ marks through the caller action. */
 function client(): TokamakClient {
   const call = async (name: string, args: JsonValue) => {
     calls.push([name, args]);
@@ -64,7 +64,7 @@ function client(): TokamakClient {
   const transport: ClientTransport = {
     query: call,
     mutation: call,
-    action: call,
+    action: async (name, args) => (name === "ai/agents:list" ? agents : call(name, args)),
     subscribe(name, _args, onEvent) {
       // The Profiles section's own list (TKM-264): none here.
       if (name === "ai-profiles/profiles:list") {
@@ -83,7 +83,7 @@ function client(): TokamakClient {
     { id: "claude", icon: mark("M1 1h22v22H1z") },
     { id: "codex", icon: mark("M2 2h20v20H2z") },
   ];
-  return new TokamakClient(transport, { invoke: async () => agents as unknown as JsonValue } as never);
+  return new TokamakClient(transport);
 }
 
 function update(next: typeof listed) {
