@@ -12,7 +12,7 @@ import {
 } from "@tokamak/sdk";
 import { hasLocalChannel } from "@tokamak/sdk/agent-turn";
 import { agent, type LaunchSettings, type Run, type Usage } from "../contracts";
-import { errorText, setupReason } from "../shared/turn-shared";
+import { errorText, hookRunnerUpdate, setupReason } from "../shared/turn-shared";
 import { controlFor, noRunningTurn, turnControl } from "./controls";
 import { api } from "./_generated/api";
 import { offered } from "../shared/offered";
@@ -75,12 +75,14 @@ export const turn = action({
   args: turnArgs,
   handler: async (ctx, args) => {
     const launchId = randomBytes(32).toString("hex");
-    try {
-      return await runTurn(ctx, args, launchId);
-    } finally {
+    let endedNotice: string | undefined;
+    const result = await runTurn(ctx, args, launchId).finally(async () => {
       // A launch contribution can acquire resources even if another contribution fails.
-      await ctx.point("ended", { launchId }).catch(() => {});
-    }
+      await ctx.point("ended", { launchId }).catch((cause: unknown) => {
+        endedNotice = hookRunnerUpdate(cause);
+      });
+    });
+    return endedNotice && !isFailure(result) ? { ...result, ended: endedNotice } : result;
   },
 });
 
@@ -90,19 +92,18 @@ async function runTurn(ctx: CallerActionContext, args: Infer<typeof turnInput>, 
   // The labels `turns:begin` records are checked here, against what the provider offers.
   const queued = await ctx.runQuery(api.turns.queuedForMessage, { messageId });
   const selectedAgent = queued?.agent.id ?? agentId;
+  const wanted = queued ?? { ...picked, access };
   const provider = await agent.get(selectedAgent, ctx);
   if (!provider) return fail("NoAgent", { agentId: selectedAgent });
-  const { settings: launchSettings, error: launchError } = await resolveLaunch(
-    ctx,
-    threadId,
-    provider.id,
+  const { settings: launchSettings, error: launchError } = await resolveLaunch(ctx, threadId, {
+    agentId: provider.id,
     launchId,
-  );
+    ...(wanted.model !== undefined && { model: wanted.model }),
+  });
   let setupError: string | undefined;
   // The normal catalog checks the person's own login. An isolated turn
   // instead uses the choices from the window and lets its CLI validate them.
   // A queued turn keeps the settings it was queued with.
-  const wanted = queued ?? { ...picked, access };
   let modelName: string | undefined;
   let choices = {
     model: wanted.model ?? "default",
@@ -295,16 +296,16 @@ async function runTurn(ctx: CallerActionContext, args: Infer<typeof turnInput>, 
 async function resolveLaunch(
   ctx: CallerActionContext,
   threadId: string,
-  agentId: string,
-  launchId: string,
+  request: { agentId: string; launchId: string; model?: string },
 ): Promise<{ settings?: LaunchSettings; error?: string }> {
+  const { agentId } = request;
   try {
     const contributions = await ctx.point(
       "launch",
-      { env: {}, args: [], request: { agentId, launchId } } as {
+      { env: {}, args: [], request } as {
         env: Record<string, string>;
         args: string[];
-        request?: { agentId: string; launchId: string };
+        request?: { agentId: string; launchId: string; model?: string };
         blocked?: string;
         identity?: string;
       },
@@ -358,9 +359,9 @@ async function resolveLaunch(
         args,
       },
     };
-  } catch {
+  } catch (cause) {
     // Hook errors can contain the settings the hook was assembling.
-    return { error: "Could not prepare the agent's launch settings." };
+    return { error: hookRunnerUpdate(cause) ?? "Could not prepare the agent's launch settings." };
   }
 }
 

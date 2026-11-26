@@ -43,21 +43,23 @@ export const narrowAgents = hook(ai.listAgents, {
 export const launchProfile = hook(ai.turn.points.launch, {
   async before(ctx, launch) {
     const thread = ctx.call.threadId as Id<"chat.threads"> | undefined;
-    if (!thread || !launch.request) return { ...launch, blocked: "Could not find the thread for this turn." };
-    const selected = await ctx.runQuery(api["thread-profiles"].selection, { thread });
+    const selected =
+      thread && launch.request ? await ctx.runQuery(api["thread-profiles"].selection, { thread }) : null;
     if (!selected) {
       const profiles = await ctx.runQuery(api.profiles.list, {});
-      return profiles.length === 0 ? launch : { ...launch, blocked: PICK_PROFILE };
+      if (profiles.length === 0) return launch;
+      if (!thread || !launch.request)
+        return { ...launch, blocked: "Could not find the thread for this turn." };
+      return { ...launch, blocked: PICK_PROFILE };
     }
-    if (launch.request.agentId !== CLAUDE || !selected.claude) return { ...launch, blocked: NOT_AVAILABLE };
+    if (launch.request?.agentId !== CLAUDE || !selected.claude) return { ...launch, blocked: NOT_AVAILABLE };
+    const { model, launchId } = launch.request;
+    if (model !== undefined && !selected.models.some((offered) => offered.id === model))
+      return { ...launch, blocked: "Pick a model offered by this profile." };
     try {
       const set = await ctx.runMutation(internal.profiles.ensureSet, { profile: selected.id });
       if (set === null) return { ...launch, blocked: PICK_PROFILE };
-      const reply = await ctx.runAction(
-        proxy.turnKey,
-        { set, lease: launch.request.launchId },
-        { on: "server" },
-      );
+      const reply = await ctx.runAction(proxy.turnKey, { set, lease: launchId }, { on: "server" });
       if (isFailure(reply)) {
         const blocked =
           reply.kind === "MissingServerOrigin"
@@ -86,7 +88,16 @@ export const launchProfile = hook(ai.turn.points.launch, {
 export const endProfile = hook(ai.turn.points.ended, {
   async before(ctx, ended) {
     const args = { lease: ended.launchId };
-    await ctx.runMutation(proxy.endTurnKey, args).catch(() => ctx.runMutation(proxy.endTurnKey, args));
+    const revoke = async () => {
+      const result = await ctx.runMutation(proxy.endTurnKey, args);
+      if (isFailure(result)) throw new Error("Could not revoke the turn key.");
+    };
+    await revoke()
+      .catch(revoke)
+      .catch(() => {
+        // oxlint-disable-next-line no-console -- Record a cleanup failure in the worker log without credentials.
+        console.warn("AI Profiles could not revoke a turn key after two attempts; the key will expire.");
+      });
     return ended;
   },
 });

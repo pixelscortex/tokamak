@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { cp, readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isFailure } from "../../packages/sdk/src/index.ts";
+import { createApi, isFailure } from "../../packages/sdk/src/index.ts";
 import { startFakeCompanies } from "../../plugins/agent-proxy/tests/fake-companies/index.ts";
 import { api } from "../../plugins/ai-profiles/src/server/_generated/api.ts";
 import { agentTurns } from "./agent-turn.mjs";
-import { build, workspace } from "./harness.mjs";
+import { build, copySource, workspace } from "./harness.mjs";
 import { installAgentFixture } from "./launch-settings.mjs";
 
 const model = "claude-sonnet-4-6";
@@ -16,10 +16,32 @@ function success(result) {
 }
 
 export async function checkProfileTurns(h) {
-  for (const id of ["agent-proxy", "ai-profiles"]) {
-    build(join(workspace, "plugins", id));
-    await cp(join(workspace, "plugins", id, "dist"), join(h.plugins, id), { recursive: true });
-  }
+  const proxySource = join(workspace, "plugins/agent-proxy");
+  const fixture = join(h.scratch, "sources", "agent-proxy");
+  await copySource(proxySource, fixture, join(proxySource, "node_modules"));
+  // Placement discovery reads the root config; its relative extends would point into scratch.
+  await writeFile(
+    join(fixture, "tsconfig.json"),
+    JSON.stringify({ extends: join(proxySource, "tsconfig.json") }),
+  );
+  await writeFile(
+    join(fixture, "src/server/probe.ts"),
+    `import { query } from "./_functions";
+export const keyCount = query({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("turnKeys").collect()).length,
+});
+export const setCount = query({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("sets").collect()).length,
+});`,
+  );
+  build(fixture);
+  await cp(join(fixture, "dist"), join(h.plugins, "agent-proxy"), { recursive: true });
+  const profilesSource = join(workspace, "plugins/ai-profiles");
+  build(profilesSource);
+  await cp(join(profilesSource, "dist"), join(h.plugins, "ai-profiles"), { recursive: true });
+  const { probe } = createApi("agent-proxy", ["probe:keyCount", "probe:setCount"]);
   const manifestPath = join(h.plugins, "agent-proxy/manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.plugin.permissions.push("net:127.0.0.1");
@@ -101,10 +123,10 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     const normal = await turns.run(await h.folder("profile-personal"), "normal");
     assert.equal(await receive(normal.folder), null);
 
-    async function subscribe(account) {
+    async function subscribe(account, as = client) {
       fake.addAccount("anthropic", account);
       const pending = success(
-        await client.action(api.subscriptions.startSignIn, {
+        await as.action(api.subscriptions.startSignIn, {
           company: "anthropic",
           method: "subscription",
         }),
@@ -112,7 +134,7 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
       fake.nextSignIn(account);
       const page = await fetch(pending.link, { redirect: "manual" });
       return success(
-        await client.action(api.subscriptions.finishSignIn, {
+        await as.action(api.subscriptions.finishSignIn, {
           id: pending.id,
           pasted: page.headers.get("location"),
         }),
@@ -145,6 +167,22 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     }
     const a = await thread("profile-alpha", alpha);
     const b = await thread("profile-beta", beta);
+    const beforeRefusals = await client.query(probe.keyCount, {});
+    const unsupported = await turns.run(a.folder, "wrong agent", {
+      threadId: a.threadId,
+      agentId: "fake-agent",
+      model: "echo",
+      state: "failed",
+    });
+    assert.equal(unsupported.error, "Pick an available agent or another profile.");
+    const wrongModel = await turns.run(a.folder, "wrong model", {
+      threadId: a.threadId,
+      model: "not-in-the-profile",
+      state: "failed",
+    });
+    assert.equal(wrongModel.error, "Pick a model offered by this profile.");
+    assert.equal(await Bun.file(join(a.folder, "received.json")).exists(), false);
+    assert.equal(await client.query(probe.keyCount, {}), beforeRefusals);
     const catalog = await client.action(ai.agents.list, { threadId: a.threadId });
     assert.deepEqual(
       catalog.map(({ id }) => id),
@@ -204,11 +242,88 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     assert.equal(await picked(a.threadId), null);
     const uses = await client.query(api.manage.usedBy, { id: alice.id });
     assert.equal(uses.find(({ id }) => id === alpha.id).threads, 1);
-    await client.mutation(profiles.discard, { profile: alpha.id });
-    assert.equal(await picked(b.threadId), null);
-    assert.equal(await client.query(picks.selection, {}), null);
+    await h.closeGate(b.folder, "go");
+    let deletedKey;
+    await turns.run(b.folder, "wait", {
+      threadId: b.threadId,
+      async during(control) {
+        await control.firstText();
+        deletedKey = await receive(b.folder);
+        await upstream(deletedKey, "bob");
+        success(await client.mutation(profiles.discard, { profile: alpha.id }));
+        assert.equal(await picked(b.threadId), null);
+        assert.equal(await client.query(picks.selection, {}), null);
+        await upstream(deletedKey, "bob");
+        await h.gate(b.folder, "go");
+      },
+    });
+    await ended(deletedKey);
+    const afterDeletion = await turns.run(b.folder, "new turn", { threadId: b.threadId, state: "failed" });
+    assert.equal(afterDeletion.error, "Pick a profile to send.");
+
+    // A forged turn call and both cross-member pick paths must leave the proxy untouched.
+    const shared = await h.serve("profile-members", {
+      shared: true,
+      windowRouted: true,
+      env: { TOKAMAK_AGENT_PROXY_ADDRESSES: JSON.stringify(fake.addresses) },
+    });
+    const owner = await h.connect(shared, { token: h.ownerToken });
+    const member = await h.connect(shared, {
+      token: (await h.signInMember(shared, "Noor")).key,
+      local: true,
+    });
+    const ownProfile = success(await owner.mutation(profiles.create, { name: "Owner", code: "OWN" }));
+    const ownersSubscription = await subscribe("owner-only", owner);
+    success(
+      await owner.mutation(profiles.add, { profile: ownProfile.id, subscription: ownersSubscription.id }),
+    );
+    success(await owner.mutation(picks.pick, { profile: ownProfile.id }));
+    const otherProfile = success(await member.mutation(profiles.create, { name: "Member", code: "MEM" }));
+    const folder = await h.folder("profile-owner");
+    const sent = await owner.mutation(chat.threads.start, {
+      text: "Mine",
+      folder: { kind: "chosen", path: folder },
+    });
+    assert.equal((await owner.query(picks.selection, { thread: sent.threadId })).id, ownProfile.id);
+    assert.equal(await member.query(picks.selection, { thread: sent.threadId }), null);
+    for (const args of [{ profile: ownProfile.id }, { profile: otherProfile.id, thread: sent.threadId }]) {
+      assert.equal((await member.mutation(picks.pick, args)).kind, "NotFound");
+    }
+    await assert.rejects(
+      member.action(ai.run.turn, {
+        threadId: sent.threadId,
+        messageId: sent.messageId,
+        folder,
+        agentId: "claude",
+        model,
+      }),
+      /That message is not in this thread|Only the person who sent a message/,
+    );
+    assert.equal(await owner.query(probe.keyCount, {}), 0);
+
+    // Restart without the installed plugin. The scoped picker is ordinary again,
+    // and a send needs neither a profile nor proxy settings.
+    assert.equal(await client.query(probe.setCount, {}), 1);
+    await h.quit(client);
+    await h.runner(address).stop();
+    await rename(join(h.plugins, "ai-profiles"), join(h.scratch, "uninstalled-ai-profiles"));
+    const without = await h.serve("profile-turns");
+    const ordinary = await h.connect(without);
+    const ordinaryTurns = agentTurns({
+      h,
+      client: ordinary,
+      agent: { id: "claude", name: "Recording Claude" },
+      model,
+    });
+    assert.equal(await ordinary.query(probe.setCount, {}), 1);
+    const ordinaryTurn = await ordinaryTurns.run(b.folder, "normal", { threadId: b.threadId });
+    assert.equal(await receive(ordinaryTurn.folder), null);
+    const ordinaryCatalog = await ordinary.action(ai.agents.list, { threadId: ordinaryTurn.threadId });
+    assert.deepEqual(ordinaryCatalog, await ordinary.action(ai.agents.list, {}));
+    assert.ok(ordinaryCatalog.some(({ id }) => id === "fake-agent"));
+
     process.stdout.write(
-      "PASS profile turns: personal login, required pick, catalog, concurrent account isolation, snapshot, stop/failure cleanup, thread cascade and profile deletion\n",
+      "PASS profile turns: personal login, required pick, catalog, concurrent account isolation, snapshot, stop/failure cleanup, deletion, member ownership and uninstall\n",
     );
   } finally {
     await fake.stop();

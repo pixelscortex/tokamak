@@ -264,15 +264,20 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   Chat's thread reference cascades on delete. Deleting a profile removes its picks,
   the saved last pick if it matched, and its proxy set in the same transaction.
 - Chat's `threads:start` hook copies the caller's saved last choice into a
-  new thread's row before the first Send is announced. Explicit picks update the
-  last choice; other existing threads don't follow it.
+  new thread's row before the first Send is announced. `lastProfiles` stores
+  one last choice per person, shared by drafts in all their windows. Explicit
+  picks update it; other existing threads don't follow it.
 - The named picker parts and `agents:list` scope are in [AI](ai.md); changes
   must keep scoped options separate from the global marks and preserve an unavailable
   current agent. The warning and row layout also depend on [Chat](chat.md).
 - Set creation and subscription order or enable changes update the profile's
   [proxy set](agent-proxy.md). A launch reads the thread pick from the call note,
-  then gets a Claude-only key. AI's `ended` point revokes that key, even if
-  starting the CLI failed.
+  checks the requested model against the profile's catalog, then gets a
+  Claude-only key. AI's `ended` point revokes the key, even if starting the CLI
+  failed. If the profile is deleted mid-turn, the running turn keeps its set
+  snapshot. A later turn must pick a profile again if the person still has profiles.
+- Uninstall removes the picker and launch hooks. Agent-proxy's set rows remain;
+  abandoned keys stop working within 15 minutes without requests.
 - A person has at most 32 profiles (`MAX_PROFILES`); the code rules are
   `checkCode`, for making a profile and for renaming one later (TKM-269).
 - `CompanyMark` keeps only path outlines, like ai's `AgentMark`: the marks
@@ -340,6 +345,9 @@ Switch's transparent 2 px border is left out (Paper measures from inside it).
 - Per-thread scope on `agents:list` (with a separate draft scope) is pending owner
   confirmation. Codex profile routing and provider-side model/effort validation
   are deferred.
+- Update both the desktop app and its Runner before installing AI Profiles.
+  Older callers cannot run the launch and ended hooks, even for people who
+  have no profiles. The thread asks the person to update Tokamak on that computer.
 - A profile turn needs an attached or connected Runner. The standalone desktop
   window fallback can read the picker catalog but cannot call the plugin-only
   key functions. It asks to connect a machine instead of using the personal login.
