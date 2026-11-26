@@ -15,6 +15,20 @@ function pointCall(checker, node) {
   );
 }
 
+function legacyPointCall(checker, node) {
+  if (!ts.isCallExpression(node)) return false;
+  const access = node.expression;
+  const member = ts.isPropertyAccessExpression(access)
+    ? access.name
+    : ts.isElementAccessExpression(access) && access.argumentExpression;
+  if (!member || member.text !== "point" || checker.getSymbolAtLocation(member)) return false;
+
+  const receiver = checker.getTypeAtLocation(access.expression);
+  return (
+    receiver.getProperty("call") || (ts.isIdentifier(access.expression) && access.expression.text === "ctx")
+  );
+}
+
 function referencedDeclaration(checker, node) {
   if (!(ts.isIdentifier(node) || ts.isStringLiteralLike(node))) return;
   if (ts.isDeclarationName(node) && !ts.isShorthandPropertyAssignment(node.parent)) return;
@@ -78,8 +92,13 @@ function traceOwner(checker, declaration) {
     // A static member reference follows that member, not its siblings.
     if (!staticReceiver(node)) add(callableBody(referencedDeclaration(checker, node)));
   }
-  traceHandler(checker, declaration, file, follow);
-  return edges;
+  const handlers = new Set();
+  traceHandler(checker, declaration, file, (node) => {
+    const handler = callableBody(referencedDeclaration(checker, node)) ?? node;
+    if (ts.isFunctionLike(handler)) handlers.add(handler);
+    follow(node);
+  });
+  return { edges, handlers };
 }
 
 function staticReceiver(node) {
@@ -107,6 +126,7 @@ function unsafeReference(call, edges, references) {
   for (const [outside, declaration] of references) {
     if (edges.has(outside)) continue;
     const body = callableBody(declaration);
+    if (!body) continue;
     const escapesObject =
       ts.isObjectLiteralExpression(body) &&
       !staticReceiver(outside) &&
@@ -118,11 +138,75 @@ function unsafeReference(call, edges, references) {
   }
 }
 
+// A live context is only proof of *a* call. Follow the first argument back to
+// this handler so a saved context from a different live call cannot be used.
+function ownsContext(checker, argument, { edges, handlers }, references) {
+  const seen = new Set();
+  let fromHandler = false;
+  function trace(node) {
+    if (!node) return false;
+    node = ts.skipOuterExpressions(node);
+    if (!ts.isIdentifier(node)) return false;
+
+    const declaration = referencedDeclaration(checker, node);
+    if (!declaration) return false;
+    if (seen.has(declaration)) return true;
+    seen.add(declaration);
+
+    if (ts.isVariableDeclaration(declaration))
+      return !!(declaration.parent.flags & ts.NodeFlags.Const) && trace(declaration.initializer);
+    if (!ts.isParameter(declaration)) return false;
+
+    const owner = declaration.parent;
+    const index = owner.parameters.indexOf(declaration);
+    if (references.some(([ref, target]) => target === declaration && ts.isAssignmentTarget(ref)))
+      return false;
+
+    if (handlers.has(owner) && index === 0) {
+      fromHandler = true;
+      return true;
+    }
+
+    const outer = owner.parent;
+    if (
+      index === 1 &&
+      ts.isCallExpression(outer) &&
+      outer.arguments[0] === owner &&
+      ts.isPropertyAccessExpression(outer.expression) &&
+      outer.expression.name.text === "withPrograms"
+    )
+      return trace(outer.expression.expression);
+
+    const sites = references.filter(([ref, target]) => edges.has(ref) && callableBody(target) === owner);
+    return (
+      sites.length > 0 &&
+      sites.every(([ref]) => {
+        const callee = staticReceiver(ref)
+          ? undefined
+          : ts.isPropertyAccessExpression(ref.parent) || ts.isElementAccessExpression(ref.parent)
+            ? ref.parent
+            : ref;
+        const call = callee?.parent;
+        return (
+          call &&
+          ts.isCallExpression(call) &&
+          call.expression === callee &&
+          !call.arguments.slice(0, index + 1).some(ts.isSpreadElement) &&
+          trace(call.arguments[index])
+        );
+      })
+    );
+  }
+  return trace(argument) && fromHandler;
+}
+
 export function discoverPoints(files, checker, definitions, warn = () => {}) {
   const owners = new Map();
   const calls = new Map();
   const references = [];
   function collect(node) {
+    if (legacyPointCall(checker, node))
+      throw new Error(`${sourceLocation(node)}: Import point from "@tokamak/sdk" and write point(ctx, ...).`);
     if (pointCall(checker, node)) calls.set(node, []);
     ts.forEachChild(node, collect);
   }
@@ -131,21 +215,22 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
 
   function collectReferences(node) {
     const declaration = referencedDeclaration(checker, node);
-    if (callableBody(declaration)) references.push([node, declaration]);
+    if (callableBody(declaration) || (declaration && ts.isParameter(declaration)))
+      references.push([node, declaration]);
     ts.forEachChild(node, collectReferences);
   }
   for (const file of files) if (file) collectReferences(file);
 
   for (const symbol of new Set(definitions)) {
     if (!symbol?.valueDeclaration) continue;
-    const edges = traceOwner(checker, symbol.valueDeclaration);
-    for (const [call, matches] of calls) if (edges.has(call)) matches.push({ symbol, edges });
+    const trace = traceOwner(checker, symbol.valueDeclaration);
+    for (const [call, matches] of calls) if (trace.edges.has(call)) matches.push({ symbol, ...trace });
   }
   for (const [call, matches] of calls) {
     const error = (message) => {
       throw new Error(`${sourceLocation(call)}: ${message}`);
     };
-    const [name] = call.arguments;
+    const [, name] = call.arguments;
     if (!name || !ts.isStringLiteralLike(name))
       error("A point name must be a string literal; pass a literal name.");
     if (!name.text || name.text.includes("#")) error('A point name cannot be empty or contain "#".');
@@ -165,6 +250,9 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
       ambiguous(
         ` (owner at ${sourceLocation(conflict.inside ?? owner.valueDeclaration)}, other use at ${sourceLocation(conflict.outside)})`,
       );
+    if (!ownsContext(checker, call.arguments[0], matches[0], references))
+      error(`Point "${name.text}" must receive the context of its own handler as the first argument.`);
+
     const points = owners.get(owner) ?? new Map();
     if (points.has(name.text)) error(`Duplicate point name "${name.text}" in the same function.`);
 
@@ -176,14 +264,14 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
 
 function pointTypes(checker, call, name, error, warn) {
   const signature = checker.getResolvedSignature(call);
-  if (![2, 3].includes(call.arguments.length) || !signature?.parameters[1])
-    error("A point takes a name, data, and an optional callback or { collect: true }.");
-  const input = checker.getTypeOfSymbolAtLocation(signature.parameters[1], call);
+  if (![3, 4].includes(call.arguments.length) || !signature?.parameters[2])
+    error("A point takes a context, name, data, and an optional callback or { collect: true }.");
+  const input = checker.getTypeOfSymbolAtLocation(signature.parameters[2], call);
   const invalid = () => error(`Point "${name}" requires plain data; describe it as data, or use \`after\`.`);
   let result;
-  if (call.arguments.length === 3) {
+  if (call.arguments.length === 4) {
     const option =
-      signature.parameters[2] && checker.getTypeOfSymbolAtLocation(signature.parameters[2], call);
+      signature.parameters[3] && checker.getTypeOfSymbolAtLocation(signature.parameters[3], call);
     const run = option?.getCallSignatures()[0];
     if (run) {
       result = checker.getAwaitedType(checker.getReturnTypeOfSignature(run));

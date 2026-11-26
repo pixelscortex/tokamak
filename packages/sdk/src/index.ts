@@ -1,5 +1,6 @@
 // Public portable SDK. Build-time helpers stay in tools/ and are not exported,
 // so importing the SDK in QuickJS cannot load Bun or Node tooling.
+export { point } from "./points";
 export { hook, createHook, createHookRegistry, hookMetadata, invokeHook } from "./hooks";
 export { trigger, createTrigger, createTriggerRegistry, triggerMetadata, invokeTrigger } from "./triggers";
 export type { TriggerChange } from "./triggers";

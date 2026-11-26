@@ -1,4 +1,4 @@
-import { action, query, v, type MachineId } from "@tokamak/sdk";
+import { action, point, query, v, type MachineId } from "@tokamak/sdk";
 import { probe } from "./contracts";
 
 export const where = action({
@@ -13,7 +13,7 @@ export const hookedPoint = action({
   args: { rejectOwner: v.boolean() },
   handler(ctx, { rejectOwner }) {
     if (rejectOwner) throw new Error("The owner started before checking its point hooks");
-    return ctx.point("gate", "owner" as string);
+    return point(ctx, "gate", "owner" as string);
   },
 });
 

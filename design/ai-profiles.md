@@ -277,8 +277,9 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   [proxy set](agent-proxy.md). A launch reads the thread pick from the call note,
   checks the requested model against the selected agent's profile catalog,
   then gets a company-bound key. Claude uses the existing launch environment;
-  Codex uses a custom HTTP Responses provider and the isolated launch home. AI's `ended` point revokes the key, even if starting the CLI
-  failed. If the profile is deleted mid-turn, the running turn keeps its set
+  Codex uses a custom HTTP Responses provider and the isolated launch home. AI
+  calls `point(ctx, "ended", { launchId })` to revoke the key even if starting the
+  CLI failed. If the profile is deleted mid-turn, the running turn keeps its set
   snapshot. A later turn must pick a profile again if the person still has profiles.
 - Uninstall removes the picker and launch hooks. Agent-proxy's set rows remain;
   abandoned keys stop working within 15 minutes without requests.
