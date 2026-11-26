@@ -1032,3 +1032,49 @@ test("reloading a plugin allows its layer warnings to be reported again", async 
   await waitFor(() => expect(warnings()).toHaveLength(2));
   expect(root.textContent).toBe("Send");
 });
+
+test("removing a plugin's layer brings back the owner's components while another plugin's addition stays", async () => {
+  const header = find("header", { in: "RealisticRow" });
+  const [installed, setInstalled] = createSignal(true);
+  const [on, setOn] = createSignal(true);
+  const Tail = append(header, () => <em>tail</em>);
+  const Custom = layer(header, (_, Original) => <Original>custom</Original>, { when: on });
+  const layers = [
+    contribution("Tail", Tail, "append", header, 0, "keeps"),
+    contribution("Custom", Custom, "layer", header, 0, "leaves"),
+  ];
+  const root = document.createElement("div");
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider
+          host={{
+            ...host(layers),
+            contributions: (kind) =>
+              layers
+                .filter(
+                  ({ metadata }) => metadata.kind === kind && (installed() || metadata.plugin !== "leaves"),
+                )
+                .map(({ metadata }) => metadata),
+          }}
+        >
+          <RealisticRow text="Hello" />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  const text = () => root.querySelector("header")?.textContent;
+  // "Ready" is a child component of the header: it has to mount again, where it
+  // was, before the other plugin's addition. Plain tags come back on their own.
+  await waitFor(() => expect(text()).toBe("custom"));
+  setOn(false);
+  flush();
+  await waitFor(() => expect(text()).toBe("Person10:00Readytail"));
+  setOn(true);
+  flush();
+  await waitFor(() => expect(text()).toBe("custom"));
+  setInstalled(false);
+  flush();
+  await waitFor(() => expect(text()).toBe("Person10:00Readytail"));
+});

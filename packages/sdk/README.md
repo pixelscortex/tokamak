@@ -691,7 +691,10 @@ element or its attributes. Put `<Original.Children />` inside `<Original>` to
 draw the contents that would appear without this layer: the children supplied
 by an outer layer, or the owner's contents with other plugins' `prepend` and
 `append`. Draw `Original` and `Original.Children` at most once per layer.
-If no layer draws `Original`, the owner's element is unloaded. A layer with a
+If no layer draws `Original`, the owner's element is unloaded. While a layer
+supplies the contents, the owner's plain tags inside keep their DOM nodes,
+but components inside mount again each time the contents change hands, so
+their own state starts over. A layer with a
 false `when` passes through.
 Layers run outermost first by plugin install order, then `order` (default
 0), plugin ID, and export name. `before` and `after` stay outside all layers;

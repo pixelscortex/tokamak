@@ -186,7 +186,7 @@ function nativeContents(element: Element, contents: Contents, children?: NativeC
         restore = () => {
           projection?.();
           // Observers must see the restored DOM the next time they register.
-          element.replaceChildren(...parked.filter((node) => !holes.has(node as Text)));
+          element.replaceChildren(...parked);
           native.capture(() => undefined);
         };
         runWithOwner(owner, () =>
@@ -395,7 +395,9 @@ class NativeBinding implements PartObserver {
         const end = nativeRange(parent, next, element);
         const decorated = renderActions(registry, actions, placementProps, (contents) => {
           const activate = () => {
-            if (destructive) setHoles(hole, children, true);
+            // Always: a layer removed just before this rebuild left the child
+            // components off, and the actions that remain may all be additions.
+            setHoles(hole, children, true);
             this.registerChildren();
           };
           if (destructive) onCleanup(() => deactivate());
