@@ -10,12 +10,11 @@ export type Company = Subscription["company"];
 /**
  * ai's own list of agents on this computer, for their marks: a company's logo
  * is the mark of its agent plugin (Claude for Anthropic, Codex for OpenAI).
- * ai publishes no server api module, so the reference is made by name; it is a
- * local function, so only a window with a local part (the desktop app) has it.
+ * AI publishes no server API module, so the caller action is referenced by name.
  */
 export const ai = createApi<{
   agents: {
-    list: FunctionReference<"local", Record<string, never>, readonly { id: string; icon?: string }[]>;
+    list: FunctionReference<"action", { windowId: string }, readonly { id: string; icon?: string }[]>;
   };
 }>("ai", ["agents:list"]);
 

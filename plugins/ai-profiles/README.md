@@ -12,8 +12,7 @@ this plugin stores nothing about them. Its server functions
 and never with a login.
 
 Company logos are the marks of the `claude` and `codex` agent plugins, read
-from ai's agent list on this computer (`ui/company-mark.tsx`). A plain browser
-has no local part and shows a neutral mark.
+from ai's agent list on this computer (`ui/company-mark.tsx`). A window without a reachable Runner shows a neutral mark.
 
 The screen asks the server to renew logins that run out soon when it opens
 and every minute while it stays open (server code has no network timer).

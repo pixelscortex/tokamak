@@ -1,6 +1,6 @@
 import { For } from "solid-js";
 import type { JSX } from "@solidjs/web";
-import type { TokamakClient } from "@tokamak/sdk";
+import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import { agentOf, ai, type Company } from "../lib/api";
 import { glyphs } from "../lib/icons";
@@ -8,8 +8,7 @@ import { glyphs } from "../lib/icons";
 /**
  * A company's logo: the mark its agent plugin ships (`claude`'s and `codex`'s
  * icon files), which this window learns from ai's agent list. Neither agent
- * plugin knows about this one. A window without a local part (a plain
- * browser) cannot ask, and shows the neutral mark.
+ * plugin knows about this one. A window without a reachable Runner shows the neutral mark.
  */
 
 interface Mark {
@@ -20,18 +19,25 @@ interface Mark {
 const NEUTRAL: Mark = { viewBox: "0 0 24 24", paths: [{ d: glyphs.company }] };
 const MAX_SVG = 16_384;
 
-/** The agents' SVG marks by agent id, as this computer's local part listed them. */
+/** The agents' SVG marks by agent id, as the caller's Runner listed them. */
 const marks = state<Readonly<Record<string, string>>>({});
 let asked: Promise<void> | undefined;
+let windowId: string | undefined;
 
 /** Asks ai for the agents' marks once per window. */
 export function loadMarks(client: TokamakClient): void {
-  if (!client.hasLocal || asked) return;
-  asked = client.local(ai.agents.list, {}).then(
-    (list) =>
-      void marks.set(
-        Object.fromEntries(list.flatMap((agent) => (agent.icon ? [[agent.id, agent.icon]] : []))),
-      ),
+  if (asked) return;
+  windowId ??= Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  asked = client.action(ai.agents.list, { windowId }, { on: "caller" }).then(
+    (list) => {
+      if (isFailure(list)) {
+        asked = undefined;
+        return;
+      }
+      marks.set(Object.fromEntries(list.flatMap((agent) => (agent.icon ? [[agent.id, agent.icon]] : []))));
+    },
     () => {
       asked = undefined;
     },

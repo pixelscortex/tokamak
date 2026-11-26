@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { render } from "@solidjs/web";
 import { afterEach, expect, test, vi } from "vitest";
-import { TokamakClient, type ClientTransport, type JsonValue } from "@tokamak/sdk";
+import { TokamakClient, fail, type ClientTransport, type JsonValue } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
 import type { SignIn, Subscription } from "../src/client/lib/api";
 import { Profiles, RENEW_EVERY_MS } from "../src/client/pages/profiles";
@@ -41,8 +41,8 @@ const calls: [string, JsonValue][] = [];
 const listeners = new Set<() => void>();
 const copied: string[] = [];
 
-/** `local` gives the window a local part, as the desktop app does; a plain browser has none. */
-function client(local: boolean): TokamakClient {
+/** A caller action can list agent marks only when a Runner can answer. */
+function client(hasRunner: boolean): TokamakClient {
   const call = async (name: string, args: JsonValue) => {
     calls.push([name, args]);
     const answer = answers[name];
@@ -51,7 +51,10 @@ function client(local: boolean): TokamakClient {
   const transport: ClientTransport = {
     query: call,
     mutation: call,
-    action: call,
+    action: (name, args) => {
+      if (name !== "ai/agents:list") return call(name, args);
+      return Promise.resolve(hasRunner ? (agents as JsonValue) : fail("noMachine", null));
+    },
     subscribe(name, _args, onEvent) {
       if (name !== "ai-profiles/subscriptions:list") throw new Error(`Unexpected query ${name}`);
       const send = () => onEvent({ value: structuredClone(listed) as unknown as JsonValue });
@@ -66,9 +69,7 @@ function client(local: boolean): TokamakClient {
       icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 1h22v22H1z"/></svg>',
     },
   ];
-  return local
-    ? new TokamakClient(transport, { invoke: async () => agents as unknown as JsonValue } as never)
-    : new TokamakClient(transport);
+  return new TokamakClient(transport);
 }
 
 function update(next: typeof listed) {
@@ -77,12 +78,12 @@ function update(next: typeof listed) {
 }
 
 const cleanups: (() => void)[] = [];
-function mount({ local = false } = {}) {
+function mount({ hasRunner = false } = {}) {
   const root = document.createElement("div");
   document.body.append(root);
   const dispose = render(
     () => (
-      <ClientContext value={client(local)}>
+      <ClientContext value={client(hasRunner)}>
         <Profiles />
       </ClientContext>
     ),
@@ -265,12 +266,12 @@ test("with nothing added the screen says so, and renewal is asked on open, every
 
 test("company logos come from the agents' marks in the desktop app, and a plain browser shows the neutral mark", async () => {
   listed = { subscriptions: [pro], signIns: [] };
-  mount({ local: false });
+  mount({ hasRunner: false });
   const plain = await screen.findByRole("article", { name: "Claude Pro, Personal" });
   expect(plain.querySelector("[data-mark]")?.getAttribute("data-mark")).toBe("neutral");
   for (const cleanup of cleanups.splice(0)) cleanup();
 
-  mount({ local: true });
+  mount({ hasRunner: true });
   const desktop = await screen.findByRole("article", { name: "Claude Pro, Personal" });
   await waitFor(() => expect(desktop.querySelector("[data-mark]")?.getAttribute("data-mark")).toBe("agent"));
 });
