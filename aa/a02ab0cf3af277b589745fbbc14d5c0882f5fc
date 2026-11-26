@@ -1,0 +1,22 @@
+plugins/ai/tests/agent-turn.test.ts
+  s_4394c86410813a::t_5899b594d38b2a 8,17,26-30,52,71-88
+  s_4394c86410813a::t_1496691afbd55a 89
+plugins/ai/src/server/agent-turn.ts
+  s_4394c86410813a::t_5899b594d38b2a 3,44-46,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aaa02ab0cf3af277b589745fbbc14d5c0882f5fc",
+  "prompts": {},
+  "sessions": {
+    "s_4394c86410813a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-2ad3-74e3-b933-e71855112b5c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
