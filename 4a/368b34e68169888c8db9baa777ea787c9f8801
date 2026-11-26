@@ -1,0 +1,23 @@
+packages/sdk/component-parts.tsx
+  s_be4ee891f4fdb9::t_7c306b3e895af2 858,891-895
+packages/sdk/component-attributes.ts
+  s_be4ee891f4fdb9::t_571f0f2639ada8 24-26
+packages/sdk/tests/web/component-attributes.test.tsx
+  s_be4ee891f4fdb9::t_7c306b3e895af2 407-417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a368b34e68169888c8db9baa777ea787c9f8801",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
