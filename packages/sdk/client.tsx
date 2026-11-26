@@ -7,9 +7,11 @@ export {
   after,
   prepend,
   append,
+  attrs,
   hide,
   layer,
   type OriginalElement,
+  type ElementAttributes,
   type ComponentPart,
   type ScreenFind,
   type ComponentActionOptions,
@@ -23,6 +25,8 @@ import {
   type ScreenSearch,
   type ScreenTree,
 } from "./screen-search";
+import type { AttributeWarning } from "./component-attributes";
+export type { AttributeWarning } from "./component-attributes";
 import { PartActions, type LoadedPartAction, type PartObserver, type PartRegistry } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
@@ -57,6 +61,7 @@ const partOwner = ({ options }: ExtensionContribution) =>
 export function ExtensionProvider(props: {
   host: ExtensionHost;
   onAlerts?: (messages: readonly string[]) => void;
+  onAttributeWarning?: (warning: AttributeWarning) => void;
   children?: JSX.Element;
 }) {
   const slots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
@@ -86,7 +91,7 @@ export function ExtensionProvider(props: {
 
   const layerWarnings = new Map<string, Set<string>>();
   const registry: PartRegistry = {
-    warn(key, message) {
+    warn(key, message, detail) {
       const [kind, plugin, target] = key;
       let warnings = layerWarnings.get(plugin);
       if (!warnings) layerWarnings.set(plugin, (warnings = new Set()));
@@ -94,6 +99,7 @@ export function ExtensionProvider(props: {
       if (warnings.has(id)) return;
       warnings.add(id);
       console.warn(message);
+      if (detail) props.onAttributeWarning?.(detail);
     },
     mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
     read: (target) => slot(target)[0],
@@ -284,6 +290,16 @@ export function ExtensionProvider(props: {
   return <PartActions value={registry}>{props.children}</PartActions>;
 }
 
+function callableAttributes(value: unknown): ReadonlySet<string> | undefined {
+  if (typeof value !== "string") return;
+  try {
+    const names: unknown = JSON.parse(value);
+    if (Array.isArray(names) && names.every((name) => typeof name === "string")) return new Set(names);
+  } catch {
+    // The build supplies this metadata. Ignore malformed older manifests.
+  }
+}
+
 function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAction {
   let warned = false;
   return {
@@ -291,6 +307,7 @@ function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAct
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
     installOrder: c.installOrder,
+    callableAttributes: callableAttributes(c.options.callableAttributes),
     action: c.resolved ? { ...action, target: c.resolved.target } : action,
     fingerprint: c.resolved ? c.resolved.fingerprint : screenTarget(c.options).fingerprint,
     enabled(props) {
@@ -298,7 +315,8 @@ function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAct
         return action.when?.(props) ?? true;
       } catch (cause) {
         if (!warned) console.warn(`Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
-        warned = componentActionKind(action) === "layer";
+        const kind = componentActionKind(action);
+        warned = kind === "layer" || kind === "attrs";
         return false;
       }
     },
@@ -333,6 +351,7 @@ export {
 
 export {
   renderPart as __renderPart,
+  renderComponentPart as __renderComponentPart,
   renderNativePart as __renderNativePart,
   renderNativeText as __renderNativeText,
 } from "./component-parts";

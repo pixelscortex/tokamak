@@ -21,6 +21,7 @@ type Part = {
   target: string;
   props: string;
   type: string;
+  elementType: () => string;
   fingerprint?: string;
   ambiguous?: boolean;
   row?: string;
@@ -171,7 +172,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     .getSourceFiles()
     .filter((file) => !file.isDeclarationFile && inSource(root, file.fileName))
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
-  const { propsType, privateDeclarations } = partProps(entry, checker, root, sources);
+  const { propsType, typeShape, componentValue, annotation, privateDeclarations } = partProps(
+    entry,
+    checker,
+    root,
+    sources,
+  );
   const aliases = new Map<string, string>();
   let captures = 0;
   const solidBuiltins = new Set([
@@ -331,6 +337,23 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           target: "",
           unnamed: named === undefined && /^[a-z][\w-]*$/.test(tagName),
           props: scope.props,
+          elementType: () => {
+            if (/^[a-z][\w-]*$/.test(tagName))
+              return `import("@tokamak/sdk/client").ElementAttributes<${JSON.stringify(tagName)}>`;
+            const value = componentValue(tag);
+            if (value) {
+              const args = opening.typeArguments?.map(annotation).join(", ");
+              return `import("@solidjs/web").ComponentProps<typeof ${value}${args ? `<${args}>` : ""}>`;
+            }
+            const signature = checker.getResolvedSignature(opening);
+            const parameter = signature?.parameters[0];
+            if (!parameter) return "{}";
+            const declaration = parameter.valueDeclaration;
+            const type = checker.getTypeOfSymbolAtLocation(parameter, opening);
+            if (declaration && ts.isParameter(declaration) && checker.getTypeAtLocation(declaration) === type)
+              return propsType(declaration);
+            return typeShape(type);
+          },
           type: scope.row ? alias(`${type} & { readonly $row: ${scope.row.type()} }`) : type,
           row: scope.row?.value(),
         };
@@ -556,7 +579,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
         }
         output.prepend(
-          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
+          'import { __renderComponentPart as __tokamakRenderComponentPart, __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
         );
       }
       if (source === entry)
@@ -578,11 +601,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
           const entries = matches.map((element) => {
             const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
-            const filters = element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
-            return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
+            const filters = element.attributes
+              ? JSON.stringify(attributeFilters(element.attributes))
+              : "undefined";
+            return `[${scopes.join(" | ") || "never"}, ${props(element)}, ${filters}, ${alias(paths.get(element.target)!.elementType())}]`;
           });
-          const only = matches[0]!;
-          return `  ${JSON.stringify(name)}: ${matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
+          return `  ${JSON.stringify(name)}: [${entries.join(", ")}];\n`;
         })
         .join("");
       const previous = readOptional(path);
@@ -703,10 +727,16 @@ function transformElement(
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}__tokamakRenderPart(${partArguments(part, target)}, (__tokamakContents) => `;
+  const opening = ts.isJsxElement(node) ? node.openingElement : node;
+  const component = !/^[a-z][\w-]*$/.test(opening.tagName.getText(source));
+  const entry = component ? "__tokamakRenderComponentPart" : "__tokamakRenderPart";
+  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}${entry}(${partArguments(part, target)}, (__tokamakContents) => `;
   const suffix = `)${hole === undefined ? "" : ")"}${child ? "}" : ""}`;
-  output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
-  const endMount = mount?.suffix ?? "";
+  output.appendLeft(
+    node.getStart(source),
+    prefix + (mount?.prefix ?? "") + (component ? "__tokamakComponent(" : ""),
+  );
+  const endMount = (component ? ")" : "") + (mount?.suffix ?? "");
 
   if (ts.isJsxSelfClosingElement(node)) {
     const tag = node.tagName.getText(source);
@@ -744,7 +774,6 @@ function transformElement(
     return;
   }
 
-  const opening = node.openingElement;
   const close = node.closingElement;
   const tag = opening.tagName.getText(source);
   const callback = childCallback(node);
