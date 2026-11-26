@@ -1,0 +1,42 @@
+packages/sdk/src/unstable.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 1-66
+packages/sdk/src/internal/machine-scope.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 1-8
+packages/server/tests/fixtures/plugin-machines/sandbox/src/work.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 14,28-30,38,43,46-52,54,61,67-70,85,95-99,110,129
+packages/sdk/README.md
+  s_ac94f984fc3ac0::t_e0dd55001f89dc 213-215
+  s_ac94f984fc3ac0::t_e4438afe3ec2d2 225-227
+  s_ac94f984fc3ac0::t_1eb5db6a0b8745 195-196,198-200,202,234-236,239
+packages/sdk/src/host.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 66-67,70
+packages/sdk/package.json
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 14
+packages/sdk/src/functions.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 21,212,307-313,425
+packages/runner/README.md
+  s_ac94f984fc3ac0::t_1eb5db6a0b8745 178-180
+packages/server/tests/fixtures/action-placement/src/work.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 2,116-117
+packages/server/tests/fixtures/plugin-machines/outsider/src/work.ts
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 2,21,29,34,39
+packages/sdk/tests/fixtures/types/negative.ts.txt
+  s_ac94f984fc3ac0::t_3d0c0a1086b88c 31-34,41
+  s_ac94f984fc3ac0::t_e0dd55001f89dc 4,35-37,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa41183f99fab7474e891f34e2224bedbc57298a",
+  "prompts": {},
+  "sessions": {
+    "s_ac94f984fc3ac0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21841-9522-7011-a108-48275f61c1c5",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
