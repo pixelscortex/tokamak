@@ -1,0 +1,35 @@
+plugins/ai-profiles/tests/desktop-returns.test.tsx
+  s_503e9e7253d05e::t_f4b311e8004d48 1-2,6,10
+  s_503e9e7253d05e::t_408f3c6c4cebf3 209,211-212,228,230-231
+  s_503e9e7253d05e::t_a1d2e15a75af75 137-142,144-145,147-207,213-217,221-224,240
+  s_503e9e7253d05e::t_15edc617e7deeb 225-227,229,232-239
+  s_503e9e7253d05e::t_2719a01b5cc67b 208,210,218-220
+  s_503e9e7253d05e::t_b3a129cbc546a7 143,146
+plugins/ai-profiles/src/client/lib/sign-in-watch.ts
+  s_503e9e7253d05e::t_583cee20f49e01 5,8-10,60-66,88-93,105,111-114,117-123
+  s_503e9e7253d05e::t_7dec823c0b1913 115-116
+plugins/ai-profiles/src/client/ui/add-dialog.tsx
+  s_503e9e7253d05e::t_dcfd2aee0792e5 7,273
+plugins/ai-profiles/src/client/pages/profiles.tsx
+  s_503e9e7253d05e::t_7dec823c0b1913 12,87-88,95,172,177,196
+  s_503e9e7253d05e::t_27e2727e35eb3f 89
+plugins/ai-profiles/src/client/pages/subscription.tsx
+  s_503e9e7253d05e::t_27e2727e35eb3f 87
+  s_503e9e7253d05e::t_7dec823c0b1913 9,35-36,83-86,88-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb6c562f616a4d4b16a5306c09c854ee2e132230",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

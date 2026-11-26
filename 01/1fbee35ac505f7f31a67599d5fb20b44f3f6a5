@@ -1,0 +1,27 @@
+plugins/ai-profiles/src/server/profiles.ts
+  s_7a30246af0730e::t_6c79604c476884 85-86
+  s_7a30246af0730e::t_5716e4af1f0859 17,23-28,42,48-49,62-69,72-84,87-95,103,106,115-117,120,126-129,135-137,139-142,145,149,152,156-157,159,174-175,185-189,191,196-199,206-209,211-212,216,222-228,238-240,244,251-256,260-261,264,274-276,285-286
+plugins/ai-profiles/tests/profiles-server.test.ts
+  s_7a30246af0730e::t_c52b45db8e0c73 2,15-25,62-64,79-83,142-144,149-150,152-156,159-178,182-183,187-192,197-203,234,251-258
+  s_7a30246af0730e::t_6c79604c476884 147-148,179-181,184-186,193-196,218-224
+  s_7a30246af0730e::t_2600fc680b423b 259
+plugins/agent-proxy/tests/workspace.ts
+  s_7a30246af0730e::t_692bddeda746f6 84-87,89,125-126,129-137,139
+  s_7a30246af0730e::t_6c79604c476884 127-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "011fbee35ac505f7f31a67599d5fb20b44f3f6a5",
+  "prompts": {},
+  "sessions": {
+    "s_7a30246af0730e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee930ffb-1991-4f90-9d86-2ea7a4c66c5e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

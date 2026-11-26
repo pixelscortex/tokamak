@@ -1,0 +1,28 @@
+design/agent-proxy.md
+  s_bbb3cd361869a9::t_a0161c3c5e1fe4 64-65
+  s_bbb3cd361869a9::t_c1959706f6794a 19-29,36-43
+design/ai-profiles.md
+  s_bbb3cd361869a9::t_87de6d2bec7c87 4-6,10-11,24-27,33-37,61-108,125-130,141-147
+plugins/agent-proxy/README.md
+  s_bbb3cd361869a9::t_a0161c3c5e1fe4 17-29,38-67
+  s_bbb3cd361869a9::t_1ac15042849f2b 34-35
+  s_bbb3cd361869a9::t_46bccf332b9b68 68
+e2e/browser/screens.spec.ts
+  s_bbb3cd361869a9::t_d511ca86232f11 372-408
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea6c9c325d3b7fb511b86394b87211445f31a4ff",
+  "prompts": {},
+  "sessions": {
+    "s_bbb3cd361869a9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5edd9cc-b210-4c2f-b1cb-c84b82ea62cc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
