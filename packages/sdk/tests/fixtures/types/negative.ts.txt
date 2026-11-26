@@ -39,7 +39,11 @@ action({
   on: "caller",
   handler: async (ctx) => {
     ctx.machines; // reject
+    await machines(ctx).list();
     await machines(ctx).create({ name: "forbidden" }); // reject
+    await machines(ctx).remove(null as never); // reject
+    await machines(ctx).waitOnline(null as never); // reject
+    await machines(ctx).listAll(); // reject
     await ctx.server.url(); // reject
   },
 });

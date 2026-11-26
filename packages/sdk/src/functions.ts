@@ -18,7 +18,7 @@ import {
   withServerContracts,
   type ContractContext,
 } from "./internal/contracts";
-import { machineScope, type MachineScope } from "./internal/machine-scope";
+import { bindMachineScope } from "./internal/machine-scope";
 import { Visibility } from "./visibility";
 import { bindPoint, type Point } from "./points";
 
@@ -301,13 +301,9 @@ function actionContext(
         kind: expected,
         ...(options?.on === undefined ? {} : { on: options.on }),
       });
-  return Object.freeze({
+  const context: CallerActionContext = Object.freeze({
     call,
     point: bindPoint(bridge, pointScope),
-    [machineScope]: {
-      host: bridge,
-      besideServer: on === undefined || on === "server" ? besideServer : undefined,
-    } satisfies MachineScope,
     ...(on === undefined || on === "server"
       ? { server: Object.freeze({ url: () => besideServer(() => callHost(bridge, "server.url", {})) }) }
       : {}),
@@ -353,6 +349,11 @@ function actionContext(
           }),
     runAction: run("action"),
   } as CallerActionContext);
+
+  return bindMachineScope(context, {
+    host: bridge,
+    besideServer: on === undefined || on === "server" ? besideServer : undefined,
+  });
 }
 
 function builder<
@@ -422,7 +423,6 @@ function builder<
             : {
                 call,
                 point: bindPoint(host),
-                [machineScope]: { host } satisfies MachineScope,
                 get auth() {
                   return caller();
                 },
@@ -436,6 +436,8 @@ function builder<
                 use: <T>(api: T) => bindCalls(api, host),
               },
         );
+        if (kind !== "action") bindMachineScope(ctx, { host });
+
         // The generic kind determines the context; the branch above enforces it
         // at runtime as well. Plugin reference kinds are erased, so the kernel
         // also enforces query-only calls. This cast never widens author types.

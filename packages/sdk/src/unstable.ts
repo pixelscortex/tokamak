@@ -7,7 +7,7 @@ import type {
   QueryContext,
 } from "./functions";
 import { callHost } from "./host";
-import { machineScope, type MachineScope } from "./internal/machine-scope";
+import { machineScopeOf } from "./internal/machine-scope";
 import type { DataModel } from "./schema";
 
 export interface MachineEntry {
@@ -45,7 +45,7 @@ export function machines<M extends DataModel>(
   ctx: QueryContext<M> | MutationContext<M> | CallerActionContext | ActionContext,
 ): MachineList;
 export function machines(ctx: object): MachineList {
-  const { host, besideServer } = (ctx as { readonly [machineScope]: MachineScope })[machineScope];
+  const { host, besideServer } = machineScopeOf(ctx);
   const list = () => callHost(host, "machines.list", {});
 
   if (!besideServer) return Object.freeze({ list });

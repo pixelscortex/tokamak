@@ -176,8 +176,10 @@ one device key per Runner. Signing that device out revokes the key and stops
 the Runner from reconnecting.
 
 For a plugin-managed machine, put its key in the same private key file. No
-sign-in or machine id is needed on the Runner. The plugin's machine management
-API is available under `@tokamak/sdk/unstable` and may change.
+sign-in or machine id is needed on the Runner. The owning plugin can revoke
+that key, and uninstalling the plugin revokes it too; the Runner then stops
+reconnecting. The plugin's machine management API is available under
+`@tokamak/sdk/unstable` and may change.
 
 Install the full Runner build of every plugin this machine serves in
 `--plugins`, including `manifest.json`, `local-entry.js`, and `local.js`.

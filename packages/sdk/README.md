@@ -232,8 +232,9 @@ If its Runner disconnects or its key is removed during an action, that action
 returns `machineLost`. Calls are never queued or replayed.
 
 Machine management can also return `machineLimit` when the plugin already has
-100 active machines, `machineForbidden` for an invalid member or unauthorized
-machine, and `machineOffline` if waiting for a connection times out.
+100 active machines, `machineForbidden` for an unauthorized machine or for a
+machine bound to a member who cannot be found, and `machineOffline` if waiting
+for a connection times out. Uninstalling a plugin revokes its machine keys.
 
 A per-call override can move a server action to a Runner, where machine
 management and `ctx.server.url()` fail with the typed `serverOnly` error.
