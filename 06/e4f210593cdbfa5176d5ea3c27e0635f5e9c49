@@ -1,0 +1,19 @@
+packages/ui/src/input.tsx
+  s_f25a3a73ba783c::t_87215951362097 72-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06e4f210593cdbfa5176d5ea3c27e0635f5e9c49",
+  "prompts": {},
+  "sessions": {
+    "s_f25a3a73ba783c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc1e9c2e-987a-409a-bf2b-65354272e8a9",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
