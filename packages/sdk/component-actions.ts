@@ -1,4 +1,5 @@
 import type { JSX } from "@solidjs/web";
+import type { AttributeFilters } from "./screen-search";
 
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
@@ -82,16 +83,46 @@ export function componentActionKind<K extends ComponentActionKind>(action: Compo
   return action[componentActionBrand];
 }
 
-type SearchOptions = { in?: string; nth?: number };
-type ScreenMatch = readonly [ancestors: string, props: object];
-type InScope<Matches extends readonly ScreenMatch[], Scope extends string> = Matches extends readonly [
-  infer First extends ScreenMatch,
-  ...infer Rest extends ScreenMatch[],
-]
-  ? Scope extends First[0]
-    ? [First, ...InScope<Rest, Scope>]
-    : InScope<Rest, Scope>
-  : [];
+type SearchOptions = AttributeFilters & { in?: string; nth?: number };
+type ScreenMatch = readonly [ancestors: string, props: object, attributes?: AttributeFilters];
+type Keys<T> = T extends unknown ? keyof T : never;
+type Values<T, K extends PropertyKey> = T extends Record<K, unknown> ? T[K] : never;
+type Available<T> = { [K in Keys<T>]?: Values<T, K> };
+type Options<Value> = Value extends readonly ScreenMatch[]
+  ? OptionsFromAttributes<NonNullable<Value[number][2]>>
+  : {};
+type OptionsFromAttributes<T> = Available<OmitEach<T, "aria">> &
+  ([Values<T, "aria">] extends [never] ? {} : { aria?: Available<Values<T, "aria">> });
+type OmitEach<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+type AllowedFilters<Value> = { in?: string; nth?: number } & Options<Value>;
+type UnknownKeys<Given, Allowed> = Record<Exclude<keyof Given, keyof Allowed>, never>;
+type CheckFilters<Given, Allowed> = UnknownKeys<Given, Allowed> &
+  (Given extends { aria: infer A }
+    ? Allowed extends { aria?: infer B }
+      ? { aria: UnknownKeys<A, NonNullable<B>> }
+      : never
+    : unknown);
+
+type Fits<Match extends ScreenMatch, Filters> = Filters extends { in: infer Scope extends string }
+  ? Scope extends Match[0]
+    ? FitsAttributes<Match, Filters>
+    : false
+  : FitsAttributes<Match, Filters>;
+type FitsAttributes<Match extends ScreenMatch, Filters> =
+  (Match[2] extends AttributeFilters ? Match[2] : {}) extends Pick<
+    Filters,
+    Exclude<keyof Filters, "in" | "nth">
+  >
+    ? true
+    : false;
+type Narrow<
+  Matches extends readonly ScreenMatch[],
+  Filters,
+  Kept extends ScreenMatch[] = [],
+> = Matches extends readonly [infer First extends ScreenMatch, ...infer Rest extends ScreenMatch[]]
+  ? Narrow<Rest, Filters, Fits<First, Filters> extends true ? [...Kept, First] : Kept>
+  : Kept;
 type AtPosition<
   Matches extends readonly ScreenMatch[],
   Nth extends number,
@@ -109,14 +140,19 @@ type MatchProps<Matches extends readonly ScreenMatch[], Filters> = Filters exten
     : AtPosition<Matches, N>
   : Matches[number][1];
 type SearchProps<Value extends object, Filters> = Value extends readonly ScreenMatch[]
-  ? MatchProps<Filters extends { in: infer Scope extends string } ? InScope<Value, Scope> : Value, Filters>
+  ? MatchProps<
+      Extract<keyof Filters, "in" | keyof AttributeFilters> extends never ? Value : Narrow<Value, Filters>,
+      Filters
+    >
   : Value;
 
-/** The compiler supplies one props type or a source-ordered list of matches for each name. */
+/** The compiler supplies one props type or a source-ordered list of matches and their filters. */
 export type ScreenFind<Names extends Record<string, object>> = <
   Name extends keyof Names & string,
   const Filters extends SearchOptions = {},
 >(
   name: Name,
-  filters?: Filters,
+  filters?: Filters &
+    AllowedFilters<Names[NoInfer<Name>]> &
+    CheckFilters<Filters, AllowedFilters<Names[NoInfer<Name>]>>,
 ) => ComponentPart<string, SearchProps<Names[Name], Filters>>;
