@@ -1,0 +1,24 @@
+packages/build/README.md
+  s_be4ee891f4fdb9::t_e2c0f788f67e5a 138-141
+packages/build/src/component-parts.ts
+  s_be4ee891f4fdb9::t_e29cf13240e9ec 52-55,62-64
+packages/build/tests/components.test.mjs
+  s_be4ee891f4fdb9::t_2c8ce9b209c9df 212-231,235-238
+  s_be4ee891f4fdb9::t_e2c0f788f67e5a 232-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "37ec9f81f2f36d1a7a993d94c06b5212d4fad987",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
