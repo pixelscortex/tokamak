@@ -280,14 +280,18 @@ impl Coordinator {
         // An attached invocation owns this capability through its retirement grace.
         let attached = match &call.lifetime {
             Some(lifetime) if lifetime.is_cancelled() => return Err("Action cancelled".into()),
-            Some(_) => true,
+            Some(_) => !call.http_root,
             None => false,
         };
         let (kind, validator) = match (&self.plugins, &call.generation, &call.owner) {
             (Some(current), Some(generation), Some(owner))
                 if (attached && current.catalog.plugins.contains_key(owner))
                     || Arc::ptr_eq(current, generation)
-                    || current.same_action_source(generation, owner) =>
+                    || if call.http_root {
+                        current.same_plugin(generation, owner)
+                    } else {
+                        current.same_action_source(generation, owner)
+                    } =>
             {
                 let target = current.target(
                     owner,
@@ -305,15 +309,16 @@ impl Coordinator {
                     );
                 }
 
-                if call.note.auth.is_none() {
-                    target.check_anonymous_scope(owner)?;
-                }
+                call.note.check_anonymous_scope(&target, owner)?;
                 (Some(target.kind), Some(target.args))
             }
             (None, None, None) => (self.kinds.get(&call.name).copied(), None),
             _ => return Err("action belongs to a retired plugin generation".to_owned()),
         };
         call.kind.check_nested(kind)?;
+        if call.http_root {
+            return Ok(call.note.clone());
+        }
         call.note
             .enter(&call.name, validator.as_deref(), &call.args)
             .map_err(|error| error.to_string())

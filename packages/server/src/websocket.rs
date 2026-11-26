@@ -213,32 +213,20 @@ async fn serve_inner(
     let (runner_control, worker) = runner.map_or((None, None), |(control, worker)| {
         (Some(Arc::from(control)), Some(worker))
     });
-    if web.is_some()
-        && access
-            .as_ref()
-            .is_none_or(|access| access.token.chars().count() < 32)
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Hosted mode requires an access token of at least 32 characters",
-        ));
-    }
-    if !listener.local_addr()?.ip().is_loopback() && (web.is_none() || access.is_none()) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "unauthenticated POC must bind loopback",
-        ));
-    }
+    let listen = check_listener_address(&listener, access.as_ref(), web.is_some())?;
     // Revocation is persisted before cleanup. Retry it before serving clients
     // in case the previous process stopped between those steps.
     server
         .clear_revoked_window_state(&identities)
         .await
         .map_err(io::Error::other)?;
-    server.machines().configure(
-        identities.clone(),
-        crate::web::configured_public_url().map_err(|error| io::Error::other(error.to_string()))?,
-    )?;
+    let public_origin = match &web {
+        Some(web) => web.public_origin.clone(),
+        None => crate::web::configured_public_url()?,
+    };
+    server
+        .machines()
+        .configure(identities.clone(), public_origin.clone())?;
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
     let hosted = web.is_some();
@@ -259,8 +247,17 @@ async fn serve_inner(
         access,
         origins: allowed_origins(web.as_ref()),
     };
-    let app = routes(adapter, web, worker);
-    // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
+    let http_actions = crate::http_actions::router(
+        adapter.server.clone(),
+        stopping.clone(),
+        web,
+        public_origin,
+        listen,
+    )?;
+    // Catch-all plugin paths belong in a fallback router so Axum can keep
+    // the core asset and reload paths registered independently.
+    let app = routes(adapter, worker).fallback_service(http_actions);
+    // The listener owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
     // connections that eventually reach our WebSocket handler.
@@ -269,19 +266,15 @@ async fn serve_inner(
         stopping: stopping.clone(),
     };
     let presence = hosted.then(|| start_last_seen_timer(identities.clone(), stopping.clone()));
-    let trigger = stopping.clone();
-    let result = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<PeerAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        tokio::select! {
-            _ = shutdown => {},
-            _ = trigger.cancelled() => {},
+    let serving = crate::http_listener::serve(listener, app, stopping.clone());
+    tokio::pin!(serving);
+    let result = tokio::select! {
+        result = &mut serving => result,
+        () = shutdown => {
+            stopping.cancel();
+            serving.await
         }
-        trigger.cancel();
-    })
-    .await;
+    };
     stopping.cancel();
     // Axum does not wait for upgraded connections. Permits include the upgrade
     // handshake, so none can escape this barrier and outlive storage shutdown.
@@ -293,6 +286,27 @@ async fn serve_inner(
         flush_last_seen(identities).await;
     }
     result
+}
+
+fn check_listener_address(
+    listener: &TcpListener,
+    access: Option<&LocalAccess>,
+    hosted: bool,
+) -> io::Result<SocketAddr> {
+    if hosted && access.is_none_or(|access| access.token.chars().count() < 32) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Hosted mode requires an access token of at least 32 characters",
+        ));
+    }
+    let listen = listener.local_addr()?;
+    if !listen.ip().is_loopback() && (!hosted || access.is_none()) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "unauthenticated POC must bind loopback",
+        ));
+    }
+    Ok(listen)
 }
 
 fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
@@ -310,11 +324,7 @@ fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
         .map_err(io::Error::other)
 }
 
-fn routes(
-    adapter: Adapter,
-    web: Option<HostedWeb>,
-    worker: Option<axum::routing::MethodRouter>,
-) -> Router {
+fn routes(adapter: Adapter, worker: Option<axum::routing::MethodRouter>) -> Router {
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
@@ -352,15 +362,7 @@ fn routes(
                 .layer(middleware::from_fn_with_state(adapter, authorize)),
         );
     }
-    if let Some(web) = web {
-        app.fallback_service(
-            Router::new()
-                .fallback(get(crate::web::shell))
-                .with_state(web),
-        )
-    } else {
-        app
-    }
+    app
 }
 
 #[cfg(not(feature = "local-runtime"))]
@@ -836,15 +838,7 @@ impl axum::serve::Listener for ShutdownListener {
 }
 
 #[derive(Clone)]
-struct PeerAddr(SocketAddr);
-
-impl axum::extract::connect_info::Connected<axum::serve::IncomingStream<'_, ShutdownListener>>
-    for PeerAddr
-{
-    fn connect_info(stream: axum::serve::IncomingStream<'_, ShutdownListener>) -> Self {
-        Self(*stream.remote_addr())
-    }
-}
+pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 pub(crate) struct ShutdownIo {
     stream: TcpStream,

@@ -59,6 +59,13 @@ impl Snapshot {
 
     pub fn register(self: &Arc<Self>, ops: &mut engine::OpRegistry) -> Result<(), engine::Error> {
         engine::register_password_crypto(ops)?;
+        self.register_env(ops)
+    }
+
+    pub(crate) fn register_env(
+        self: &Arc<Self>,
+        ops: &mut engine::OpRegistry,
+    ) -> Result<(), engine::Error> {
         let values = self.clone();
         ops.register_sync("action.env", move |payload| {
             let name = payload["name"].as_str().ok_or("env requires a name")?;

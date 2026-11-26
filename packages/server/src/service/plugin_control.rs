@@ -96,6 +96,7 @@ impl Coordinator {
                 };
                 let _ = reply.send(result);
             }
+            Command::HttpAction(id, path, reply) => self.reply_http_route(&id, &path, reply),
             Command::Asset(revision, id, name, reply) => {
                 let result = self
                     .plugins
