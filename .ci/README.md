@@ -1,7 +1,8 @@
 # CI and unsigned release
 
 All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
-three fast jobs on every PR, and `.ci/check.sh` holds their commands:
+two fast jobs on every PR, `lint` and `typescript`. The `rust` job is started by hand only for now
+(Actions → CI → Run workflow). `.ci/check.sh` holds their commands:
 
 - `lint`: formatting and lint for TypeScript and both Rust builds (Clippy, warnings denied),
   plus a byte-for-byte comparison of copied contract declarations against their owners.
@@ -18,8 +19,8 @@ or the browser suite:
 `proto run bun -- run e2e:browser` (see `e2e/README.md`). Real agent turns
 are local only.
 
-Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint,
-TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
+Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint
+and TypeScript. Run the Rust stage locally with `moon run workspace:ci-rust` before changing Rust code. Draft pull requests are skipped; the jobs start when a pull
 request is marked ready for review. `dev` is the integration branch: feature pull requests target
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
