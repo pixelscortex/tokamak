@@ -1,0 +1,77 @@
+plugins/agent-proxy/tests/sign-in.test.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 19,39,48,334-336
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 58-64,67-73,231,266-275,315,322,343,455,470
+plugins/agent-proxy/src/server/api.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 7
+design/ai-profiles.md
+  s_d41cc78fb3109d::t_acf483c83057c1 4-6,10-11,26-29,35-39,62-121,138-143,158-164,186
+plugins/ai-profiles/src/client/ui/subscription-card.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 12-13,20-21,74,109-113
+design/agent-proxy.md
+  s_d41cc78fb3109d::t_acf483c83057c1 19-29,36-43,71
+plugins/agent-proxy/src/server/logins.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 215-223
+plugins/ai-profiles/src/server/_generated/api.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 4-11,23-28
+plugins/agent-proxy/src/server/_generated/plugin.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 4-10,24-28
+plugins/agent-proxy/src/server/signins.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 21-22,82-85,87-97,107-112,122-123,263-273,293-297
+plugins/ai-profiles/src/server/profile-uses.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-46
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 31-33
+plugins/agent-proxy/README.md
+  s_d41cc78fb3109d::t_acf483c83057c1 17-30,33-36,39-81
+plugins/ai-profiles/src/client/lib/format.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 10-14,17
+plugins/ai-profiles/src/client/ui/card-actions.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 1-87
+plugins/agent-proxy/src/server/schema.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 22-25,49-53,95-96
+plugins/ai-profiles/src/client/ui/remove-dialog.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 1-91
+plugins/agent-proxy/src/server/_generated/internal.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 14-18,37-38
+plugins/ai-profiles/src/client/lib/sign-in-watch.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-102
+plugins/agent-proxy/src/server/_functions.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 49,58,61-65,67,69-76,92-95,108-109,118-119,127,129-137
+plugins/agent-proxy/src/server/manage.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-349
+plugins/ai-profiles/src/client/pages/subscription.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 1-332
+plugins/agent-proxy/tests/manage.test.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-428
+e2e/browser/screens.spec.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 373-408
+plugins/ai-profiles/src/client/styles.css
+  s_d41cc78fb3109d::t_acf483c83057c1 11-16
+plugins/ai-profiles/src/server/manage.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-71
+plugins/ai-profiles/src/client/lib/manage.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-33
+plugins/agent-proxy/src/server/reads.ts
+  s_d41cc78fb3109d::t_acf483c83057c1 1-61
+plugins/ai-profiles/tests/manage.test.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 1-315
+plugins/ai-profiles/src/client/pages/profiles.tsx
+  s_d41cc78fb3109d::t_acf483c83057c1 1,5,10-14,24,46-59,61,64,72-77,93-98,131-132,145,156,160-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "84b1a068b88b4d262f6a54dd2fb078171ac8744e",
+  "prompts": {},
+  "sessions": {
+    "s_d41cc78fb3109d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a2174b-b763-72f0-b509-041c8fbafc92",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
