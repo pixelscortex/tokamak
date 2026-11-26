@@ -1,0 +1,29 @@
+plugins/ai-profiles/tests/desktop-listener.test.tsx
+  s_503e9e7253d05e::t_97ad8d49ef81e7 1-190
+  s_503e9e7253d05e::t_506e4462e38312 191-194
+design/shell.md
+  s_503e9e7253d05e::t_ae451bbc521f0d 72-78
+app/src-tauri/src/sign_in_return.rs
+  s_503e9e7253d05e::t_1e0e6cc39949e2 20-22,200-203,205-206,247,253-263
+  s_503e9e7253d05e::t_13ac509aa7f1f6 620-640,646-691
+  s_503e9e7253d05e::t_861bbf0444327f 641,644-645
+  s_503e9e7253d05e::t_f2b63b77ae49f3 642-643
+plugins/ai-profiles/src/client/lib/sign-in-return.ts
+  s_503e9e7253d05e::t_1d694fff1fae66 1,6-13,15-23,37-78,81-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb3e056a827d1dac21cc8df25eb350f6abba6c04",
+  "prompts": {},
+  "sessions": {
+    "s_503e9e7253d05e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd87a5c1-03cb-47c8-8c85-835040bf0bbf",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

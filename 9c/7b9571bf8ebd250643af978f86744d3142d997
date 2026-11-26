@@ -1,0 +1,21 @@
+plugins/ai-profiles/src/client/ui/card-actions.tsx
+  s_bbb3cd361869a9::t_492ff70760adab 43,45-52,70
+plugins/ai-profiles/src/client/pages/subscription.tsx
+  s_bbb3cd361869a9::t_492ff70760adab 190-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c7b9571bf8ebd250643af978f86744d3142d997",
+  "prompts": {},
+  "sessions": {
+    "s_bbb3cd361869a9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5edd9cc-b210-4c2f-b1cb-c84b82ea62cc",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

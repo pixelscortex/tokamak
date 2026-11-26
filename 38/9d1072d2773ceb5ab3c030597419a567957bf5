@@ -1,0 +1,31 @@
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_62d8de3fec7e8a::t_4ea6bfa86f5d0f 3-37,39-40,45,49-60,64-91,96-103,105-106,111-112,117,128-133,138-139,143-239,241-248,254-256,258-260,264,267-271,273-276,282-287,290-292,296-298,302-305,307-309,311-312,314-316,319-323,325,329-334,336,338-342,346-350,352-396,401-533,537-542,544-548,550-553,555-557,559-560,565-574,577-580
+plugins/ai-profiles/src/client/ui/company-mark.tsx
+  s_3c3e6807a80329::t_fbba175bf93a85 35
+plugins/ai-profiles/tests/chatgpt.test.tsx
+  s_3c3e6807a80329::t_ff7df694c52098 58,67,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "389d1072d2773ceb5ab3c030597419a567957bf5",
+  "prompts": {},
+  "sessions": {
+    "s_3c3e6807a80329": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21717-f345-7953-b663-129c38e1eb2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_62d8de3fec7e8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "68ee70d4-9653-4451-880a-97d966f1069a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}

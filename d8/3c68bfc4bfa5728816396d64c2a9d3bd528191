@@ -1,0 +1,21 @@
+plugins/ai-profiles/README.md
+  s_7a30246af0730e::t_dc6e178cb82181 12-14
+plugins/ai-profiles/src/server/schema.ts
+  s_7a30246af0730e::t_f405641e12fda8 21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d83c68bfc4bfa5728816396d64c2a9d3bd528191",
+  "prompts": {},
+  "sessions": {
+    "s_7a30246af0730e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee930ffb-1991-4f90-9d86-2ea7a4c66c5e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
