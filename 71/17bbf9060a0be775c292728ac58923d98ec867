@@ -1,0 +1,45 @@
+packages/runtime/tools/run-app.ts
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 4-5,25-32
+packages/runner/README.md
+  s_8c7413d0fa8ee9::t_ce470b70b8d254 13
+app/src-tauri/src/runner.rs
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 3,8,12,17-24,26-28
+app/scripts/prepare-host.ts
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 2
+packages/worker/src/runner.rs
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 22-37,46,48-50,53-55,57-59,63-68
+  s_8c7413d0fa8ee9::t_fb3199730d273e 38-40,47,51-52,56,60-62
+  s_8c7413d0fa8ee9::t_72d54cd0fde01f 41-45
+app/scripts/dev-app.ts
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 1-32
+app/src-tauri/tauri.conf.json
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 42
+packages/server/PLUGINS.md
+  s_8c7413d0fa8ee9::t_ce470b70b8d254 33-34
+app/scripts/starter-plugins.ts
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 1-2
+app/moon.yml
+  s_8c7413d0fa8ee9::t_a4352c67f54de6 37
+app/README.md
+  s_8c7413d0fa8ee9::t_ce470b70b8d254 13-14,17-25,110-112
+packages/runner/tests/lifecycle.rs
+  s_8c7413d0fa8ee9::t_ce470b70b8d254 8,279-328,335-346
+  s_8c7413d0fa8ee9::t_4809d51a6c9b6a 329-334
+  s_8c7413d0fa8ee9::t_115bfa3c327c62 347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7117bbf9060a0be775c292728ac58923d98ec867",
+  "prompts": {},
+  "sessions": {
+    "s_8c7413d0fa8ee9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a219c6-15e5-7580-a3e2-56ff8b1ae90b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
