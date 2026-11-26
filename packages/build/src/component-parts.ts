@@ -30,12 +30,13 @@ type Part = {
 };
 type Tree = {
   part?: Part;
+  renderFunction?: Part;
   opening?: ts.JsxOpeningLikeElement;
   children: Map<string, Tree>;
   entries: { name: string; node: ts.Node; fixed: boolean; tree: Tree }[];
 };
 type Row = { item: string; index: string; type: () => string; value: () => string };
-type Scope = { tree: Tree; props: string; type: () => string; row?: Row };
+type Scope = { tree: Tree; props: string; type: () => string; row?: Row; renderFunction?: () => void };
 type Binding = { node: ts.ConciseBody; parameter: ts.ParameterDeclaration };
 
 const branch = (): Tree => ({ children: new Map(), entries: [] });
@@ -85,6 +86,15 @@ function assignParts(
   const counts = new Map<string, number>();
   const identities = new Map<Tree, string>();
   const times = new Map<string, number>();
+  // A render function with no elements of its own (a fragment, a provider) is
+  // only something to attach to. Two with one name cannot be told apart, so
+  // they leave the tree instead of failing a build that worked before.
+  const groups = new Map<string, number>();
+  for (const { name, tree: child } of tree.entries)
+    if (!child.part) groups.set(name, (groups.get(name) ?? 0) + 1);
+  tree.entries = tree.entries.filter(
+    ({ name, tree: child }) => child.part || child.entries.length || groups.get(name) === 1,
+  );
   for (const { name, node, fixed: named, tree: child } of tree.entries) {
     if (named) {
       if (!fixed.has(name)) fixed.set(name, node);
@@ -134,6 +144,10 @@ function assignParts(
       Object.assign(child.part, { target, fingerprint, ambiguous: uncertain });
       paths.set(target, child.part);
     }
+    if (child.renderFunction) {
+      child.renderFunction.target = target;
+      paths.set(target, child.renderFunction);
+    }
     assignParts(child, target, paths, fingerprint, uncertain);
   }
 }
@@ -147,6 +161,7 @@ function segment(name: string) {
 export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin: string, root: string) {
   const files = new Map<ts.SourceFile, Map<Element, Part>>();
   const bindings = new Map<ts.SourceFile, (Binding & { name: string })[]>();
+  const functions = new Map<ts.SourceFile, Map<ts.ConciseBody, Part>>();
   const rows = new Map<
     ts.SourceFile,
     { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[]
@@ -210,6 +225,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
   for (const source of sources) {
     const elements = new Map<Element, Part>();
     const pending: (Binding & { name: string })[] = [];
+    const renderFunctions = new Map<ts.ConciseBody, Part>();
     const rowBindings: { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[] = [];
     const base: Scope = { tree, props: "{}", type: () => "{}" };
 
@@ -255,12 +271,24 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                   : propsType(parameter);
               return (type = alias(shape));
             },
+            renderFunction: () => {
+              const body = node.body!;
+              // A component is named like one. A lowercase helper that returns
+              // JSX is called, not mounted, so it has no instance to attach to.
+              if (!isDefault && !/^[A-Z]/.test(name!.getText(source))) return;
+              if (renderFunctions.has(body)) return;
+              const part = { target: "", props, type: scope.type() };
+              identity().renderFunction = part;
+              renderFunctions.set(body, part);
+            },
           };
           visit(node.body, scope);
           return;
         }
       }
 
+      if (ts.isJsxFragment(node) || ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node))
+        scope.renderFunction?.();
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
         const opening = ts.isJsxElement(node) ? node.openingElement : node;
         if (
@@ -343,16 +371,21 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     }
     visit(source, base);
     if (elements.size) files.set(source, elements);
+    if (renderFunctions.size) functions.set(source, renderFunctions);
     if (pending.length) bindings.set(source, pending);
     if (rowBindings.length) rows.set(source, rowBindings);
   }
 
   assignParts(tree, plugin, paths);
 
-  function compactParts(node: Tree): ScreenTree {
+  function compactParts(node: Tree, root = false): ScreenTree {
     const fingerprint = node.part?.fingerprint ?? null;
     return [
-      ...(node.part ? ["", node.part.attributes ? [fingerprint, ...node.part.attributes] : fingerprint] : []),
+      ...(node.part
+        ? ["", node.part.attributes ? [fingerprint, ...node.part.attributes] : fingerprint]
+        : root || !node.renderFunction
+          ? [":", null]
+          : []),
       ...[...node.children].flatMap(([key, child]) => [
         key,
         child.part && !child.children.size && !child.part.attributes
@@ -361,18 +394,34 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       ]),
     ];
   }
-  const compact = compactParts(tree);
+  const compact = compactParts(tree, true);
   const elements = screenElements(plugin, compact).map((element) => {
     const computed = paths.get(element.target)?.computed;
     return computed ? { ...element, computed } : element;
   });
+  const renderFunctions = screenElements(plugin, compact, "render function");
   // Pack the shape into a string so the bundle keeps its compact layout.
   const packed = JSON.stringify(compact);
 
   return {
     has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
-    resolve(search: ScreenSearch) {
-      const result = resolveScreenSearch(elements, search);
+    resolve(search: ScreenSearch, action: string) {
+      const attach = action === "attach";
+      const result = resolveScreenSearch(
+        attach ? renderFunctions : elements,
+        search,
+        undefined,
+        attach ? "render function" : "element",
+      );
+      if (
+        result.reason &&
+        !(attach ? renderFunctions : elements).some(({ name }) => name === search.name) &&
+        (attach ? elements : renderFunctions).some(({ name }) => name === search.name)
+      )
+        return {
+          ...result,
+          reason: `${action} requires ${attach ? "a render function" : "an element"}; ${result.reason}`,
+        };
       const part = result.element && paths.get(result.element.target);
       return { ...result, ambiguous: part?.ambiguous, unnamed: part?.unnamed };
     },
@@ -382,17 +431,10 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       mounts: ReadonlyMap<Element, ElementMount> | undefined,
       erased: (node: ts.Node) => boolean,
     ) {
-      const elements = files.get(source);
-      if (elements) {
-        for (const { node, parameter, name } of bindings.get(source) ?? []) {
-          if (erased(node)) continue;
-          const binding = parameter.name.getText(source);
-          const destructured = !ts.isIdentifier(parameter.name);
-          if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
-          const capture = destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`;
-          if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, capture);
-          else output.prependLeft(node.getStart(source), `{ ${capture} return (`);
-        }
+      const elements = files.get(source) ?? new Map<Element, Part>();
+      const renderFunctions = functions.get(source);
+      const setup = new Map<ts.ConciseBody, string>();
+      if (elements.size || renderFunctions?.size) {
         for (const { node, item, index } of rows.get(source) ?? []) {
           if (erased(node)) continue;
           output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
@@ -418,6 +460,23 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           }
           const index = group.suffixes.push(segments.slice(2).join(".")) - 1;
           return `${group.variable}[${index}]`;
+        }
+        for (const { node, parameter, name } of bindings.get(source) ?? []) {
+          if (erased(node)) continue;
+          const binding = parameter.name.getText(source);
+          const destructured = !ts.isIdentifier(parameter.name);
+          if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
+          setup.set(node, destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`);
+        }
+        for (const [node, part] of renderFunctions ?? []) {
+          if (!part.target) continue; // Left out of the tree: nothing can attach to it.
+          if (erased(node)) continue;
+          const props = part.props === "{}" ? "" : `, ${part.props}`;
+          setup.set(node, `${setup.get(node) ?? ""}__tokamakAttach(${address(part)}${props});`);
+        }
+        for (const [node, code] of setup) {
+          if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, code);
+          else output.prependLeft(node.getStart(source), `{ ${code} return (`);
         }
         const tables: string[] = [];
         function collect(node: Element): Site | undefined {
@@ -549,49 +608,50 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
             .join(""),
         );
-        for (const { node } of bindings.get(source) ?? []) {
-          if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
-        }
+        for (const node of setup.keys()) if (!ts.isBlock(node)) output.appendLeft(node.end, "); }");
         for (const { node, item, index } of rows.get(source) ?? []) {
           if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
         }
         output.prepend(
-          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
+          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths, __attachRenderFunction as __tokamakAttach } from "@tokamak/sdk/client";\n',
         );
       }
       if (source === entry)
         output.append(
           `\nimport { __defineScreenFind } from "@tokamak/sdk/client";\nconst __tokamakFind = __defineScreenFind(${JSON.stringify(plugin)}, ${JSON.stringify(packed)});\nexport { __tokamakFind as find };\n`,
         );
-      return !!elements || source === entry;
+      return !!(elements.size || renderFunctions?.size) || source === entry;
     },
     publish(warn: (message: string) => void, catalog?: string) {
       const path = join(dirname(entry.fileName), "_generated/components.d.ts");
-      const names = new Map<string, typeof elements>();
-      for (const element of elements) {
-        const matches = names.get(element.name);
-        if (matches) matches.push(element);
-        else names.set(element.name, [element]);
+      function shape(candidates: typeof elements, scoped = false) {
+        const names = new Map<string, typeof elements>();
+        for (const element of candidates) {
+          const matches = names.get(element.name);
+          if (matches) matches.push(element);
+          else names.set(element.name, [element]);
+        }
+        return [...names]
+          .map(([name, matches]) => {
+            const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
+            const entries = matches.map((element) => {
+              const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
+              const filters =
+                element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
+              return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
+            });
+            const only = matches[0]!;
+            return `  ${JSON.stringify(name)}: ${!scoped && matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
+          })
+          .join("");
       }
-      const shape = [...names]
-        .map(([name, matches]) => {
-          const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
-          const entries = matches.map((element) => {
-            const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
-            const filters = element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
-            return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
-          });
-          const only = matches[0]!;
-          return `  ${JSON.stringify(name)}: ${matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
-        })
-        .join("");
       const previous = readOptional(path);
       const declarations =
         privateDeclarations() +
         [...aliases]
           .map(([shape, name]) => `type ${name} = Extract<NonNullable<${shape}>, object>;\n`)
           .join("");
-      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${shape}}>;\n`;
+      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${shape(elements)}}${renderFunctions.length ? `, {\n${shape(renderFunctions, true)}}` : ""}>;\n`;
       const reported = new Set<string>();
       const catalogs = new Set([
         dirname(root),
@@ -622,7 +682,13 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                 : !previous.target.startsWith(plugin + ".")
             )
               continue;
-            const { reason, element } = resolveScreenSearch(elements, previous.search, previous);
+            const attach = options.action === "attach";
+            const { reason, element } = resolveScreenSearch(
+              attach ? renderFunctions : elements,
+              previous.search,
+              previous,
+              attach ? "render function" : "element",
+            );
             if (reason) {
               const message = `Plugin "${installed.id}": ${reason}; skipping this addition`;
               if (reported.has(message)) continue;

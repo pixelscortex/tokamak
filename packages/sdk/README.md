@@ -714,6 +714,20 @@ match that has moved. It skips missing or ambiguous targets, and an `nth`
 target whose position another element took. See the [builder guide](../build/README.md#extending-a-screen)
 for the naming rules.
 
+Use `attach(owner.find("Composer"), TrackComposer, { when })` to run a
+component for each mounted instance of the owner's named render function.
+It receives live props and can use effects, cleanup, context, and shell
+regions such as `Region.Panel`. Returned JSX is evaluated without drawing in
+place. Hiding or layering an element inside the function leaves the attachment
+running. An attachment stops and cleans up when its instance leaves, `when`
+becomes false, or it throws. Failures are warned once per plugin and export.
+
+For `attach`, `find` searches only render functions; placements search only
+elements. Use `in` for an enclosing render function and `nth` to pick a
+position; attribute filters apply to elements. Attachments start in plugin
+install order, then `order`, plugin ID, and export name. Owner updates
+recheck the match and warn when an attachment can no longer resolve.
+
 ## Caller identity
 
 Queries, mutations and actions receive `ctx.auth.user` (`id`, `name`, and

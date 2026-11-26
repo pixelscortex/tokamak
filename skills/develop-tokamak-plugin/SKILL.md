@@ -112,6 +112,11 @@ A plugin that uses another plugin builds when both sit side by side in
   unloads. Layers stack by install order; `before` and `after` stay outside the stack.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.
+  Use `attach(owner.find("Editor"), TrackEditor)` to run a component for each
+  mounted instance of a named render function. Unlike placements, the search
+  matches render functions. The attachment gets live props and can use effects,
+  cleanup, context and regions; its JSX is not drawn in place. Hiding or
+  layering an element inside the render function leaves it running.
   Use `state` for window values, `derived` for computed values, and
   `keep: "device"` or `keep: "me"` when a value needs to survive a restart.
 - **Contracts**: export a typed `contract<T>("name")` from `src/contracts.ts`.

@@ -6,6 +6,7 @@ import {
   createRenderEffect,
   createRoot,
   createSignal,
+  flatten,
   getOwner,
   onCleanup,
   onSettled,
@@ -75,6 +76,97 @@ export interface PartRegistry {
 }
 
 export const PartActions = createContext<PartRegistry | null>(null);
+
+export function compareInstallOrder(a: LoadedPartAction, b: LoadedPartAction) {
+  return (
+    (a.installOrder ?? Infinity) - (b.installOrder ?? Infinity) ||
+    a.order - b.order ||
+    a.plugin.localeCompare(b.plugin) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+const noProps = {};
+
+/** Compiler entry point, owned by the render function rather than any of its parts. */
+export function attachRenderFunction(target: string, props?: object) {
+  // A component function can also be called as a plain helper, outside any
+  // owner (from a click handler, say). There is no instance to attach to.
+  if (!getOwner()) return;
+  const registry = useContext(PartActions);
+  if (!registry) return;
+  const observer = new RenderAttachment(registry, target, props ?? noProps);
+  onCleanup(() => observer.stop());
+  registry.observe(target, observer);
+}
+
+class RenderAttachment implements PartObserver {
+  private dispose?: () => void;
+  private write?: (actions: readonly LoadedPartAction[]) => void;
+  private owner = getOwner();
+
+  constructor(
+    private registry: PartRegistry,
+    private target: string,
+    private props: object,
+  ) {}
+
+  stop() {
+    this.registry.unobserve(this.target, this);
+    this.dispose?.();
+  }
+
+  update(actions: readonly LoadedPartAction[]) {
+    if (!actions.length) {
+      this.dispose?.();
+      this.dispose = this.write = undefined;
+    } else if (this.write) this.write(actions);
+    else
+      runWithOwner(this.owner, () =>
+        createRoot((dispose) => {
+          this.dispose = dispose;
+          const [read, write] = createSignal(actions, { ownedWrite: true });
+          this.write = write;
+          const tree = <For each={read()}>{(item) => attached(item, this.props, this.registry)}</For>;
+          // Evaluate lazy children (including portals) without inserting the
+          // returned nodes. A Portal can render directly into its outlet.
+          createRenderEffect(
+            () => flatten(tree),
+            () => {},
+          );
+        }),
+      );
+  }
+}
+
+function attached(item: LoadedPartAction, props: object, registry: PartRegistry) {
+  const [failed, setFailed] = createSignal(false, { ownedWrite: true });
+  const owner = getOwner();
+  return (
+    <Show when={!failed()}>
+      <Errored
+        fallback={(cause) => {
+          registry.warn(
+            ["error", item.plugin, item.id],
+            `Component attachment ${item.plugin}/${item.id} failed: ${String(cause())}`,
+          );
+          // Solid's error boundary retains the failed scope for a possible
+          // reset. Dropping the boundary disposes it and runs its cleanups.
+          runWithOwner(owner, () =>
+            onSettled(() => {
+              setFailed(true);
+            }),
+          );
+          return undefined;
+        }}
+      >
+        <Show when={item.enabled(props)}>
+          {createComponent((item.action as ComponentAction<"attach">).layer!, props)}
+        </Show>
+      </Errored>
+    </Show>
+  );
+}
 
 type NativeSite = readonly [
   target: string,
@@ -506,13 +598,7 @@ function renderActions(
     actions.filter((item) => componentActionKind(item.action) === kind);
   const enabled = (item: LoadedPartAction) => item.enabled(props);
   const hides = at("hide");
-  const layers = at("layer").sort(
-    (a, b) =>
-      (a.installOrder ?? Infinity) - (b.installOrder ?? Infinity) ||
-      a.order - b.order ||
-      a.plugin.localeCompare(b.plugin) ||
-      a.id.localeCompare(b.id),
-  );
+  const layers = at("layer").sort(compareInstallOrder);
 
   function additions(items: LoadedPartAction[]) {
     return (

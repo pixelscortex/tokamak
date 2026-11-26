@@ -23,7 +23,7 @@ const screen = `
 `;
 const manifest = async (path) => JSON.parse(await readFile(resolve(path, "dist/manifest.json"), "utf8"));
 const imports = `
-  import { after, append, before, hide, prepend, layer } from "@tokamak/sdk/client";
+  import { after, append, attach, before, hide, prepend, layer } from "@tokamak/sdk/client";
   import * as owner from "plugin:owner/client";
 `;
 
@@ -74,6 +74,86 @@ test("find resolves the placements and stores the literal search with the found 
       target: "owner.ThreadRow.article.span.title",
     });
     expect(placements[0]).toMatchObject({ name: "Price", nth: 1, fingerprint: expect.any(String) });
+  });
+}, 30_000);
+
+test("attach searches render functions, including nested names, separately from elements", async () => {
+  await scratch(async (root) => {
+    built(
+      await source(
+        root,
+        "owner",
+        screen +
+          `
+      export function Left() {
+        const Item = ({ left }: { left: string }) => <div>{left}</div>;
+        return <Item left="left" />;
+      }
+      export function Right() {
+        const Item = (props: { right: number }) => <div>{props.right}</div>;
+        return <Item right={2} />;
+      }
+    `,
+      ),
+    );
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        `
+      const target = owner.find("Price", { nth: 1 });
+      export const Placed = after(target, ({ amount }) => amount.toFixed());
+      export const Attached = attach(target, ({ currency }) => currency?.toLowerCase());
+      export const Left = attach(owner.find("Item", { in: "Left" }), ({ left }) => left.toUpperCase());
+      export const Right = attach(owner.find("Item", { nth: 2 }), ({ right }) => right.toFixed(), {
+        when: ({ right }) => right > 0, order: 2,
+      });
+    `,
+    );
+    built(addon);
+    expect((await manifest(addon)).plugin.contributes["component-action"]).toMatchObject([
+      { id: "Placed", action: "after", target: "owner.Picker.section.Price" },
+      { id: "Attached", action: "attach", name: "Price", nth: 1, target: "owner.Price" },
+      { id: "Left", action: "attach", name: "Item", in: "Left", target: "owner.Left.Item" },
+      { id: "Right", action: "attach", name: "Item", nth: 2, order: 2, target: "owner.Right.Item" },
+    ]);
+    const entry = resolve(addon, "src/main.tsx");
+    const wrong = [
+      ['attach(owner.find("strong"), () => null)', "attach requires a render function"],
+      ['after(owner.find("Header"), () => null)', "after requires an element"],
+      ['attach(owner.find("Item"), () => null)', "matches several render functions"],
+    ];
+    for (const [call, reason] of wrong) {
+      await writeFile(entry, imports + `export const Bad = ${call};`);
+      const result = build(addon);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(reason);
+      if (call.includes('"Item"')) expect(result.stderr).toContain("Left › Item, Right › Item");
+    }
+    await writeFile(
+      entry,
+      imports +
+        `
+      // @ts-expect-error: an element is not a render function
+      ${wrong[0][0]};
+      // @ts-expect-error: a render function is not an element
+      ${wrong[1][0]};
+      // @ts-expect-error: a render function does not have the element's props
+      attach(owner.find("Price"), ({ row }) => row);
+      // @ts-expect-error: scope is checked against render function candidates
+      attach(owner.find("Item", { in: "Missing" }), () => null);
+    `,
+    );
+    const program = ts.createProgram(
+      [entry],
+      pluginCompilerOptions(addon, {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: ts.JsxEmit.Preserve,
+        jsxImportSource: "@solidjs/web",
+      }),
+    );
+    expect(program.getSemanticDiagnostics(program.getSourceFile(entry))).toEqual([]);
   });
 }, 30_000);
 
@@ -498,5 +578,40 @@ test("a renamed Original parameter and its Children are private to the layer", a
     expect(types).not.toMatch(/"Keep(?:[^"]*)"/);
     const ui = await readFile(resolve(addon, "dist/ui.js"), "utf8");
     expect(ui).not.toContain('"Keep');
+  });
+}, 30_000);
+
+test("only a component can be attached to: not a lowercase helper, and not one of two same-named wrappers", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      import { Wrap as Other } from "./helpers";
+      const Wrap = (props: { children?: unknown }) => <>{props.children}</>;
+      const row = (text: string) => <li>{text}</li>;
+      export const List = (props: { items: string[] }) => <Other><Wrap><ul>{props.items.map(row)}</ul></Wrap></Other>;
+    `,
+    );
+    await writeFile(
+      resolve(owner, "src/helpers.tsx"),
+      "export const Wrap = (props: { children?: unknown }) => <>{props.children}</>;",
+    );
+    // Two wrappers with one name and no elements built before attach existed; they still do.
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports + 'export const Ok = attach(owner.find("List"), ({ items }) => items.length);',
+    );
+    built(addon);
+    for (const name of ["row", "Wrap"]) {
+      await writeFile(
+        resolve(addon, "src/main.tsx"),
+        imports + `export const Bad = attach(owner.find(${JSON.stringify(name)}), () => null);`,
+      );
+      const failure = build(addon);
+      expect(failure.status, name).not.toBe(0);
+    }
   });
 }, 30_000);

@@ -237,6 +237,20 @@ still have the same identity, a swap of the two cannot be seen; an add-on
 build that picks one of them with `nth` warns that the target is ambiguous
 and asks the owner for a `data-part` or `id`.
 
+Use `attach(owner.find("Composer"), TrackComposer, { when })` to run a
+component for each mounted instance of the owner's named render function.
+It receives live props and can use effects, cleanup, context, and shell
+regions such as `Region.Panel`. Returned JSX is evaluated without drawing in
+place. Hiding or layering an element inside the function leaves the attachment
+running. An attachment stops and cleans up when its instance leaves, `when`
+becomes false, or it throws. Failures are warned once per plugin and export.
+
+For `attach`, `find` searches only render functions; placements search only
+elements. Use `in` for an enclosing render function and `nth` to pick a
+position; attribute filters apply to elements. Attachments start in plugin
+install order, then `order`, plugin ID, and export name. Owner updates
+recheck the match and warn when an attachment can no longer resolve.
+
 ### Contract registrations
 
 `src/contracts.ts` declares named public contract keys. A

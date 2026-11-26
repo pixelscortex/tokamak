@@ -7,6 +7,7 @@ export type AttributeFilters = Partial<Record<SearchAttribute, string>> & {
 export type ScreenSearch = AttributeFilters & { name: string; in?: string; nth?: number };
 export type ScreenElement = { target: string; fingerprint?: string };
 export type ScreenTarget = ScreenElement & { search?: ScreenSearch };
+type ScreenKind = "element" | "render function";
 type Candidate = ScreenElement & {
   name: string;
   ancestors: readonly string[];
@@ -47,6 +48,9 @@ export function attributeFilters(options: Readonly<Record<string, string | numbe
 // Ordered pairs preserve source order even for names like "123". Leaves hold
 // just a fingerprint (or null); branches use "" for their own fingerprint.
 // With attributes, that fingerprint becomes [fingerprint, name, value, …].
+// A leading ":" at the root marks trees with render function addresses.
+// Inside, branches with no "" or ":" entry are render functions. A ":" entry
+// marks a scope that only encloses other functions and cannot be attached to.
 export type ScreenTree = readonly (string | null | ScreenTree)[];
 
 function segmentName(segment: string) {
@@ -58,13 +62,19 @@ function segmentName(segment: string) {
   );
 }
 
-export function screenElements(plugin: string, tree: ScreenTree) {
+export function screenElements(plugin: string, tree: ScreenTree, kind: ScreenKind = "element") {
   const elements: Candidate[] = [];
+  const functions = kind === "render function";
+  if (functions && tree[0] !== ":") return elements; // Older bundles have no instance hook.
   function visit(branch: ScreenTree, target: string, ancestors: readonly string[]) {
+    if (functions && branch[0] !== "" && branch[0] !== ":")
+      elements.push({ target, name: ancestors.at(-1)!, ancestors: ancestors.slice(0, -1) });
     for (let i = 0; i < branch.length; i += 2) {
       const segment = branch[i] as string;
       const value = branch[i + 1]!;
+      if (segment === ":") continue;
       if (segment === "") {
+        if (functions) continue;
         const packed = typeof value === "object" && value !== null ? value : undefined;
         let attributes: Record<string, string> | undefined;
         if (packed) {
@@ -83,9 +93,9 @@ export function screenElements(plugin: string, tree: ScreenTree) {
       } else {
         const name = segmentName(segment);
         const path = `${target}.${segment}`;
-        if (typeof value === "string" || value === null)
-          elements.push({ target: path, name, ancestors, fingerprint: value ?? undefined });
-        else visit(value, path, [...ancestors, name]);
+        if (typeof value === "string" || value === null) {
+          if (!functions) elements.push({ target: path, name, ancestors, fingerprint: value ?? undefined });
+        } else visit(value, path, [...ancestors, name]);
       }
     }
   }
@@ -114,12 +124,13 @@ export function resolveScreenSearch(
   elements: readonly Candidate[],
   search?: ScreenSearch,
   previous?: ScreenElement,
+  kind: ScreenKind = "element",
 ): { element: ScreenElement; reason?: never } | { element?: never; reason: string } {
   if (!search) {
     const samePath = elements.find((element) => element.target === previous?.target);
     if (!samePath) return { reason: `targets missing screen part ${previous?.target}` };
     if (previous?.fingerprint && previous.fingerprint !== samePath.fingerprint)
-      return { reason: `targets a different element at ${previous.target}` };
+      return { reason: `targets a different ${kind} at ${previous.target}` };
     return { element: samePath };
   }
 
@@ -148,10 +159,10 @@ export function resolveScreenSearch(
 
   const issue =
     matches.length === 0
-      ? "matches no elements"
+      ? `matches no ${kind}s`
       : pinned
-        ? "targets a different element"
-        : "matches several elements";
+        ? `targets a different ${kind}`
+        : `matches several ${kind}s`;
   return { reason: searchProblem(search, issue, scoped.length ? scoped : named) };
 }
 
