@@ -1,0 +1,45 @@
+design/shell.md
+  s_ca9d7afa6e814c::t_7198097dfbe7b1 19-23
+packages/ui/src/switch.tsx
+  s_ca9d7afa6e814c::t_26533691fdd172 44,57
+  s_ca9d7afa6e814c::t_c11cd1293aa429 1-20,23-43,45-56,58-62
+  s_ca9d7afa6e814c::t_94abd11bd357e8 21-22
+packages/ui/lint/plugin.js
+  s_ca9d7afa6e814c::t_31112cb579c3ca 31
+packages/ui/src/index.ts
+  s_ca9d7afa6e814c::t_12b312a9cbc3a3 14-15
+packages/ui/src/kit/kit.tsx
+  s_ca9d7afa6e814c::t_831b39fd3a0352 12,51
+wiki/content/docs/design/index.mdx
+  s_ca9d7afa6e814c::t_7198097dfbe7b1 57,243-244,362-365
+packages/ui/tests/fields.test.tsx
+  s_ca9d7afa6e814c::t_7e726cb330b2a7 76,90
+  s_ca9d7afa6e814c::t_166bd16a12f56f 96-102
+  s_ca9d7afa6e814c::t_fbe3b70c75d5ea 1-75,77-89,91-95
+packages/ui/src/kit/inputs.tsx
+  s_ca9d7afa6e814c::t_6a865dc9e55849 1-54
+packages/ui/src/input.tsx
+  s_ca9d7afa6e814c::t_12b312a9cbc3a3 17
+  s_ca9d7afa6e814c::t_0f1b292d61b982 28
+  s_ca9d7afa6e814c::t_831b39fd3a0352 64-65,69,73
+  s_ca9d7afa6e814c::t_0ab68df134048f 74
+  s_ca9d7afa6e814c::t_514aee91e0132c 1-16,18-27,29-63,66-68,70-72,75-83
+packages/ui/README.md
+  s_ca9d7afa6e814c::t_7198097dfbe7b1 3-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e8a2abe79acf02976ff52da2a80dfd55cba32d3",
+  "prompts": {},
+  "sessions": {
+    "s_ca9d7afa6e814c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "76b44171-31b4-42b9-bd75-50a0264adbb2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
