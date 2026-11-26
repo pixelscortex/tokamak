@@ -1295,3 +1295,230 @@ async fn quickjs_allows_an_old_transaction_only_artifact_and_refuses_an_old_acti
     drop(session);
     server.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn http_catalog_isolates_bad_folders_and_retries_fixed_plugins() {
+    let root = Installation::empty();
+    install_broken_catalog_fixtures(&root);
+    let primary = root.0.join("a-primary");
+    let unbuilt = root.0.join("unbuilt");
+
+    let (_process, base, client) = start_plugin_catalog_server(&root).await;
+    let get_catalog = || async {
+        let request = client.get(format!("{base}/plugins"));
+        catalog_request(request)
+            .await
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    };
+    let catalog = get_catalog().await;
+    assert_initial_plugin_catalog(&root, &catalog);
+
+    // The active plugin now has an unreadable ID on disk. Reloading another
+    // plugin must preserve the old build, even though a duplicate is present.
+    std::fs::write(primary.join("dist/manifest.json"), "{").unwrap();
+    install_ui(&root, "0-new-copy", json!({}));
+    root.change("0-new-copy", |manifest| {
+        manifest["plugin"]["id"] = json!("healthy");
+        manifest["plugin"]["version"] = json!("3.0.0");
+    });
+    let fixed = Installation::empty();
+    install_ui(&fixed, "unbuilt", json!({}));
+    std::fs::rename(fixed.0.join("unbuilt"), unbuilt.join("dist")).unwrap();
+    catalog_request(client.post(format!("{base}/plugins/unbuilt/reload")))
+        .await
+        .error_for_status()
+        .unwrap();
+
+    let after = get_catalog().await;
+    let plugins = after["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 5);
+    assert_eq!(plugins[0]["plugin"]["version"], "1.0.0");
+    assert_eq!(plugins[0]["folder"], json!(primary));
+    let plugins_by_id = plugins
+        .iter()
+        .map(|plugin| (plugin["plugin"]["id"].as_str().unwrap(), plugin))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(plugins_by_id["optional"]["installOrder"], 1);
+    assert_eq!(plugins_by_id["unbuilt"]["installOrder"], 2);
+    assert_eq!(plugins_by_id["unbuilt"]["folder"], json!(unbuilt));
+    assert!(plugins_by_id.contains_key("needs-unbuilt"));
+    assert!(plugins_by_id.contains_key("transitive"));
+    assert_eq!(
+        after["skipped"]["0-new-copy"],
+        catalog["skipped"]["healthy (duplicate)"]
+    );
+    assert!(after["skipped"].get("unbuilt").is_none());
+    assert!(after["skippedFolders"].get("unbuilt").is_none());
+    let asset = plugins[0]["uiUrl"].as_str().unwrap();
+    let response = catalog_request(client.get(format!("{base}{asset}"))).await;
+    assert_eq!(
+        response.error_for_status().unwrap().text().await.unwrap(),
+        "export {};"
+    );
+
+    let failure = catalog_request(client.post(format!("{base}/plugins/healthy/reload"))).await;
+    assert_eq!(failure.status(), 400);
+    let error = failure.json::<Value>().await.unwrap();
+    assert!(
+        error["error"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid plugin manifest")
+    );
+    assert_eq!(get_catalog().await, after);
+}
+
+fn install_broken_catalog_fixtures(root: &Installation) {
+    let primary = root.0.join("a-primary");
+    std::fs::create_dir(&primary).unwrap();
+    install_ui(root, "healthy", json!({}));
+    std::fs::rename(root.0.join("healthy"), primary.join("dist")).unwrap();
+    install_ui(root, "healthy", json!({}));
+    root.change("healthy", |manifest| {
+        manifest["plugin"]["version"] = json!("2.0.0")
+    });
+
+    write_bad_plugin_folder(root, "unbuilt", "package.json", "{}");
+    write_bad_plugin_folder(root, "bad-json", "manifest.json", "{");
+    write_bad_plugin_folder(
+        root,
+        "bad-schema",
+        "manifest.json",
+        r#"{"plugin":{"id":"schema-id"}}"#,
+    );
+    install_ui(root, "hash-id", json!({}));
+    std::fs::rename(root.0.join("hash-id"), root.0.join("bad-hash")).unwrap();
+    std::fs::write(root.0.join("bad-hash/ui.js"), "changed").unwrap();
+
+    install_ui(root, "needs-absent", json!({"absent":"*"}));
+    install_ui(root, "needs-unbuilt", json!({"unbuilt":"*"}));
+    install_ui(root, "transitive", json!({"needs-unbuilt":"*"}));
+    install_ui(root, "optional", json!({"auth":"*"}));
+    root.change("optional", |manifest| {
+        manifest["plugin"]["optional"] = json!({"absent":"*", "unbuilt":"*"});
+    });
+}
+
+fn assert_initial_plugin_catalog(root: &Installation, catalog: &Value) {
+    let primary = root.0.join("a-primary");
+    assert_eq!(catalog["pluginsFolder"], json!(root.0));
+    let plugins = catalog["plugins"].as_array().unwrap();
+    assert_eq!(plugins.len(), 2);
+    assert_eq!(plugins[0]["plugin"]["id"], "healthy");
+    assert_eq!(plugins[0]["plugin"]["version"], "1.0.0");
+    assert_eq!(plugins[0]["folder"], json!(primary));
+    assert_eq!(plugins[1]["plugin"]["id"], "optional");
+    assert_eq!(plugins[1]["installOrder"], 1);
+    let skipped = &catalog["skipped"];
+    assert!(skipped["unbuilt"].as_str().unwrap().contains("not built"));
+    assert!(
+        skipped["bad-json"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid plugin manifest")
+    );
+    assert!(
+        skipped["schema-id"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid plugin manifest")
+    );
+    assert!(
+        skipped["hash-id"]
+            .as_str()
+            .unwrap()
+            .contains("hash mismatch")
+    );
+    assert_eq!(
+        skipped["healthy (duplicate)"],
+        format!(
+            "duplicate of plugin healthy, already loaded from {}",
+            primary.display()
+        )
+    );
+    assert_eq!(
+        skipped["needs-absent"],
+        "needs absent, which is not installed"
+    );
+    assert_eq!(skipped["needs-unbuilt"], "needs unbuilt, which was skipped");
+    assert_eq!(
+        skipped["transitive"],
+        "needs needs-unbuilt, which was skipped"
+    );
+    assert_eq!(
+        catalog["skippedFolders"],
+        json!({
+            "unbuilt": root.0.join("unbuilt"),
+            "bad-json": root.0.join("bad-json"),
+            "schema-id": root.0.join("bad-schema"),
+            "hash-id": root.0.join("bad-hash"),
+            "healthy (duplicate)": root.0.join("healthy"),
+            "needs-absent": root.0.join("needs-absent"),
+            "needs-unbuilt": root.0.join("needs-unbuilt"),
+            "transitive": root.0.join("transitive"),
+        })
+    );
+}
+
+fn write_bad_plugin_folder(root: &Installation, name: &str, file: &str, contents: &str) {
+    let folder = root.0.join(name);
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::write(folder.join(file), contents).unwrap();
+}
+
+async fn catalog_request(request: reqwest::RequestBuilder) -> reqwest::Response {
+    request.bearer_auth("a".repeat(64)).send().await.unwrap()
+}
+
+async fn start_plugin_catalog_server(root: &Installation) -> (Process, String, reqwest::Client) {
+    let local = root.0.join("local");
+    std::fs::create_dir(&local).unwrap();
+    let token = local.join("server.token");
+    std::fs::write(&token, "a".repeat(64)).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let mut process = Process(
+        std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
+            .arg("--local-dir")
+            .arg(&local)
+            .arg("--plugins")
+            .arg(&root.0)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let discovery = local.join("server.json");
+    let identity = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            assert!(
+                process.0.try_wait().unwrap().is_none(),
+                "plugin server exited before readiness"
+            );
+            if let Ok(bytes) = std::fs::read(&discovery)
+                && let Ok(identity) = serde_json::from_slice::<Value>(&bytes)
+            {
+                break identity;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("plugin startup timed out");
+    let base = identity["url"]
+        .as_str()
+        .unwrap()
+        .replace("ws://", "http://");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .unwrap();
+    (process, base.trim_end_matches("/ws").to_owned(), client)
+}

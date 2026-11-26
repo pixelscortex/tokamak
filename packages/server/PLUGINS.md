@@ -61,11 +61,30 @@ proxies and redirects, and does not replay requests. The server exposes:
 
 ## Loading and reload contract
 
-Static validation resolves one version per ID, host API compatibility, required
-and present optional dependencies, conflicts and cycles **before evaluating any
-module**. Rust's maintained `semver` implements range semantics. A `depends`
-target must exist; an absent `optional` target is fine, but a present incompatible
-version is an error.
+Static validation checks the host API, dependencies, conflicts and cycles before
+evaluating modules. Rust's maintained `semver` implements range semantics.
+One bad child folder does not stop the scan or prevent other plugins from loading:
+
+- A project with `package.json` and no built manifest is reported by folder name
+  as not built. Invalid manifests and artifacts report the validation or read
+  error, using the plugin ID if it can be read, or the folder name otherwise.
+- The first valid build in sorted folder order wins a duplicate ID. Later copies
+  are reported by folder name, with ` (duplicate)` appended if the name is already
+  in use.
+- A missing required dependency reports `needs <dep>, which is not installed`.
+  If the dependency was skipped, the dependent reports
+  `needs <dep>, which was skipped`, including through chains of dependencies.
+  The built-in `auth` contract satisfies `auth: "*"`. Optional dependencies do
+  not cause a skip.
+- Incompatible required versions, dependencies on sign-in plugins instead of
+  `auth`, declared conflicts and dependency cycles report the resolver's error.
+  A plugin that fails to start reports its startup error.
+
+`GET /plugins` lists those reasons in `skipped` and their absolute paths in
+`skippedFolders`, using the same keys. `pluginsFolder` identifies the scanned
+directory, and each entry in `plugins` includes its absolute `folder` (the child
+folder, even when the build is in `dist`, or the root for a single build).
+An unreadable installation directory still fails the scan.
 
 The private server directory stores `plugin-install-order.json` as a list of
 plugin IDs in installation order. Plugins with no history are ordered after
@@ -106,7 +125,10 @@ fixed heap quota; the former 64 MiB window ceiling does not limit UI bundles.
 
 Reload is serialized with admitted calls: old calls finish their commit/rollback
 first. The full candidate installation resolves and is inspected before one
-generation swap. Failed reload leaves old code, subscriptions and data usable.
+generation swap. Fix a skipped plugin's folder and reload its ID to retry it without restarting.
+A failed reload of a loaded plugin reports the error and keeps old code,
+subscriptions and data usable. During another plugin's reload, an unreadable
+build for an already loaded plugin keeps its last good snapshot.
 Successful reload dirties all subscriptions; removed or changed-kind queries
 produce explicit subscription errors. The named ID must be present in the old or
 new installation; dependent callers reload together. This is not stateful HMR.
