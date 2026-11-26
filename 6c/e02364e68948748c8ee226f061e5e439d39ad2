@@ -1,0 +1,42 @@
+packages/sdk/component-attributes.ts
+  s_d056a7166f42ba::t_6b11e3c484b080 308
+  s_d056a7166f42ba::t_43a1c0446c6040 58,60-62
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_2db1a452a3cede 3-4,6-10
+packages/sdk/tests/web/fixtures/parts/addon/src/client/_generated/components.d.ts
+  s_cb2e6045e6b3bc::t_fd0505d0ee5ae1 4-7
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_3eac49029b5240 3-11,13-35
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_6dbb49c16512b3 3-4,10-14,19-20,25-35,40,48,52-54,59-62,67-68,73-75,83,88,92-94,108-109,117-118,122-124,126,128-138,141-209
+plugins/ai/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_fb8c25b581d269 3-4,11-12,27,34-35,43-49,56-58,63,69-91,93-150
+plugins/chat/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_d2417672dad161 3-6,11-18,27-31,39-41,47-51,60-116
+plugins/code/src/client/_generated/components.d.ts
+  s_d056a7166f42ba::t_da84a1ce8b4256 3,13-24,26-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ce02364e68948748c8ee226f061e5e439d39ad2",
+  "prompts": {},
+  "sessions": {
+    "s_cb2e6045e6b3bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ac81cd7-5d7d-4ae0-9966-f53bdd3c63a6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_d056a7166f42ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21a0e-f5c6-79f3-8a75-af9c48919c98",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
