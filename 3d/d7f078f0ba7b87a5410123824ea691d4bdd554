@@ -1,0 +1,19 @@
+e2e/fake-agent/profile-codex.mjs
+  s_8f45cf81ac6fad::t_549390c2e5a6c4 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3dd7f078f0ba7b87a5410123824ea691d4bdd554",
+  "prompts": {},
+  "sessions": {
+    "s_8f45cf81ac6fad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a217e3-9793-77b3-913a-c592c3c24123",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
