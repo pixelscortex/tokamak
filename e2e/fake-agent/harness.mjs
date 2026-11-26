@@ -213,6 +213,7 @@ function observeWorker(launch, observe) {
       workspace,
     );
     return {
+      pointPlans: worker.pointPlans,
       route: (id, provider) => worker.route(id, provider),
       retire: (provider) => worker.retire(provider),
       close: () => worker.close(),

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LAUNCH_VALUE } from "../../../e2e/fake-agent/launch-settings.mjs";
 
 const args = process.argv.slice(2);
 const status = await readFile(
@@ -48,6 +49,14 @@ if (args[0] === "--version") {
   // Model discovery does not select a thread folder. The Runner can start
   // from any directory, including one whose name starts with "claude-".
   let replay = args.includes("--strict-mcp-config") ? "claude-info" : basename(process.cwd());
+  if (replay === "claude-hello-launch") {
+    assert.equal(process.env.TOKAMAK_LAUNCH_TEST, LAUNCH_VALUE);
+    assert.ok(args.includes("--bare"), "the isolated CLI must not read the Keychain");
+    assert.match(basename(process.env.CLAUDE_CONFIG_DIR), /^tokamak-claude-/);
+    assert.equal(status, "", "the isolated CLI did not see the personal credentials file");
+    await writeFile(join(process.env.CLAUDE_CONFIG_DIR, "cli-state"), "");
+    await writeFile("isolated-home", process.env.CLAUDE_CONFIG_DIR);
+  }
   if (replay.startsWith("claude-rate-limit-")) {
     for await (const line of console) {
       assert.equal(JSON.parse(line).request.subtype, "initialize");

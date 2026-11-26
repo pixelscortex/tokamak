@@ -1,7 +1,7 @@
 // Drives the installed Claude provider through a real Tokamak server. CI plays
 // sanitized recordings; --live opts into the official CLI on this computer.
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { permissionCases } from "./permissions.mjs";
@@ -11,6 +11,7 @@ import { turnWire } from "./turn-wire.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
 import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
+import { installLaunchHook, LAUNCH_VALUE } from "../../../e2e/fake-agent/launch-settings.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -40,6 +41,7 @@ try {
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
   if (!live) await installReplay();
+  const launch = live ? undefined : await installLaunchHook(h);
   const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
   const address = runner ? undefined : await h.serve("local", { windowRouted: !live });
   const client = live
@@ -61,6 +63,25 @@ try {
     assert.deepEqual(readyState(await aboutClaude(signedOut)), [true, false]);
   } else {
     await discovery(client);
+    const personal = join(h.home, ".claude");
+    const personalLogin = join(personal, ".credentials.json");
+    await writeFile(personalLogin, "signed-out");
+    await launch.set({ TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CLAUDE_CONFIG_DIR: personal });
+    try {
+      const folder = await caseFolder("hello-launch");
+      await h.gate(folder, "go");
+      const isolated = await turns.run(folder, hello);
+      assert.equal(isolated.text, "Hello Tokamak.");
+      assert.equal(isolated.row.sessionId, undefined);
+      const temporary = await readFile(join(folder, "isolated-home"), "utf8");
+      await assert.rejects(stat(temporary), { code: "ENOENT" });
+      assert.equal(await readFile(personalLogin, "utf8"), "signed-out");
+      assert.ok(!JSON.stringify(isolated).includes(LAUNCH_VALUE));
+      passed("launch environment and isolated Claude configuration");
+    } finally {
+      await launch.clear();
+      await writeFile(personalLogin, "signed-in");
+    }
     const keychain = join(h.home, "claude-replay-signed-out");
     await writeFile(keychain, "");
     try {

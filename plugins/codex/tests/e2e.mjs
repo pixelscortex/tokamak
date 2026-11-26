@@ -1,11 +1,12 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { agentHarness, build, bunPath, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
+import { installLaunchHook, LAUNCH_VALUE } from "../../../e2e/fake-agent/launch-settings.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -34,6 +35,7 @@ try {
   build(module);
   await cp(join(module, "dist"), join(h.plugins, "codex"), { recursive: true });
   if (!real) await replayExecutable();
+  const launch = real ? undefined : await installLaunchHook(h);
 
   const { ai } = h.api;
   const binary = process.argv[2];
@@ -117,6 +119,24 @@ try {
     timeout: real ? 120_000 : undefined,
   });
   const run = async (tape, prompt, options) => turns.run(await h.folder(tape), prompt, options);
+
+  if (launch) {
+    await writeFile(status, "signed-out\n");
+    await launch.set({ TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CODEX_HOME: codexHome });
+    try {
+      const isolated = await run("hello-launch", "Reply only: Hello from Codex.");
+      assert.equal(isolated.text, "Hello from Codex.");
+      assert.equal(isolated.row.sessionId, undefined);
+      const temporary = await readFile(join(isolated.folder, "isolated-home"), "utf8");
+      await assert.rejects(stat(temporary), { code: "ENOENT" });
+      assert.equal(await readFile(status, "utf8"), "signed-out\n");
+      assert.ok(!JSON.stringify(isolated).includes(LAUNCH_VALUE));
+      passed("launch environment and isolated Codex home");
+    } finally {
+      await launch.clear();
+      await writeFile(status, "signed-in\n");
+    }
+  }
 
   const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
   if (greeting) {
@@ -392,7 +412,7 @@ async function replayExecutable() {
   await writeFile(
     join(path, "codex"),
     `#!/bin/sh
-status=$(cat "$CODEX_HOME/auth.json")
+status=$(cat "$CODEX_HOME/auth.json" 2>/dev/null)
 case "$1" in
   --version)
     case "$status" in
@@ -408,6 +428,15 @@ case "$1" in
       if [ "$status" = "signed-out" ]; then tape=signed-out; else tape=info; fi
     else
       tape="\${PWD##*/}"
+    fi
+    if [ "$tape" = hello-launch ]; then
+      [ "$TOKAMAK_LAUNCH_TEST" = ${shellQuote(LAUNCH_VALUE)} ] || exit 3
+      case "\${CODEX_HOME##*/}" in tokamak-codex-*) ;; *) exit 4 ;; esac
+      [ ! -e "$CODEX_HOME/auth.json" ] || exit 5
+      [ "$*" = 'app-server -c cli_auth_credentials_store="file"' ] || exit 6
+      : > "$CODEX_HOME/cli-state"
+      printf '%s' "$CODEX_HOME" > isolated-home
+      tape=hello
     fi
     if [ "$tape" = hello ]; then
       trap '' TERM
