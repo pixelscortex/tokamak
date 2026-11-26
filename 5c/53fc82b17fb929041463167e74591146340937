@@ -1,0 +1,20 @@
+packages/server/src/host/hooks.rs
+  s_7bdd004021668d::t_49252d7effc675 277,307-329
+  s_7bdd004021668d::t_b608441da1d755 330-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c53fc82b17fb929041463167e74591146340937",
+  "prompts": {},
+  "sessions": {
+    "s_7bdd004021668d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21778-7e87-7e82-b90d-1586c02cb282",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
