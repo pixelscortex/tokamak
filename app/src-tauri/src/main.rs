@@ -31,6 +31,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             runner::tokamak_endpoint,
+            runner::reveal_plugins_folder,
             quit::quit_listen,
             quit::quit_hold,
             quit::quit_cancel,
