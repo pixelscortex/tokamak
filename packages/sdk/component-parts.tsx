@@ -84,10 +84,7 @@ type NativeSite = readonly [
   authored?: number,
 ];
 type HoleValue = JSX.Element | (() => JSX.Element);
-type RenderHole = {
-  (id: number, render: () => HoleValue): () => HoleValue;
-  (id: number, render: () => HoleValue, text: true): HoleValue;
-};
+type RenderHole = (id: number, render: () => HoleValue, text?: true) => HoleValue | (() => HoleValue);
 
 function matches(
   registry: PartRegistry,
@@ -100,11 +97,7 @@ function matches(
   return false;
 }
 
-function plainHole(_id: number, render: () => HoleValue): () => HoleValue;
-function plainHole(_id: number, render: () => HoleValue, text: true): HoleValue;
-function plainHole(_id: number, render: () => HoleValue, text?: true) {
-  return text ? render() : render;
-}
+const plainHole: RenderHole = (_id, render, text) => (text ? render() : render);
 const plainSpread = (props: object) => props;
 
 // Native templates own their DOM nodes. Additions get their own insertion
@@ -192,7 +185,7 @@ export function renderNativePart(
 ) {
   const registry = useContext(PartActions);
   if (!registry) return create([], plainHole);
-  if (!children.length && rootHole == null)
+  if (!children.length && typeof rootHole !== "number")
     return renderPart(target, fingerprint, props, row, (contents) => {
       const element = create([], plainHole) as Element;
       nativeContents(
@@ -207,9 +200,7 @@ export function renderNativePart(
     const refs: Element[] = [];
     const active: ReturnType<typeof createSignal<boolean>>[] = [];
 
-    function hole(id: number, render: () => HoleValue): () => HoleValue;
-    function hole(id: number, render: () => HoleValue, text: true): HoleValue;
-    function hole(id: number, render: () => HoleValue, text?: true) {
+    const hole: RenderHole = (id, render, text) => {
       let state = active[id];
       if (!state) active[id] = state = createSignal(true, { ownedWrite: true });
       const [shown] = state;
@@ -217,7 +208,7 @@ export function renderNativePart(
       // stop writing to its parent while a layer has supplied other children.
       if (text) return shown() ? render() : undefined;
       return createMemo(() => (shown() ? untrack(render) : undefined));
-    }
+    };
 
     function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: boolean) {
       if (typeof id === "number") {

@@ -38,17 +38,7 @@ const exported = new Set([
 const window = await readFile(join(pages, "window.mdx"), "utf8");
 const { pages: navigation } = JSON.parse(await readFile(join(pages, "meta.json"), "utf8"));
 if (!navigation.includes("window")) throw new Error("The window reference is missing from API navigation");
-for (const name of [
-  "view",
-  "before",
-  "after",
-  "prepend",
-  "append",
-  "layer",
-  "hide",
-  "state",
-  "derived",
-])
+for (const name of ["view", "before", "after", "prepend", "append", "layer", "hide", "state", "derived"])
   if (!new RegExp(`name="${name}"`).test(window)) throw new Error(`Window reference is missing ${name}`);
 
 const documented = new Set();
