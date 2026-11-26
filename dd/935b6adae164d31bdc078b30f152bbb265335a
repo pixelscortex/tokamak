@@ -1,0 +1,19 @@
+design/shell.md
+  s_a9381f96aab968::t_af82fabcc3c2ee 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd935b6adae164d31bdc078b30f152bbb265335a",
+  "prompts": {},
+  "sessions": {
+    "s_a9381f96aab968": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21782-2c03-7341-8c0a-7b0a24824df9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
