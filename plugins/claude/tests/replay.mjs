@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CLAUDE_PERSONAL_ENV, LAUNCH_VALUE } from "../../../e2e/fake-agent/launch-settings.mjs";
 
 const args = process.argv.slice(2);
 const status = await readFile(
@@ -13,8 +14,24 @@ const status = await readFile(
 // Simulate a Keychain-only logout without touching the watched credential file.
 const keychainSignedOut = await Bun.file(join(process.env.HOME, "claude-replay-signed-out")).exists();
 const failedStart = join(process.env.HOME, "claude-replay-start-failed");
+function checkLaunchEnvironment() {
+  assert.equal(process.env.TOKAMAK_LAUNCH_TEST, LAUNCH_VALUE);
+  assert.match(basename(process.env.CLAUDE_CONFIG_DIR), /^[a-f0-9]{64}$/);
+  assert.equal(status, "", "the isolated CLI did not see the personal credentials file");
+  for (const name of CLAUDE_PERSONAL_ENV) {
+    if (name === "ANTHROPIC_API_KEY") assert.match(process.env[name] ?? "", /^(?:fake-turn-key-[12])?$/);
+    else assert.equal(process.env[name], undefined, name);
+  }
+}
+
 if (args[0] === "--version") {
-  console.log(status === "old" ? "Claude Code v2.1.329 (test build)" : "2.1.330 (Claude Code)");
+  assert.deepEqual(args, ["--version"]);
+  if (process.env.TOKAMAK_LAUNCH_TEST) checkLaunchEnvironment();
+  console.log(
+    status === "old" || process.env.TOKAMAK_REPLAY_OLD
+      ? "Claude Code v2.1.329 (test build)"
+      : "2.1.330 (Claude Code)",
+  );
 } else if (args[0] === "auth") {
   assert.equal(args[1], "status");
   const probe = await readFile(failedStart, "utf8").catch(() => "");
@@ -48,6 +65,21 @@ if (args[0] === "--version") {
   // Model discovery does not select a thread folder. The Runner can start
   // from any directory, including one whose name starts with "claude-".
   let replay = args.includes("--strict-mcp-config") ? "claude-info" : basename(process.cwd());
+  if (replay === "claude-hello-launch") {
+    checkLaunchEnvironment();
+    assert.match(process.env.ANTHROPIC_API_KEY, /^fake-turn-key-[12]$/);
+    assert.equal(args.includes("--bare"), false);
+    assert.equal(args.includes("--strict-mcp-config"), false);
+    assert.equal(flag("--setting-sources"), "project,local");
+    assert.equal(args[0], "--disable-slash-commands");
+    assert.match(await readFile("CLAUDE.md", "utf8"), /Project instructions/);
+    assert.deepEqual(JSON.parse(await readFile(".claude/settings.json", "utf8")), { hooks: {} });
+    assert.deepEqual(JSON.parse(await readFile(".mcp.json", "utf8")), { mcpServers: {} });
+    if (flag("--resume"))
+      assert.equal(await Bun.file(join(process.env.CLAUDE_CONFIG_DIR, "cli-state")).exists(), true);
+    await writeFile(join(process.env.CLAUDE_CONFIG_DIR, "cli-state"), "");
+    await writeFile("isolated-home", process.env.CLAUDE_CONFIG_DIR);
+  }
   if (replay.startsWith("claude-rate-limit-")) {
     for await (const line of console) {
       assert.equal(JSON.parse(line).request.subtype, "initialize");

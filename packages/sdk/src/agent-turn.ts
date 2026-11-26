@@ -114,6 +114,13 @@ export interface Usage {
   readonly costUsd?: number;
 }
 
+export interface LaunchSettings {
+  readonly threadId: string;
+  readonly identity: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly args: readonly string[];
+}
+
 /**
  * One turn, handed to the agent's `start` on the sender's own computer. The
  * agent reports into it; `ai` writes every row. A malformed report (an
@@ -133,6 +140,8 @@ export interface Run {
   /** The mode, when the agent offers modes. */
   readonly mode?: string;
   readonly access: Access;
+  /** Caller-only settings fixed for this start. Treat the values as secrets. */
+  readonly launchSettings?: LaunchSettings;
   /**
    * The agent's own session to carry on: given when the thread's last turn was
    * this agent's, on this computer. The agent checks it still has it.
@@ -194,7 +203,19 @@ export interface TurnAddress {
 }
 
 export type AgentTurnStart = TurnAddress &
-  Pick<Run, "folder" | "prompt" | "history" | "sessionId" | "model" | "effort" | "speed" | "mode" | "access">;
+  Pick<
+    Run,
+    | "folder"
+    | "prompt"
+    | "history"
+    | "sessionId"
+    | "model"
+    | "effort"
+    | "speed"
+    | "mode"
+    | "access"
+    | "launchSettings"
+  >;
 
 /** Bump on incompatible changes to the messages understood by the embedded local host. */
 export const AGENT_TURN_PROTOCOL = 2;

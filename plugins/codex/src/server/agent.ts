@@ -3,6 +3,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { agentInfoCache } from "@tokamak/sdk/agent-turn";
+import { withAgentLaunch } from "@tokamak/sdk/agent-launch";
 import { action, provide } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { codexInfo } from "./info";
@@ -20,16 +21,30 @@ const discovery = agentInfoCache(codexInfo, async () => {
 });
 const info = action({
   on: "caller",
-  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
-    setupDeadline === undefined ? discovery.read(ctx) : codexInfo(ctx, setupDeadline),
+  handler: (
+    ctx,
+    { setupDeadline, launchSettings }: { setupDeadline?: number; launchSettings?: ai.LaunchSettings },
+  ) =>
+    launchSettings
+      ? withAgentLaunch(launchSettings, "codex", ({ env }) => codexInfo(ctx, undefined, env))
+      : setupDeadline === undefined
+        ? discovery.read(ctx)
+        : codexInfo(ctx, setupDeadline),
 });
 const start = action({
   on: "caller",
   handler: async (ctx, run: ai.Run) => {
     try {
-      return await codexTurn(ctx, run);
+      if (!run.launchSettings) return await codexTurn(ctx, run);
+      return await withAgentLaunch(run.launchSettings, "codex", ({ env, args }) =>
+        codexTurn(ctx, run, {
+          env,
+          // This turn must not fall back to a login in the system keyring.
+          args: [...args, "-c", 'cli_auth_credentials_store="file"'],
+        }),
+      );
     } catch (error) {
-      discovery.invalidate();
+      if (!run.launchSettings) discovery.invalidate();
       throw error;
     }
   },

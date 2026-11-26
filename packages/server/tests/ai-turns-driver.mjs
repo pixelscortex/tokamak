@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { authCaller, createApi, isFailure } from "../../sdk/src/index.ts";
 import { FORCE_STOP_MS } from "../../../plugins/ai/src/shared/turn-timing.ts";
 import { agentHarness, build, copySource, within, workspace } from "../../../e2e/fake-agent/harness.mjs";
+import { checkLaunchSettings } from "../../../e2e/fake-agent/launch-settings.mjs";
 
 const h = await agentHarness({ binary: process.argv[2], name: "ai-turns" });
 const { ai, chat } = h.api;
@@ -30,8 +31,9 @@ try {
   await permissions();
   await sharedServer();
   await withoutAgents();
+  await checkLaunchSettings(h);
   console.log(
-    "ai turns: agent listed, reply streamed, reports stored, one writer, steer, FIFO queue, graceful stop, force-stopped process group, permission questions, sender's device only, no agent",
+    "ai turns: agent listed, reply streamed, reports stored, one writer, steer, FIFO queue, graceful stop, force-stopped process group, permission questions, sender's device only, no agent, launch settings",
   );
 } finally {
   await h.close();

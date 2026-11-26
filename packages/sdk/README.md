@@ -951,6 +951,19 @@ manager settles a turn, Force stop can also kill groups left by a completed
 needs a session file the CLI is still writing. Agent authors
 do not implement the message transport.
 
+`Run.launchSettings`, when present, holds the environment and arguments for
+that start. Its values stay in the caller; don't log or report them. The
+caller-only `withAgentLaunch` helper from `@tokamak/sdk/agent-launch` gives
+Claude or Codex a private CLI home under the Runner's data folder. It is
+shared only by turns of the same thread, agent, and set of contributing
+plugins, even when the hook values change. The Runner that deletes the thread
+cleans up its homes. The helper removes inherited CLI-specific environment
+variables before adding the hook's variables. Providers still load project
+settings, check the CLI version in the isolated environment, and wait for it
+to finish writing its session. Claude requires an explicit Anthropic key or
+token; Codex uses file storage for credentials. Hook arguments come before
+Tokamak's flags and cannot override them. AI redacts launch values from errors.
+
 The adapter in `packages/sdk/worker/contracts.ts` special-cases
 `owner === "ai" && name === "agent" && method === "start"` to build that
 `Run`. The Runner's linked call transport is general and does not inspect
@@ -1104,6 +1117,13 @@ The first form lets `before` hooks change the value. A value point cannot have
 an `after` hook. In the second form, `before` hooks change the input, the owner
 runs its callback in its own process, and `after(ctx, result, input)` hooks can
 change the result. `input` in an after hook is the input the callback received.
+
+Use `ctx.point("launch", initial, { collect: true })` for a value point whose
+owner needs to combine contributions. Each `before` hook receives the same
+initial value. The point returns a list of `{ plugin, value }` entries, one
+per hook, with the plugin ID supplied by the host. Without hooks it returns
+an empty list. Order across plugins is unspecified. Update both server and
+Runner for a hooked point using this option.
 
 The generated API puts each point under the function it belongs to. For example,
 a plugin that depends on `ai` could hook a point named `launch` on its exported

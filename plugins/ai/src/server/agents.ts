@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { action, TIMED_OUT, v, within } from "@tokamak/sdk";
 import { AGENT_INFO_MAX_AGE_MS, localProviderIdentity, localProviders } from "@tokamak/sdk/agent-turn";
-import { agent, type Agent, type Info } from "../contracts";
+import { agent, type Agent, type Info, type LaunchSettings } from "../contracts";
 import { MAX_ICON_LENGTH } from "../shared/icon";
 
 /** What the agent row shows for an agent whose `info` failed: not usable, like a missing program. */
@@ -70,7 +70,15 @@ export async function infoAfterStartFailure(provider: Agent): Promise<Info | und
 }
 
 /** The picker probes for account changes; turns reuse only an opted-in, fresh answer for this build. */
-export async function infoOf(provider: Agent, forTurn = false): Promise<Info> {
+export async function infoOf(
+  provider: Agent,
+  forTurn = false,
+  launchSettings?: LaunchSettings,
+): Promise<Info> {
+  if (launchSettings) {
+    // The isolated setup check never populates or reads the personal catalog cache.
+    return provider.info({ launchSettings });
+  }
   const key = localProviderIdentity(provider);
   const cached = key && turnInfo.get(key);
   if (forTurn && cached && cached.until > Date.now()) return cached.info;

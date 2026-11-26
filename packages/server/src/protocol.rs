@@ -61,7 +61,7 @@ impl CallError {
         if let Some((_, point)) = target.split_once('#') {
             details["point"] = serde_json::json!(point);
             details["stage"] = serde_json::json!(match stage {
-                "before" => "pointBefore",
+                "before" | "collect" => "pointBefore",
                 "after" => "pointAfter",
                 _ => stage,
             });

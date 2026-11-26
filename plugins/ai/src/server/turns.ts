@@ -298,7 +298,9 @@ async function handOver(
     turnId: turn._id,
     prompt: message.text,
     history,
-    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(sessionId === undefined
+      ? {}
+      : { sessionId, ...(earlier?.sessionHome && { sessionHome: earlier.sessionHome }) }),
   };
   const {
     model: pickedModel,
@@ -639,10 +641,11 @@ export const finish = mutation({
     state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped"), v.literal("interrupted")),
     error: v.optional(v.string()),
     sessionId: v.optional(v.string()),
+    sessionHome: v.optional(v.string()),
     acknowledgedSteer: v.optional(v.string()),
     finishedAt: v.number(),
   },
-  handler: async (ctx, { turnId, state, error, sessionId, acknowledgedSteer, finishedAt }) => {
+  handler: async (ctx, { turnId, state, error, sessionId, sessionHome, acknowledgedSteer, finishedAt }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
     if (turn.stoppingAt !== undefined && state !== "interrupted") state = "stopped";
     const reason = error === undefined ? undefined : line(error, LINE_CHARS * 4);
@@ -680,7 +683,9 @@ export const finish = mutation({
       current: undefined,
       finishedAt: Date.now(),
       ...((state === "failed" || state === "interrupted") && reason !== undefined ? { error: reason } : {}),
-      ...(sessionId === undefined ? {} : { sessionId: line(sessionId) }),
+      ...(sessionId === undefined
+        ? {}
+        : { sessionId: line(sessionId), ...(sessionHome && { sessionHome: line(sessionHome) }) }),
     });
     return state;
   },
