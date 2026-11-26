@@ -1,0 +1,23 @@
+packages/sdk/README.md
+  s_de915ed99026cd::t_c5ca9113d45555 716-722
+packages/server/src/plugin-skill.md
+  s_de915ed99026cd::t_c5ca9113d45555 50-55
+packages/build/README.md
+  s_de915ed99026cd::t_c5ca9113d45555 134-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2faee31e5d81bcd6afd847f56604caaab50c855",
+  "prompts": {},
+  "sessions": {
+    "s_de915ed99026cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218b9-264a-76d2-aeb2-fc4b304ad411",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
