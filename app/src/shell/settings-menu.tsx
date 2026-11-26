@@ -26,6 +26,7 @@ export function SettingsMenu(props: { side: "right" | "bottom" }): JSX.Element {
         if (value === "kit") shell.navigation.go("/kit");
         if (value === "members") shell.navigation.openView(shellPages.members);
         if (value === "devices") shell.navigation.openView(shellPages.devices);
+        if (value === "plugins") shell.navigation.openView(shellPages.plugins);
       }}
     >
       <Menu.Trigger variant="ghost" icon={shellIcons.settings} label="Settings" />
@@ -46,6 +47,7 @@ export function SettingsMenu(props: { side: "right" | "bottom" }): JSX.Element {
           </Show>
           <Menu.Item value="devices">Devices</Menu.Item>
         </Show>
+        <Menu.Item value="plugins">Plugins</Menu.Item>
         <Menu.Item value="kit">UI kit</Menu.Item>
       </Menu.Content>
     </Menu.Root>
