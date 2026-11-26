@@ -1,0 +1,51 @@
+packages/server/src/plugins/mod.rs
+  s_1a39aa4301bc83::t_48f843cba44dca 28-30
+packages/server/tests/plugins.rs
+  s_1a39aa4301bc83::t_8cc202f96c3c98 1298-1322,1328-1340,1354-1377,1379,1381-1384,1388-1392,1394-1396,1401-1405,1408-1416,1418-1454,1458-1466,1468-1524
+  s_1a39aa4301bc83::t_a41ea29e1f0a35 1323-1327,1350-1353
+  s_1a39aa4301bc83::t_4282654c45d65a 1341-1349,1378,1380,1385-1387,1393,1397-1400,1406-1407,1417,1455-1457,1467
+packages/server/src/plugins/dependencies.rs
+  s_1a39aa4301bc83::t_a41ea29e1f0a35 26
+  s_1a39aa4301bc83::t_5aa17cee6040ef 3-25,27-37,41-43,45-51,53-57,59,68-76,78-79,83-92,100-118,125-133,135-136,139-143,145-154,156-183,187,189,204,207-212
+  s_1a39aa4301bc83::t_0efb594648a494 60-67,80-82,93,95-99
+  s_1a39aa4301bc83::t_d22a194003e6ac 44,52,123,137-138
+packages/server/src/plugins/artifact.rs
+  s_1a39aa4301bc83::t_48f843cba44dca 8,13
+packages/server/src/plugins/tests.rs
+  s_1a39aa4301bc83::t_a41ea29e1f0a35 81-89
+  s_1a39aa4301bc83::t_8cc202f96c3c98 40,42-45,78,134-135,139-140,145,151-152,157,163,169-170,175,182-190,222
+  s_1a39aa4301bc83::t_a31a9d660a7de7 80,199
+packages/server/src/plugins/catalog.rs
+  s_1a39aa4301bc83::t_a41ea29e1f0a35 58-60
+  s_1a39aa4301bc83::t_48f843cba44dca 5,7-9,12,15-19,22-24,40,44,53-57,61-62,64-69,72-77,79-80,100-102,113,251,267-283,286-373,387-415,417-418,420-424,427-428
+  s_1a39aa4301bc83::t_8cc202f96c3c98 6,150-164,189-200,213
+  s_1a39aa4301bc83::t_4dbba9b7b392b7 45-51,70-71,78,111-112,114,244-250,252-266,284-285,419
+packages/server/src/plugins/manifest.rs
+  s_1a39aa4301bc83::t_48f843cba44dca 113-131
+packages/server/src/plugins/loading.rs
+  s_1a39aa4301bc83::t_8cc202f96c3c98 602
+  s_1a39aa4301bc83::t_a41ea29e1f0a35 378-380
+  s_1a39aa4301bc83::t_4bd322a6c52160 381,589-594,599-601,603-605
+packages/server/PLUGINS.md
+  s_1a39aa4301bc83::t_8cc202f96c3c98 64-87,128-131
+packages/server/src/service/plugin_control.rs
+  s_1a39aa4301bc83::t_5ee77d81f51b91 10,186-191,195-198
+packages/server/tests/schema_indexes.rs
+  s_1a39aa4301bc83::t_c4b6ec41768814 1217-1218,1280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fbcbf9c35da248e3248d36f9095262b6a02690ca",
+  "prompts": {},
+  "sessions": {
+    "s_1a39aa4301bc83": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a219c5-ea43-7ab2-9b53-0fbca1138ad3",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
