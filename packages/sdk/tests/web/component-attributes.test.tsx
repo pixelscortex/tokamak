@@ -1,8 +1,15 @@
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
-import { createSignal, flush, untrack } from "solid-js";
+import { createComponent, createSignal, flush, isStatic, untrack } from "solid-js";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { attrs, ExtensionProvider, layer, type AttributeWarning } from "../../client";
+import {
+  __renderComponentPart,
+  __renderPart,
+  attrs,
+  ExtensionProvider,
+  layer,
+  type AttributeWarning,
+} from "../../client";
 import { host, layer as contribution, type Layer } from "./fixtures/parts/extension-host";
 import { AttributeScreen } from "./fixtures/parts/attrs-owner/src/client/api";
 import { find } from "./fixtures/parts/attrs-owner/src/client/_generated/components";
@@ -162,12 +169,12 @@ test("native overlays stay live on template roots, descendants, a void input and
   expect(warnings).not.toHaveBeenCalled();
 });
 
-test("component props compose in installation order and keep the component mounted", async () => {
+test("component props stay live until removal restores the owner on a fresh mount", async () => {
   const [left, setLeft] = createSignal(false);
   const [right, setRight] = createSignal(false);
   const first = contribution(
     "Left",
-    attrs(button, (_, current) => ({ disabled: current.disabled || left() })),
+    attrs(button, (_, current) => ({ disabled: current.disabled || left(), once: true })),
     "attrs",
     button,
     10,
@@ -184,8 +191,9 @@ test("component props compose in installation order and keep the component mount
     2,
   );
   const { root, setDisabled, setLoaded, warnings, mounts } = mount([second, first]);
+  await waitFor(() => expect(root.querySelector("button")?.dataset.once).toBe("true"));
   const send = root.querySelector("button")!;
-  await waitFor(() => expect(send.disabled).toBe(false));
+  expect(send.disabled).toBe(false);
   setLeft(true);
   flush();
   await waitFor(() => expect(send.disabled).toBe(true));
@@ -199,13 +207,127 @@ test("component props compose in installation order and keep the component mount
   setDisabled(true);
   flush();
   expect(send.disabled).toBe(true);
+  expect(root.querySelector("button")).toBe(send);
+  const beforeRemoval = mounts.mock.calls.length;
   setLoaded([]);
+  flush();
+  const restored = root.querySelector("button")!;
+  expect(restored.disabled).toBe(true);
+  expect(mounts).toHaveBeenCalledTimes(beforeRemoval + 1);
   setDisabled(false);
   flush();
-  expect(send.disabled).toBe(false);
-  expect(root.querySelector("button")).toBe(send);
-  expect(mounts).toHaveBeenCalledOnce();
+  expect(root.querySelector("button")).toBe(restored);
+  expect(restored.disabled).toBe(false);
+  expect(restored.dataset.once).toBe("false");
+  expect(restored).not.toBe(send);
   expect(warnings).not.toHaveBeenCalled();
+});
+
+test("an untargeted component receives the exact Solid props object without setup warnings", () => {
+  const authored = { label: "owner" };
+  const draw = vi.fn((props: typeof authored) => {
+    expect(isStatic(props, "label")).toBe(true);
+    return <button>{props.label}</button>;
+  });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const container = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider host={host([])}>
+        {
+          __renderComponentPart("owner.Screen.Button", null, {}, undefined, (contents) =>
+            contents.c(draw, authored),
+          ) as ReturnType<typeof draw>
+        }
+      </ExtensionProvider>
+    ),
+    container,
+  );
+  onTestFinished(() => {
+    dispose();
+    warn.mockRestore();
+  });
+  expect(draw.mock.calls).toHaveLength(1);
+  expect(draw.mock.calls[0]?.[0]).toBe(authored);
+  expect(container.textContent).toBe("owner");
+  expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("STRICT_READ_UNTRACKED"));
+});
+
+test("an old compiled component skips attrs and Original props but still draws layer children", async () => {
+  const OldButton = (props: { children?: string }) => <button>{props.children ?? "owner"}</button>;
+  const change = attrs(button, () => ({ label: "plugin", disabled: true }));
+  const wrap = layer(button, (_, Original) => <Original disabled>wrapped</Original>);
+  const warnings = vi.fn<(warning: AttributeWarning) => void>();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const container = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={host([
+          contribution("Change", change, "attrs", button, 0, "changer"),
+          contribution("Wrap", wrap, "layer", button, 0, "wrapper"),
+        ])}
+        onAttributeWarning={warnings}
+      >
+        {__renderPart(button.target, null, {}, undefined, () => (
+          <button>owner</button>
+        ))}
+        {__renderPart(button.target, null, {}, undefined, (contents) =>
+          createComponent(OldButton, {
+            get children() {
+              return contents(() => "owner") as string;
+            },
+          }),
+        )}
+      </ExtensionProvider>
+    ),
+    container,
+  );
+  onTestFinished(() => {
+    dispose();
+    warn.mockRestore();
+  });
+  await waitFor(() => expect(container.textContent).toBe("ownerwrapped"));
+  expect(container.querySelector("[disabled], [label]")).toBeNull();
+  expect(warnings.mock.calls.map(([warning]) => [warning.kind, warning.plugin])).toEqual([
+    ["attr-legacy", "changer"],
+    ["attr-legacy", "wrapper"],
+  ]);
+  for (const addon of ["changer", "wrapper"])
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`${addon}.*owner plugin "attrs-owner".*must be rebuilt`)),
+    );
+});
+
+test("native current reads booleans by presence and ignores handler keys", async () => {
+  const values = vi.fn(
+    (
+      _: unknown,
+      current: Readonly<{ hidden?: boolean; itemscope?: boolean; inert?: boolean; title?: string }>,
+    ) => ({
+      className: "alias",
+      onclick: "invalid",
+      onClick: "invalid",
+      "on:customevent": "invalid",
+      online: "allowed",
+      hidden: current.hidden || false,
+      itemscope: current.itemscope || false,
+      inert: current.inert || false,
+      title: current.title,
+    }),
+  );
+  const { root } = mount([contribution("Native", attrs(nested, values as never), "attrs", nested)]);
+  const heading = root.querySelector("header")!;
+  await waitFor(() => expect(heading.className).toBe("block alias"));
+  const current = values.mock.calls.at(-1)?.[1];
+  expect(current?.hidden).toBe(true);
+  expect(current?.itemscope).toBe(true);
+  expect(current?.inert).toBe(false);
+  expect(current?.title).toBe("owner title");
+  expect(heading.outerHTML).not.toMatch(/ (?:classname|onclick|on:customevent)=/i);
+  expect(heading.getAttribute("online")).toBe("allowed");
+  expect(heading.hasAttribute("hidden")).toBe(true);
+  expect(heading.hasAttribute("itemscope")).toBe(true);
 });
 
 test("an overwrite, invalid computed key and throwing action do not break the owner", async () => {
@@ -276,6 +398,22 @@ test("Original forwards a live prop to the owner's component", async () => {
   flush();
   expect(send?.disabled).toBe(false);
   expect(root.querySelector("button")).toBe(send);
+});
+
+test("enabling and disabling a layer applies and removes its Original props", async () => {
+  const [forward, setForward] = createSignal(false);
+  const action = layer(button, (_, Original) => <Original once />, { when: forward });
+  const { root } = mount([contribution("Wrap", action, "layer", button)]);
+  const plain = root.querySelector("button");
+  expect(plain?.dataset.once).toBe("false");
+  setForward(true);
+  await waitFor(() => expect(root.querySelector("button")?.dataset.once).toBe("true"));
+  const decorated = root.querySelector("button");
+  expect(decorated).not.toBe(plain);
+  setForward(false);
+  flush();
+  expect(root.querySelector("button")).not.toBe(decorated);
+  expect(root.querySelector("button")?.dataset.once).toBe("false");
 });
 
 test("Original applies attributes after attrs, and a layer that covers Original drops them", async () => {

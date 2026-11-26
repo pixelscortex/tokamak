@@ -12,6 +12,7 @@ export {
   layer,
   type OriginalElement,
   type ElementAttributes,
+  type ComponentAttributes,
   type ComponentPart,
   type ScreenFind,
   type ComponentActionOptions,
@@ -351,6 +352,7 @@ export {
 
 export {
   renderPart as __renderPart,
+  renderPlainPart as __renderPlainPart,
   renderComponentPart as __renderComponentPart,
   renderNativePart as __renderNativePart,
   renderNativeText as __renderNativeText,

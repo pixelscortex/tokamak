@@ -1,9 +1,10 @@
 import { assign, className, DOMWithState } from "@solidjs/web";
 import { createRenderEffect, createSignal, onCleanup } from "solid-js";
-import { reservedAttribute } from "./component-actions";
+import { eventNamespace, reservedAttribute } from "./component-actions";
 import type { LoadedPartAction, PartRegistry } from "./component-parts";
 
 type Values = Record<string, unknown>;
+type NativeAttributes = { key(key: string): string; event(key: string): boolean };
 export type AttributeLayer = { item: LoadedPartAction; values: Values };
 export type AttributeLayers = () => readonly AttributeLayer[];
 export const noAttributeLayers: AttributeLayers = () => [];
@@ -11,7 +12,7 @@ const empty = Object.freeze(Object.create(null) as Values);
 const exposed = { enumerable: true, configurable: true };
 
 export type AttributeWarning = {
-  kind: "attr-conflict" | "attr-covered" | "attr-invalid" | "attr-error";
+  kind: "attr-conflict" | "attr-covered" | "attr-invalid" | "attr-error" | "attr-legacy";
   plugin: string;
   target: string;
   otherPlugin?: string;
@@ -40,27 +41,29 @@ export function attributeValues(
   owner: Values,
   actions: readonly LoadedPartAction[],
   layers?: readonly AttributeLayer[],
+  native?: NativeAttributes,
 ): Values {
   if (!actions.length && !layers?.length) return empty;
   const changes = Object.create(null) as Values;
   const written = new Map<string, string>();
 
+  const forbidden = (item: LoadedPartAction, key: string) =>
+    reservedAttribute(key) || native?.event(key) || item.callableAttributes?.has(key);
+  const name = (key: string) => native?.key(key) ?? key;
+
   function apply(item: LoadedPartAction, values: Values, reads?: Set<string>) {
-    const forbidden = (key: string) => reservedAttribute(key) || item.callableAttributes?.has(key);
     // Children are drawn by the layer stage. Reading that getter here would
     // render a second copy of the children in the attribute effect.
     const keys = Object.keys(values).filter((key) => reads || key !== "children");
-    const entries = keys.map((key) => [key, forbidden(key) ? undefined : values[key]] as const);
-    for (const [key, value] of entries) {
-      if (
-        forbidden(key) ||
-        typeof value === "function" ||
-        (key !== "class" && typeof owner[key] === "function")
-      ) {
+    for (const raw of keys) {
+      const key = name(raw);
+      const blocked = forbidden(item, raw);
+      const value = blocked ? undefined : values[raw];
+      if (blocked || typeof value === "function" || (key !== "class" && typeof owner[key] === "function")) {
         warnAttribute(
           registry,
-          { kind: "attr-invalid", plugin: item.plugin, target: item.action.target, attribute: key },
-          `Plugin "${item.plugin}" cannot change attribute "${key}" on ${item.action.target}`,
+          { kind: "attr-invalid", plugin: item.plugin, target: item.action.target, attribute: raw },
+          `Plugin "${item.plugin}" cannot change attribute "${raw}" on ${item.action.target}`,
         );
         continue;
       }
@@ -110,22 +113,22 @@ export function attributeValues(
     const reads = new Set<string>();
     const current = new Proxy(Object.create(null) as Values, {
       get(_, key) {
-        if (typeof key !== "string" || reservedAttribute(key) || item.callableAttributes?.has(key)) return;
+        if (typeof key !== "string" || forbidden(item, key)) return;
+        key = name(key);
         reads.add(key);
         return Object.hasOwn(changes, key) ? changes[key] : owner[key];
       },
       has(_, key) {
-        if (typeof key !== "string" || reservedAttribute(key) || item.callableAttributes?.has(key))
-          return false;
+        if (typeof key !== "string" || forbidden(item, key)) return false;
+        key = name(key);
         reads.add(key);
         return key in changes || key in owner;
       },
       ownKeys: () =>
-        [...new Set([...Object.keys(owner), ...Object.keys(changes)])].filter(
-          (key) => !reservedAttribute(key) && !item.callableAttributes?.has(key),
-        ),
+        [...new Set([...Object.keys(owner), ...Object.keys(changes)])].filter((key) => !forbidden(item, key)),
       getOwnPropertyDescriptor(_, key) {
-        if (typeof key !== "string" || reservedAttribute(key) || item.callableAttributes?.has(key)) return;
+        if (typeof key !== "string" || forbidden(item, key)) return;
+        key = name(key);
         reads.add(key);
         if (Object.hasOwn(changes, key) || Object.hasOwn(owner, key)) return exposed;
       },
@@ -137,13 +140,23 @@ export function attributeValues(
 }
 
 const html = "http://www.w3.org/1999/xhtml";
-const booleanAttribute =
-  /^(?:allowfullscreen|async|autofocus|autoplay|controls|default|defer|disabled|formnovalidate|inert|ismap|loop|multiple|nomodule|novalidate|open|playsinline|readonly|required|reversed)$/i;
+const booleanAttributes = new Set(
+  (
+    "allowfullscreen alpha async autofocus autoplay checked compact controls credentialless declare default defer " +
+    "disablepictureinpicture disableremoteplayback disabled formnovalidate hidden inert ismap itemscope loop " +
+    "multiple muted nohref nomodule noresize noshade novalidate nowrap open playsinline readonly required reversed " +
+    "scoped seamless selected shadowrootclonable shadowrootcustomelementregistry shadowrootdelegatesfocus shadowrootserializable " +
+    "truespeed typemustmatch webkitdirectory"
+  ).split(" "),
+);
 
 /** Owner bindings keep writing to the original node. While an overlay is
  * active, save those writes separately so disabling it reveals the latest
  * owner state, including Solid's incremental class and style operations. */
-export function bindNativeAttributes(element: Element, read: (owner: Values) => Values) {
+export function bindNativeAttributes(
+  element: Element,
+  read: (owner: Values, native: NativeAttributes) => Values,
+) {
   // Mirror attributes only; cloning a custom element would run its constructor.
   const base = element.ownerDocument.createElementNS(
     element.namespaceURI,
@@ -245,12 +258,18 @@ export function bindNativeAttributes(element: Element, read: (owner: Values) => 
     });
   }
 
+  const native: NativeAttributes = {
+    key: (key) => (key === "className" ? "class" : key),
+    event: (key) => eventNamespace(key) || (/^on/i.test(key) && key.toLowerCase() in element),
+  };
   const owner = new Proxy(Object.create(null) as Values, {
     get(_, key) {
       if (typeof key !== "string") return;
       if (baseline.has(key)) return baseline.get(key);
       const value = base.getAttribute(key);
-      return booleanAttribute.test(key) ? value !== null : (value ?? undefined);
+      return element.namespaceURI === html && booleanAttributes.has(key.toLowerCase())
+        ? value !== null
+        : (value ?? undefined);
     },
     has: (_, key) => typeof key === "string" && (baseline.has(key) || base.hasAttribute(key)),
     ownKeys: () => [...new Set([...base.getAttributeNames(), ...baseline.keys()])],
@@ -283,6 +302,10 @@ export function bindNativeAttributes(element: Element, read: (owner: Values) => 
           else element.setAttribute(key, attr);
         } else if (typeof value === "boolean" && key.startsWith("aria-")) {
           element.setAttribute(key, String(value));
+        } else if (/^on/i.test(key)) {
+          // Solid reserves camel-case on* names even when the DOM has no such event.
+          if (value == null || value === false) element.removeAttribute(key);
+          else element.setAttribute(key, value === true ? "" : String(value));
         } else assign(element, { [key]: value }, true);
       }
     } finally {
@@ -298,7 +321,7 @@ export function bindNativeAttributes(element: Element, read: (owner: Values) => 
   createRenderEffect(
     () => {
       revision();
-      return read(owner);
+      return read(owner, native);
     },
     paint,
     { sync: true, transparent: true },

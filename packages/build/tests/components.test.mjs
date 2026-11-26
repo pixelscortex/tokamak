@@ -12,7 +12,7 @@ async function scratch(run) {
 }
 
 const screen = `
-  interface PriceProps { amount: number; currency?: string }
+  interface PriceProps { amount: number; currency?: string; once?: boolean }
   const Price = (props: PriceProps) => <strong>{props.amount}</strong>;
   export const Picker = (props: { amount: number }) =>
     <section><Price amount={props.amount} /><Price amount={0} /><aside><span /></aside></section>;
@@ -344,6 +344,7 @@ test("attrs and Original use the attributes of the found element", async () => {
         `
         export const Cost = attrs(owner.find("Price", { nth: 1 }), (props, current) => ({
           amount: (current.amount ?? 0) + props.amount,
+          once: true,
         }), { order: 2 });
         export const Frame = layer(owner.find("strong"), (_, Original) =>
           <Original class="custom" aria-busy>new</Original>);
@@ -381,6 +382,14 @@ test("the builder rejects reserved attributes, function props and props from the
       [
         'attrs(owner.find("Price", { nth: 1 }), () => ({ changed: undefined }))',
         /Cannot change attribute "changed" with attrs/,
+      ],
+      [
+        'attrs(owner.find("strong"), () => ({ onclick: "bad" } as any))',
+        /Cannot change attribute "onclick" with attrs/,
+      ],
+      [
+        'attrs(owner.find("strong"), () => ({ "oncapture:custom": "bad" } as any))',
+        /Cannot change attribute "oncapture:custom" with attrs/,
       ],
       [
         'layer(owner.find("strong"), (_, Original) => <Original onClick={() => {}} />)',

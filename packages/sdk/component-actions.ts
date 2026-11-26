@@ -4,6 +4,7 @@ import type { AttributeFilters } from "./screen-search";
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
 declare const originalElementBrand: unique symbol;
 declare const elementAttributesBrand: unique symbol;
+declare const nativeAttributesBrand: unique symbol;
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
 
 export interface ComponentPart<Target extends string, Props extends object, Attributes extends object = {}> {
@@ -36,20 +37,25 @@ type ReservedAttribute =
   | "textContent"
   | "outerHTML"
   | "innerText";
-type ForbiddenAttribute = ReservedAttribute | `on${string}` | `prop:${string}` | `attr:${string}`;
+type ForbiddenAttribute = ReservedAttribute | `prop:${string}` | `attr:${string}`;
+type EventNamespace = `on:${string}` | `oncapture:${string}`;
+
+export function eventNamespace(key: string) {
+  return /^(?:on|oncapture):/i.test(key);
+}
 
 export function reservedAttribute(key: string) {
   return (
-    /^(?:on|prop:|attr:)/i.test(key) ||
+    /^(?:prop:|attr:)/i.test(key) ||
     /^(?:data-part|data-part-ignore|id|ref|children|innerhtml|textcontent|outerhtml|innertext)$/i.test(key)
   );
 }
 
 type IntrinsicAttributes<Tag extends string> = Tag extends keyof JSX.IntrinsicElements
   ? JSX.IntrinsicElements[Tag]
-  : JSX.HTMLAttributes<HTMLElement>;
+  : JSX.IntrinsicElements["div"];
 
-export type ElementAttributes<Tag extends string> = {
+export type ElementAttributes<Tag extends string> = { readonly [nativeAttributesBrand]: true } & {
   [K in keyof IntrinsicAttributes<Tag>]: K extends `aria-${string}`
     ? string extends IntrinsicAttributes<Tag>[K]
       ? IntrinsicAttributes<Tag>[K]
@@ -59,10 +65,16 @@ export type ElementAttributes<Tag extends string> = {
     : IntrinsicAttributes<Tag>[K];
 };
 
+type CallableKeys<A> = {
+  [K in keyof A]-?: Extract<A[K], (...args: never[]) => unknown> extends never ? never : K;
+}[keyof A];
+type NativeEvents<A> = typeof nativeAttributesBrand extends keyof A
+  ? EventNamespace | Lowercase<Extract<CallableKeys<A>, string>>
+  : never;
 type MutableAttributes<A extends object> = {
   [
     K in keyof A as K extends string
-      ? Lowercase<K> extends Lowercase<ForbiddenAttribute>
+      ? Lowercase<K> extends Lowercase<ForbiddenAttribute | NativeEvents<A>>
         ? never
         : Extract<A[K], (...args: never[]) => unknown> extends never
           ? K
@@ -70,9 +82,9 @@ type MutableAttributes<A extends object> = {
       : never
   ]?: K extends "class" ? string : A[K];
 };
-type Forbidden<F extends ForbiddenAttribute = ForbiddenAttribute> = { [K in F]?: never };
+type Forbidden<F extends string = ForbiddenAttribute> = { [K in F]?: never };
 type OriginalProps<A extends object> = MutableAttributes<A> &
-  Forbidden<Exclude<ForbiddenAttribute, "children">> & { readonly children?: JSX.Element };
+  Forbidden<Exclude<ForbiddenAttribute, "children"> | NativeEvents<A>> & { readonly children?: JSX.Element };
 
 export interface OriginalElement<A extends object = {}> {
   readonly [originalElementBrand]?: true;
@@ -144,7 +156,9 @@ export function attrs<P extends object, A extends object, Values extends Mutable
     props: NoInfer<P>,
     current: Readonly<MutableAttributes<NoInfer<A>>>,
   ) => Values &
-    (string extends keyof Values ? unknown : Forbidden & UnknownKeys<Values, MutableAttributes<NoInfer<A>>>),
+    (string extends keyof Values
+      ? unknown
+      : Forbidden<ForbiddenAttribute | NativeEvents<A>> & UnknownKeys<Values, MutableAttributes<NoInfer<A>>>),
   options?: ComponentActionOptions<NoInfer<P>>,
 ) {
   return defineComponentAction("attrs", target, undefined, options, read as Attributes<any, any>);
@@ -155,11 +169,12 @@ export function componentActionKind<K extends ComponentActionKind>(action: Compo
 }
 
 type SearchOptions = AttributeFilters & { in?: string; nth?: number };
+type ElementType = object | string;
 type ScreenMatch = readonly [
   ancestors: string,
   props: object,
   filters?: AttributeFilters,
-  attributes?: object,
+  attributes?: ElementType,
 ];
 type Keys<T> = T extends unknown ? keyof T : never;
 type Values<T, K extends PropertyKey> = T extends Record<K, unknown> ? T[K] : never;
@@ -224,10 +239,34 @@ type SearchField<Value extends object, Filters, Field extends 1 | 3> = Value ext
     >
   : Field extends 1
     ? Value
-    : {};
+    : undefined;
 
-/** The compiler supplies one props type or a source-ordered list of matches and their filters. */
-export type ScreenFind<Names extends Record<string, object>> = <
+type ComponentAt<Module, Name extends string> = Name extends keyof Module
+  ? Module[Name]
+  : Name extends `${infer Key extends keyof Module & string}.${infer Rest}`
+    ? ComponentAt<Module[Key], Rest>
+    : never;
+
+/** Generated declarations share a module reference for imported component props. */
+export type ComponentAttributes<Module, Names extends string> = {
+  [Name in Names]: ComponentAt<Module, Name> extends (props: infer Props, ...rest: any) => unknown
+    ? Extract<NonNullable<Props>, object>
+    : {};
+};
+
+type SearchAttributes<Name extends string, Type, Defaults> = Type extends string
+  ? ElementAttributes<Type>
+  : Type extends object
+    ? Type
+    : [Defaults] extends [never]
+      ? {}
+      : Name extends keyof Defaults
+        ? SearchAttributes<Name, Defaults[Name], never>
+        : ElementAttributes<Name>;
+
+/** The compiler supplies source-ordered matches or a single props type.
+ * New declarations infer native types from unaliased tag names. */
+export type ScreenFind<Names extends Record<string, object>, Defaults extends object = never> = <
   Name extends keyof Names & string,
   const Filters extends SearchOptions = {},
 >(
@@ -238,5 +277,5 @@ export type ScreenFind<Names extends Record<string, object>> = <
 ) => ComponentPart<
   string,
   SearchField<Names[Name], Filters, 1>,
-  NonNullable<SearchField<Names[Name], Filters, 3>>
+  SearchAttributes<Name, SearchField<Names[Name], Filters, 3>, Defaults>
 >;

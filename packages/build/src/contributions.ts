@@ -1,4 +1,4 @@
-import { reservedAttribute } from "../../sdk/component-actions.ts";
+import { eventNamespace, reservedAttribute } from "../../sdk/component-actions.ts";
 import {
   flattenAttributes,
   isSearchAttribute,
@@ -315,9 +315,9 @@ function componentActionOptions(
     }
   }
   if (action === "attrs" || action === "layer") {
-    const excluded = callableAttributes(reference, checker);
-    checkAttributeLiterals(init.arguments[1], action, checker, excluded);
-    if (excluded.size) values.callableAttributes = JSON.stringify([...excluded]);
+    const { callable, nativeEvents } = callableAttributes(reference, checker);
+    checkAttributeLiterals(init.arguments[1], action, checker, callable, nativeEvents);
+    if (callable.size) values.callableAttributes = JSON.stringify([...callable]);
   }
   checkAction(init);
   return values;
@@ -325,16 +325,23 @@ function componentActionOptions(
 
 function callableAttributes(reference: ts.Expression, checker: ts.TypeChecker) {
   const property = brand(checker.getTypeAtLocation(reference), "elementAttributesBrand");
-  const excluded = new Set<string>();
-  if (!property) return excluded;
-  const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, reference));
-  for (const member of type.isUnion() ? type.types : [type])
-    for (const prop of member.getProperties()) {
-      const value = checker.getTypeOfSymbolAtLocation(prop, reference);
-      if ((value.isUnion() ? value.types : [value]).some((part) => part.getCallSignatures().length))
-        if (!reservedAttribute(prop.name)) excluded.add(prop.name);
+  const callable = new Set<string>();
+  let nativeEvents: Set<string> | undefined;
+  if (property) {
+    const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, reference));
+    for (const member of type.isUnion() ? type.types : [type]) {
+      const native = !!brand(member, "nativeAttributesBrand");
+      if (native) nativeEvents ??= new Set();
+      for (const prop of member.getProperties()) {
+        const value = checker.getTypeOfSymbolAtLocation(prop, reference);
+        if (!(value.isUnion() ? value.types : [value]).some((part) => part.getCallSignatures().length))
+          continue;
+        if (native) nativeEvents!.add(prop.name.toLowerCase());
+        else if (!reservedAttribute(prop.name)) callable.add(prop.name);
+      }
     }
-  return excluded;
+  }
+  return { callable, nativeEvents };
 }
 
 function checkAttributeLiterals(
@@ -342,6 +349,7 @@ function checkAttributeLiterals(
   action: "attrs" | "layer",
   checker: ts.TypeChecker,
   callable: ReadonlySet<string>,
+  nativeEvents?: ReadonlySet<string>,
 ) {
   let read: ts.Node | undefined = unwrap(expression);
   if (read && ts.isIdentifier(read)) {
@@ -358,7 +366,11 @@ function checkAttributeLiterals(
     }
     const key = ts.isStringLiteralLike(name) || ts.isIdentifier(name) ? name.text : name.getText();
     if (original && key === "children") return;
-    if (reservedAttribute(key) || callable.has(key))
+    if (
+      reservedAttribute(key) ||
+      callable.has(key) ||
+      (nativeEvents && (eventNamespace(key) || nativeEvents.has(key.toLowerCase())))
+    )
       throw problem(name, `Cannot change attribute "${key}" with ${original ? "Original" : "attrs"}`);
   }
   function returned(expression: ts.Expression | undefined) {

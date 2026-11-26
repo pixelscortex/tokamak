@@ -186,7 +186,9 @@ then `order`, plugin ID, and export name. Class strings are added to existing
 classes, including the owner's Solid class objects and arrays. For other
 keys, a defined value overrides `current`; omit the key or return `undefined`
 to leave it alone. If another add-on already set a key, read `current` for
-that key to combine the values and avoid an overwrite warning.
+that key to combine the values and avoid an overwrite warning. For plain
+HTML attributes, `current` reads booleans as true when present and false when
+absent, and other attributes as strings or `undefined` when absent.
 
 ```tsx
 import { attrs } from "@tokamak/sdk/client";
@@ -204,6 +206,12 @@ below draw the owner's element. You can't change identifiers (`id`,
 handlers, or function props. Pass JSX children to `Original` to replace
 its contents. Rebuild the owner to publish the attribute types for its
 elements.
+
+The overlay tracks writes through `setAttribute`, `removeAttribute`,
+`toggleAttribute`, `classList`, `className`, `style`, and form-state properties.
+Writes through other DOM properties (such as `el.title`, JSX `prop:title`,
+`dataset`, and ARIA reflection) bypass it, so the owner's write shows during
+the override and ending the override may restore a stale value.
 
 Actions and their live `when` option receive the
 props of the render function that owns the tag. Parts inside an inline list

@@ -256,59 +256,75 @@ export function renderNativePart(
   const registry = useContext(PartActions);
   if (!registry) return create([], plainHole);
   if (!children.length)
-    return renderPart(target, fingerprint, props, row, (contents) => {
-      const element = create([], plainHole) as Element;
-      nativeContents(element, contents);
-      return element;
-    });
+    return renderPart(
+      target,
+      fingerprint,
+      props,
+      row,
+      (contents) => {
+        const element = create([], plainHole) as Element;
+        nativeContents(element, contents);
+        return element;
+      },
+      undefined,
+      false,
+    );
 
-  return renderPart(target, fingerprint, props, row, (contents) => {
-    const refs: Element[] = [];
-    const active: ReturnType<typeof createSignal<HoleState>>[] = [];
-    const hole: RenderHole = (id, render) => {
-      let state = active[id];
-      if (!state) active[id] = state = createSignal<HoleState>(true, { ownedWrite: true });
-      const [shown] = state;
-      return createMemo(() => {
-        const value = shown();
-        if (value === true) return untrack(render);
-        if (value === false) return undefined;
-        const marker = element.ownerDocument.createTextNode("");
-        value.set(marker, render);
-        return marker;
-      });
-    };
+  return renderPart(
+    target,
+    fingerprint,
+    props,
+    row,
+    (contents) => {
+      const refs: Element[] = [];
+      const active: ReturnType<typeof createSignal<HoleState>>[] = [];
+      const hole: RenderHole = (id, render) => {
+        let state = active[id];
+        if (!state) active[id] = state = createSignal<HoleState>(true, { ownedWrite: true });
+        const [shown] = state;
+        return createMemo(() => {
+          const value = shown();
+          if (value === true) return untrack(render);
+          if (value === false) return undefined;
+          const marker = element.ownerDocument.createTextNode("");
+          value.set(marker, render);
+          return marker;
+        });
+      };
 
-    function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: HoleState) {
-      if (typeof id === "number") {
-        const state = active[id];
-        if (!state) active[id] = createSignal(enabled, { ownedWrite: true });
-        else state[1](enabled);
+      function setHoles(id: number | null | undefined, sites: readonly NativeSite[], enabled: HoleState) {
+        if (typeof id === "number") {
+          const state = active[id];
+          if (!state) active[id] = createSignal(enabled, { ownedWrite: true });
+          else state[1](enabled);
+        }
+        for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled === true);
       }
-      for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled === true);
-    }
 
-    const element = create(refs, hole) as Element;
-    const scope = { registry, refs, owner: getOwner(), props, row, setHoles };
-    let bindings: NativeBinding[] | undefined = registerNative(element, children, scope);
-    onCleanup(() => stopNative(bindings));
-    if (contents.native)
-      nativeContents(element, contents, {
-        resume() {
-          if (bindings) return;
-          setHoles(rootHole, children, true);
-          bindings = registerNative(element, children, scope);
-        },
-        suspend(park) {
-          stopNative(bindings);
-          bindings = undefined;
-          setHoles(rootHole, children, park ?? false);
-        },
-        project: (parent, nodes) => projectNative(parent, nodes, children, scope),
-      });
-    else nativeContents(element, contents);
-    return element;
-  });
+      const element = create(refs, hole) as Element;
+      const scope = { registry, refs, owner: getOwner(), props, row, setHoles };
+      let bindings: NativeBinding[] | undefined = registerNative(element, children, scope);
+      onCleanup(() => stopNative(bindings));
+      if (contents.native)
+        nativeContents(element, contents, {
+          resume() {
+            if (bindings) return;
+            setHoles(rootHole, children, true);
+            bindings = registerNative(element, children, scope);
+          },
+          suspend(park) {
+            stopNative(bindings);
+            bindings = undefined;
+            setHoles(rootHole, children, park ?? false);
+          },
+          project: (parent, nodes) => projectNative(parent, nodes, children, scope),
+        });
+      else nativeContents(element, contents);
+      return element;
+    },
+    undefined,
+    false,
+  );
 }
 
 type NativeScope = {
@@ -417,7 +433,9 @@ class NativeBinding implements PartObserver {
       const ordered = actions.sort(installationOrder);
       this.dispose = runWithOwner(owner, () =>
         createRoot((cleanup) => {
-          bindNativeAttributes(element, (owner) => attributeValues(registry, placementProps, owner, ordered));
+          bindNativeAttributes(element, (owner, native) =>
+            attributeValues(registry, placementProps, owner, ordered, undefined, native),
+          );
           return cleanup;
         }),
       );
@@ -428,26 +446,33 @@ class NativeBinding implements PartObserver {
       createRoot((cleanup) => {
         this.dispose = cleanup;
         const end = nativeRange(parent, next, element);
-        const decorated = renderActions(registry, actions, placementProps, (contents) => {
-          const activate = () => {
-            // Always: a layer removed just before this rebuild left the child
-            // components off, and the actions that remain may all be additions.
-            setHoles(hole, children, true);
-            this.registerChildren();
-          };
-          if (destructive) onCleanup(() => deactivate());
-          if (contents.native) {
-            nativeContents(element, contents, {
-              resume: activate,
-              suspend: deactivate,
-              project: (parent, nodes) => projectNative(parent, nodes, children, this.scope),
-            });
-          } else {
-            activate();
-            nativeContents(element, contents);
-          }
-          return element;
-        });
+        const decorated = renderActions(
+          registry,
+          actions,
+          placementProps,
+          (contents) => {
+            const activate = () => {
+              // Always: a layer removed just before this rebuild left the child
+              // components off, and the actions that remain may all be additions.
+              setHoles(hole, children, true);
+              this.registerChildren();
+            };
+            if (destructive) onCleanup(() => deactivate());
+            if (contents.native) {
+              nativeContents(element, contents, {
+                resume: activate,
+                suspend: deactivate,
+                project: (parent, nodes) => projectNative(parent, nodes, children, this.scope),
+              });
+            } else {
+              activate();
+              nativeContents(element, contents);
+            }
+            return element;
+          },
+          undefined,
+          false,
+        );
         insert(parent, decorated, end, [element]);
       }),
     );
@@ -463,39 +488,14 @@ export function renderPart(
   row: (() => object) | undefined,
   render: (contents: Contents) => JSX.Element,
   original?: () => JSX.Element,
-  component = false,
+  component?: boolean,
 ): JSX.Element | (() => JSX.Element) {
   const registry = useContext(PartActions);
   const read = registry?.read(target);
   const plain = ((override = original) => override?.()) as Contents;
   plain.spread = plainSpread;
-  if (component) plain.c = createComponent;
+  plain.c = createComponent;
   if (!read) return render(plain);
-
-  // A component already receives an object from Solid. Keep its owner alive
-  // when add-ons arrive and read merged props through that same mount.
-  if (component)
-    plain.c = (draw, authored, ...debug) => {
-      let placementProps: object | undefined;
-      let previous: readonly LoadedPartAction[] | undefined;
-      let attributes: LoadedPartAction[] = [];
-      return createComponent(
-        draw,
-        merge(authored, () => {
-          const installed = read();
-          if (installed !== previous) {
-            previous = installed;
-            attributes = orderedAttributes(
-              installed.filter((item) => matches(registry!, target, fingerprint, item)),
-            );
-          }
-          if (!attributes.length) return undefined;
-          placementProps ??= row ? merge(props, { $row: row() }) : props;
-          return attributeValues(registry!, placementProps, authored, attributes);
-        }) as typeof authored,
-        ...debug,
-      );
-    };
 
   // The insert can move between wrapper owners. Keep the original in a
   // separate owner so a sibling placement never remounts the element.
@@ -510,12 +510,13 @@ export function renderPart(
     disposeOriginal?.();
   });
 
-  function renderOriginal() {
+  let originalAttributes: readonly LoadedPartAction[] = [];
+  function renderOriginal(contents = plain) {
     if (!disposeOriginal) {
       element = runWithOwner(owner, () =>
         createRoot((dispose) => {
           disposeOriginal = dispose;
-          return render(plain);
+          return render(contents);
         }),
       );
     }
@@ -529,17 +530,27 @@ export function renderPart(
     return untrack(() => {
       disposeActions?.();
       disposeActions = undefined;
-      if (!installed.length) return (decorated = renderOriginal());
-      const actions = installed.filter((item) => matches(registry!, target, fingerprint, item));
-      if (!actions.length) return (decorated = renderOriginal());
+      const actions = installed.filter((item) => {
+        if (!matches(registry!, target, fingerprint, item)) return false;
+        if (component !== undefined || !isAttributes(item)) return true;
+        warnLegacyAttributes(registry!, item);
+        return false;
+      });
       const outside = actions.every(({ action }) => {
         const kind = componentActionKind(action);
         return kind === "before" || kind === "after" || kind === "attrs";
       });
-      if (!outside) {
+      const attributes = component && outside ? orderedAttributes(actions) : [];
+      if (
+        !outside ||
+        attributes.length !== originalAttributes.length ||
+        attributes.some((item, index) => item !== originalAttributes[index])
+      ) {
         disposeOriginal?.();
         disposeOriginal = undefined;
       }
+      originalAttributes = attributes;
+      if (!actions.length) return (decorated = renderOriginal());
       const placementProps = row ? merge(props, { $row: row() }) : props;
       return (decorated = runWithOwner(owner, () =>
         createRoot((dispose) => {
@@ -548,15 +559,26 @@ export function renderPart(
             registry!,
             actions,
             placementProps,
-            outside ? renderOriginal : render,
+            outside
+              ? (contents) => renderOriginal(component && attributes.length ? contents : plain)
+              : render,
             original,
             component,
-            outside,
           );
         }),
       ));
     });
   };
+}
+
+function warnLegacyAttributes(registry: PartRegistry, item: LoadedPartAction) {
+  const target = item.action.target;
+  const owner = target.split(".")[0];
+  warnAttribute(
+    registry,
+    { kind: "attr-legacy", plugin: item.plugin, target, otherPlugin: owner },
+    `Plugin "${item.plugin}" cannot change attributes on ${target}: owner plugin "${owner}" must be rebuilt`,
+  );
 }
 
 export function renderComponentPart(
@@ -570,14 +592,24 @@ export function renderComponentPart(
   return renderPart(target, fingerprint, props, row, render, original, true);
 }
 
+export function renderPlainPart(
+  target: string,
+  fingerprint: string | null | undefined,
+  props: object,
+  row: (() => object) | undefined,
+  render: (contents: Contents) => JSX.Element,
+  original?: () => JSX.Element,
+) {
+  return renderPart(target, fingerprint, props, row, render, original, false);
+}
+
 function renderActions(
   registry: PartRegistry,
   actions: readonly LoadedPartAction[],
   props: object,
   render: (contents: Contents) => JSX.Element,
   original?: () => JSX.Element,
-  component = false,
-  direct = false,
+  component?: boolean,
 ): JSX.Element {
   const at = (kind: ComponentActionKind) =>
     actions.filter((item) => componentActionKind(item.action) === kind);
@@ -616,7 +648,7 @@ function renderActions(
     );
   }
 
-  function renderElement(read?: ReadOverride, readLayers?: AttributeLayers) {
+  function renderElement(read?: ReadOverride, readLayers?: AttributeLayers, forwarded = false) {
     const contents: Contents = (children) => {
       if (!read) return authored(children);
       const current = createMemo(() => {
@@ -646,17 +678,25 @@ function renderActions(
             },
           })
         : forwarded;
-    const decorate = !!(attributes.length || readLayers);
-    const values = (owner: Record<string, unknown>) =>
-      attributeValues(registry, props, owner, attributes, readLayers?.());
     contents.c =
-      component && decorate && !direct
+      component && (attributes.length || forwarded)
         ? (draw, authored, ...debug) =>
-            createComponent(draw, merge(authored, () => values(authored)) as typeof authored, ...debug)
+            createComponent(
+              draw,
+              merge(authored, () =>
+                attributeValues(registry, props, authored, attributes, readLayers?.()),
+              ) as typeof authored,
+              ...debug,
+            )
         : createComponent;
     const written = render(contents);
-    const element = !component && decorate && asElement(written);
-    if (element) bindNativeAttributes(element, values);
+    if (component === false && (attributes.length || readLayers)) {
+      const element = asElement(written);
+      if (element)
+        bindNativeAttributes(element, (owner, native) =>
+          attributeValues(registry, props, owner, attributes, readLayers?.(), native),
+        );
+    }
     return written;
   }
 
@@ -688,6 +728,8 @@ function renderActions(
               props,
               renderElement,
               () => (useContext(ForwardedChildren!) ?? authored)(),
+              component,
+              attributes.length > 0,
               attributes.length ? covered : undefined,
             )
           : renderElement()}
@@ -704,8 +746,10 @@ function renderLayers(
   registry: PartRegistry,
   layers: LoadedPartAction[],
   props: object,
-  render: (read: ReadOverride, attributes: AttributeLayers) => JSX.Element,
+  render: (read: ReadOverride, attributes: AttributeLayers, forwarded?: boolean) => JSX.Element,
   authored: () => JSX.Element,
+  component: boolean | undefined,
+  hasAttributes: boolean,
   covered?: (item: LoadedPartAction) => () => void,
 ) {
   const owner = getOwner();
@@ -726,7 +770,7 @@ function renderLayers(
 
   // A stage's owner lives outside the layer that requests it. Switching
   // between a wrapper and its fallback moves the stage without remounting it.
-  function stage(draw: (read: ReadOverride, attributes: AttributeLayers) => JSX.Element) {
+  function stage(draw: typeof render, remountOnAttributes = false) {
     let users = 0;
     let dispose: (() => void) | undefined;
     let output: JSX.Element;
@@ -757,8 +801,32 @@ function renderLayers(
                   ? current
                   : { input, attributes },
               );
-            const override = createMemo(() => readInput().input());
-            return draw(override, () => readInput().attributes());
+            const children = () => readInput().input();
+            const layers = () => readInput().attributes();
+            if (!remountOnAttributes) return draw(createMemo(children), layers);
+
+            // Keep the stage mounted as wrappers move it, except when Original
+            // starts or stops passing props. The plain component gets its own props.
+            const stageOwner = getOwner();
+            let disposeMount: (() => void) | undefined;
+            let decorated: boolean | undefined;
+            let drawn: JSX.Element;
+            onCleanup(() => disposeMount?.());
+            const current = createMemo(() => {
+              const forwarded = layers().length > 0;
+              if (forwarded !== decorated) {
+                disposeMount?.();
+                decorated = forwarded;
+                drawn = runWithOwner(stageOwner, () =>
+                  createRoot((cleanup) => {
+                    disposeMount = cleanup;
+                    return draw(children, layers, forwarded);
+                  }),
+                );
+              }
+              return drawn;
+            });
+            return <>{current()}</>;
           }),
         );
       }
@@ -769,9 +837,19 @@ function renderLayers(
   const top = layers.reduceRight(
     (next, item) =>
       stage((read, attributes) =>
-        renderLayer(registry, item, props, authored, next, read, attributes, covered),
+        renderLayer(
+          registry,
+          item,
+          props,
+          authored,
+          next,
+          read,
+          attributes,
+          component !== undefined,
+          covered,
+        ),
       ),
-    stage(render),
+    stage(render, component === true && !hasAttributes),
   );
   return top(noOverride, noAttributeLayers);
 }
@@ -784,6 +862,7 @@ function renderLayer(
   next: (read: ReadOverride, attributes: AttributeLayers) => JSX.Element,
   read: ReadOverride,
   attributes: AttributeLayers,
+  supportsAttributes: boolean,
   covered?: (item: LoadedPartAction) => () => void,
 ) {
   const target = item.action.target;
@@ -827,7 +906,12 @@ function renderLayer(
           claimed = false;
           claim?.[1](false);
         });
-        const forwarded: AttributeLayers = () => [...attributes(), { item, values: passed }];
+        const hasAttributes = Object.keys(passed).some((key) => key !== "children");
+        if (hasAttributes && !supportsAttributes) warnLegacyAttributes(registry, item);
+        const forwarded: AttributeLayers =
+          hasAttributes && supportsAttributes
+            ? () => [...attributes(), { item, values: passed }]
+            : attributes;
         if (!("children" in passed)) return next(read, forwarded);
         const children: LayerContents = {
           draw: () => <Outlet value={true}>{passed.children}</Outlet>,
