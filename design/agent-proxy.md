@@ -33,20 +33,22 @@ None.
 The plugin-only `registerSet` export stores an ordered list of subscriptions
 owned by the calling member and returns the set id. A caller can replace the
 list without changing the id. `removeSet` is plugin-only and owner-scoped;
-removing a set invalidates all its outstanding keys. The plugin-only `turnKey`
+removing a set prevents new keys and invalidates keys without a snapshot. The plugin-only `turnKey`
 gives the caller a fresh key and the set's address under
 `/plugins/agent-proxy/<set>` on the configured public origin. The proxy stores
-only a hash and accepts the key only for that set. Keys expire after eight
-hours. AI Profiles calls `endTurnKey` when a turn ends, including on stop or
-failure. It can end a key by the turn's random lease ID without keeping or
-passing the raw key after launch. A hard process loss can leave the key
-until its expiry.
+only a hash and accepts the key only for that set. Keys have a 15 minute idle
+window from issue or the last recorded request, and expire no later than eight
+hours after issue. The proxy records the first forwarded request and then at
+most one per minute. AI Profiles calls `endTurnKey` when a turn ends, including
+on stop or failure. It can end a key by the turn's random lease ID without
+keeping or passing the raw key after launch. If a process crashes, the idle
+deadline still applies.
 
 The proxy accepts only POST to `/v1/messages` and
 `/v1/messages/count_tokens`, and GET to `/v1/models` and `/v1/models/<id>`.
 Keys with a lease capture the enabled subscriptions and set order when issued.
-Edits affect the next lease; keys without a lease continue to use the current
-set. Each request skips deleted or signed-out accounts and accounts with an
+Edits and deletion affect future leases; keys without a lease continue to use
+the current set. Each request skips deleted or signed-out accounts and accounts with an
 active rate limit. It forwards with
 the subscription's OAuth headers, streams the answer, and records last use
 only on a 2xx response. An upstream 401 forces a renewal and allows one
@@ -60,8 +62,8 @@ the key.
 ## If you change X, check Y
 
 - Set or key lifetime: check [AI Profiles](ai-profiles.md) launch and cleanup.
-  Reordering or enabling a subscription only changes new keys; removing a
-  set revokes all keys for it.
+  Reordering, enabling or removing a set only changes future snapshots.
+  Keep both the snapshot path and the live-set path covered.
 
 - `SubscriptionView` or `SignInView` (`src/server/_functions.ts`): every field
   is drawn by ai-profiles' cards and dialog; the window tests there stand in for

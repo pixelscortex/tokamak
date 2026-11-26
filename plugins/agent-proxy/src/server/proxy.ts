@@ -136,6 +136,10 @@ export const proxy = httpAction({
         if (!current.ok) return { error: error(401, "authentication_error", current.error) };
         if (!current.accounts.some(({ id }) => id === candidate.id)) return null;
         if (request.signal.aborted) return { error: new Response(null, { status: 499 }) };
+        if (current.touch) {
+          const expired = await ctx.runMutation(internal.sets.touch, args);
+          if (expired) return { error: error(401, "authentication_error", expired) };
+        }
         await discard(response);
         response = await fetch(url, {
           method: request.method,

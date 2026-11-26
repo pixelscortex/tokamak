@@ -46,8 +46,11 @@ turn launcher sets `ANTHROPIC_BASE_URL` to the returned address
 (`<origin>/plugins/agent-proxy/<set>`) and `ANTHROPIC_AUTH_TOKEN` to the
 returned key. The client can also send the key as `x-api-key`. Call
 `endTurnKey` when the turn finishes or is cancelled. One key can authenticate
-multiple requests on its set during that turn; keys expire after eight hours
-even if the caller never ends them. Only their SHA-256 hashes are stored.
+multiple requests on its set during that turn. Keys expire after 15 minutes
+without activity and at most eight hours after issue. The first forwarded
+request and then at most one per minute reset the idle deadline. Only key hashes
+are stored. A key with a lease keeps its subscription snapshot if the set is
+deleted; a key without a lease requires the set to exist.
 
 Each request picks the first enabled Claude subscription in set order that
 has a signed-in account with a usable login. It tries the accounts in signup

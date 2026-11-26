@@ -74,6 +74,7 @@ export default defineSchema({
     subscriptions: v.optional(v.array(v.id("subscriptions"))),
     lease: v.optional(v.string()),
     expiresAt: v.number(),
+    lastAcceptedAt: v.optional(v.number()),
     ended: v.optional(v.boolean()),
   })
     .index("by_hash", ["hash"])

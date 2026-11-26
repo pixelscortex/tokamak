@@ -22,6 +22,7 @@ type References = {
     readonly "candidates": ReferenceFromDefinition<typeof import("../sets")["candidates"]>;
     readonly "issue": ReferenceFromDefinition<typeof import("../sets")["issue"]>;
     readonly "recordForward": ReferenceFromDefinition<typeof import("../sets")["recordForward"]>;
+    readonly "touch": ReferenceFromDefinition<typeof import("../sets")["touch"]>;
   };
   readonly "signins": {
     readonly "begin": ReferenceFromDefinition<typeof import("../signins")["begin"]>;
@@ -49,6 +50,7 @@ export const internal: References = createApi("agent-proxy", [
   "sets:candidates",
   "sets:issue",
   "sets:recordForward",
+  "sets:touch",
   "signins:begin",
   "signins:claimFinish",
   "signins:connect",

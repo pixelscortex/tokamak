@@ -1,4 +1,4 @@
-import { fail, pluginOnly, v, type Doc, type Id, type QueryContext } from "@tokamak/sdk";
+import { fail, pluginOnly, v, type Id, type QueryContext } from "@tokamak/sdk";
 import { internal } from "./_generated/internal";
 import {
   action,
@@ -16,6 +16,8 @@ const setId = v.string();
 const ownerId = v.string();
 const hashValue = v.string();
 const TURN_KEY_TTL_MS = 8 * 60 * 60_000;
+const TURN_KEY_IDLE_MS = 15 * 60_000;
+const TURN_KEY_TOUCH_MS = 60_000;
 
 export function turnKeyHash(key: string) {
   return /^[A-Za-z0-9_-]{43}$/.test(key) ? challenge(key) : null;
@@ -48,7 +50,7 @@ export const registerSet = pluginOnly(
   }),
 );
 
-/** Removing the set also makes every outstanding key for it unusable. */
+/** Removing a set prevents new keys. Leased keys keep their launch snapshot. */
 export const removeSet = pluginOnly(
   mutation({
     args: { set: setId },
@@ -139,41 +141,76 @@ export const issue = internalMutation({
   },
 });
 
-export const candidates = internalQuery({
-  args: { set: setId, hash: hashValue },
-  handler: async (ctx, { set, hash }) => {
-    const key = await ctx.db
-      .query("turnKeys")
-      .withIndex("by_hash", (q) => q.eq("hash", hash))
-      .first();
-    if (!key) return { ok: false as const, error: "Unknown turn key." };
-    if (key.set !== idIn("sets", set))
-      return { ok: false as const, error: "Turn key belongs to a different set." };
-    if (key.ended) return { ok: false as const, error: "Turn key has ended." };
-    const now = Date.now();
-    if (key.expiresAt <= now) return { ok: false as const, error: "Turn key has expired." };
-    const row = await ctx.db.get(key.set);
-    if (!row || row.owner !== key.owner) return { ok: false as const, error: "Turn key has no set." };
+async function validKey(
+  ctx: Pick<QueryContext<Model>, "db">,
+  { set, hash }: { set: string; hash: string },
+  now: number,
+) {
+  const key = await ctx.db
+    .query("turnKeys")
+    .withIndex("by_hash", (q) => q.eq("hash", hash))
+    .first();
+  if (!key) return { error: "Unknown turn key." };
+  if (key.set !== idIn("sets", set)) return { error: "Turn key belongs to a different set." };
+  if (key.ended) return { error: "Turn key has ended." };
+  const activeAt = key.lastAcceptedAt ?? key.expiresAt - TURN_KEY_TTL_MS;
+  if (key.expiresAt <= now || activeAt + TURN_KEY_IDLE_MS <= now) return { error: "Turn key has expired." };
+  return { key };
+}
 
-    const availability = await eligibleAccounts(ctx, row, now, key.subscriptions);
-    return { ok: true as const, owner: row.owner, ...availability };
+const keyArgs = { set: setId, hash: hashValue };
+
+export const candidates = internalQuery({
+  args: keyArgs,
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const result = await validKey(ctx, args, now);
+    if (!result.key) return { ok: false as const, error: result.error };
+    const { key } = result;
+    const snapshot = key.subscriptions;
+    let subscriptions = snapshot;
+    if (!subscriptions) {
+      const row = await ctx.db.get(key.set);
+      if (!row || row.owner !== key.owner) return { ok: false as const, error: "Turn key has no set." };
+      subscriptions = row.subscriptions;
+    }
+
+    const availability = await eligibleAccounts(ctx, key.owner, subscriptions, now, snapshot !== undefined);
+    return { ok: true as const, owner: key.owner, touch: needsTouch(key, now), ...availability };
+  },
+});
+
+// Persist the first use, then at most once a minute. Expiry uses the last durable touch.
+function needsTouch(key: { lastAcceptedAt?: number }, now: number) {
+  return key.lastAcceptedAt === undefined || now - key.lastAcceptedAt >= TURN_KEY_TOUCH_MS;
+}
+
+export const touch = internalMutation({
+  args: keyArgs,
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const result = await validKey(ctx, args, now);
+    if (!result.key) return result.error;
+    if (needsTouch(result.key, now)) await ctx.db.patch(result.key._id, { lastAcceptedAt: now });
+    return null;
   },
 });
 
 async function eligibleAccounts(
   ctx: QueryContext<Model>,
-  row: Doc<Model, "sets">,
+  owner: string,
+  subscriptions: readonly Id<"subscriptions">[],
   now: number,
-  snapshot?: readonly Id<"subscriptions">[],
+  snapshot: boolean,
 ) {
   const accounts = [];
   let earliestReset = 0;
-  for (const id of snapshot ?? row.subscriptions) {
+  for (const id of subscriptions) {
     const subscription = await ctx.db.get(id);
     if (
       !subscription ||
       (!snapshot && !subscription.enabled) ||
-      subscription.owner !== row.owner ||
+      subscription.owner !== owner ||
       subscription.company !== "anthropic"
     )
       continue;
@@ -182,7 +219,7 @@ async function eligibleAccounts(
       .withIndex("by_subscription", (q) => q.eq("subscription", id))
       .collect();
     for (const account of members) {
-      if (account.owner !== row.owner || account.status !== "ok") continue;
+      if (account.owner !== owner || account.status !== "ok") continue;
       const until = account.limitedUntil ?? 0;
       if (until <= now) accounts.push({ id: account._id, subscription: id });
       else earliestReset = earliestReset ? Math.min(earliestReset, until) : until;

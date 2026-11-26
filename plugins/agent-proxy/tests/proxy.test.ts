@@ -487,25 +487,61 @@ describe.skipIf(!available.length).each(available)("Claude proxy on the $name", 
     ).toEqual([`Bearer ${account.accessToken}`, `Bearer ${account.accessToken}`]);
   });
 
-  test("an expired key cannot admit a new request", async () => {
+  test("idle keys expire after a crash, activity extends a key, and age still caps it", async () => {
+    // Shorten the intervals in the installed fixture, including the write debounce.
+    const idle = 3_000;
+    const cap = 8_000;
     const expiring = await startWorkspace(build, fake.addresses, {
       turnCaller: true,
-      patches: [{ find: "TURN_KEY_TTL_MS = 8 * 60 * 60000", replace: "TURN_KEY_TTL_MS = 250" }],
+      patches: [
+        { find: "TURN_KEY_TTL_MS = 8 * 60 * 60000", replace: `TURN_KEY_TTL_MS = ${cap}` },
+        { find: "TURN_KEY_IDLE_MS = 15 * 60000", replace: `TURN_KEY_IDLE_MS = ${idle}` },
+        { find: "TURN_KEY_TOUCH_MS = 60000", replace: "TURN_KEY_TOUCH_MS = 100" },
+      ],
     });
     try {
       const caller = await expiring.owner();
-      const set = await caller.mutation(api.turns.register, { subscriptions: [] });
-      if ("failed" in set) throw new Error(set.kind);
-      const address = await caller.action(api.turns.key, set);
-      if ("failed" in address) throw new Error(address.kind);
-      await expect
-        .poll(async () => {
-          const response = await stream(address);
-          const body = await response.json();
-          return [response.status, body.error.message];
-        })
-        .toEqual([401, "Turn key has expired."]);
-      expect(expiring.output().includes(address.key)).toBe(false);
+      const { subscription } = await signIn("expiry", false, caller);
+      const registered = await caller.mutation(api.turns.register, { subscriptions: [subscription.id] });
+      if ("failed" in registered) throw new Error(registered.kind);
+      const { set } = registered;
+
+      async function issue() {
+        const address = await caller.action(api.turns.key, { set });
+        if ("failed" in address) throw new Error(address.kind);
+        secrets.push(address.key);
+        return address;
+      }
+      async function accepted(address: Address) {
+        const at = Date.now();
+        const response = await stream(address);
+        expect(response.status).toBe(200);
+        await response.text();
+        return at;
+      }
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      const unused = await issue();
+      const crashed = await issue();
+      const active = await issue();
+      const hardDeadline = Date.now() + cap;
+      await accepted(crashed);
+      const idleDeadline = Date.now() + idle;
+      let lastAccepted = await accepted(active);
+      async function keepActiveUntil(deadline: number) {
+        while (Date.now() < deadline) {
+          await wait(Math.min(500, deadline - Date.now()));
+          lastAccepted = await accepted(active);
+        }
+      }
+
+      await keepActiveUntil(idleDeadline);
+      await rejected(await stream(unused), 401, "Turn key has expired.");
+      await rejected(await stream(crashed), 401, "Turn key has expired.");
+      await keepActiveUntil(hardDeadline - idle / 2);
+      await wait(Math.max(0, hardDeadline - Date.now()));
+      await rejected(await stream(active), 401, "Turn key has expired.");
+      expect(Date.now() - lastAccepted).toBeLessThan(idle); // The hard cap, not idleness.
+      for (const { key } of [unused, crashed, active]) expect(expiring.output().includes(key)).toBe(false);
     } finally {
       await expiring.stop();
     }
