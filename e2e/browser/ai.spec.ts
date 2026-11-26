@@ -4,7 +4,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { connect } from "../fake-agent/harness.mjs";
-import { pickAgentOption } from "./agent-picker";
+import { agentChip, expectAgentOptions, pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 
 // ai on top of chat. A plain browser has no local part, so no agent can run
@@ -24,11 +24,10 @@ const ai = createApi<{
   };
 }>("ai", ["turns:active", "turns:list"]);
 
-/** Picks the fake agent and one of its replays (each replay is a model) in the agent row. */
+/** Picks one of the fake agent's replays (each replay is a model) in the agent picker. */
 async function pickReplay(page: Page, replay: string) {
-  await pickAgentOption(page, "Agent", "Fake agent");
-  await pickAgentOption(page, "Model", replay);
-  await expect(agentRow(page).getByRole("button", { name: replay })).toBeVisible();
+  await pickAgentOption(page, "Fake agent", replay);
+  await expect(agentChip(page)).toHaveAccessibleName(`Agent: Fake agent · ${replay}`);
 }
 
 /** Chooses a fresh folder under the desktop's home for the new thread; returns its path. */
@@ -55,11 +54,9 @@ test("the agent row names the agent and Send streams its reply into the thread",
   const page = await context.newPage();
   await page.goto("/");
   // Pick the agent and the replay by name: other fake agents and replays may be installed too.
-  await pickAgentOption(page, "Agent", "Fake agent");
+  await pickAgentOption(page, "Fake agent", "echo");
   await expect(page.getByRole("heading", { name: "What should Fake agent work on?" })).toBeVisible();
-  await pickAgentOption(page, "Model", "echo");
-  await expect(agentRow(page).getByRole("button", { name: "Fake agent" })).toBeVisible();
-  await expect(agentRow(page).getByRole("button", { name: "echo" })).toBeVisible();
+  await expect(agentChip(page)).toHaveAccessibleName("Agent: Fake agent · echo");
 
   const folder = join(home, `project-${crypto.randomUUID().slice(0, 8)}`);
   await mkdir(folder);
@@ -209,9 +206,9 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
     const page = await context.newPage();
     await page.goto("/");
     const selectReplay = async (name: string) => {
-      await pickAgentOption(page, "Model", name);
-      // The next Send and Queue read the stored choice from the server.
-      await expect(agentRow(page).getByRole("button", { name: `Model: ${name}`, exact: true })).toBeVisible();
+      // Resolves once checked: the next Send and Queue read the stored choice from the server.
+      await pickAgentOption(page, "Fake agent", name);
+      await expect(agentChip(page)).toHaveAccessibleName(`Agent: Fake agent · ${name}`);
     };
     const send = async (text: string, key = "Enter") => {
       await composer(page).fill(text);
@@ -219,7 +216,6 @@ test("Enter steers, Cmd+Enter queues in order, and Escape stops", async ({ brows
       await expect(composer(page)).toHaveValue("");
     };
 
-    await pickAgentOption(page, "Agent", "Fake agent");
     await selectReplay("steer");
     await send("Start here");
     await expect(conversation(page)).toContainText("Ready for steering.");
@@ -301,8 +297,7 @@ test("a reloaded window starts its queued turns when the old turn ends", async (
     });
     const page = await context.newPage();
     await page.goto("/");
-    await pickAgentOption(page, "Agent", "Fake agent");
-    await pickAgentOption(page, "Model", "echo");
+    await pickAgentOption(page, "Fake agent", "echo");
     const folder = join(desk.home, "reload");
     await mkdir(folder);
     await page.getByRole("button", { name: "Choose a folder…" }).click();
@@ -356,8 +351,7 @@ test("on Ask first the agent's question waits on the composer and each answer re
   const { home } = await asDesktop(context);
   const page = await context.newPage();
   await page.goto("/");
-  await pickAgentOption(page, "Agent", "Fake agent");
-  await pickAgentOption(page, "Model", "ask-once");
+  await pickAgentOption(page, "Fake agent", "ask-once");
   const card = page.getByRole("group", { name: "Permission question" });
   const replies = () => conversation(page).getByRole("article", { name: /^Fake agent at / });
   /** The turn has ended: Send is back in place of Stop (Enter during a turn would steer it). */
@@ -374,10 +368,8 @@ test("on Ask first the agent's question waits on the composer and each answer re
   /** A new thread in a fresh folder, switched to Ask first before its first Send. */
   async function askFirstThread() {
     // Every new thread starts on Full access.
-    await expect(agentRow(page).getByRole("button", { name: "Full access" })).toBeVisible();
-    await agentRow(page).getByRole("button", { name: "Full access" }).click();
-    await page.getByRole("menuitem", { name: "Ask first" }).click();
-    await expect(agentRow(page).getByRole("button", { name: "Ask first" })).toBeVisible();
+    await expectAgentOptions(page, { "Access level": "Full access" });
+    await pickAgentOption(page, "Access level", "Ask first");
     const folder = join(home, `project-${crypto.randomUUID().slice(0, 8)}`);
     await mkdir(folder);
     await page.getByRole("button", { name: "Choose a folder…" }).click();

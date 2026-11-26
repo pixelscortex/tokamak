@@ -2,6 +2,7 @@
 
 mod quit;
 mod runner;
+mod sign_in_return;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
@@ -12,6 +13,7 @@ fn main() {
             Ok(())
         })
         .manage(quit::Quit::default())
+        .manage(sign_in_return::Returns::default())
         .menu(quit::menu)
         .on_menu_event(|app, event| {
             if event.id() == quit::MENU_ID {
@@ -32,7 +34,10 @@ fn main() {
             quit::quit_listen,
             quit::quit_hold,
             quit::quit_cancel,
-            quit::quit_confirm
+            quit::quit_confirm,
+            sign_in_return::sign_in_return_listen,
+            sign_in_return::sign_in_return_cancel,
+            sign_in_return::sign_in_open_browser
         ])
         .build(tauri::generate_context!())
         .expect("Tauri application failed")

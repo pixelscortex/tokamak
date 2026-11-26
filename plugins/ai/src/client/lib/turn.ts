@@ -1,7 +1,7 @@
 import { isFailure, type TokamakClient } from "@tokamak/sdk";
 import { onSent, type Sent } from "plugin:chat/client";
 import { runLocalTurn } from "./local-turn";
-import { errorText } from "../../shared/turn-shared";
+import { errorText, hookRunnerUpdate } from "../../shared/turn-shared";
 import { connectMachine, connectedClient, machineNotice, notice, reasonLine, unavailable } from "./agents";
 import { threadChoices, toStored } from "./choices";
 import { guardQuit } from "./quit";
@@ -51,7 +51,7 @@ export async function startTurn(client: TokamakClient, sent: Sent): Promise<void
     } else if ("ended" in result && result.ended) notice.set(result.ended);
     else if ("hookNotice" in result && result.hookNotice) notice.set(result.hookNotice);
   } catch (cause) {
-    notice.set(`The turn could not run: ${errorText(cause)}`);
+    notice.set(hookRunnerUpdate(cause) ?? `The turn could not run: ${errorText(cause)}`);
   }
 }
 

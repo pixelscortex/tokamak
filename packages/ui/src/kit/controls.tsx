@@ -69,6 +69,16 @@ export function Buttons(): JSX.Element {
         <Button variant="outline" icon={icons.add} label="Add" size="lg" />
         <Caption>lg (48) matches a roomy row; use it only there.</Caption>
       </div>
+      <div class="flex items-center gap-3">
+        <Button variant="ghost" size="sm">
+          Sign in
+        </Button>
+        <Button size="sm" icon={icons.add}>
+          Add
+        </Button>
+        <Button variant="ghost" icon={icons.more} label="More" size="sm" />
+        <Caption>sm (24) for quiet actions in dense rows and dialogs.</Caption>
+      </div>
     </Section>
   );
 }

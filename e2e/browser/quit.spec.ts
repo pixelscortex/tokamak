@@ -5,6 +5,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { createApi, type FunctionReference } from "../../packages/sdk/src/index";
 import type { TurnView } from "../../plugins/ai/src/server/_functions";
 import { connect } from "../fake-agent/harness.mjs";
+import { pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 
 // Quitting the desktop app while an agent works: the window asks first. The
@@ -56,11 +57,8 @@ test("quitting while an agent works asks first; Cancel keeps it, Stop and quit l
     });
     const page = await context.newPage();
     await page.goto("/");
-    await agentRow(page).getByRole("button").first().click();
-    await page.getByRole("menuitem", { name: "Fake agent" }).click();
     // An agent that ignores Stop and has started a child and a grandchild that ignore signals too.
-    await agentRow(page).getByRole("button").nth(1).click();
-    await page.getByRole("menuitem", { name: "ignore-stop", exact: true }).click();
+    await pickAgentOption(page, "Fake agent", "ignore-stop");
     const folder = join(desk.home, `quit-${crypto.randomUUID().slice(0, 8)}`);
     await mkdir(folder);
     await page.getByRole("button", { name: "Choose a folder…" }).click();

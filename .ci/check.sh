@@ -88,7 +88,7 @@ case "$1" in
     ;;
   ts)
     proto run bun -- run typecheck
-    moon run sdk:test build:test runtime:test ui:test chat:test ai:test app:test app:web-build
+    moon run sdk:test build:test runtime:test ui:test chat:test ai:test agent-proxy:test ai-profiles:test app:test app:web-build
     proto run bun -- run --cwd plugins/code test
     proto run bun -- test ./.ci/*.test.ts
     ;;
@@ -130,7 +130,7 @@ case "$1" in
     time CI=1 cargo test --locked -p server \
       --test ai_threads --test ai_turns --test chat_threads --test claude_turns \
       --test codex_turns --test caller_actions --test runner_routing --test action_placement \
-      --test connected_runner --test plugin_machines
+      --test connected_runner --test plugin_machines --test http_actions
     # These suites use real deadlines and Git/hook timing. Run them only
     # after the other test binaries finish compiling and running.
     for suite in ai_liveness code_changes code_snapshots; do

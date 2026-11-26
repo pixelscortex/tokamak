@@ -20,7 +20,7 @@ type References = {
     readonly "pending": ReferenceFromDefinition<typeof import("../run")["pending"]>;
     readonly "steer": ReferenceFromDefinition<typeof import("../run")["steer"]>;
     readonly "stop": ReferenceFromDefinition<typeof import("../run")["stop"]>;
-    readonly "turn": ReferenceFromDefinition<typeof import("../run")["turn"]>;
+    readonly "turn": ReferenceFromDefinition<typeof import("../run")["turn"]> & { readonly points: {readonly "ended": import("@tokamak/sdk").PointReference<"action", { launchId: string; }, { launchId: string; }, "ai", "ai/run:turn#ended", true>;readonly "launch": import("@tokamak/sdk").PointReference<"action", { env: { [key: string]: string; }; args: (string)[]; request?: (undefined | { agentId: string; launchId: string; model?: (undefined | string); }); blocked?: (undefined | string); identity?: (undefined | string); provider?: (undefined | { baseUrl: string; keyEnv: string; key: string; }); }, { env: { [key: string]: string; }; args: (string)[]; request?: (undefined | { agentId: string; launchId: string; model?: (undefined | string); }); blocked?: (undefined | string); identity?: (undefined | string); provider?: (undefined | { baseUrl: string; keyEnv: string; key: string; }); }, "ai", "ai/run:turn#launch", true>;} };
   };
   readonly "threads": {
     readonly "statuses": ReferenceFromDefinition<typeof import("../threads")["statuses"]>;
@@ -97,4 +97,4 @@ export const api: References = createApi("ai", [
   "turns:write",
   "working:list",
   "working:stopAll",
-]);
+], {"run:turn":"action"}, {"run:turn":["ended","launch"]});

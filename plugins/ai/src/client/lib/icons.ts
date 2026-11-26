@@ -34,3 +34,11 @@ export const steerIcon =
 /** The lock before a permission question: the agent waits for you. */
 export const lockIcon =
   "M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z";
+
+// The agent picker's, from the Paper artboard "6 · Thread · picker open".
+/** The closed picker opens a popover: arrows up and down after its text. */
+export const expandIcon =
+  "M18.207 9.043L12 2.836L5.793 9.043L7.207 10.457L12 5.664L16.793 10.457L18.207 9.043ZM5.793 14.957L12 21.164L18.207 14.957L16.793 13.543L12 18.336L7.207 13.543L5.793 14.957Z";
+/** "Runs on": the computer whose local part runs the turn. */
+export const computerIcon =
+  "M4 5V16H20V5H4ZM2 4.007C2 3.451 2.455 3 2.992 3H21.008C21.556 3 22 3.449 22 4.007V18H2V4.007ZM1 19H23V21H1V19Z";

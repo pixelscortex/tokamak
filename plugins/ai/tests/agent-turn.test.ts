@@ -5,7 +5,7 @@ import type { Agent } from "../src/contracts";
 import { startAgent } from "../src/server/agent-turn";
 import { turnControl } from "../src/server/controls";
 
-function linkedTurn(turnId: string) {
+function linkedTurn(turnId: string, options: Partial<AgentTurnStart> = {}) {
   const input: AgentTurnStart = {
     threadId: "one-thread",
     turnId,
@@ -14,6 +14,7 @@ function linkedTurn(turnId: string) {
     access: "ask",
     prompt: "Go",
     history: [],
+    ...options,
   };
   const channel = Symbol.for("tokamak.contract.channel");
   let receive!: (method: string, args: JsonValue) => Promise<JsonValue>;
@@ -22,12 +23,11 @@ function linkedTurn(turnId: string) {
   const send = vi.fn(async (_method: string, _input: JsonValue) => null);
   const close = vi.fn(async () => {});
   const stopPrograms = vi.fn(async () => {});
-  const provider = {
-    [channel](_method: string, _args: unknown, onMessage: typeof receive) {
-      receive = onMessage;
-      return { result, send, close, stopPrograms };
-    },
-  } as unknown as Agent;
+  const open = vi.fn((_method: string, _args: unknown, onMessage: typeof receive) => {
+    receive = onMessage;
+    return { result, send, close, stopPrograms };
+  });
+  const provider = { [channel]: open } as unknown as Agent;
   const text = vi.fn();
   const ask = vi.fn(async () => "approve" as const);
   const reports = {
@@ -49,6 +49,7 @@ function linkedTurn(turnId: string) {
     control,
   );
   return {
+    open,
     send,
     close,
     stopPrograms,
@@ -66,6 +67,30 @@ function linkedTurn(turnId: string) {
     },
   };
 }
+
+test("launch settings get space in the start frame before earlier history", async () => {
+  const newest = { role: "user" as const, name: "Sam", text: "Keep this" };
+  const launchSettings = {
+    threadId: "thread",
+    identity: "a".repeat(64),
+    env: { TOKEN: "x".repeat(20_000) },
+    args: [],
+  };
+  const turn = linkedTurn("large-history", {
+    history: [{ ...newest, text: "x".repeat(1_020_000) }, newest],
+    launchSettings,
+  });
+  try {
+    const request = turn.open.mock.calls[0][1] as AgentTurnStart;
+    expect(request.launchSettings).toEqual(launchSettings);
+    expect(request.history).toEqual([
+      expect.objectContaining({ role: "note", text: expect.stringContaining("1 earlier message") }),
+      newest,
+    ]);
+  } finally {
+    await turn.end();
+  }
+});
 
 test("Force stop reaches the agent's programs after the result, during after work", async () => {
   const turn = linkedTurn("settled-agent");
