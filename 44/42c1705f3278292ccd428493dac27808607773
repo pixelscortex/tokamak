@@ -1,0 +1,61 @@
+packages/server/PLUGINS.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 75
+packages/build/tests/components.test.mjs
+  s_90a7b31543204c::t_eb7e6f835705d4 322-342
+  s_90a7b31543204c::t_4248b61abdaa6e 343
+plugins/ai/src/client/api.tsx
+  s_90a7b31543204c::t_bca1550a733d36 6,32-36
+packages/sdk/component-parts.tsx
+  s_90a7b31543204c::t_587bb0039845be 71,130,145,150-151,213-218,276-277,315,324,327,331,720-724
+  s_90a7b31543204c::t_5f5f2feef71bfe 87-89,102,107-109,122-128,152-153,157-184,187-189,231,235,238,244-246,248,250-257,260,266,269-271,273,282-283,285-287,298,301-304,371,405,703
+  s_90a7b31543204c::t_bca1550a733d36 142-144,146-147,717-719,725
+  s_90a7b31543204c::t_22c8a5a57c71bb 204-212
+  s_90a7b31543204c::t_fa510d8c11487a 6,219-223,229,274-275,280,305-309,325-326,328-330,332-337,382,385,390,402,404,406-408,684-685,726-737
+packages/sdk/tests/web/component-actions.test.tsx
+  s_90a7b31543204c::t_d5f9a1a2e8592e 825-865,957
+  s_90a7b31543204c::t_eb7e6f835705d4 1,866-930
+  s_90a7b31543204c::t_7be0d217990af3 497-498,500-507,560,562-563,780,790,814-819,823-824,931-956,958
+  s_90a7b31543204c::t_7d8ff5d3053f2e 959-999
+packages/runtime/PLUGINS.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 6-9
+packages/sdk/component-actions.ts
+  s_90a7b31543204c::t_bca1550a733d36 4,32
+wiki/content/docs/api/window.mdx
+  s_90a7b31543204c::t_4a62c11ac2e00e 53-58
+packages/build/README.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 154-159
+design/chat.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 34
+packages/sdk/README.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 726-731
+design/ai.md
+  s_90a7b31543204c::t_4a62c11ac2e00e 22,113
+packages/build/src/client-surface.ts
+  s_90a7b31543204c::t_6f6648a00dac4a 122-127
+  s_90a7b31543204c::t_22c8a5a57c71bb 25,30,93-114,116-118,120-121,130-133,135-142,144-146,149
+  s_90a7b31543204c::t_21e47c365d8195 115,119,128-129,134,143,147-148,150-156
+packages/build/src/component-parts.ts
+  s_90a7b31543204c::t_22c8a5a57c71bb 465-470
+  s_90a7b31543204c::t_b312daba7cc8ef 389,476-486,489-491,493,498,513
+  s_90a7b31543204c::t_bca1550a733d36 258-262
+  s_90a7b31543204c::t_0d6535bb12f184 263,385,388,397,471-475,517,529-534
+packages/sdk/client.tsx
+  s_90a7b31543204c::t_bca1550a733d36 86,89-94,131
+  s_90a7b31543204c::t_4c9df5d3a66184 333-337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4442c1705f3278292ccd428493dac27808607773",
+  "prompts": {},
+  "sessions": {
+    "s_90a7b31543204c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218ea-3b57-7d50-8381-f5a5cb8235ea",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
