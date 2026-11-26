@@ -1,0 +1,19 @@
+plugins/ai-profiles/src/client/ui/thread-profile.tsx
+  s_fe419e09314433::t_e60d925a40317e 115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dbfb0e1aa3d83b367da220e982c57bad022e7de1",
+  "prompts": {},
+  "sessions": {
+    "s_fe419e09314433": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21795-a478-75c2-942e-3280c380a539",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
