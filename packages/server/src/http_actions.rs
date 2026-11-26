@@ -60,10 +60,10 @@ pub(crate) fn router(
     listen: std::net::SocketAddr,
 ) -> io::Result<Router> {
     let config = Arc::new(config::Config::load()?);
-    let server_url = match &web {
-        Some(web) => web.public_origin.clone(),
-        None if cfg!(feature = "local-runtime") => Some(format!("http://{listen}")),
-        None => public_origin,
+    let server_url = if web.is_none() && cfg!(feature = "local-runtime") {
+        Some(format!("http://{listen}"))
+    } else {
+        public_origin
     };
     if server_url.is_none() {
         eprintln!(

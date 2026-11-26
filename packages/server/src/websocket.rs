@@ -235,7 +235,10 @@ async fn serve_inner(
         .clear_revoked_window_state(&identities)
         .await
         .map_err(io::Error::other)?;
-    let public_origin = crate::web::configured_public_url()?;
+    let public_origin = match &web {
+        Some(web) => web.public_origin.clone(),
+        None => crate::web::configured_public_url()?,
+    };
     server
         .machines()
         .configure(identities.clone(), public_origin.clone())?;

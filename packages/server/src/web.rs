@@ -30,9 +30,10 @@ impl HostedWeb {
             return Err("--web must contain a built index.html".into());
         }
         let public_origin = configured_public_url()?;
-        let origin = public_origin
-            .clone()
-            .unwrap_or_else(|| format!("http://{listen}"));
+        let origin = match &public_origin {
+            Some(origin) => origin.clone(),
+            None => parse_public_url(&format!("http://{listen}"))?,
+        };
         Ok(Some(Self {
             directory,
             public_origin,
@@ -47,13 +48,17 @@ pub(crate) fn configured_public_url() -> std::io::Result<Option<String>> {
         Err(std::env::VarError::NotPresent) => return Ok(None),
         Err(error) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, error)),
     };
+    parse_public_url(&public).map(Some)
+}
+
+fn parse_public_url(public: &str) -> std::io::Result<String> {
     let invalid = || {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "TOKAMAK_PUBLIC_URL must be an http(s) origin without a path or credentials",
         )
     };
-    let url = reqwest::Url::parse(&public).map_err(|_| invalid())?;
+    let url = reqwest::Url::parse(public).map_err(|_| invalid())?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -64,7 +69,7 @@ pub(crate) fn configured_public_url() -> std::io::Result<Option<String>> {
     {
         return Err(invalid());
     }
-    Ok(Some(url.origin().ascii_serialization()))
+    Ok(url.origin().ascii_serialization())
 }
 
 pub(crate) async fn shell(State(web): State<HostedWeb>, uri: Uri) -> Response {
