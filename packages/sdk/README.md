@@ -716,8 +716,8 @@ receive the owning render function's props, plus `$row.item` and
 as `$row.parent`. Use a literal name, and add `{ in: "Header" }` or a
 1-based `nth` if a name matches several elements. The window keeps the
 original match on owner updates when possible and follows a unique named
-match that has moved. It skips missing or ambiguous targets and positional
-targets that changed. See the [builder guide](../build/README.md#extending-a-screen)
+match that has moved. It skips missing or ambiguous targets, and an `nth`
+target whose position another element took. See the [builder guide](../build/README.md#extending-a-screen)
 for the naming rules.
 
 ## Caller identity

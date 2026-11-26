@@ -127,7 +127,7 @@ Build the owner plugin to publish a typed `find` on its public client API.
 Searches look at that plugin's authored JSX, including UI it contributes to
 other plugins. Each element is named by its nonempty static `data-part`,
 then its static `id`, then its tag or component name (such as `Menu.Item`).
-A bare `data-part-ignore` excludes an element and its descendants.
+`data-part-ignore` excludes an element and its descendants.
 
 If a name has several matches, narrow it with `in` to an enclosing render
 function or element. Solid control flow and fragments are transparent.
@@ -162,9 +162,10 @@ An add-on's manifest records both the search and the element selected at
 build time. When the owner changes, a search keeps its original match if
 possible, or follows the only remaining match. If a search cannot be
 resolved, the owner's build warns with the add-on ID and the window skips
-the placement and raises an alert. Positional targets (`nth` and elements
-with positional fingerprints) are skipped when their position or identity
-changes. Give a target a stable `data-part` to avoid relying on position.
+the placement and raises an alert. A search with `nth` stays on the element
+it found: when the owner's change puts another element at that position, the
+placement is skipped, never moved. Give a target a `data-part` to avoid
+relying on position.
 
 A positional segment hashes the tag, the attributes `role`, `type`, `name`,
 `for` and `href` (each by its static string value or as "an expression"),
@@ -172,8 +173,9 @@ and any `aria-*` attribute that has a static string value. It ignores every
 other attribute, including `class`, `style`, `data-*`, computed `aria-*`,
 event handlers, `ref`, spread attributes, and the source text of
 expressions. If two positional siblings
-still have the same identity, the add-on build warns that the target is
-ambiguous and asks the owner for a `data-part` or `id`.
+still have the same identity, a swap of the two cannot be seen; an add-on
+build that picks one of them with `nth` warns that the target is ambiguous
+and asks the owner for a `data-part` or `id`.
 
 ### Contract registrations
 

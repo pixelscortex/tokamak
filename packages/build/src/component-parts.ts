@@ -105,13 +105,11 @@ function assignParts(
     let fingerprint = inherited;
     let uncertain = ambiguous;
     if (positional) {
-      let identity = identities.get(child)!;
-      // If attributes cannot distinguish siblings, include authored markup so
-      // moving two distinct instances into each other's slot is detectable.
-      if (times.get(name + ":" + identity)! > 1) {
-        uncertain = true;
-        identity += ":" + node.getText();
-      }
+      const identity = identities.get(child)!;
+      // Siblings their attributes cannot tell apart: a swap goes unnoticed, so
+      // the add-on's build asks for a name. Their contents stay out of the
+      // fingerprint, or every edit inside would read as a move.
+      uncertain ||= times.get(name + ":" + identity)! > 1;
       fingerprint = createHash("sha256")
         .update(JSON.stringify([inherited, identity]))
         .digest("base64url")
@@ -252,10 +250,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         const opening = ts.isJsxElement(node) ? node.openingElement : node;
         if (
           opening.attributes.properties.some(
-            (attribute) =>
-              ts.isJsxAttribute(attribute) &&
-              attribute.name.getText() === "data-part-ignore" &&
-              !attribute.initializer,
+            (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText() === "data-part-ignore",
           )
         )
           return;

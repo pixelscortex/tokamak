@@ -75,20 +75,24 @@ export function resolveScreenSearch(
   const named = elements.filter((element) => element.name === name);
   const scoped = within === undefined ? named : named.filter((element) => element.ancestors.includes(within));
   const matches = nth === undefined ? scoped : scoped.slice(nth - 1, nth);
-  const guarded = !!previous && (previous.fingerprint !== undefined || nth !== undefined);
+  // A name says which element is meant, so a search without `nth` follows it
+  // wherever the owner moves it. Only a position can come to mean another
+  // element: an `nth` search stays on the element it found, or is skipped.
+  const pinned = !!previous && nth !== undefined;
   const retained =
     previous &&
     matches.find(
       (element) =>
-        element.target === previous.target && (!guarded || previous.fingerprint === element.fingerprint),
+        element.target === previous.target &&
+        (!pinned || !previous.fingerprint || previous.fingerprint === element.fingerprint),
     );
   if (retained) return { element: retained };
-  if (!guarded && matches.length === 1) return { element: matches[0]! };
+  if (!pinned && matches.length === 1) return { element: matches[0]! };
 
   const issue =
     matches.length === 0
       ? "matches no elements"
-      : guarded
+      : pinned
         ? "targets a different element"
         : "matches several elements";
   return { reason: searchProblem(search, issue, scoped.length ? scoped : named) };

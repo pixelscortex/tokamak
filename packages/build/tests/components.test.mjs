@@ -128,7 +128,7 @@ test("ignored subtrees stay as JSX and cannot be found", async () => {
       "owner",
       `
       export const Panel = () => (
-        <section><div data-part-ignore data-part="ignored"><span data-part="secret" /></div><p id="visible" /><p id="$2" /></section>
+        <section><div data-part-ignore data-part="ignored"><span data-part="secret" /></div><div data-part-ignore=""><span data-part="hidden" /></div><p id="visible" /><p id="$2" /></section>
       );
     `,
     );
@@ -136,7 +136,7 @@ test("ignored subtrees stay as JSX and cannot be found", async () => {
     const types = await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8");
     const bundle = await readFile(resolve(owner, "dist/ui.js"), "utf8");
     expect(types).toMatch(/["]?visible["]?:/);
-    expect(types).not.toMatch(/ignored|secret|declare const parts/);
+    expect(types).not.toMatch(/ignored|secret|hidden|declare const parts/);
     expect(bundle).toContain("data-part");
     expect(bundle).not.toMatch(/Panel\.section\.ignored|export\s*\{[^}]*\bas parts\b/);
     const addon = await source(
@@ -172,31 +172,69 @@ test("two replacements of the same resolved element fail the build", async () =>
   });
 }, 30_000);
 
-test("a named part inherits position protection without mistaking ordinary edits for a move", async () => {
+test("a search by a unique name follows the element when the owner edits or moves things around it", async () => {
   await scratch(async (root) => {
     const original = `
       export function Message() {
-        return <section><nav role="a"><p data-part="x"/></nav><nav role="b"><p data-part="y"/></nav></section>;
+        return <section><div><p data-part="x">a</p></div><div><p data-part="y">b</p></div></section>;
       }
     `;
     const owner = await source(root, "owner", original);
     built(owner);
-    built(await source(root, "addon", imports + 'export const Inside = append(owner.find("y"), () => "y");'));
+    const addon = build(
+      await source(root, "addon", imports + 'export const Inside = append(owner.find("y"), () => "y");'),
+    );
+    expect(addon.status, addon.stderr).toBe(0);
+    // A name needs no position, so the add-on is not asked to get one from the owner.
+    expect(addon.stderr).not.toContain("ambiguous positional target");
 
     const entry = resolve(owner, "src/main.tsx");
-    await writeFile(entry, original.replace('<nav role="b">', '<nav role="b" title="b" aria-busy={false}>'));
-    const edited = build(owner);
-    expect(edited.status, edited.stderr).toBe(0);
-    expect(edited.stderr).not.toContain('Plugin "addon"');
-
-    await writeFile(entry, original.replace('<nav role="b">', '<nav role="c"/><nav role="b">'));
-    const shifted = build(owner);
-    expect(shifted.status, shifted.stderr).toBe(0);
-    expect(shifted.stderr).toContain('Plugin "addon": find("y") targets a different element');
+    const edits = [
+      original.replace(">b<", ">b changed<"),
+      original.replace('<p data-part="y">b</p>', '<span><p data-part="y">b</p></span>'),
+      original.replace("<section><div>", "<section><div /><div>"),
+    ];
+    for (const edit of edits) {
+      await writeFile(entry, edit);
+      const edited = build(owner);
+      expect(edited.status, edited.stderr).toBe(0);
+      expect(edited.stderr).not.toContain('Plugin "addon"');
+    }
   });
 }, 30_000);
 
-test("same-named siblings preserve source order and detect a reorder even without identifying attributes", async () => {
+test("a search by position stays on its element, and is skipped when another element takes the position", async () => {
+  await scratch(async (root) => {
+    const original = `
+      export const B = () => <header><h2 data-part="title">B</h2></header>;
+      export const C = () => <section><footer><h2 data-part="title">C</h2></footer></section>;
+    `;
+    const owner = await source(root, "owner", original);
+    built(owner);
+    built(
+      await source(
+        root,
+        "addon",
+        imports + 'export const Note = after(owner.find("title", { nth: 2 }), () => "n");',
+      ),
+    );
+
+    const entry = resolve(owner, "src/main.tsx");
+    // A new sibling makes the footer positional; the title is still the second match at the same place.
+    await writeFile(entry, original.replace("</footer>", "</footer><footer />"));
+    const kept = build(owner);
+    expect(kept.status, kept.stderr).toBe(0);
+    expect(kept.stderr).not.toContain('Plugin "addon"');
+
+    // An earlier match pushes another element into second place.
+    await writeFile(entry, `export const A = () => <h2 data-part="title">A</h2>;` + original);
+    const shifted = build(owner);
+    expect(shifted.status, shifted.stderr).toBe(0);
+    expect(shifted.stderr).toContain('Plugin "addon": find("title", { nth: 2 }) targets a different element');
+  });
+}, 30_000);
+
+test("siblings that only a position tells apart ask for a name, and an edit inside one is not a move", async () => {
   await scratch(async (root) => {
     const original =
       'export const Panel = () => <section><p data-part="2">First</p><p data-part="2">Second</p></section>;';
@@ -207,18 +245,17 @@ test("same-named siblings preserve source order and detect a reorder even withou
       "addon",
       imports + 'export const Note = after(owner.find("2", { nth: 1 }), () => "note");',
     );
-    built(addon);
+    const first = build(addon);
+    expect(first.status, first.stderr).toBe(0);
+    expect(first.stderr).toContain("ambiguous positional target; ask the owner for a data-part or id");
     expect((await manifest(addon)).plugin.contributes["component-action"][0]).toMatchObject({
       target: "owner.Panel.section.2",
       fingerprint: expect.any(String),
     });
-    await writeFile(
-      resolve(owner, "src/main.tsx"),
-      original.replace("First", "TEMP").replace("Second", "First").replace("TEMP", "Second"),
-    );
-    const shifted = build(owner);
-    expect(shifted.status, shifted.stderr).toBe(0);
-    expect(shifted.stderr).toContain('Plugin "addon": find("2", { nth: 1 }) targets a different element');
+    await writeFile(resolve(owner, "src/main.tsx"), original.replace("First", "First, edited"));
+    const edited = build(owner);
+    expect(edited.status, edited.stderr).toBe(0);
+    expect(edited.stderr).not.toContain('Plugin "addon"');
   });
 }, 30_000);
 

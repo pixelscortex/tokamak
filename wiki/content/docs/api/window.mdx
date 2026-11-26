@@ -11,7 +11,7 @@ and actions from your plugin's `src/client/api.tsx` so the build can discover th
 `view` gives a page a literal route and can supply its title and icon.
 The build publishes a typed `find` function for a plugin's JSX elements.
 Names come from a static `data-part`, then a static `id`, then the component
-or tag name. A bare `data-part-ignore` excludes a subtree.
+or tag name. `data-part-ignore` excludes a subtree.
 
 ```tsx
 import { view } from "@tokamak/sdk/client";

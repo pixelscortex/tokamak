@@ -84,7 +84,8 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
           const cuts = edits.get(file.fileName) ?? [];
           cuts.push([node.getStart(), node.end, `(${JSON.stringify({ target })})`]);
           edits.set(file.fileName, cuts);
-          if (result.ambiguous)
+          // Only a search by position depends on telling the siblings apart.
+          if (result.ambiguous && search.nth !== undefined)
             warn(
               `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
             );
