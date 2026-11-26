@@ -1,0 +1,58 @@
+plugins/codex/src/server/turn.ts
+  s_4394c86410813a::t_135d3e2fbf4207 19-24,53
+plugins/claude/src/server/wire.ts
+  s_4394c86410813a::t_135d3e2fbf4207 103-108,111,137-141
+  s_4394c86410813a::t_54280337e222e5 142-143
+plugins/ai/src/server/run.ts
+  s_4394c86410813a::t_31c12564c6efd2 104-111,200
+  s_4394c86410813a::t_c7b825988bf2d2 15,81-82,85,92-103,118,127-129,169,186,208-209
+  s_4394c86410813a::t_3ea68f512eae5f 3,226
+  s_4394c86410813a::t_b4346c752322ea 80,86-91,198-199,201,204-205,210,264-303
+  s_0669b2ba766ce6::t_cd8acbc2005834 304
+plugins/codex/src/server/agent.ts
+  s_4394c86410813a::t_d6e50ef9985ed2 31,33-38
+  s_4394c86410813a::t_22233c9fd7a536 32
+  s_4394c86410813a::t_135d3e2fbf4207 40
+  s_0669b2ba766ce6::t_2493ec73f45e0c 6
+plugins/claude/src/server/agent.ts
+  s_4394c86410813a::t_d6e50ef9985ed2 132,137-140,142
+  s_4394c86410813a::t_135d3e2fbf4207 133,144
+  s_4394c86410813a::t_22233c9fd7a536 141
+  s_0669b2ba766ce6::t_f926742d999f86 6
+design/ai.md
+  s_4394c86410813a::t_56d67d867a4a03 33-36
+plugins/claude/src/server/turn.ts
+  s_4394c86410813a::t_b4346c752322ea 48-52
+  s_4394c86410813a::t_135d3e2fbf4207 53,70,82,85,131
+  s_4394c86410813a::t_54280337e222e5 24-25
+plugins/ai/src/contracts.ts
+  s_4394c86410813a::t_c7b825988bf2d2 9
+plugins/codex/src/server/rpc.ts
+  s_4394c86410813a::t_135d3e2fbf4207 29-33,36-38
+plugins/ai/src/server/api.ts
+  s_4394c86410813a::t_1d083039515005 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b35a1edf7f9ad6af7dc6a582ab9bc94b34723168",
+  "prompts": {},
+  "sessions": {
+    "s_0669b2ba766ce6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-4307-74b3-958e-15d99f1d9472",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
+    "s_4394c86410813a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21758-2ad3-74e3-b933-e71855112b5c",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
