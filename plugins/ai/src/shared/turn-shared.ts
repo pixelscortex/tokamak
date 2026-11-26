@@ -33,3 +33,9 @@ export function sameSender(
 export function errorText(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
 }
+
+/** An older caller can reject a point hook before the turn action starts. */
+export function hookRunnerUpdate(cause: unknown): string | undefined {
+  if (typeof cause === "object" && cause && "kind" in cause && cause.kind === "hookRunnerUnavailable")
+    return "Update Tokamak on this computer to send turns. A plugin that hooks this turn needs a newer version.";
+}

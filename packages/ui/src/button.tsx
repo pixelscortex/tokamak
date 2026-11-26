@@ -8,6 +8,9 @@
   actions. An icon-only button needs a label; it becomes its name.
   quiet: ink text on a soft fill that strengthens on hover, for notice actions.
   bare: colour-only hover for chrome icons, with a 12 px glyph in the usual target.
+
+  size: md (32) is the default. sm (24) is for quiet actions in dense rows and
+  dialogs, with 12 px text and a 14 px icon. lg (48) only matches a roomy row.
 */
 import { Button as Base } from "@ui-sdk/solid/button";
 import { omit } from "solid-js";
@@ -43,10 +46,11 @@ export const buttonVariants = tv({
       quiet: "bg-edge/50 text-ink hover:bg-edge",
       bare: "text-ink-3 transition-none hover:text-ink",
     },
-    size: { md: "h-8 px-3", lg: "h-12 px-4" },
+    size: { sm: "h-6 px-2 gap-1 text-label", md: "h-8 px-3", lg: "h-12 px-4" },
     iconOnly: { true: "px-0" },
   },
   compoundVariants: [
+    { iconOnly: true, size: "sm", class: "w-6" },
     { iconOnly: true, size: "md", class: "w-8" },
     { iconOnly: true, size: "lg", class: "w-12" },
     { iconOnly: true, variant: "ghost", class: "text-ink-3" },
@@ -55,7 +59,7 @@ export const buttonVariants = tv({
 });
 
 export type ButtonVariant = "brand" | "primary" | "outline" | "destructive" | "ghost" | "quiet" | "bare";
-export type ButtonSize = "md" | "lg";
+export type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonLook = { variant?: ButtonVariant; size?: ButtonSize; class?: string } & (
   | {
@@ -80,7 +84,9 @@ export function buttonClass(props: ButtonLook): string {
 export function ButtonContent(props: ButtonLook): JSX.Element {
   return (
     <>
-      {props.icon && <Icon path={props.icon} size={props.variant === "bare" ? 12 : undefined} />}
+      {props.icon && (
+        <Icon path={props.icon} size={props.variant === "bare" ? 12 : props.size === "sm" ? 14 : undefined} />
+      )}
       {/* Beside the text, never inside it: the text is trimmed to its cap height to sit dead
           centre, and a mark inside that line moves the line's baseline to the mark's bottom edge. */}
       {props.lead}

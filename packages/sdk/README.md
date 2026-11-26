@@ -324,6 +324,83 @@ process. This includes calls to stubbed modules such as `node:path`,
 `node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their
 bindings inside the handler so the server bundle can load independently.
 
+## HTTP actions
+
+Export an `httpAction` from the plugin's server part to answer requests from
+programs outside Tokamak. Its path is relative to `/plugins/<plugin-id>`.
+
+```ts
+import type {} from "@tokamak/sdk/web";
+import { httpAction } from "@tokamak/sdk";
+
+export const proxy = httpAction({
+  path: "/:profile/*",
+  handler: async (ctx, request) => {
+    if (!checkKey(request.headers.get("x-api-key"))) {
+      return new Response(null, { status: 401 });
+    }
+    const target = upstreamUrl(ctx.params.profile, ctx.params["*"]);
+    return fetch(target, { signal: request.signal });
+  },
+});
+```
+
+For example, `POST /plugins/my-proxy/ACME/v1/messages?format=sse` sets
+`ctx.path` to `/ACME/v1/messages`, with `ctx.params.profile` equal to `ACME`
+and `ctx.params["*"]` equal to `v1/messages`. Use a literal path; `:name`
+captures one segment and a final `*` captures the remainder. Literal segments
+take precedence over parameters, and parameters over the wildcard.
+The core routes `/plugins/<id>/<revision>/assets/<name...>` and
+`/plugins/<id>/reload` take precedence over HTTP actions. Dot segments,
+including percent-encoded dots, and encoded slash or backslash are rejected.
+There is no member sign-in: check the caller in the handler before doing work.
+Functions called through the handler receive no member or device. A function
+that requires a signed-in member refuses the call as it would any anonymous call.
+`OPTIONS` reaches the handler; the plugin is responsible for CORS answers.
+
+`ctx.serverUrl` is the bound loopback origin in the Runner. Set
+`TOKAMAK_PUBLIC_URL` to the CLI-reachable origin in the Server. If it is unset,
+the Server logs a startup warning and reading `ctx.serverUrl` throws.
+The request's Host header is never used to derive the origin.
+
+Use `ctx.runQuery(ref, args)`, `ctx.runMutation(ref, args)`, and
+`ctx.runAction(ref, args)` with the same typed references as a server action.
+The handler can call its own plugin's `_generated/api`, `_generated/internal`,
+and `_generated/plugin` functions. Each call starts at depth zero; calls made
+from those functions increase depth as usual. The handler has no `ctx.db`;
+each query or mutation runs in its own transaction. `ctx.runAction` accepts the
+usual optional placement argument. A placement that needs the member's
+Runner returns `noMachine` because the request has no member.
+
+Use `await ctx.env("NAME")` to read a value from the server environment or the
+installation's `.env.local`. Declare `env:NAME` in the plugin's permissions.
+An unset value returns `null`; an undeclared name rejects.
+
+The `Request` provides the method, URL (including query), headers and body
+using the same [web API subset](../engine/WEB_APIS.md) as `fetch`. Uploads are
+buffered up to 32 MiB and must finish within 30 seconds. The server gives
+request headers 10 seconds. It removes Host, Content-Length and hop-by-hop
+headers before handing the request to the plugin. The original Host is
+available as `ctx.originalHost` and is untrusted. Duplicate headers are joined
+by the web Headers implementation; the server drops response `Set-Cookie`.
+
+Outbound requests require the usual `net:<hostname>` permission. Each
+outbound `fetch` from a fresh host performs its own DNS lookup and, for HTTPS,
+TLS handshake. Return the upstream `Response` directly to stream its body
+with backpressure.
+
+HTTP actions run in a separate plugin host process per request on macOS and
+Linux. `TOKAMAK_HTTP_PLUGIN_SLOTS` (default 32) and
+`TOKAMAK_HTTP_TOTAL_SLOTS` (default 96) cap concurrent hosts. After reading the
+upload, the server waits up to 250 ms for a slot and replies with
+`503 Retry-After: 1` if none becomes available. The time to response headers
+is bounded by `TOKAMAK_HTTP_FIRST_HEADERS_MS` (default 300000); the normal action
+wall deadline does not apply to the response stream. On disconnect or server
+shutdown, the host aborts `request.signal` and has up to 500 ms for cleanup
+before it is killed. A disconnect does not roll back a mutation that already
+started. The HTTP route itself has no generated function reference and cannot
+be hooked, exported to windows, or provided as a contract method.
+
 ## Internal functions and expected failures
 
 Use `internalQuery`, `internalMutation` or `internalAction` for a function only
@@ -874,6 +951,21 @@ manager settles a turn, Force stop can also kill groups left by a completed
 needs a session file the CLI is still writing. Agent authors
 do not implement the message transport.
 
+`Run.launchSettings`, when present, holds the environment, arguments, and
+optional OpenAI-compatible Responses provider (`{ baseUrl, keyEnv, key }`) for
+that start. Only one hook may supply the provider. Its values stay in the
+caller; don't log or report them. The
+caller-only `withAgentLaunch` helper from `@tokamak/sdk/agent-launch` gives
+Claude or Codex a private CLI home under the Runner's data folder. It is
+shared only by turns of the same thread, agent, and set of contributing
+plugins, even when the hook values change. The Runner that deletes the thread
+cleans up its homes. The helper removes inherited CLI-specific environment
+variables before adding the hook's variables. Providers still load project
+settings, check the CLI version in the isolated environment, and wait for it
+to finish writing its session. Claude requires an explicit Anthropic key or
+token; Codex uses file storage for credentials. Hook arguments come before
+Tokamak's flags and cannot override them. AI redacts launch values from errors.
+
 The adapter in `packages/sdk/worker/contracts.ts` special-cases
 `owner === "ai" && name === "agent" && method === "start"` to build that
 `Run`. The Runner's linked call transport is general and does not inspect
@@ -1027,6 +1119,13 @@ The first form lets `before` hooks change the value. A value point cannot have
 an `after` hook. In the second form, `before` hooks change the input, the owner
 runs its callback in its own process, and `after(ctx, result, input)` hooks can
 change the result. `input` in an after hook is the input the callback received.
+
+Use `ctx.point("launch", initial, { collect: true })` for a value point whose
+owner needs to combine contributions. Each `before` hook receives the same
+initial value. The point returns a list of `{ plugin, value }` entries, one
+per hook, with the plugin ID supplied by the host. Without hooks it returns
+an empty list. Order across plugins is unspecified. Update both server and
+Runner for a hooked point using this option.
 
 The generated API puts each point under the function it belongs to. For example,
 a plugin that depends on `ai` could hook a point named `launch` on its exported

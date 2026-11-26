@@ -1,5 +1,6 @@
 import {
   AGENT_TURN_PROTOCOL,
+  agentTurnHistory,
   checkedHelper,
   checkedTasks,
   checkedText,
@@ -40,12 +41,15 @@ export function startAgent(
   control: Control,
 ) {
   const { threadId, turnId } = request;
+  // The server budgets the history without seeing the caller's launch settings.
+  const history = request.launchSettings ? agentTurnHistory(request) : request.history;
+  if (!history) throw new Error("The prompt and launch settings do not fit in the agent turn.");
   const address: TurnAddress = { threadId, turnId };
   let accepting = true;
   const channel = openLocalChannel(
     provider,
     "start",
-    { ...request, version: AGENT_TURN_PROTOCOL },
+    { ...request, history, version: AGENT_TURN_PROTOCOL },
     async (method, value) => {
       const target = value as unknown as TurnAddress;
       if (!accepting || target?.threadId !== threadId || target.turnId !== turnId)

@@ -77,6 +77,14 @@ part's sign of life and answers a quit.
 frame reads `views()` for the rail, tabs and search. See
 [src/plugins/README.md](src/plugins/README.md) for loader lifetime details.
 
+The desktop shell can open a subscription sign-in in the system browser and
+listen once on loopback for its return address. Profiles passes the address
+through the same server call as a manual paste, even after the dialog closes
+if the Profiles page stays open. A plain browser still uses the paste field.
+Every installed plugin's code in the main window can use all three commands
+to open any HTTPS page, listen on either allowed loopback port, and replace
+another listener there.
+
 ## Checks and builds
 
 From the root:

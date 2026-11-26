@@ -46,6 +46,12 @@ type Containment = Group;
 
 /// Bound protocol messages before buffering untrusted worker output.
 pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
+
+// HTTP action stdout mixes response bytes and control frames; stdin carries
+// length-prefixed operation replies after the request body.
+pub const HTTP_ACTION_OP_PACKET: u32 = 1 << 31;
+pub const HTTP_ACTION_LOG_PACKET: u32 = 1 << 30;
+pub const HTTP_ACTION_OP_CAPACITY: usize = 32;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
 

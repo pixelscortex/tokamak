@@ -1,4 +1,4 @@
-import { v, type DatabaseReader, type Id, type MutationContext } from "@tokamak/sdk";
+import { v, type DatabaseReader, type ArgsOf, type Id, type MutationContext } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import { isSendersDevice, sameSender } from "../shared/turn-shared";
 import { BEAT_MS, CLOSED, RELOADED, SILENCE_MS } from "../shared/turn-timing";
@@ -154,7 +154,7 @@ async function lastHeard(db: DatabaseReader<Model>, turn: Turn) {
 async function interrupt(ctx: MutationContext<Model>, turn: Turn, now: number, reason = CLOSED) {
   if (turn.replyId && turn.replyToken)
     await ctx.use(chat).writeReply({
-      messageId: turn.replyId as Id<"messages">,
+      messageId: turn.replyId as ArgsOf<typeof chat.writeReply>["messageId"],
       token: turn.replyToken,
       done: true,
       outcome: "interrupted",
@@ -203,7 +203,10 @@ async function settleStrandedQueue(
   if (Math.max(head.startedAt, lastEnded) > cutoff) return;
   for (const turn of queue) {
     if (!sameSender(turn, head)) continue;
-    await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages">, error: CLOSED });
+    await ctx.use(chat).deliverMessage({
+      messageId: turn.messageId as ArgsOf<typeof chat.writeReply>["messageId"],
+      error: CLOSED,
+    });
     await ctx.db.patch(turn._id, { state: "interrupted", error: CLOSED, finishedAt: now });
   }
 }

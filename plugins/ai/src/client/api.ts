@@ -59,3 +59,5 @@ export const ThreadWork = append(chat.find("detail"), ThreadDetail, {
 export const Helpers = after(chat.find("detail"), ThreadHelpers, {
   when: (row) => isWorking(statusOf(row.thread._id)) && (statusOf(row.thread._id)?.helpers.length ?? 0) > 0,
 });
+
+export { hasLiveThreadDetail, SavedAgentDetail } from "./ui/thread-status";

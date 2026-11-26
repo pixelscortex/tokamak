@@ -177,17 +177,20 @@ export function discoverPoints(files, checker, definitions, warn = () => {}) {
 function pointTypes(checker, call, name, error, warn) {
   const signature = checker.getResolvedSignature(call);
   if (![2, 3].includes(call.arguments.length) || !signature?.parameters[1])
-    error("A point takes a name, data, and an optional callback.");
+    error("A point takes a name, data, and an optional callback or { collect: true }.");
   const input = checker.getTypeOfSymbolAtLocation(signature.parameters[1], call);
   const invalid = () => error(`Point "${name}" requires plain data; describe it as data, or use \`after\`.`);
   let result;
   if (call.arguments.length === 3) {
-    const callback =
+    const option =
       signature.parameters[2] && checker.getTypeOfSymbolAtLocation(signature.parameters[2], call);
-    const run = callback?.getCallSignatures()[0];
-    if (!run) invalid();
-    result = checker.getAwaitedType(checker.getReturnTypeOfSignature(run));
-    if (!result) invalid();
+    const run = option?.getCallSignatures()[0];
+    if (run) {
+      result = checker.getAwaitedType(checker.getReturnTypeOfSignature(run));
+      if (!result) invalid();
+    } else if (!option?.getProperty("collect")) {
+      invalid();
+    }
   }
   let empty = false;
   const emptyLiteral = () => {

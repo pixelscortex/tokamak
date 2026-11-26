@@ -660,3 +660,29 @@ test("value points do not accept an after hook", async () => {
     );
   });
 }, 30_000);
+
+test("the build rejects ambiguous and fully shadowed HTTP action routes", async () => {
+  await scratch(async (root) => {
+    const path = await backend(root, "http-routes");
+    for (const [routes, diagnostic] of [
+      [["/:a", "/:b"], "Ambiguous HTTP action path"],
+      [["/reload"], "reserved core route"],
+      [["/latest/assets/bundle.js"], "reserved core route"],
+    ]) {
+      await file(
+        path,
+        "src/server/ops.ts",
+        'import { httpAction } from "@tokamak/sdk";\n' +
+          routes
+            .map(
+              (route, i) =>
+                `export const route${i} = httpAction({ path: ${JSON.stringify(route)}, handler: () => new Response() });`,
+            )
+            .join("\n"),
+      );
+      const result = build(path);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(diagnostic);
+    }
+  });
+}, 60_000);

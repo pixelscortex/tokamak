@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { basename, join, resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { httpActionEntry } from "./http-actions.mjs";
 import { buildLocalBundle, transactionSources } from "./worker.mjs";
 import { bunPluginBoundary, checkPluginImports, featurePluginRoot } from "./plugin-boundary.mjs";
 import ts from "typescript";
@@ -94,7 +95,7 @@ function discoverReferences(root, pluginRoot, sources, virtual) {
       .filter((entry) => runtime.has(entry.name))
       .flatMap((entry) => {
         const info = definitionInfo(checker, entry, source);
-        if (!info) return [];
+        if (!info || info.kind === "httpAction") return [];
         if (info.visibility === undefined)
           throw new Error(
             `Cannot determine visibility of ${path}:${entry.name}; preserve the function builder's inferred type`,
@@ -208,18 +209,29 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
   const pluginSource = organized || flat;
   const placement = pluginSource ? functionPlacement(pluginRoot, undefined, namespace) : undefined;
   const providers = placement?.providers ?? [];
+  const http = placement ? httpActionEntry(placement, root, organized) : undefined;
   const local = placement ? placedModules(placement, root, organized, runnerFunction) : [];
   const split =
     !!placement &&
-    (local.length > 0 ||
+    (http !== undefined ||
+      local.length > 0 ||
       flat ||
       (organized && [...placement.modules.keys()].some((path) => !path.startsWith(root + sep))));
-  const server = split ? placedModules(placement, root, organized) : [];
+  const server = split ? placedModules(placement, root, organized, lanes.server.keep) : [];
   const files = split
-    ? [...new Set([...server, ...local].map(([path]) => relative(root, path).split(sep).join("/")))]
+    ? [
+        ...new Set(
+          [...server, ...local, ...(http?.modules ?? [])].map(([path]) =>
+            relative(root, path).split(sep).join("/"),
+          ),
+        ),
+      ]
     : await scanFiles(root);
   const modules = split
-    ? files.map((file) => [...server, ...local].find(([path]) => path === resolve(root, file))[1])
+    ? files.map(
+        (file) =>
+          [...server, ...local, ...(http?.modules ?? [])].find(([path]) => path === resolve(root, file))[1],
+      )
     : files.map((file) => (organized ? file.split("/").at(-1).slice(0, -3) : file.slice(0, -3)));
   if (new Set(modules).size !== modules.length)
     throw new Error("Duplicate server module name; module basenames must be unique");
@@ -327,6 +339,12 @@ export async function bundleFeature(folder, namespace, splitActions = namespace 
           { cause: error },
         );
       }
+    }
+    if (http) {
+      await buildServer("http-actions.js", http.source, [
+        placementTransform(placement, lanes.http),
+        serverBuiltins("http-action-builtins", pluginRoot, "HTTP actions"),
+      ]);
     }
     if (splitActions) {
       const descriptor = transactionSources({

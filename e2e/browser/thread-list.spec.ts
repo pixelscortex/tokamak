@@ -1,25 +1,23 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import { pickAgentOption } from "./agent-picker";
 import { asDesktop } from "./desktop";
 
 // ai's marks in chat's thread list (Paper "Threads · C"), on a desktop page
 // running the real local part and the fake agent (e2e/fake-agent).
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Message" });
-const agentRow = (page: Page) => page.getByRole("group", { name: "Agent" });
 const threadRow = (page: Page, title: string) =>
   page.getByRole("navigation", { name: "Chat threads" }).getByRole("option", { name: new RegExp(title) });
 
 test("each thread shows its status live, and a second line only while it works", async ({ browser }) => {
-  // The model menu lists every replay and opens upward: a tall window keeps them all on screen.
+  // The picker lists every replay and opens upward: a tall window keeps them all on screen.
   const context = await browser.newContext({ viewport: { width: 1280, height: 1400 } });
   try {
     const { home } = await asDesktop(context);
     const page = await context.newPage();
     await page.goto("/");
-    await agentRow(page).getByRole("button").first().click();
-    await page.getByRole("menuitem", { name: "Fake agent" }).click();
     const id = crypto.randomUUID().slice(0, 8);
 
     /** A new thread in its own folder, sent with the replay `model`; resolves its title and folder name. */
@@ -28,12 +26,8 @@ test("each thread shows its status live, and a second line only while it works",
         .getByRole("navigation", { name: "Chat threads" })
         .getByRole("button", { name: /^New thread/ })
         .click();
-      await agentRow(page).getByRole("button").nth(1).click();
-      await page.getByRole("menuitem", { name: model, exact: true }).click();
-      if (access) {
-        await agentRow(page).getByRole("button", { name: "Full access" }).click();
-        await page.getByRole("menuitem", { name: access }).click();
-      }
+      await pickAgentOption(page, "Fake agent", model);
+      if (access) await pickAgentOption(page, "Access level", access);
       const folderName = `${label.toLowerCase()}-${id}`;
       await mkdir(join(home, folderName));
       await page.getByRole("button", { name: "Choose a folder…" }).click();
