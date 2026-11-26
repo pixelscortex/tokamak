@@ -54,6 +54,8 @@ const chat = createApi<{
 const available = builds();
 if (!available.length)
   console.log("Skipping: build the server and tokamak-plugin-host to run the profile tests");
+// Without a server build the suites below register nothing, and Vitest fails a file with no tests.
+if (!available.length) test.skip("needs the Runner or Server build", () => {});
 
 /** A failure a person can read: one line, no stack trace, no source path. */
 const plain = (kind: string) => ({
