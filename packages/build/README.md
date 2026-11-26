@@ -146,17 +146,25 @@ export const Branch = after(chat.find("title", { in: "Header" }), BranchChip);
 ```
 
 `before` and `after` render siblings. `prepend` and `append` render inside
-elements that accept children. `wrap` receives the element as `props.children`.
-`replace` substitutes another element; `hide` also removes the sibling
-additions. `replace` and `hide` dispose the original element and its
-descendants while active. Actions and their live `when` option receive the
+elements that accept children.
+
+Use `layer(target, (props, Original) => …)` to take over the element.
+Render `<Original />` to draw the next layer down, or the owner's element
+at the bottom. Pass children to change the contents without changing the
+element or its attributes. Put `<Original.Children />` among your children
+to draw the owner's contents, including other plugins' `prepend` and
+`append`. Draw `Original` at most once per layer. If no layer draws it, the
+owner's element is unloaded. A layer with a false `when` passes through.
+Layers run outermost first by plugin install order, then `order` (default
+0), plugin ID, and export name. `before` and `after` stay outside all layers;
+`hide` also removes those sibling additions.
+
+Actions and their live `when` option receive the
 props of the render function that owns the tag. Parts inside an inline list
 callback get `props.$row.item` and `props.$row.index`, typed as Solid passes
 them to that callback. Nested rows expose the enclosing row as `$row.parent`.
 With `Index` (or Solid 2’s `For keyed={false}`), the item is an accessor and
-the index is a number. Layers at one position are
-ordered by `order` (default 0) and then plugin ID. The first installed
-replacement owns the position even while its condition is false.
+the index is a number.
 
 An add-on's manifest records both the search and the element selected at
 build time. When the owner changes, a search keeps its original match if

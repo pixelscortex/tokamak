@@ -34,28 +34,35 @@ An action targets a named element, such as `example.find("button", { in: "Compos
 Use literal arguments. If a name matches several elements, narrow it with
 `in` or use a 1-based `nth`.
 
-| Action    | Effect                                                                   |
-| --------- | ------------------------------------------------------------------------ |
-| `before`  | Add a sibling immediately before the element.                            |
-| `after`   | Add a sibling immediately after it.                                      |
-| `prepend` | Add a child at the start.                                                |
-| `append`  | Add a child at the end.                                                  |
-| `wrap`    | Surround the current element, which arrives as `props.children`.         |
-| `replace` | Swap in another element and dispose of the original and its descendants. |
-| `hide`    | Remove the element, its children, and additions before and after it.     |
+| Action    | Effect                                                                            |
+| --------- | --------------------------------------------------------------------------------- |
+| `before`  | Add a sibling immediately before the element.                                     |
+| `after`   | Add a sibling immediately after it.                                               |
+| `prepend` | Add a child at the start.                                                         |
+| `append`  | Add a child at the end.                                                           |
+| `layer`   | Draw the original element, give it children, surround it, or draw something else. |
+| `hide`    | Remove the element, its children, and additions before and after it.              |
 
 Use `{ when: (props) => condition }` to make an action conditional. The
 check is reactive and receives the declaring component's props, including
 `$row.item` and `$row.index` inside a `For` row. The
 `order` option sorts actions at the same position (default 0, then plugin ID).
-Only the first installed replacement owns a target.
+Use `layer(target, (props, Original) => …)` to take over the element.
+Render `<Original />` to draw the next layer down, or the owner's element
+at the bottom. Pass children to change the contents without changing the
+element or its attributes. Put `<Original.Children />` among your children
+to draw the owner's contents, including other plugins' `prepend` and
+`append`. Draw `Original` at most once per layer. If no layer draws it, the
+owner's element is unloaded. A layer with a false `when` passes through.
+Layers run outermost first by plugin install order, then `order` (default
+0), plugin ID, and export name. `before` and `after` stay outside all layers;
+`hide` also removes those sibling additions.
 
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="before" />
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="after" />
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="prepend" />
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="append" />
-<api-declaration path="../../../../packages/sdk/component-actions.ts" name="wrapPart" />
-<api-declaration path="../../../../packages/sdk/component-actions.ts" name="replacePart" />
+<api-declaration path="../../../../packages/sdk/component-actions.ts" name="layer" />
 <api-declaration path="../../../../packages/sdk/component-actions.ts" name="hide" />
 
 ## State

@@ -708,9 +708,30 @@ import * as chat from "plugin:chat/client";
 export const Cost = after(chat.find("box"), (props) => <small>{props.draft.length} characters</small>);
 ```
 
-Use `before` and `after` for siblings, `prepend` and `append` for children,
-`wrap` to surround an element, `replace` to substitute another element, or
-`hide` to remove it. A placement and its optional live `when` function
+Use `before` and `after` for siblings, `prepend` and `append` for children, and
+`hide` to remove an element.
+
+```tsx
+import { layer } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Heading = layer(chat.find("heading"), (_, Original) => (
+  <Original>What should we work on?</Original>
+));
+```
+
+Use `layer(target, (props, Original) => …)` to take over the element.
+Render `<Original />` to draw the next layer down, or the owner's element
+at the bottom. Pass children to change the contents without changing the
+element or its attributes. Put `<Original.Children />` among your children
+to draw the owner's contents, including other plugins' `prepend` and
+`append`. Draw `Original` at most once per layer. If no layer draws it, the
+owner's element is unloaded. A layer with a false `when` passes through.
+Layers run outermost first by plugin install order, then `order` (default
+0), plugin ID, and export name. `before` and `after` stay outside all layers;
+`hide` also removes those sibling additions.
+
+A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row
 as `$row.parent`. Use a literal name, and add `{ in: "Header" }` or a

@@ -71,7 +71,7 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - `Message` spacing (`gap-2`, `pb-12`) or the header height (`h-5`): `ai`
   reply header (also `h-5`), `ai` cards (`pt-2`, relies on the 8 px gap),
   `code` change card and notices in `footer`.
-- The body's text style or the author line (avatar, name): `ai` replaces the
+- The body's text style or the author line (avatar, name): `ai` layers over the
   body of a steered reply and draws each steer as the person's message with
   the same classes (`plugins/ai/src/client/ui/turn-steers.tsx`).
 - `ThreadRow` box (`min-h-8`, `px-row`, `py-1`) or the lead lane (`w-4`):
@@ -82,7 +82,7 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - The header layout (`gap-2`, chip after the title, `flex-1` before the menu):
   `code` branch chip (`ms-2`), layout control and review panel mount.
 - The empty state heading style (`text-read font-semibold`): `ai`
-  `AgentHeading` repeats it and must match.
+  changes the text through `Original` and inherits the heading markup and style.
 - Removing or renaming any part: every action on it in `ai` and `code`
   breaks at build time; update `design/ai.md` and `design/code.md`.
 

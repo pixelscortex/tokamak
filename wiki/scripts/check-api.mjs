@@ -40,13 +40,11 @@ const { pages: navigation } = JSON.parse(await readFile(join(pages, "meta.json")
 if (!navigation.includes("window")) throw new Error("The window reference is missing from API navigation");
 for (const name of [
   "view",
-  "component",
   "before",
   "after",
   "prepend",
   "append",
-  "wrapPart",
-  "replacePart",
+  "layer",
   "hide",
   "state",
   "derived",

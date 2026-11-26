@@ -48,7 +48,13 @@ generated references in `src/server/_generated/` and component declarations in
   A dependent plugin imports `plugin:<id>/client` and exports an action such as
   `after(owner.find("button", { in: "Editor" }), Tools)`.
   A static `data-part` or `id` supplies the element name when present. The actions
-  are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
+  are `before`, `after`, `prepend`, `append`, `layer`, and `hide`.
+  Use `layer(target, (props, Original) => <Original>New text</Original>)` to change
+  contents while keeping the owner's markup. `<Original />` draws the next layer
+  (or the owner); draw it at most once. `<Original.Children />` keeps the owner's
+  children and inside additions when supplying your own children. If no layer
+  draws the original element, it unloads. Layers stack by install order;
+  `before` and `after` stay outside the stack.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.
   Use `state` for window values, `derived` for computed values, and
