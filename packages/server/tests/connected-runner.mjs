@@ -263,9 +263,8 @@ try {
 
   const { child: machine, logs: machineLogs } = startMachine(keyFile, proxyAddress);
   assert.ok((await presence(true)).lastSeen);
-  // Read the arguments once the Runner is online: right after the spawn, Linux
-  // can still show the parent's arguments before the exec.
-  const ps = Bun.spawnSync(["ps", "-p", String(machine.pid), "-o", "args="]);
+  // `-ww`: Linux `ps` cuts the line at 80 columns when it has no terminal.
+  const ps = Bun.spawnSync(["ps", "-ww", "-p", String(machine.pid), "-o", "args="]);
   const args = ps.stdout.toString();
   assert.ok(args.includes("--key-file"), `Runner arguments: ${args}`);
   assert.ok(!args.includes(key), "The persisted key is absent from process arguments");
