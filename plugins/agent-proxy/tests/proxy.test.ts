@@ -72,6 +72,8 @@ const rejected = async (response: Response, status: number, message: string) => 
 };
 
 const available = builds();
+// Without a server build the suites below register nothing, and Vitest fails a file with no tests.
+if (!available.length) test.skip("needs the Runner or Server build", () => {});
 if (!available.length) console.log("Skipping: build both server binaries and plugin hosts to test the proxy");
 
 describe.skipIf(!available.length).each(available)("Subscription proxy on the $name", (build) => {
