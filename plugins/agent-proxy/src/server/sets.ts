@@ -65,14 +65,19 @@ export const removeSet = pluginOnly(
 /** The raw credential only crosses the boundary back to the calling plugin. */
 export const turnKey = pluginOnly(
   action({
-    args: { set: setId },
-    handler: async (ctx, { set }) => {
+    args: { set: setId, lease: v.optional(v.string()) },
+    handler: async (ctx, { set, lease }) => {
       const owner = ownerOf(ctx.auth);
       const origin = await ctx.server.url();
       if (!origin)
         return fail("MissingServerOrigin", { message: "Set TOKAMAK_PUBLIC_URL to hand out turn keys." });
       const key = randomToken();
-      const saved = await ctx.runMutation(internal.sets.issue, { owner, set, hash: challenge(key) });
+      const saved = await ctx.runMutation(internal.sets.issue, {
+        owner,
+        set,
+        hash: challenge(key),
+        ...(lease !== undefined && { lease }),
+      });
       if (!saved) return notFound("set");
       return { address: new URL(`/plugins/agent-proxy/${saved}`, origin).href, key };
     },
@@ -81,23 +86,32 @@ export const turnKey = pluginOnly(
 
 export const endTurnKey = pluginOnly(
   mutation({
-    args: { key: v.string() },
-    handler: async (ctx, { key }) => {
-      const hash = turnKeyHash(key);
+    args: { key: v.optional(v.string()), lease: v.optional(v.string()) },
+    handler: async (ctx, { key, lease }) => {
+      const owner = ownerOf(ctx.auth);
+      if (lease !== undefined) {
+        const rows = await ctx.db
+          .query("turnKeys")
+          .withIndex("by_owner_lease", (q) => q.eq("owner", owner).eq("lease", lease))
+          .collect();
+        for (const row of rows) await ctx.db.patch(row._id, { ended: true });
+        return null;
+      }
+      const hash = key !== undefined && turnKeyHash(key);
       if (!hash) return null;
       const row = await ctx.db
         .query("turnKeys")
         .withIndex("by_hash", (q) => q.eq("hash", hash))
         .first();
-      if (row?.owner === ownerOf(ctx.auth)) await ctx.db.patch(row._id, { ended: true });
+      if (row?.owner === owner) await ctx.db.patch(row._id, { ended: true });
       return null;
     },
   }),
 );
 
 export const issue = internalMutation({
-  args: { owner: ownerId, set: setId, hash: hashValue },
-  handler: async (ctx, { owner, set, hash }) => {
+  args: { owner: ownerId, set: setId, hash: hashValue, lease: v.optional(v.string()) },
+  handler: async (ctx, { owner, set, hash, lease }) => {
     const id = idIn("sets", set);
     const row = id && (await ctx.db.get(id));
     if (!row || row.owner !== owner) return null;
@@ -107,7 +121,20 @@ export const issue = internalMutation({
       .withIndex("by_owner_expiry", (q) => q.eq("owner", owner).lte("expiresAt", now))
       .take(100);
     for (const previous of expired) await ctx.db.delete(previous._id);
-    await ctx.db.insert("turnKeys", { owner, set: row._id, hash, expiresAt: now + TURN_KEY_TTL_MS });
+    const snapshot = [];
+    if (lease !== undefined) {
+      for (const id of row.subscriptions) {
+        const subscription = await ctx.db.get(id);
+        if (subscription?.owner === owner && subscription.enabled) snapshot.push(id);
+      }
+    }
+    await ctx.db.insert("turnKeys", {
+      owner,
+      set: row._id,
+      hash,
+      expiresAt: now + TURN_KEY_TTL_MS,
+      ...(lease !== undefined && { lease, subscriptions: snapshot }),
+    });
     return row._id.slice(row._id.indexOf("/") + 1);
   },
 });
@@ -128,17 +155,27 @@ export const candidates = internalQuery({
     const row = await ctx.db.get(key.set);
     if (!row || row.owner !== key.owner) return { ok: false as const, error: "Turn key has no set." };
 
-    const availability = await eligibleAccounts(ctx, row, now);
+    const availability = await eligibleAccounts(ctx, row, now, key.subscriptions);
     return { ok: true as const, owner: row.owner, ...availability };
   },
 });
 
-async function eligibleAccounts(ctx: QueryContext<Model>, row: Doc<Model, "sets">, now: number) {
+async function eligibleAccounts(
+  ctx: QueryContext<Model>,
+  row: Doc<Model, "sets">,
+  now: number,
+  snapshot?: readonly Id<"subscriptions">[],
+) {
   const accounts = [];
   let earliestReset = 0;
-  for (const id of row.subscriptions) {
+  for (const id of snapshot ?? row.subscriptions) {
     const subscription = await ctx.db.get(id);
-    if (!subscription?.enabled || subscription.owner !== row.owner || subscription.company !== "anthropic")
+    if (
+      !subscription ||
+      (!snapshot && !subscription.enabled) ||
+      subscription.owner !== row.owner ||
+      subscription.company !== "anthropic"
+    )
       continue;
     const members = await ctx.db
       .query("accounts")

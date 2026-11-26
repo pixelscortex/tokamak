@@ -37,13 +37,17 @@ removing a set invalidates all its outstanding keys. The plugin-only `turnKey`
 gives the caller a fresh key and the set's address under
 `/plugins/agent-proxy/<set>` on the configured public origin. The proxy stores
 only a hash and accepts the key only for that set. Keys expire after eight
-hours. The consumer (TKM-266) must call `endTurnKey` when the turn ends,
-including on stop or failure.
+hours. AI Profiles calls `endTurnKey` when a turn ends, including on stop or
+failure. It can end a key by the turn's random lease ID without keeping or
+passing the raw key after launch. A hard process loss can leave the key
+until its expiry.
 
 The proxy accepts only POST to `/v1/messages` and
 `/v1/messages/count_tokens`, and GET to `/v1/models` and `/v1/models/<id>`.
-Each request tries the enabled Claude subscriptions in set order, skipping
-signed-out accounts and accounts with an active rate limit. It forwards with
+Keys with a lease capture the enabled subscriptions and set order when issued.
+Edits affect the next lease; keys without a lease continue to use the current
+set. Each request skips deleted or signed-out accounts and accounts with an
+active rate limit. It forwards with
 the subscription's OAuth headers, streams the answer, and records last use
 only on a 2xx response. An upstream 401 forces a renewal and allows one
 replay. If Claude refuses renewal, the account is signed out and the replay
@@ -54,6 +58,10 @@ otherwise returns 403. A missing or invalid key names only the problem with
 the key.
 
 ## If you change X, check Y
+
+- Set or key lifetime: check [AI Profiles](ai-profiles.md) launch and cleanup.
+  Reordering or enabling a subscription only changes new keys; removing a
+  set revokes all keys for it.
 
 - `SubscriptionView` or `SignInView` (`src/server/_functions.ts`): every field
   is drawn by ai-profiles' cards and dialog; the window tests there stand in for

@@ -70,10 +70,14 @@ export default defineSchema({
     owner: v.string(),
     set: v.id("sets"),
     hash: v.string(),
+    // Older keys use the live set until they expire.
+    subscriptions: v.optional(v.array(v.id("subscriptions"))),
+    lease: v.optional(v.string()),
     expiresAt: v.number(),
     ended: v.optional(v.boolean()),
   })
     .index("by_hash", ["hash"])
+    .index("by_owner_lease", ["owner", "lease"])
     .index("by_owner_expiry", ["owner", "expiresAt"]),
 
   /** The login itself. Only internal functions read this table. */
