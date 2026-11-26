@@ -38,6 +38,14 @@ export const shellPages = {
     icon: shellIcons.computer,
     generation: 0,
   },
+  plugins: {
+    id: "plugins",
+    plugin: "shell",
+    route: "/settings/plugins",
+    title: "Plugins",
+    icon: shellIcons.plug,
+    generation: 0,
+  },
 } satisfies Record<string, PluginView>;
 
 export const shellPageList: readonly PluginView[] = Object.values(shellPages);

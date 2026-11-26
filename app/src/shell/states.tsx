@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { Button, Icon, StatusIcon, icons } from "@tokamak/ui";
 import { useShell } from "./context";
 import { shellIcons } from "./icons";
+import { shellPages } from "./pages";
 import { hrefOf } from "./views";
 
 /** A centred notice on the stage: a mark, a 16/26 heading, one line, then its action. */
@@ -103,15 +104,20 @@ export function Unreachable(props: { reason: string; needs?: "token" }): JSX.Ele
   );
 }
 
+/** A server with no plugins: points to Settings → Plugins, which shows the plugins folder. */
 export function NoPlugins(): JSX.Element {
+  const shell = useShell();
   return (
     <Notice
       mark={<Icon path={shellIcons.plug} />}
       title="No plugins installed"
       role="status"
       label="No plugins"
+      action={
+        <Button onClick={() => shell.navigation.openView(shellPages.plugins)}>Open Settings → Plugins</Button>
+      }
     >
-      Everything in Tokamak comes from a plugin. Install one on the server and its views open here.
+      Everything in Tokamak comes from a plugin. Settings → Plugins shows the folder they load from.
     </Notice>
   );
 }

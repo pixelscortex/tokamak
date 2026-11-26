@@ -17,7 +17,10 @@ interface DesktopWindow {
  * a disposable workspace and every fake agent's command on its PATH. Returns the person's home folder
  * and the PATH folder holding those commands (unlink one to "uninstall" it).
  */
-export async function asDesktop(context: BrowserContext): Promise<{
+export async function asDesktop(
+  context: BrowserContext,
+  options: { plugins?: string } = {},
+): Promise<{
   home: string;
   bin: string;
   readonly endpoint: { ws: string; token: string };
@@ -29,10 +32,12 @@ export async function asDesktop(context: BrowserContext): Promise<{
   readonly quitAnswers: readonly string[];
   /** The pages "Open sign-in page" asked the system browser to open, oldest first. */
   readonly opened: readonly string[];
+  /** How many times Settings → Plugins asked to reveal the plugins folder. */
+  readonly revealed: number;
 }> {
   // Inside the run's folder, which the runner removes at the end.
-  const plugins = process.env.TOKAMAK_PLUGIN_DIR!;
-  const scratch = await mkdtemp(join(dirname(plugins), "desktop-"));
+  const plugins = options.plugins ?? process.env.TOKAMAK_PLUGIN_DIR!;
+  const scratch = await mkdtemp(join(dirname(process.env.TOKAMAK_PLUGIN_DIR!), "desktop-"));
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
   await mkdir(home);
@@ -53,6 +58,7 @@ export async function asDesktop(context: BrowserContext): Promise<{
   let quitChannel: ((message: unknown) => Promise<void>) | undefined;
   const quitAnswers: string[] = [];
   const opened: string[] = [];
+  let revealed = 0;
   /** Return listeners the window opened, each ended by its cancel. */
   const listening = new Map<string, () => void>();
 
@@ -82,6 +88,9 @@ export async function asDesktop(context: BrowserContext): Promise<{
         // The sign-in return (app/src-tauri/src/sign_in_return.rs): the test desktop opens no
         // browser, and its listener waits until cancelled without a return ever coming, so the
         // dialog shows the desktop's wording and the test finishes each sign-in by pasting.
+        case "reveal_plugins_folder":
+          revealed++;
+          return null;
         case "sign_in_open_browser":
           opened.push(args.url!);
           return "opened";
@@ -147,5 +156,8 @@ export async function asDesktop(context: BrowserContext): Promise<{
     },
     quitAnswers,
     opened,
+    get revealed() {
+      return revealed;
+    },
   };
 }

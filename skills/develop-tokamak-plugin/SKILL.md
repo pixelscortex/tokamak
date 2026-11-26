@@ -1,14 +1,65 @@
 ---
 name: develop-tokamak-plugin
-description: Build and reload this Tokamak plugin using server actions, caller actions and window APIs.
+description: Build, install and reload a Tokamak plugin in the tokamak-plugins repository, and write its server part, caller actions, window part and contracts. Use when creating or changing a Tokamak plugin.
 ---
 
-Use the Tokamak checkout and install its dependencies with `proto run bun -- install`.
-From the checkout root, build this folder with
-`proto run bun -- packages/build/src/build.ts plugins/<id>`. Commit the
-generated references in `src/server/_generated/` and component declarations in
-`src/client/_generated/`. Reload the installed build with
-`tokamak-server plugin reload <id>`, then check the behavior on the local server.
+Plugins live in `tokamak-plugins`, one folder per plugin at `plugins/<id>/`,
+named by its id. They build against a Tokamak checkout on disk; nothing is
+published yet. The app ships with no plugins: it loads the builds in its
+**plugins folder**. To **install** a plugin is to place its build there.
+
+## Set up
+
+- Clone Tokamak next to `tokamak-plugins` as `../tokamak`, or anywhere and set
+  `TOKAMAK_DIR`. Install its dependencies there with
+  `proto run bun -- install --frozen-lockfile`.
+- In `tokamak-plugins`, run `./setup.sh`. It links `@tokamak/sdk`,
+  `@tokamak/build`, `@tokamak/ui`, `@tokamak/runtime` and the toolchain they
+  build with into `node_modules`. Run it again after moving the checkout.
+- Change Tokamak in its own repository, never through the links.
+
+## Create
+
+Copy `plugins/hello`, the smallest working plugin, or run
+`tokamak-server plugin create plugins/<id>` from `tokamak-plugins` with a
+`tokamak-server` built from the Tokamak checkout. Either way the plugin has:
+
+- `plugin.ts`: `definePlugin({ id, version, ... })`. List the plugins it uses
+  in `depends` or `optional`.
+- `package.json` with no `@tokamak/*` dependencies; `setup.sh` provides them.
+- `src/server/` with `tsconfig.json` extending `@tokamak/sdk/tsconfig.server.json`.
+- `src/client/` with `tsconfig.json` extending `@tokamak/sdk/tsconfig.window.json`
+  and `styles.css` importing `@tokamak/ui/theme.css` by reference.
+- `DESIGN.md`: the plugin's design note (see the `tokamak-design` skill).
+
+Configs extend Tokamak's packages by name, never by a path into the checkout.
+A plugin that uses another plugin builds when both sit side by side in
+`plugins/`.
+
+## Build, install and reload
+
+- `./install.sh <id>` builds the plugin, places the build at
+  `<plugins folder>/<id>` in one step and asks a running app to reload it.
+  With no id it installs every plugin, owners before the plugins that depend
+  on them. A failed build copies nothing; the installed builds keep working.
+- `./install.sh --dev <id>` installs into the dev (debug) build's plugins
+  folder instead.
+- If the app is not running, the plugin loads at the next start. The script
+  prints the plugins folder, each reload result and the Tokamak commit it
+  built against. An app older than that commit may fail to load the build.
+- To build without installing, run
+  `proto run bun -- node_modules/@tokamak/build/src/build.ts plugins/<id>`.
+- `proto run bun -- run check` type-checks every plugin, as the editor does.
+- Commit the generated references in `src/server/_generated/` and component
+  declarations in `src/client/_generated/`.
+- Test against a throwaway folder (`TOKAMAK_PLUGIN_DIR`, `TOKAMAK_SERVER_DIR`)
+  unless told to install into the owner's app.
+- A plugin that fails to load is skipped with a reason; the others still
+  load. The catalog (`GET /plugins`, or `tokamak-server plugin list` with
+  `TOKAMAK_SERVER_DIR` set to the app's data folder) lists each reason under
+  `skipped`, such as "not built" or "needs chat, which is not installed".
+
+## Write the plugin
 
 - **Server** (`src/server`): use `query` to read, `mutation` to write in one
   transaction, and `action` for effects. Define table schemas with
