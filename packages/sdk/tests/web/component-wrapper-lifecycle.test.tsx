@@ -5,9 +5,9 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { ExtensionProvider, replace, wrap } from "../../client";
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
 import { Composer } from "./fixtures/parts/owner/src/client/api";
-import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
+import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
-const button = parts.Composer.section.SendButton;
+const button = find("SendButton");
 
 function mount(layers: Layer[], label = () => "Send", lifecycle = (_event: string) => {}) {
   const root = document.createElement("div");

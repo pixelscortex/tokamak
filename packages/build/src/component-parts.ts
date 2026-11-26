@@ -5,6 +5,13 @@ import type MagicString from "magic-string";
 import ts from "typescript";
 import { brand, importModule, inSource, unalias, type Element, type ElementMount } from "./compiler.ts";
 import { partProps } from "./part-props.ts";
+import {
+  resolveScreenSearch,
+  screenElements,
+  screenTarget,
+  type ScreenSearch,
+  type ScreenTree,
+} from "../../sdk/screen-search.ts";
 
 type Part = {
   target: string;
@@ -58,51 +65,63 @@ function assignParts(
   ambiguous = false,
 ) {
   const fixed = new Map<string, ts.Node>();
+  const scopes = new Map<string, ts.Node>();
+  const fixedCounts = new Map<string, number>();
   const counts = new Map<string, number>();
   const identities = new Map<Tree, string>();
   const times = new Map<string, number>();
-  for (const entry of tree.entries) {
-    const { name, node } = entry;
-    if (entry.fixed) {
-      const previous = fixed.get(name);
+  for (const { name, node, fixed: named, tree: child } of tree.entries) {
+    if (named) {
+      if (!fixed.has(name)) fixed.set(name, node);
+      fixedCounts.set(name, (fixedCounts.get(name) ?? 0) + 1);
+    }
+    if (!child.part) {
+      const previous = scopes.get(name);
       if (previous)
         throw problem(
           node,
           `Duplicate screen segment "${name}" (first declared in ${previous.getSourceFile().fileName})`,
         );
-      fixed.set(name, node);
-    } else {
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-      const identity = JSON.stringify(tagIdentity(entry.tree.opening!));
-      identities.set(entry.tree, identity);
+      scopes.set(name, node);
+    }
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    if (child.opening) {
+      const identity = JSON.stringify(tagIdentity(child.opening));
+      identities.set(child, identity);
       const key = name + ":" + identity;
       times.set(key, (times.get(key) ?? 0) + 1);
     }
   }
   const positions = new Map<string, number>();
-  for (const { name, fixed: named, tree: node } of tree.entries) {
-    const position = (positions.get(name) ?? (fixed.has(name) ? 1 : 0)) + 1;
-    if (!named) positions.set(name, position);
-    const key = named || position === 1 ? name : `${name}$${position}`;
+  for (const { name, node, fixed: named, tree: child } of tree.entries) {
+    const first = named && fixed.get(name) === node;
+    const position = first ? 1 : (positions.get(name) ?? (fixed.has(name) ? 1 : 0)) + 1;
+    if (!first) positions.set(name, position);
+    const key = position === 1 ? name : `${name}$${position}`;
     const target = `${prefix}.${key}`;
-    tree.children.set(key, node);
-    const positional = !named && (fixed.has(name) || counts.get(name)! > 1);
-    // A named segment adds nothing, but still carries its positional ancestors.
+    tree.children.set(key, child);
+    const positional = child.opening && counts.get(name)! > 1 && (!first || fixedCounts.get(name)! > 1);
+    // A unique explicit name still carries any positional ancestors.
     let fingerprint = inherited;
     let uncertain = ambiguous;
     if (positional) {
-      const identity = identities.get(node)!;
+      let identity = identities.get(child)!;
+      // If attributes cannot distinguish siblings, include authored markup so
+      // moving two distinct instances into each other's slot is detectable.
+      if (times.get(name + ":" + identity)! > 1) {
+        uncertain = true;
+        identity += ":" + node.getText();
+      }
       fingerprint = createHash("sha256")
         .update(JSON.stringify([inherited, identity]))
         .digest("base64url")
         .slice(0, 12);
-      uncertain ||= times.get(name + ":" + identity)! > 1;
     }
-    if (node.part) {
-      Object.assign(node.part, { target, fingerprint, ambiguous: uncertain });
-      paths.set(target, node.part);
+    if (child.part) {
+      Object.assign(child.part, { target, fingerprint, ambiguous: uncertain });
+      paths.set(target, child.part);
     }
-    assignParts(node, target, paths, fingerprint, uncertain);
+    assignParts(child, target, paths, fingerprint, uncertain);
   }
 }
 
@@ -123,12 +142,14 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
   const tree = branch();
   const checker = program.getTypeChecker();
   const module = checker.getSymbolAtLocation(entry);
-  const exported = new Map(
-    (module ? checker.getExportsOfModule(module) : []).map((symbol) => [
-      unalias(checker, symbol),
-      symbol.name,
-    ]),
-  );
+  const exports = module ? checker.getExportsOfModule(module) : [];
+  const find = exports.find((symbol) => symbol.name === "find");
+  if (find)
+    throw problem(
+      find.declarations?.[0] ?? entry,
+      "The plugin builder generates the public find export; use a different name",
+    );
+  const exported = new Map(exports.map((symbol) => [unalias(checker, symbol), symbol.name]));
   const entryImport = JSON.stringify(
     "../" + relative(dirname(entry.fileName), entry.fileName).replace(/\.tsx?$/, ""),
   );
@@ -229,6 +250,15 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
 
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
         const opening = ts.isJsxElement(node) ? node.openingElement : node;
+        if (
+          opening.attributes.properties.some(
+            (attribute) =>
+              ts.isJsxAttribute(attribute) &&
+              attribute.name.getText() === "data-part-ignore" &&
+              !attribute.initializer,
+          )
+        )
+          return;
         const tag = opening.tagName;
         const builtin = solidTag(tag);
         if (builtin && solidBuiltins.has(builtin)) {
@@ -302,28 +332,26 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
 
   assignParts(tree, plugin, paths);
 
-  function describe(node: Tree, value: (part: Part) => string, indent = ""): string {
-    const next = indent + "  ";
-    const parts = [...node.children].flatMap(([name, child]) => {
-      const children = describe(child, value, next);
-      if (!child.part && !children) return [];
-      return [
-        `${next}readonly ${JSON.stringify(name)}: ${child.part ? value(child.part) + (children ? " & " : "") : ""}${children};`,
-      ];
-    });
-    return parts.length ? `{\n${parts.join("\n")}\n${indent}}` : "";
+  function compactParts(node: Tree): ScreenTree {
+    return [
+      ...(node.part ? ["", node.part.fingerprint ?? null] : []),
+      ...[...node.children].flatMap(([key, child]) => [
+        key,
+        child.part && !child.children.size ? (child.part.fingerprint ?? null) : compactParts(child),
+      ]),
+    ];
   }
-
-  function compactParts(node: Tree): object {
-    return Object.fromEntries([
-      ...(node.part ? [["", node.part.fingerprint ?? null]] : []),
-      ...[...node.children].map(([name, child]) => [name, compactParts(child)]),
-    ]);
-  }
+  const compact = compactParts(tree);
+  const elements = screenElements(plugin, compact);
+  // Pack the shape into a string so the bundle keeps its compact layout.
+  const packed = JSON.stringify(compact);
 
   return {
     has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
-    part: (names: string[]) => paths.get(`${plugin}.${names.join(".")}`) ?? false,
+    resolve(search: ScreenSearch) {
+      const result = resolveScreenSearch(elements, search);
+      return { ...result, ambiguous: result.element && paths.get(result.element.target)?.ambiguous };
+    },
     transform(
       source: ts.SourceFile,
       output: MagicString,
@@ -481,27 +509,37 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
         );
       }
-      if (source === entry && paths.size)
+      if (source === entry)
         output.append(
-          `\nimport { __defineScreenParts } from "@tokamak/sdk/client";\nconst __tokamakParts = __defineScreenParts(${JSON.stringify(plugin)}, ${JSON.stringify(compactParts(tree))});\nexport { __tokamakParts as parts };\n`,
+          `\nimport { __defineScreenFind } from "@tokamak/sdk/client";\nconst __tokamakFind = __defineScreenFind(${JSON.stringify(plugin)}, ${JSON.stringify(packed)});\nexport { __tokamakFind as find };\n`,
         );
-      return !!elements || (source === entry && paths.size > 0);
+      return !!elements || source === entry;
     },
     publish(warn: (message: string) => void, catalog?: string) {
       const path = join(dirname(entry.fileName), "_generated/components.d.ts");
-      const shape = describe(
-        tree,
-        ({ target, type }) =>
-          `import("@tokamak/sdk/client").ComponentPart<${JSON.stringify(target)}, ${type}>`,
-      );
+      const names = new Map<string, typeof elements>();
+      for (const element of elements) {
+        const matches = names.get(element.name);
+        if (matches) matches.push(element);
+        else names.set(element.name, [element]);
+      }
+      const shape = [...names]
+        .map(([name, matches]) => {
+          const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
+          const entries = matches.map(
+            (element) =>
+              `[${[...new Set(element.ancestors)].map((name) => JSON.stringify(name)).join(" | ") || "never"}, ${props(element)}]`,
+          );
+          return `  ${JSON.stringify(name)}: ${matches.length === 1 ? props(matches[0]!) : `[${entries.join(", ")}]`};\n`;
+        })
+        .join("");
       const previous = readOptional(path);
-      if (!shape && !previous) return;
       const declarations =
         privateDeclarations() +
         [...aliases]
           .map(([shape, name]) => `type ${name} = Extract<NonNullable<${shape}>, object>;\n`)
           .join("");
-      const next = `// Generated plugin screen paths. Commit this file.\nexport * from ${entryImport};\n${shape ? `${declarations}export declare const parts: ${shape};\n` : ""}`;
+      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${shape}}>;\n`;
       const reported = new Set<string>();
       const catalogs = new Set([
         dirname(root),
@@ -524,16 +562,17 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           } catch {
             continue; // The catalog reports invalid artifacts.
           }
-          for (const { target, fingerprint } of installed?.contributes?.["component-action"] ?? []) {
-            if (typeof target !== "string" || !target.startsWith(plugin + ".")) continue;
-            const current = paths.get(target);
-            const reason = !current
-              ? `targets missing screen part ${target}`
-              : fingerprint && current.fingerprint && current.fingerprint !== fingerprint
-                ? `targets a changed screen part: path ${target} now names a different element`
-                : "";
+          for (const options of installed?.contributes?.["component-action"] ?? []) {
+            const previous = screenTarget(options);
+            if (
+              typeof options.owner === "string"
+                ? options.owner !== plugin
+                : !previous.target.startsWith(plugin + ".")
+            )
+              continue;
+            const { reason } = resolveScreenSearch(elements, previous.search, previous);
             if (!reason) continue;
-            const message = `Plugin "${installed.id}" ${reason}; skipping this addition`;
+            const message = `Plugin "${installed.id}": ${reason}; skipping this addition`;
             if (reported.has(message)) continue;
             reported.add(message);
             warn(message);

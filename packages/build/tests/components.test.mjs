@@ -1,17 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import ts from "typescript";
+import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
 import { build, built, source, workspace } from "./plugin-fixtures.mjs";
 
 async function scratch(run) {
   const parent = resolve(workspace, "packages/build/dist");
   await mkdir(parent, { recursive: true });
-  const root = await mkdtemp(resolve(parent, "components-"));
-  try {
-    await run(root);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  await run(await mkdtemp(resolve(parent, "components-")));
 }
 
 const screen = `
@@ -19,204 +16,209 @@ const screen = `
   const Price = (props: PriceProps) => <strong>{props.amount}</strong>;
   export const Picker = (props: { amount: number }) =>
     <section><Price amount={props.amount} /><Price amount={0} /><aside><span /></aside></section>;
+  export const Header = (props: { heading: string }) =>
+    <header><h2 data-part="title">{props.heading}</h2></header>;
+  export const ThreadRow = (props: { row: number }) =>
+    <article><span><h3 id="title">{props.row}</h3></span></article>;
 `;
 const manifest = async (path) => JSON.parse(await readFile(resolve(path, "dist/manifest.json"), "utf8"));
-const addonSource = `
-  import { after } from "@tokamak/sdk/client";
+const imports = `
+  import { after, append, before, hide, prepend, replace, wrap } from "@tokamak/sdk/client";
   import * as owner from "plugin:owner/client";
-  export const Badge = after(owner.parts.Picker.section.Price, ({ amount }) => <small>{amount.toFixed(2)}</small>);
-  export const Note = after(owner.parts.Picker.section.aside, ({ amount }) => <p>{amount}</p>);
 `;
 
-test("plain JSX publishes typed paths for every tag and numbers only same-named siblings", async () => {
+test("find resolves the placements and stores the literal search with the found element", async () => {
   await scratch(async (root) => {
-    const owner = await source(root, "owner", screen);
-    built(owner);
-    const types = () => readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8");
-    const paths = (text) => [...text.matchAll(/ComponentPart<"(.*?)"/g)].map((m) => m[1]);
-    const first = paths(await types());
-    expect(first).toEqual([
-      "owner.Price.strong",
-      "owner.Picker.section",
-      "owner.Picker.section.Price",
-      "owner.Picker.section.Price$2",
-      "owner.Picker.section.aside",
-      "owner.Picker.section.aside.span",
-    ]);
-
-    await writeFile(
-      resolve(owner, "src/main.tsx"),
-      screen.replace("<aside><span />", "<aside><i /><span />"),
-    );
-    built(owner);
-    expect(paths(await types())).toEqual([
-      ...first.slice(0, -1),
-      "owner.Picker.section.aside.i",
-      first.at(-1),
-    ]);
-
+    built(await source(root, "owner", screen));
     const addon = await source(
       root,
       "addon",
-      `
-      import { after, append, before, hide, prepend, replace, wrap } from "@tokamak/sdk/client";
-      import { parts } from "plugin:owner/client";
-      export const Before = before(parts.Picker.section.Price, ({ amount }) => amount.toFixed(2));
-      export const After = after(parts.Picker.section.Price, ({ amount }) => amount.toFixed(2));
-      export const Prepend = prepend(parts.Price.strong, ({ amount }) => amount.toFixed(2));
-      export const Append = append(parts.Price.strong, ({ amount }) => amount.toFixed(2));
-      export const Wrap = wrap(parts.Picker.section.Price, ({ children }) => <aside>{children}</aside>);
-      export const Replace = replace(parts.Picker.section.Price, () => "Replaced");
-      export const Hide = hide(parts.Picker.section.Price$2);
+      imports +
+        `
+      import { find as findPart } from "plugin:owner/client";
+      export const Before = before(owner.find("Price", { nth: 1 }), ({ amount }) => amount.toFixed(2));
+      const title = findPart("title", { in: "Header" } as const);
+      export const After = after(title, ({ heading }) => heading.toUpperCase());
+      export const Prepend = prepend(owner.find("strong"), ({ amount }) => amount.toFixed(2));
+      export const Append = append(owner.find("title", { nth: 2 }), ({ row }) => row.toFixed(0));
+      export const Wrap = wrap(owner.find("Price", { nth: 1 }), ({ children }) => <aside>{children}</aside>);
+      export const Replace = replace(owner.find("Price", { nth: 1 }), () => "Replaced");
+      export const Hide = hide(owner.find("Price", { nth: 2 }));
     `,
     );
     built(addon);
-    expect(
-      (await manifest(addon)).plugin.contributes["component-action"].map(({ action }) => action),
-    ).toEqual(["before", "after", "prepend", "append", "wrap", "replace", "hide"]);
-  });
-}, 30_000);
-
-test("a renamed part warns about the installed addon and only its stale action is skipped", async () => {
-  await scratch(async (root) => {
-    const owner = await source(root, "owner", screen);
-    built(owner);
-    const addon = await source(root, "addon", addonSource);
-    built(addon);
-
-    await writeFile(resolve(owner, "src/main.tsx"), screen.replaceAll("Price", "NewPrice"));
-    const rebuiltOwner = build(owner);
-    expect(rebuiltOwner.status, rebuiltOwner.stderr).toBe(0);
-    expect(rebuiltOwner.stderr).toContain(
-      'Plugin "addon" targets missing screen part owner.Picker.section.Price',
-    );
-
-    const rebuiltAddon = build(addon);
-    expect(rebuiltAddon.status, rebuiltAddon.stderr).toBe(0);
-    expect(rebuiltAddon.stderr).toContain(
-      'Plugin "addon" targets missing screen part owner.Picker.section.Price',
-    );
-    expect((await manifest(addon)).plugin.contributes["component-action"]).toEqual([
-      expect.objectContaining({ id: "Note", action: "after", target: "owner.Picker.section.aside" }),
+    const placements = (await manifest(addon)).plugin.contributes["component-action"];
+    expect(placements.map(({ action }) => action)).toEqual([
+      "before",
+      "after",
+      "prepend",
+      "append",
+      "wrap",
+      "replace",
+      "hide",
     ]);
+    expect(placements).toContainEqual({
+      id: "After",
+      action: "after",
+      name: "title",
+      owner: "owner",
+      in: "Header",
+      target: "owner.Header.header.title",
+    });
+    expect(placements).toContainEqual({
+      id: "Append",
+      action: "append",
+      name: "title",
+      owner: "owner",
+      nth: 2,
+      target: "owner.ThreadRow.article.span.title",
+    });
+    expect(placements[0]).toMatchObject({ name: "Price", nth: 1, fingerprint: expect.any(String) });
   });
 }, 30_000);
 
-test("two replacements of the same compiler named element fail the build", async () => {
+test("wrong names fail both TypeScript and the builder; ambiguous and dynamic searches fail the builder", async () => {
   await scratch(async (root) => {
-    const owner = await source(root, "owner", screen);
-    built(owner);
+    built(await source(root, "owner", screen));
     const addon = await source(
       root,
       "addon",
-      `
-      import { replace } from "@tokamak/sdk/client";
-      import { parts } from "plugin:owner/client";
-      export const First = replace(parts.Picker.section.Price, () => "first");
-      export const Second = replace(parts.Picker.section.Price, () => "second");`,
+      imports + 'export const Bad = after(owner.find("missing"), () => null);',
     );
     const failure = build(addon);
     expect(failure.status).not.toBe(0);
-    expect(failure.stderr).toContain("First and Second both replace owner.Picker.section.Price");
+    expect(failure.stderr).toContain('find("missing") matches no elements; candidates: none');
+
+    const entry = resolve(addon, "src/main.tsx");
+    const program = ts.createProgram(
+      [entry],
+      pluginCompilerOptions(addon, {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: ts.JsxEmit.Preserve,
+        jsxImportSource: "@solidjs/web",
+      }),
+    );
+    expect(
+      program
+        .getSemanticDiagnostics(program.getSourceFile(entry))
+        .some(
+          ({ code, messageText }) =>
+            code === 2345 && ts.flattenDiagnosticMessageText(messageText, " ").includes('"missing"'),
+        ),
+    ).toBe(true);
+
+    await writeFile(entry, imports + 'export const Bad = after(owner.find("title"), () => null);');
+    const ambiguous = build(addon);
+    expect(ambiguous.status).not.toBe(0);
+    expect(ambiguous.stderr).toContain("Header › header › title, ThreadRow › article › span › title");
+    expect(ambiguous.stderr).toContain("Narrow the search with in or nth");
+
+    await writeFile(entry, imports + 'const name = "title"; export const Bad = () => owner.find(name);');
+    const dynamic = build(addon);
+    expect(dynamic.status).not.toBe(0);
+    expect(dynamic.stderr).toContain("Use a literal screen element name");
   });
 }, 30_000);
 
-test("same-tag insertions keep named parts and warn when a positional part changes identity", async () => {
+test("ignored subtrees stay as JSX and cannot be found", async () => {
   await scratch(async (root) => {
     const owner = await source(
       root,
       "owner",
       `
-      import { Show } from "solid-js";
-      export function Message(props: { text: string }) {
-        const helper = () => <i>{props.text}</i>;
-        const items = [props.text].map(text => <li>{text}</li>);
-        return <article><div class="body" aria-label="body"/><div aria-label="detail"/><div data-part="footer" id="bar"/><footer/><div id="123"/><li/><li/>{helper()}{items}</article>;
-      }
+      export const Panel = () => (
+        <section><div data-part-ignore data-part="ignored"><span data-part="secret" /></div><p id="visible" /><p id="$2" /></section>
+      );
     `,
     );
     built(owner);
+    const types = await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8");
+    const bundle = await readFile(resolve(owner, "dist/ui.js"), "utf8");
+    expect(types).toMatch(/["]?visible["]?:/);
+    expect(types).not.toMatch(/ignored|secret|declare const parts/);
+    expect(bundle).toContain("data-part");
+    expect(bundle).not.toMatch(/Panel\.section\.ignored|export\s*\{[^}]*\bas parts\b/);
     const addon = await source(
       root,
       "addon",
-      `
-      import { replace, append } from "@tokamak/sdk/client";
-      import { parts } from "plugin:owner/client";
-      export const Body = replace(parts.Message.article.div, () => "body");
-      export const Footer = append(parts.Message.article.footer, () => "footer");
-      export const Title = append(parts.Message.article["123"], () => "title");
-      export const Helper = append(parts.Message.helper.i, ({ text }) => text);
-      export const Row = append(parts.Message.li, ({ text }) => text);
-      export const Ambiguous = append(parts.Message.article.li, () => "row");
-      export const Tag = append(parts.Message.article.footer$2, () => "plain footer");
-    `,
-    );
-    const compiled = build(addon);
-    expect(compiled.status, compiled.stderr).toBe(0);
-    expect(compiled.stderr).toContain(
-      "owner.Message.article.li: ambiguous positional target; ask the owner for a data-part or id",
-    );
-
-    const entry = resolve(owner, "src/main.tsx");
-    const original = await readFile(entry, "utf8");
-    await writeFile(
-      entry,
-      original.replace(
-        '<div class="body" aria-label="body"/>',
-        '<div aria-label="notice"/><Show when={true}><div class="body" aria-label="body"/></Show>',
-      ),
-    );
-    const result = build(owner);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stderr).toContain(
-      'Plugin "addon" targets a changed screen part: path owner.Message.article.div now names a different element',
-    );
-    expect(result.stderr).not.toMatch(/targets .*owner\.Message\.article\.(footer|123)/);
-    expect(await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8")).toContain(
-      "owner.Message.article.div$2",
-    );
-  });
-}, 30_000);
-
-test("a named part keeps its positional ancestors, and a new attribute is not a new element", async () => {
-  await scratch(async (root) => {
-    const owner = await source(
-      root,
-      "owner",
-      `
-      export function Message() {
-        return <section><nav role="a"><p data-part="x"/></nav><nav role="b"><p data-part="x"/></nav></section>;
-      }
-    `,
-    );
-    built(owner);
-    const addon = await source(
-      root,
-      "addon",
-      `
-      import { append } from "@tokamak/sdk/client";
-      import { parts } from "plugin:owner/client";
-      export const Inside = append(parts.Message.section.nav$2.x, () => "x");
-    `,
+      imports + 'export const Note = after(owner.find("$2"), () => null);',
     );
     built(addon);
+    await writeFile(
+      resolve(addon, "src/main.tsx"),
+      imports + 'export const Bad = after(owner.find("secret"), () => null);',
+    );
+    const failure = build(addon);
+    expect(failure.status).not.toBe(0);
+    expect(failure.stderr).toContain('find("secret") matches no elements');
+  });
+}, 30_000);
+
+test("two replacements of the same resolved element fail the build", async () => {
+  await scratch(async (root) => {
+    built(await source(root, "owner", screen));
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        `
+      export const First = replace(owner.find("title", { in: "Header" }), () => "first");
+      export const Second = replace(owner.find("title", { nth: 1 }), () => "second");`,
+    );
+    const failure = build(addon);
+    expect(failure.status).not.toBe(0);
+    expect(failure.stderr).toContain("First and Second both replace owner.Header.header.title");
+  });
+}, 30_000);
+
+test("a named part inherits position protection without mistaking ordinary edits for a move", async () => {
+  await scratch(async (root) => {
+    const original = `
+      export function Message() {
+        return <section><nav role="a"><p data-part="x"/></nav><nav role="b"><p data-part="y"/></nav></section>;
+      }
+    `;
+    const owner = await source(root, "owner", original);
+    built(owner);
+    built(await source(root, "addon", imports + 'export const Inside = append(owner.find("y"), () => "y");'));
 
     const entry = resolve(owner, "src/main.tsx");
-    const original = await readFile(entry, "utf8");
     await writeFile(entry, original.replace('<nav role="b">', '<nav role="b" title="b" aria-busy={false}>'));
     const edited = build(owner);
     expect(edited.status, edited.stderr).toBe(0);
     expect(edited.stderr).not.toContain('Plugin "addon"');
 
+    await writeFile(entry, original.replace('<nav role="b">', '<nav role="c"/><nav role="b">'));
+    const shifted = build(owner);
+    expect(shifted.status, shifted.stderr).toBe(0);
+    expect(shifted.stderr).toContain('Plugin "addon": find("y") targets a different element');
+  });
+}, 30_000);
+
+test("same-named siblings preserve source order and detect a reorder even without identifying attributes", async () => {
+  await scratch(async (root) => {
+    const original =
+      'export const Panel = () => <section><p data-part="2">First</p><p data-part="2">Second</p></section>;';
+    const owner = await source(root, "owner", original);
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports + 'export const Note = after(owner.find("2", { nth: 1 }), () => "note");',
+    );
+    built(addon);
+    expect((await manifest(addon)).plugin.contributes["component-action"][0]).toMatchObject({
+      target: "owner.Panel.section.2",
+      fingerprint: expect.any(String),
+    });
     await writeFile(
-      entry,
-      original.replace('<nav role="b">', '<nav role="c"><p data-part="x"/></nav><nav role="b">'),
+      resolve(owner, "src/main.tsx"),
+      original.replace("First", "TEMP").replace("Second", "First").replace("TEMP", "Second"),
     );
     const shifted = build(owner);
     expect(shifted.status, shifted.stderr).toBe(0);
-    expect(shifted.stderr).toContain(
-      'Plugin "addon" targets a changed screen part: path owner.Message.section.nav$2.x now names a different element',
-    );
+    expect(shifted.stderr).toContain('Plugin "addon": find("2", { nth: 1 }) targets a different element');
   });
 }, 30_000);
 
@@ -237,42 +239,6 @@ test("duplicate top-level render names report both files", async () => {
   });
 }, 30_000);
 
-test("style and prop expression edits keep composer placements valid", async () => {
-  await scratch(async (root) => {
-    const composer = `
-      const SendButton = (props: { disabled: boolean }) => <button disabled={props.disabled} />;
-      export const Composer = (props: { draft: string }) =>
-        <div class="flex gap-1"><div data-part="top"/><div data-part="box"><SendButton disabled={!props.draft}/></div></div>;
-    `;
-    const owner = await source(root, "owner", composer);
-    built(owner);
-    const addon = await source(
-      root,
-      "addon",
-      `
-      import { after, prepend, replace } from "@tokamak/sdk/client";
-      import { parts } from "plugin:owner/client";
-      export const Agent = after(parts.Composer.div.box, () => "Agent");
-      export const Permission = prepend(parts.Composer.div.top, () => "Permission");
-      export const Cleanup = prepend(parts.Composer.div.top, () => "Cleanup");
-      export const Stop = replace(parts.Composer.div.box.SendButton, () => "Stop");
-    `,
-    );
-    built(addon);
-    const actions = (await manifest(addon)).plugin.contributes["component-action"];
-    expect(actions).toHaveLength(4);
-    expect(actions.every((action) => !("fingerprint" in action))).toBe(true);
-
-    await writeFile(
-      resolve(owner, "src/main.tsx"),
-      composer.replace("gap-1", "gap-2").replace("!props.draft", "props.draft.length === 0"),
-    );
-    const rebuilt = build(owner);
-    expect(rebuilt.status, rebuilt.stderr).toBe(0);
-    expect(rebuilt.stderr).not.toContain("skipping this addition");
-  });
-}, 30_000);
-
 test("an Index callback exposes its accessor item and numeric index", async () => {
   await scratch(async (root) => {
     const owner = await source(
@@ -285,8 +251,15 @@ test("an Index callback exposes its accessor item and numeric index", async () =
     `,
     );
     built(owner);
-    const types = await readFile(resolve(owner, "src/_generated/components.d.ts"), "utf8");
-    expect(types).toContain("owner.Labels.span");
-    expect(types).toContain("readonly item: () => string; readonly index: number");
+    built(
+      await source(
+        root,
+        "addon",
+        imports +
+          `
+      export const Note = after(owner.find("span"), ({ $row }) => $row.item().repeat($row.index));
+    `,
+      ),
+    );
   });
 }, 30_000);

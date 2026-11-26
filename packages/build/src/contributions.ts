@@ -1,3 +1,4 @@
+import type { ScreenSearch } from "../../sdk/screen-search.ts";
 import { parsePluginSpecifier } from "../../sdk/tools/plugin-boundary.mjs";
 import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
 import { componentParts, problem } from "./component-parts.ts";
@@ -41,7 +42,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
   const replacements = new Map<string, string>();
   const owners = new Map<string, ReturnType<typeof componentParts>>();
   const edits = new Map<string, [number, number, string][]>();
-  function lookup(owner: string, names: string[]) {
+  function lookup(owner: string, search: ScreenSearch) {
     let parts = owners.get(owner);
     if (!parts) {
       const folder = resolve(root, "..", owner);
@@ -49,7 +50,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
       if (!file) return;
       owners.set(owner, (parts = componentParts(file, program, owner, folder)));
     }
-    return parts.part(names);
+    return parts.resolve(search);
   }
   const checked = new Map<ts.SourceFile, readonly ts.Diagnostic[]>();
   function checkAction(call: ts.CallExpression) {
@@ -60,6 +61,49 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
       (d) => d.start !== undefined && d.start >= call.getStart(file) && d.start < call.end,
     );
     if (diagnostic) throw problem(call, ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+  }
+  const searches = new Map<ts.CallExpression, Record<string, string | number>>();
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile || !inSource(root, file.fileName)) continue;
+    function visit(node: ts.Node) {
+      if (ts.isImportDeclaration(node) || ts.isTypeNode(node)) return;
+      if (ts.isCallExpression(node)) {
+        const owner = findOwner(node.expression, checker);
+        if (owner) {
+          const search = searchArguments(node);
+          const result = lookup(owner, search);
+          if (!result) throw problem(node, `Cannot read screen elements for plugin "${owner}"`);
+          if (!result.element) throw problem(node, result.reason);
+          const { target, fingerprint } = result.element;
+          searches.set(node, {
+            ...search,
+            owner,
+            target,
+            ...(fingerprint ? { fingerprint } : {}),
+          });
+          const cuts = edits.get(file.fileName) ?? [];
+          cuts.push([node.getStart(), node.end, `(${JSON.stringify({ target })})`]);
+          edits.set(file.fileName, cuts);
+          if (result.ambiguous)
+            warn(
+              `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
+            );
+          return;
+        }
+      }
+      if (
+        (ts.isPropertyAccessExpression(node) ||
+          ts.isElementAccessExpression(node) ||
+          ts.isIdentifier(node)) &&
+        findOwner(node, checker)
+      )
+        throw problem(
+          node,
+          "Call find directly from its public client import so its arguments can be checked",
+        );
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
   }
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
     if (!runtime.has(exported.name)) continue;
@@ -75,22 +119,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
     if (action) {
       const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
       if (!kind.isStringLiteral()) throw problem(declaration, "Declare a single component action");
-      const values = componentActionOptions(
-        declaration,
-        kind.value,
-        checker,
-        plugin,
-        lookup,
-        checkAction,
-        (node, replacement) => {
-          const file = node.getSourceFile().fileName;
-          const cuts = edits.get(file) ?? [];
-          cuts.push([node.getStart(), node.end, replacement]);
-          edits.set(file, cuts);
-        },
-        warn,
-      );
-      if (!values) continue;
+      const values = componentActionOptions(declaration, kind.value, checker, plugin, searches, checkAction);
       if (kind.value === "replace") {
         const target = String(values.target);
         const first = replacements.get(target);
@@ -248,38 +277,21 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  lookup: (
-    owner: string,
-    names: string[],
-  ) => { fingerprint?: string; ambiguous?: boolean } | false | undefined,
+  searches: ReadonlyMap<ts.CallExpression, Record<string, string | number>>,
   checkAction: (call: ts.CallExpression) => void,
-  edit: (node: ts.Node, replacement: string) => void,
-  warn: (message: string) => void,
-): Record<string, string | number> | undefined {
+): Record<string, string | number> {
   const init = exportedInitializer(declaration);
   if (!init || !ts.isCallExpression(init) || !init.arguments[0])
     throw problem(declaration, "Export a component action declared with an action helper");
-  const path = init.arguments[0];
-  const type = checker.getTypeAtLocation(path);
-  const reference = importedPart(path, checker);
-  if (!reference || reference.owner === plugin)
-    throw problem(path, "Use a screen part from another plugin's client import");
-  const target = [reference.owner, ...reference.names].join(".");
-  const exists = lookup(reference.owner, reference.names);
-  if (exists === false) {
-    warn(`Plugin "${plugin}" targets missing screen part ${target}; skipping this addition`);
-    edit(init, "undefined");
-    return;
-  }
-  if (!exists || !brand(type, "componentPartBrand"))
-    throw problem(path, `Screen element is not a typed path: ${path.getText()}; build its owner first`);
+  const reference = unwrap(init.arguments[0])!;
+  const call = targetSearch(reference, checker);
+  const found = call && searches.get(call);
+  if (!found || findOwner(call.expression, checker) === plugin)
+    throw problem(reference, "Use find from another plugin's public client import");
+  if (!brand(checker.getTypeAtLocation(reference), "componentPartBrand"))
+    throw problem(reference, "Build the owning plugin first to generate its find types");
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
-  const values: Record<string, string | number> = { action, target };
-  if (exists.fingerprint) values.fingerprint = exists.fingerprint;
-  if (exists.ambiguous)
-    warn(
-      `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
-    );
+  const values: Record<string, string | number> = { action, ...found };
   if (options) {
     if (!ts.isObjectLiteralExpression(options))
       throw problem(options, "Use literal component action options");
@@ -294,33 +306,72 @@ function componentActionOptions(
     }
   }
   checkAction(init);
-  // Existing artifacts keep loading when an owner removes the runtime path.
-  edit(path, JSON.stringify({ target }));
   return values;
 }
 
-/** Only paths rooted in public client imports can contribute placements. */
-function importedPart(path: ts.Expression, checker: ts.TypeChecker) {
-  while (ts.isParenthesizedExpression(path)) path = path.expression;
-  const names: string[] = [];
-  while (true) {
-    if (ts.isPropertyAccessExpression(path) && !path.questionDotToken) names.unshift(path.name.text);
-    else if (
-      ts.isElementAccessExpression(path) &&
-      !path.questionDotToken &&
-      ts.isStringLiteralLike(path.argumentExpression)
-    )
-      names.unshift(path.argumentExpression.text);
-    else break;
+function targetSearch(target: ts.Expression, checker: ts.TypeChecker) {
+  if (ts.isCallExpression(target)) return target;
+  const declaration = ts.isIdentifier(target) && checker.getSymbolAtLocation(target)?.valueDeclaration;
+  if (
+    !declaration ||
+    !ts.isVariableDeclaration(declaration) ||
+    !(declaration.parent.flags & ts.NodeFlags.Const)
+  )
+    return;
+  const value = unwrap(declaration.initializer);
+  if (value && ts.isCallExpression(value)) return value;
+}
+
+function findOwner(expression: ts.Expression, checker: ts.TypeChecker) {
+  let path = unwrap(expression)!;
+  let member: string | undefined;
+  if (ts.isPropertyAccessExpression(path)) {
+    member = path.name.text;
+    path = path.expression;
+  } else if (ts.isElementAccessExpression(path) && ts.isStringLiteralLike(path.argumentExpression)) {
+    member = path.argumentExpression.text;
     path = path.expression;
   }
-  if (!ts.isIdentifier(path)) return;
+  if (!ts.isIdentifier(path) || (member !== undefined && member !== "find")) return;
   const binding = checker
     .getSymbolAtLocation(path)
     ?.declarations?.find((node) => ts.isImportSpecifier(node) || ts.isNamespaceImport(node));
-  if (binding && ts.isImportSpecifier(binding)) names.unshift((binding.propertyName ?? binding.name).text);
-  if (names.shift() !== "parts" || !names.length) return;
+  if (!binding) return;
+  if (ts.isImportSpecifier(binding)) {
+    if (member !== undefined || (binding.propertyName ?? binding.name).text !== "find") return;
+  } else if (member !== "find") return;
   const specifier = importModule(binding);
   const reference = specifier && parsePluginSpecifier(specifier);
-  if (reference && reference.side === "client") return { owner: reference.id, names };
+  if (reference && reference.side === "client") return reference.id;
+}
+
+function searchArguments(call: ts.CallExpression): ScreenSearch {
+  const name = unwrap(call.arguments[0]);
+  const options = unwrap(call.arguments[1]);
+  const fail = (node: ts.Node = call): never => {
+    throw problem(node, "Use a literal screen element name and literal in or positive integer nth filters");
+  };
+  if (!name || !ts.isStringLiteralLike(name) || call.arguments.length > 2) return fail();
+  const search: ScreenSearch = { name: name.text };
+  if (options) {
+    if (!ts.isObjectLiteralExpression(options)) return fail(options);
+    for (const property of options.properties) {
+      if (!ts.isPropertyAssignment(property)) return fail(property);
+      const { name } = property;
+      const initializer = unwrap(property.initializer)!;
+      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
+      if (key === "in" && search.in === undefined && ts.isStringLiteralLike(initializer))
+        search.in = initializer.text;
+      else if (
+        key === "nth" &&
+        search.nth === undefined &&
+        ts.isNumericLiteral(initializer) &&
+        Number.isSafeInteger(Number(initializer.text)) &&
+        Number(initializer.text) > 0
+      )
+        search.nth = Number(initializer.text);
+      else return fail(property);
+    }
+  }
+  return search;
 }
