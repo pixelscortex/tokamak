@@ -192,35 +192,14 @@ action on a connected Runner, `ctx.env` comes from the Runner's environment.
 
 #### Run actions on a sandbox machine
 
-A server action can create a machine for its plugin. Pass the returned key to
-your sandbox provider as a secret. The provider starts a Runner with
-`--server` set to the workspace URL and `--key-file` pointing to the key in a
-private file. Install the full plugin build in the Runner's `--plugins`
-directory. The Runner identifies itself with the key; it does not need the id.
+The machine management API is available under `@tokamak/sdk/unstable` and may
+change.
+
+Connect a sandbox Runner using
+[`--server` and `--key-file`](../runner/README.md#connect-a-headless-runner-to-a-shared-server).
+Target a known machine id when calling an action:
 
 ```ts
-import { action, fail, isFailure } from "@tokamak/sdk";
-import { api } from "./_generated/api";
-
-export const newSandbox = action({
-  handler: async (ctx) => {
-    const server = await ctx.server.url();
-    if (!server) return fail("sandboxServerUrlMissing");
-
-    const machine = await ctx.machines.create({
-      name: "Thread sandbox",
-      member: ctx.auth.user.id,
-    });
-    if (isFailure(machine)) return machine;
-    const { id, key } = machine;
-    await startSandbox({ server, runnerKey: key }); // Your provider code.
-    const ready = await ctx.machines.waitOnline(id);
-    if (isFailure(ready)) return ready;
-    await ctx.runMutation(api.threads.saveMachine, { threadId: ctx.call.threadId, machineId: id });
-    return id; // Save only the id, never the key.
-  },
-});
-
 // Inside a server action:
 await ctx.runAction(api.jobs.collect, { cwd }, { on: machineId });
 // From the owning plugin's window:
@@ -231,9 +210,9 @@ Set `TOKAMAK_PUBLIC_URL` on the server to its reachable HTTP(S) origin, for
 example `https://workspace.example.com`. `ctx.server.url()` returns `null` if
 it is unset. Use HTTPS for a Runner outside loopback.
 
-`MachineId` is a branded string. Keep ids returned by `create` or `list` and
-supply them in per-call options for dynamic placement. For a fixed default in
-an action declaration, use a literal such as `on: "device:example" as MachineId`
+`MachineId` is a branded string. Supply a machine id in per-call options for
+dynamic placement. For a fixed default in an action declaration, use a
+literal such as `on: "device:example" as MachineId`
 with an actual issued id. The action has the Runner capabilities described
 above. The original caller and call note reach the action, including the
 thread, and queries and mutations still execute on the server.
@@ -241,39 +220,24 @@ thread, and queries and mutations still execute on the server.
 Only actions owned by a machine's plugin may run on it. A machine bound to
 a member accepts only calls whose original call note identifies that member.
 For thread turns, read the saved machine id and pass it as `{ on: id }`.
-Omitting `member` makes a machine server-only: only the owning plugin's server
-code can dispatch its own actions to it with `ctx.runAction`. A signed-in
-creator does not implicitly bind the machine. Binding is fixed at creation.
 A person's device is available only to calls started by that person.
 
-An unbound machine is only reachable through the owning plugin's server code,
-so if a server action accepts a machine id from a window, check `ctx.auth` and
-the plugin's own records before passing the id through.
-Bind a machine with `member` when a window should target it directly.
-`create({ member })` returns `machineForbidden` if the id is not an active member.
+Only the owning plugin's server code can dispatch its own actions to an
+unbound machine using `ctx.runAction`. If a server action accepts a machine id
+from a window, check `ctx.auth` and the plugin's records before passing it through.
 
 Unknown, removed and unauthorized ids all return `machineForbidden`.
 An authorized machine without a Runner returns `machineOffline` immediately.
 If its Runner disconnects or its key is removed during an action, that action
 returns `machineLost`. Calls are never queued or replayed.
 
-`ctx.machines.list()` returns the plugin's machines bound to the caller and
-that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
-milliseconds or `null`). Bound plugin entries also carry the member id in
-`member`. Without a person, the ordinary list is empty. Server actions
-can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
-Lists are snapshots; presence does not refresh query subscriptions.
-
-`create`, `waitOnline`, and `remove` run only in server actions. The credential
-store is separate from plugin transactions. `create` returns the key once
-and returns `machineLimit` when the plugin already has 100 active machines.
-`waitOnline` returns `null` when connected and `machineOffline` when it times
-out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
-sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
-container with your provider. Uninstalling a plugin revokes its machine keys.
+Machine management can also return `machineLimit` when the plugin already has
+100 active machines, `machineForbidden` for an unauthorized machine or for a
+machine bound to a member who cannot be found, and `machineOffline` if waiting
+for a connection times out. Uninstalling a plugin revokes its machine keys.
 
 A per-call override can move a server action to a Runner, where machine
-management methods and `ctx.server.url()` fail with the typed `serverOnly` error.
+management and `ctx.server.url()` fail with the typed `serverOnly` error.
 
 `ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
 one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
