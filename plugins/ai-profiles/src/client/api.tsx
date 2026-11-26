@@ -15,10 +15,10 @@ import {
   ThreadProfile,
 } from "./ui/thread-profile";
 
-export const ProfileColumn = append(ai.parts.PickerColumns.div.extraColumns, PickerProfileColumn);
-export const ProfileChip = append(ai.parts.PickerChip.Menu$2e$Trigger.chipExtras, PickerProfileChip);
-export const ProfileStatus = append(ai.parts.Row.div.statusExtras, PickerProfileStatus);
-export const WorkingProfile = append(ai.parts.ThreadDetail.detailExtras, ThreadProfile);
-export const IdleProfile = append(chat.parts.ThreadRow.ListboxItem.span.detail, IdleThreadProfile, {
+export const ProfileColumn = append(ai.find("extraColumns"), PickerProfileColumn);
+export const ProfileChip = append(ai.find("chipExtras"), PickerProfileChip);
+export const ProfileStatus = append(ai.find("statusExtras"), PickerProfileStatus);
+export const WorkingProfile = append(ai.find("detailExtras"), ThreadProfile);
+export const IdleProfile = append(chat.find("detail"), IdleThreadProfile, {
   when: (row) => !ai.hasLiveThreadDetail(row.thread._id),
 });

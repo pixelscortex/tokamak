@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 import solid from "@solidjs/vite-plugin";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { clientSurface } from "../build/src/client-surface.ts";
@@ -10,9 +10,15 @@ const require = createRequire(import.meta.url);
 const fixtures = resolve(import.meta.dirname, "tests/web/fixtures/parts");
 const addon = resolve(fixtures, "addon");
 const owner = resolve(fixtures, "owner/src/client/api.tsx");
-const renamedOwner = resolve(fixtures, "owner/dist/rename-check");
 const builder = resolve(import.meta.dirname, "../build/src/build.ts");
-const build = (root: string) => execFileSync("proto", ["run", "bun", "--", builder, root]);
+const build = (root: string) => {
+  const result = spawnSync("proto", ["run", "bun", "--", builder, root], {
+    encoding: "utf8",
+    env: { ...process.env, TOKAMAK_PLUGIN_DIR: fixtures },
+  });
+  if (result.status !== 0) throw new Error(result.error?.message ?? result.stdout + result.stderr);
+  return result.stderr;
+};
 const builtAddon = "\0built-component-addon";
 export default defineConfig({
   plugins: [
@@ -25,23 +31,41 @@ export default defineConfig({
         if (id !== builtAddon) return;
         build(addon);
 
-        const entry = resolve(renamedOwner, "src/main.tsx");
-        mkdirSync(dirname(entry), { recursive: true });
-        writeFileSync(
-          resolve(renamedOwner, "package.json"),
-          '{"name":"owner","version":"1.0.0","type":"module"}',
-        );
-        writeFileSync(resolve(renamedOwner, "plugin.ts"), readFileSync(resolve(fixtures, "owner/plugin.ts")));
-        writeFileSync(
-          entry,
-          readFileSync(owner, "utf8")
+        const original = readFileSync(owner, "utf8");
+        const versions = {
+          moved: original.replace(
+            "<SendButton {...props} />",
+            '<div data-part="send-slot"><SendButton {...props} /></div>',
+          ),
+          duplicate: original.replace(
+            "const Region =",
+            "export const Other = (props: ExampleProps) => <SendButton {...props} />; const Region =",
+          ),
+          changed: original
             .replaceAll("SendButton", "PostButton")
-            .replace('<div aria-label="body" />', '<div aria-label="notice" /><div aria-label="body" />'),
-        );
-        build(renamedOwner);
+            .replace(
+              '<div aria-label="body" />\n    <div aria-label="detail" />',
+              '<div aria-label="detail" />\n    <div aria-label="body" />',
+            ),
+        };
+        const exports: string[] = [];
+        let warnings = "";
+        for (const [version, source] of Object.entries(versions)) {
+          const root = resolve(fixtures, "owner/dist", version);
+          const entry = resolve(root, "src/main.tsx");
+          mkdirSync(dirname(entry), { recursive: true });
+          writeFileSync(resolve(root, "package.json"), '{"name":"owner","version":"1.0.0","type":"module"}');
+          writeFileSync(resolve(root, "plugin.ts"), readFileSync(resolve(fixtures, "owner/plugin.ts")));
+          writeFileSync(entry, source);
+          const log = build(root);
+          if (version === "changed") warnings = log;
+          else if (log.includes('Plugin "addon"')) throw new Error(log);
+          exports.push(`export * as ${version} from ${JSON.stringify(resolve(root, "dist/ui.js"))};`);
+        }
         return `
           export { default as manifest } from ${JSON.stringify(resolve(addon, "dist/manifest.json"))};
-          export { Composer as RenamedComposer, parts as renamedParts } from ${JSON.stringify(resolve(renamedOwner, "dist/ui.js"))};
+          ${exports.join("\n")}
+          export const warnings = ${JSON.stringify(warnings)};
           export const loadActions = () => import(${JSON.stringify(resolve(addon, "dist/ui.js"))});
         `;
       },

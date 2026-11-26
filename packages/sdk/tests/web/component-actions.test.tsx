@@ -4,13 +4,13 @@ import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
 import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
 import { BenchmarkRow, Composer, Labels, RealisticRow } from "./fixtures/parts/owner/src/client/api";
-import { parts } from "./fixtures/parts/owner/src/client/_generated/components";
+import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
 import { host, layer, type Layer } from "./fixtures/parts/extension-host";
 
 test("a plugin can add live UI before another plugin's button", async () => {
   const [visible, setVisible] = createSignal(false);
-  const target = parts.Composer.section.SendButton;
+  const target = find("SendButton");
   const Cost = before(target, (props) => <small>Cost of {props.label}</small>, { when: visible });
   const root = document.createElement("div");
   const lifecycle: string[] = [];
@@ -40,8 +40,8 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   const [hiding, setHiding] = createSignal(false);
   const [wrapping, setWrapping] = createSignal(true);
   const [label, setLabel] = createSignal("Send");
-  const button = parts.Composer.section.SendButton;
-  const toolbar = parts.Composer.section;
+  const button = find("SendButton");
+  const toolbar = find("section", { in: "Composer" });
   const layers = [
     layer(
       "Before",
@@ -146,7 +146,7 @@ test("two plugins compose around and inside elements, and hiding or replacing un
 
 test("a later replacement is refused even while the first installed replacement is inactive", async () => {
   const [active, setActive] = createSignal(false);
-  const target = parts.Composer.section.SendButton;
+  const target = find("SendButton");
   const layers = [
     layer(
       "Second",
@@ -198,10 +198,10 @@ test("a later replacement is refused even while the first installed replacement 
 });
 
 test("render props, forwarded and explicit children, and void elements keep their behavior", async () => {
-  const list = parts.Labels.section.span;
-  const search = parts.Labels.section.input;
-  const body = parts.Labels.section.Region.span;
-  const button = parts.Labels.section.button;
+  const list = find("span", { in: "Labels", nth: 1 });
+  const search = find("input");
+  const body = find("span", { in: "Region" });
+  const button = find("button", { in: "Labels" });
   const layers = [
     layer(
       "Result",
@@ -248,8 +248,8 @@ test("render props, forwarded and explicit children, and void elements keep thei
 });
 
 test("each action's `when` reads the props of the instance it would change", async () => {
-  const button = parts.Composer.section.SendButton;
-  const toolbar = parts.Composer.section;
+  const button = find("SendButton");
+  const toolbar = find("section", { in: "Composer" });
   // Only the composer labelled "Post" is changed; the "Send" one stays as it was.
   const onPost = (props: { label: string }) => props.label === "Post";
   const cases: [Layer[], string][] = [
@@ -331,8 +331,8 @@ test("a cloned native subtree supports live placements and restores its original
   const [layers, setLayers] = createSignal<Layer[]>([]);
   const [hidden, setHidden] = createSignal(false);
   const [replaced, setReplaced] = createSignal(false);
-  const header = parts.BenchmarkRow.article.header;
-  const bold = header.b;
+  const header = find("header", { in: "BenchmarkRow" });
+  const bold = find("b", { in: "BenchmarkRow" });
   const additions = [
     layer(
       "Before",
@@ -423,8 +423,8 @@ test("a cloned native subtree supports live placements and restores its original
 test("a child component is a hole in the native template and unloads when its containing part hides", async () => {
   const [hidden, setHidden] = createSignal(false);
   const unloaded = vi.fn();
-  const header = parts.RealisticRow.article.header;
-  const person = header.b;
+  const header = find("header", { in: "RealisticRow" });
+  const person = find("b", { in: "RealisticRow" });
   const root = document.createElement("div");
   const dispose = render(
     () => (

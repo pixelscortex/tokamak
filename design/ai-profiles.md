@@ -222,12 +222,12 @@ None for its thread UI. It fills named parts published by AI and Chat.
 | ------------------ | ---------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
 | Rail, tabs, search | The Profiles page (`/p/ai-profiles`), marked with a person (user-line) | `pages/profiles.tsx`, `lib/icons.ts` | every `Profiles ·` artboard (its tab); the rail is not on them |
 
-| Target                                                                   | What                                  | Source                  |
-| ------------------------------------------------------------------------ | ------------------------------------- | ----------------------- |
-| AI `PickerColumns.div.extraColumns`                                      | Profile radio column                  | `ui/thread-profile.tsx` |
-| AI `PickerChip.Menu$2e$Trigger.chipExtras`                               | Code or warning chip                  | `ui/thread-profile.tsx` |
-| AI `Row.div.statusExtras`                                                | Missing pick line and Send hold       | `ui/thread-profile.tsx` |
-| AI `ThreadDetail.detailExtras`, Chat `ThreadRow.ListboxItem.span.detail` | Profile code in working and idle rows | `ui/thread-profile.tsx` |
+| Target                                                   | What                                  | Source                  |
+| -------------------------------------------------------- | ------------------------------------- | ----------------------- |
+| AI `ai.find("extraColumns")`                             | Profile radio column                  | `ui/thread-profile.tsx` |
+| AI `ai.find("chipExtras")`                               | Code or warning chip                  | `ui/thread-profile.tsx` |
+| AI `ai.find("statusExtras")`                             | Missing pick line and Send hold       | `ui/thread-profile.tsx` |
+| AI `ai.find("detailExtras")`, Chat `chat.find("detail")` | Profile code in working and idle rows | `ui/thread-profile.tsx` |
 
 It uses the shell's sign-in return commands (`sign_in_return_listen`,
 `sign_in_return_cancel`, `sign_in_open_browser`, `design/shell.md`) through
