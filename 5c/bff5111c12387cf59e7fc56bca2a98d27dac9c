@@ -1,0 +1,48 @@
+plugins/agent-proxy/tests/fake-companies.test.ts
+  s_262cd94f783a6b::t_d13ee211cf2422 5,13-21,23-40,48-61,64,88,91-98,104,108-116,119,126-135,152-159,161,170-181,192-206,220-225,227-231
+  s_262cd94f783a6b::t_04a22f2b6d5c3a 262-328
+plugins/agent-proxy/README.md
+  s_262cd94f783a6b::t_283d4af7615fdd 7-28,44,63-75,79-83,91-117,121,123-125,128-143,152-154,176-185
+  s_262cd94f783a6b::t_dd4048a64ce953 186
+plugins/agent-proxy/tests/cli.test.ts
+  s_262cd94f783a6b::t_283d4af7615fdd 301-303
+  s_262cd94f783a6b::t_6deef394907ac4 1-5,8,41-153,155-156,158,194-207,209,222-265,319,322-327,338-339
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_262cd94f783a6b::t_8fc6dd40eb568c 8,14,21-25,28-34,47-48,69-70,91,119-134,137,141-167,182-185,187-188,203-217,231-232,247-249,261-263,265-270,278,280,282,292,298-303,306-316,318-319,321-324,326-332,334-335,337,345,358-359,365-366,373,390-391,393-394,400,411-413
+  s_262cd94f783a6b::t_283d4af7615fdd 6,74-77,273-277,325,333
+  s_262cd94f783a6b::t_5585a192b04f48 1-2,4,26,97,186,264,271-272,279,281,283-291,317,320,392,414-415
+moon.yml
+  s_262cd94f783a6b::t_195aacd5e51093 59
+plugins/agent-proxy/tests/fake-companies/record.ts
+  s_262cd94f783a6b::t_0e33a54af49388 1-55
+  s_262cd94f783a6b::t_f0dcf910979b4a 56-75
+plugins/agent-proxy/plugin.ts
+  s_262cd94f783a6b::t_195aacd5e51093 7-14
+plugins/agent-proxy/tests/fake-companies/recorder.ts
+  s_262cd94f783a6b::t_0e33a54af49388 2,12,14,29-43,49-53,55-56,72,77-78,106,118,133,143
+  s_262cd94f783a6b::t_283d4af7615fdd 44-48,62-64,67-71,73-76,99-102,122,126,134-138
+plugins/agent-proxy/tests/fake-companies/oauth.ts
+  s_262cd94f783a6b::t_195aacd5e51093 1-57
+  s_262cd94f783a6b::t_7d13ce37c8357c 58-80
+plugins/agent-proxy/src/server/addresses.ts
+  s_262cd94f783a6b::t_195aacd5e51093 1-5,22-45
+  s_262cd94f783a6b::t_4b40d666f9b94a 46-56
+plugins/agent-proxy/tests/addresses.test.ts
+  s_262cd94f783a6b::t_a9806c611b9e50 1-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cbff5111c12387cf59e7fc56bca2a98d27dac9c",
+  "prompts": {},
+  "sessions": {
+    "s_262cd94f783a6b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21336-9ced-7ed2-aa29-fc6cf65c996d",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
