@@ -37,11 +37,12 @@ fn write(root: &Path, directory: &str, definition: Value) -> PathBuf {
     })).unwrap()).unwrap();
     path
 }
-fn error(root: &Path) -> String {
+fn skip_reason(root: &Path, id: &str) -> String {
     Catalog::read(root)
-        .err()
-        .expect("invalid catalog")
-        .to_string()
+        .unwrap()
+        .scan_skip_reason(id)
+        .unwrap()
+        .to_owned()
 }
 #[test]
 fn resolves_dependencies_and_preserves_private_assets() {
@@ -74,8 +75,18 @@ fn resolves_dependencies_and_preserves_private_assets() {
             .unwrap(),
         b"export {};"
     );
-    assert!(error(&root.0).contains("hash mismatch"));
+    assert!(skip_reason(&root.0, "notes").contains("hash mismatch"));
 }
+#[test]
+fn catalog_reports_the_root_of_a_single_build_and_rejects_an_unreadable_root() {
+    let root = scratch();
+    let path = write(&root.0, "single", json!({"id":"a","version":"1.0.0"}));
+    let catalog = Catalog::read(&path).unwrap().metadata();
+    assert_eq!(catalog["pluginsFolder"], json!(path));
+    assert_eq!(catalog["plugins"][0]["folder"], json!(path));
+    assert!(Catalog::read(&root.0.join("missing")).is_err());
+}
+
 #[test]
 fn runner_assets_follow_the_build() {
     let root = scratch();
@@ -120,48 +131,63 @@ fn runner_assets_follow_the_build() {
 }
 
 #[test]
-fn rejects_missing_incompatible_conflicting_cyclic_and_duplicate_plugins() {
-    for (a, b, expected) in [
+fn skips_missing_incompatible_conflicting_cyclic_and_duplicate_plugins() {
+    for (a, b, key, expected) in [
         (
             json!({"id":"a","version":"1.0.0","depends":{"missing":"*"}}),
             json!({"id":"b","version":"1.0.0"}),
-            "Missing dependency",
+            "a",
+            "needs missing, which is not installed",
         ),
         (
             json!({"id":"a","version":"1.0.0","depends":{"b":"^2"}}),
             json!({"id":"b","version":"1.0.0"}),
+            "a",
             "Incompatible dependency",
         ),
         (
             json!({"id":"a","version":"1.0.0","optional":{"b":"^2"}}),
             json!({"id":"b","version":"1.0.0"}),
-            "Incompatible dependency",
+            "a",
+            "",
         ),
         (
             json!({"id":"a","version":"1.0.0","breaks":{"b":"^1"}}),
             json!({"id":"b","version":"1.0.0"}),
+            "a",
             "Plugin conflict",
         ),
         (
             json!({"id":"a","version":"1.0.0","depends":{"b":"*"}}),
             json!({"id":"b","version":"1.0.0","depends":{"a":"*"}}),
+            "a",
             "cycle",
         ),
         (
             json!({"id":"a","version":"1.0.0"}),
             json!({"id":"a","version":"2.0.0"}),
-            "Duplicate",
+            "second",
+            "duplicate of plugin a",
         ),
         (
             json!({"id":"a","version":"1.0.0","api":"tokamak@^9"}),
             json!({"id":"b","version":"1.0.0"}),
+            "a",
             "Incompatible host API",
         ),
     ] {
         let root = scratch();
         write(&root.0, "first", a);
         write(&root.0, "second", b);
-        assert!(error(&root.0).contains(expected), "{expected}");
+        let catalog = Catalog::read(&root.0).unwrap();
+        if expected.is_empty() {
+            assert!(catalog.plugins.contains_key(key));
+        } else {
+            assert!(
+                catalog.scan_skip_reason(key).unwrap().contains(expected),
+                "{expected}"
+            );
+        }
     }
 }
 #[test]
@@ -170,7 +196,7 @@ fn rejects_unbuilt_and_escaping_artifacts() {
     let project = root.0.join("unbuilt");
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(project.join("package.json"), "{}").unwrap();
-    assert!(error(&root.0).contains("not been built"));
+    assert!(skip_reason(&root.0, "unbuilt").contains("not built"));
     let path = write(&root.0, "artifact", json!({"id":"a","version":"1.0.0"}));
     let manifest = path.join("manifest.json");
     let mut metadata: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
@@ -193,7 +219,7 @@ fn catalog_refuses_a_plugin_with_the_reserved_auth_id() {
         "external-identity",
         json!({"id":"auth","version":"1.0.0"}),
     );
-    assert!(error(&root.0).contains("auth is built into the server"));
+    assert!(skip_reason(&root.0, "auth").contains("auth is built into the server"));
 }
 
 #[cfg(unix)]

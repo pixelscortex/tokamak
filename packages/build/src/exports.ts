@@ -3,6 +3,7 @@ import {
   definitionInfo,
   pluginCompilerOptions,
   runtimeExportNames,
+  serverConfigPath,
 } from "../../sdk/tools/plugin-compiler.mjs";
 import { isServerModule, serverDirectory } from "../../sdk/tools/server-files.mjs";
 import { serverModule } from "./descriptor.ts";
@@ -18,14 +19,10 @@ export function exportedFunctions(root: string, entry: string | undefined) {
     throw new Error(`Invalid plugin exports ${entry}: ${message}`);
   };
   if (!ts.sys.fileExists(path)) fail("file does not exist");
-  const configPath = ts.findConfigFile(serverDirectory(root), ts.sys.fileExists);
-  const config = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
+  const configPath = serverConfigPath(serverDirectory(root), root);
+  const config = ts.readConfigFile(configPath, ts.sys.readFile);
   if (config.error) fail(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    configPath ? resolve(configPath, "..") : root,
-  );
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, resolve(configPath, ".."));
   const program = ts.createProgram([path, resolve(serverDirectory(root), "_generated/api.ts")], {
     ...pluginCompilerOptions(root, parsed.options),
     noEmit: true,

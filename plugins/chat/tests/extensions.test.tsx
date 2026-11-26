@@ -7,7 +7,7 @@ import { TokamakClient, type ClientTransport, type Id } from "@tokamak/sdk";
 import { ClientContext } from "@tokamak/sdk/solid";
 import { ExtensionProvider, RegionOutlet, RegionProvider, ShortcutContext } from "@tokamak/sdk/client";
 import { RowList } from "@tokamak/ui";
-import { createPluginLoader, type PluginModuleHost } from "../../../packages/runtime/js/plugins";
+import { createPluginLoader, type PluginModuleHost } from "@tokamak/runtime/plugins";
 import {
   Chat,
   Composer,

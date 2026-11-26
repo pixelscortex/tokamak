@@ -1,7 +1,7 @@
 /** Static package conventions. Never import or evaluate an authored descriptor. */
 import { basename, resolve } from "node:path";
 import { existsSync } from "node:fs";
-export { clientEntry } from "../../sdk/tools/plugin-boundary.mjs";
+export { clientEntry } from "../../sdk/tools/client-entry.mjs";
 export { readDescriptor } from "../../sdk/tools/plugin-descriptor.ts";
 
 export function serverModule(root: string, module: string): string {
