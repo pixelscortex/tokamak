@@ -7,13 +7,14 @@ export async function agentCommand(
   ctx: CallerActionContext,
   [name, ...args]: ["claude" | "codex", ...string[]],
   timeout: number,
+  env?: Readonly<Record<string, string>>,
 ): Promise<{ stdout: string; code: number } | "missing" | undefined> {
   if (timeout <= 0) return;
   const notFound = new RegExp(`^tokamak-program: (?:line )?(?:\\d+: )?exec: ${name}: not found$`);
   let program: RunningProcess | undefined;
   let finished = false;
   try {
-    const child = (program = ctx.proc([name, ...args]));
+    const child = (program = ctx.proc([name, ...args], env === undefined ? undefined : { env }));
     child.closeInput();
     const result = await within(
       Promise.all([

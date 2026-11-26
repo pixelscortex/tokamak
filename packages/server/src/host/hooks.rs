@@ -62,6 +62,23 @@ pub(crate) async fn run_point<F: Future<Output = Result<Json, engine::CallError>
 ) -> Result<Json, engine::CallError> {
     match payload["stage"].as_str() {
         Some("before") => run_before(target, note, payload["args"].take(), execute).await,
+        Some("collect") if target.result.is_none() => {
+            let args = payload["args"].take();
+            validate(&target.args, &args, "args")?;
+            run_chain(
+                target,
+                note,
+                ChainStage {
+                    stage: Stage::Before,
+                    validation: Some(&target.args),
+                    collect: true,
+                },
+                Json::Null,
+                &args,
+                execute,
+            )
+            .await
+        }
         Some("after") if target.result.is_some() => {
             let result = payload["result"].take();
             run_after(target, note, result, &payload["args"], execute).await
@@ -155,6 +172,7 @@ pub(crate) async fn run_before<F: Future<Output = Result<Json, engine::CallError
         ChainStage {
             stage: Stage::Before,
             validation: Some(&target.args),
+            collect: false,
         },
         args,
         &Json::Null,
@@ -189,6 +207,7 @@ pub(crate) async fn run_after<F: Future<Output = Result<Json, engine::CallError>
         ChainStage {
             stage: Stage::After,
             validation,
+            collect: false,
         },
         result,
         args,
@@ -200,18 +219,24 @@ pub(crate) async fn run_after<F: Future<Output = Result<Json, engine::CallError>
 struct ChainStage<'a> {
     stage: Stage,
     validation: Option<&'a Json>,
+    collect: bool,
 }
 
 async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
     target: &HookTarget,
     note: &CallNote,
-    ChainStage { stage, validation }: ChainStage<'_>,
+    ChainStage {
+        stage,
+        validation,
+        collect,
+    }: ChainStage<'_>,
     mut value: Json,
     args: &Json,
     mut execute: impl FnMut(Hook, Stage, CallNote, Json) -> F,
 ) -> Result<Json, engine::CallError> {
+    let mut contributions = Vec::new();
     for hook in target.chain.iter().filter(|hook| stage.enabled(hook)) {
-        let stage_args = if matches!(stage, Stage::Before) {
+        let stage_args = if !collect && matches!(stage, Stage::Before) {
             &value
         } else {
             args
@@ -237,7 +262,7 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
         }
         let input = match stage {
             Stage::Before => {
-                json!({"name":hook.name,"target":target.name,"stage":"before","args":value})
+                json!({"name":hook.name,"target":target.name,"stage":"before","args":stage_args})
             }
             Stage::After => {
                 json!({"name":hook.name,"target":target.name,"stage":"after","args":args,"result":value})
@@ -284,8 +309,15 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
             validate(schema, &value, path)
                 .map_err(|message| make_error("invalidHookResult", json!(message)))?;
         }
+        if collect {
+            contributions.push(json!({"plugin":hook.owner,"value":value.take()}));
+        }
     }
-    Ok(value)
+    Ok(if collect {
+        Json::Array(contributions)
+    } else {
+        value
+    })
 }
 
 pub(super) struct TransactionHooks {
