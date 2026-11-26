@@ -222,7 +222,6 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "SignInStep": [[never, Props19]];
   "ConnectedStep": [[never, Props20]];
   "CardActions": [[never, Props23]];
-  "button": [["CardActions", Props22]];
   "CardProfiles": [[never, Props24]];
   "AddToProfile": [[never, Props24]];
   "CompanyMark": [[never, Props27]];

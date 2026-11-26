@@ -90,6 +90,9 @@ const noProps = {};
 
 /** Compiler entry point, owned by the render function rather than any of its parts. */
 export function attachRenderFunction(target: string, props?: object) {
+  // A component function can also be called as a plain helper, outside any
+  // owner (from a click handler, say). There is no instance to attach to.
+  if (!getOwner()) return;
   const registry = useContext(PartActions);
   if (!registry) return;
   const observer = new RenderAttachment(registry, target, props ?? noProps);
@@ -157,7 +160,7 @@ function attached(item: LoadedPartAction, props: object, registry: PartRegistry)
           return undefined;
         }}
       >
-        <Show when={item.action.when?.(props) ?? true}>
+        <Show when={item.enabled(props)}>
           {createComponent((item.action as ComponentAction<"attach">).layer!, props)}
         </Show>
       </Errored>

@@ -53,7 +53,6 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "CardText": [[never, Props3]];
   "Counts": [[never, Props4]];
   "ReviewPanel": [[never, Props5]];
-  "view": [["ReviewPanel", Props5]];
   "Note": [[never, Props6]];
   "TurnReview": [[never, Props7]];
   "FileCounts": [[never, Props4]];

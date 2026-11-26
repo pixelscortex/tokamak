@@ -580,3 +580,38 @@ test("a renamed Original parameter and its Children are private to the layer", a
     expect(ui).not.toContain('"Keep');
   });
 }, 30_000);
+
+test("only a component can be attached to: not a lowercase helper, and not one of two same-named wrappers", async () => {
+  await scratch(async (root) => {
+    const owner = await source(
+      root,
+      "owner",
+      `
+      import { Wrap as Other } from "./helpers";
+      const Wrap = (props: { children?: unknown }) => <>{props.children}</>;
+      const row = (text: string) => <li>{text}</li>;
+      export const List = (props: { items: string[] }) => <Other><Wrap><ul>{props.items.map(row)}</ul></Wrap></Other>;
+    `,
+    );
+    await writeFile(
+      resolve(owner, "src/helpers.tsx"),
+      "export const Wrap = (props: { children?: unknown }) => <>{props.children}</>;",
+    );
+    // Two wrappers with one name and no elements built before attach existed; they still do.
+    built(owner);
+    const addon = await source(
+      root,
+      "addon",
+      imports + 'export const Ok = attach(owner.find("List"), ({ items }) => items.length);',
+    );
+    built(addon);
+    for (const name of ["row", "Wrap"]) {
+      await writeFile(
+        resolve(addon, "src/main.tsx"),
+        imports + `export const Bad = attach(owner.find(${JSON.stringify(name)}), () => null);`,
+      );
+      const failure = build(addon);
+      expect(failure.status, name).not.toBe(0);
+    }
+  });
+}, 30_000);

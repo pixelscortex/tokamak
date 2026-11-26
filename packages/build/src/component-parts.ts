@@ -86,6 +86,15 @@ function assignParts(
   const counts = new Map<string, number>();
   const identities = new Map<Tree, string>();
   const times = new Map<string, number>();
+  // A render function with no elements of its own (a fragment, a provider) is
+  // only something to attach to. Two with one name cannot be told apart, so
+  // they leave the tree instead of failing a build that worked before.
+  const groups = new Map<string, number>();
+  for (const { name, tree: child } of tree.entries)
+    if (!child.part) groups.set(name, (groups.get(name) ?? 0) + 1);
+  tree.entries = tree.entries.filter(
+    ({ name, tree: child }) => child.part || child.entries.length || groups.get(name) === 1,
+  );
   for (const { name, node, fixed: named, tree: child } of tree.entries) {
     if (named) {
       if (!fixed.has(name)) fixed.set(name, node);
@@ -264,6 +273,9 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             },
             renderFunction: () => {
               const body = node.body!;
+              // A component is named like one. A lowercase helper that returns
+              // JSX is called, not mounted, so it has no instance to attach to.
+              if (!isDefault && !/^[A-Z]/.test(name!.getText(source))) return;
               if (renderFunctions.has(body)) return;
               const part = { target: "", props, type: scope.type() };
               identity().renderFunction = part;
@@ -457,6 +469,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           setup.set(node, destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`);
         }
         for (const [node, part] of renderFunctions ?? []) {
+          if (!part.target) continue; // Left out of the tree: nothing can attach to it.
           if (erased(node)) continue;
           const props = part.props === "{}" ? "" : `, ${part.props}`;
           setup.set(node, `${setup.get(node) ?? ""}__tokamakAttach(${address(part)}${props});`);

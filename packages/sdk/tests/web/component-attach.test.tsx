@@ -229,3 +229,36 @@ test("attachments start in install, action, plugin and export order even when im
     dispose();
   }
 });
+
+test("a `when` that throws reads as false and the attachment starts once it stops throwing", async () => {
+  const composer = find("Composer");
+  const [broken, setBroken] = createSignal(true);
+  const starts: string[] = [];
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const watch = attach(composer, (props) => (starts.push(props.label), null), {
+    when: () => {
+      if (broken()) throw new Error("not yet");
+      return true;
+    },
+  });
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider host={host([contribution("Watch", watch, "attach", composer, 0, "watcher")])}>
+        <Composer label="Send" lifecycle={() => {}} />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    await waitFor(() => expect(warn).toHaveBeenCalledWith(expect.stringMatching(/watcher\/Watch.*not yet/)));
+    expect(starts).toEqual([]);
+    setBroken(false);
+    flush();
+    await waitFor(() => expect(starts).toEqual(["Send"]));
+    expect(root.textContent).toBe("Send");
+  } finally {
+    dispose();
+    warn.mockRestore();
+  }
+});
