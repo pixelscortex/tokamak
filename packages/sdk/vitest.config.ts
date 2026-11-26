@@ -29,14 +29,18 @@ export default defineConfig({
       },
       load(id) {
         if (id !== builtAddon) return;
+        build(resolve(fixtures, "owner"));
         build(addon);
 
         const original = readFileSync(owner, "utf8");
         const versions = {
-          moved: original.replace(
-            "<SendButton {...props} />",
-            '<div data-part="send-slot"><SendButton {...props} /></div>',
-          ),
+          moved: original
+            .replace(
+              "<SendButton {...props} />",
+              '<div data-part="send-slot"><SendButton {...props} /></div>',
+            )
+            .replace('<select aria-label="Upload" />', '<aside><select aria-label="Upload" /></aside>'),
+          noUploadLabel: original.replace('<select aria-label="Upload" />', "<select />"),
           duplicate: original.replace(
             "const Region =",
             "export const Other = (props: ExampleProps) => <SendButton {...props} />; const Region =",
@@ -50,6 +54,7 @@ export default defineConfig({
         };
         const exports: string[] = [];
         let warnings = "";
+        let filteredWarnings = "";
         for (const [version, source] of Object.entries(versions)) {
           const root = resolve(fixtures, "owner/dist", version);
           const entry = resolve(root, "src/main.tsx");
@@ -59,13 +64,15 @@ export default defineConfig({
           writeFileSync(entry, source);
           const log = build(root);
           if (version === "changed") warnings = log;
-          else if (log.includes('Plugin "addon"')) throw new Error(log);
+          else if (version === "noUploadLabel") filteredWarnings = log;
+          else if (log.includes("skipping this addition")) throw new Error(log);
           exports.push(`export * as ${version} from ${JSON.stringify(resolve(root, "dist/ui.js"))};`);
         }
         return `
           export { default as manifest } from ${JSON.stringify(resolve(addon, "dist/manifest.json"))};
           ${exports.join("\n")}
           export const warnings = ${JSON.stringify(warnings)};
+          export const filteredWarnings = ${JSON.stringify(filteredWarnings)};
           export const loadActions = () => import(${JSON.stringify(resolve(addon, "dist/ui.js"))});
         `;
       },

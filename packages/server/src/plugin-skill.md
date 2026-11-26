@@ -47,8 +47,12 @@ generated references in `src/server/_generated/` and component declarations in
   Write plain JSX. A build generates a typed `find` function on the client entry.
   A dependent plugin imports `plugin:<id>/client` and exports an action such as
   `after(owner.find("button", { in: "Editor" }), Tools)`.
-  A static `data-part` or `id` supplies the element name when present. The actions
-  are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
+  A static `data-part` or `id` supplies the element name when present. Narrow
+  a name with literal `type`, `href`, `role`, or `aria` filters, such as
+  `find("button", { aria: { label: "Stop" } })`. They match only static string
+  attributes; `nth` counts the remaining matches. Both builds warn and ask
+  for `data-part` when a search reaches a plain tag with no static name.
+  The actions are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.
   Use `state` for window values, `derived` for computed values, and

@@ -131,9 +131,23 @@ then its static `id`, then its tag or component name (such as `Menu.Item`).
 
 If a name has several matches, narrow it with `in` to an enclosing render
 function or element. Solid control flow and fragments are transparent.
-If the search is still ambiguous, use `nth` (1-based source order).
-The name and all filters must be literals. The build fails when the resulting
-search does not identify exactly one element and lists the candidates.
+You can also narrow a name by static `type`, `href`, `role`, and `aria-*`
+attributes. Write ARIA keys without the prefix, for example
+`find("button", { aria: { label: "Stop" } })`. The typed API offers the
+attribute filters and values the owner writes for that name. Computed JSX
+values, class, style, data attributes and text cannot match a filter, and
+neither can an attribute written before a spread, which can replace it. A
+value is matched as written in the source: `aria-label="Save &amp; quit"` is
+found with `"Save &amp; quit"`.
+
+Filters must all match. If the search is still ambiguous, use `nth` to select
+a 1-based position among the remaining matches in source order. The name
+and filters in the search must be literals. If the search does not identify
+exactly one element, the build fails and lists the candidates.
+
+When an add-on finds a plain tag without a static `data-part` or `id`,
+both builds warn and suggest adding `data-part`. The owner's build reports
+this once per installed add-on and target.
 
 Commit the generated `_generated/components.d.ts` next to the client entry.
 Export actions from the contributing plugin's client entry:

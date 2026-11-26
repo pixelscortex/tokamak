@@ -22,9 +22,9 @@ type Props10 = Extract<NonNullable<Props9 & { readonly $row: { readonly item: { 
 type Props11 = Extract<NonNullable<{ row: Local3 }>, object>;
 type Props12 = Extract<NonNullable<import("plugin:chat/client").HeaderProps>, object>;
 export declare const find: import("@tokamak/sdk/client").ScreenFind<{
-  "p": [["SnapshotNotice", Props1], ["SnapshotNotice" | "div", Props1], ["Note", Props6], ["TurnReview" | "ScrollArea", Props7], ["PatchNote", Props6]];
-  "div": [["SnapshotNotice", Props1], ["ChangeCard", Props1], ["ChangeCard", Props1], ["TurnReview" | "ScrollArea", Props7], ["FilePatch" | "article", Props9], ["PatchRow", Props11], ["PatchRow", Props11], ["PatchRow", Props11], ["ReviewToggle", Props12]];
-  "ul": [["SnapshotNotice" | "div", Props1], ["TurnReview" | "ScrollArea", Props7]];
+  "p": [["SnapshotNotice", Props1], ["SnapshotNotice" | "div", Props1], ["Note", Props6], ["TurnReview" | "ScrollArea", Props7, {"role":"note"}], ["PatchNote", Props6]];
+  "div": [["SnapshotNotice", Props1], ["ChangeCard", Props1], ["ChangeCard", Props1], ["TurnReview" | "ScrollArea", Props7], ["FilePatch" | "article", Props9], ["PatchRow", Props11], ["PatchRow", Props11], ["PatchRow", Props11], ["ReviewToggle", Props12, {"role":"group","aria":{"label":"Layout"}}]];
+  "ul": [["SnapshotNotice" | "div", Props1, {"aria":{"label":"Skipped files"}}], ["TurnReview" | "ScrollArea", Props7, {"aria":{"label":"Changed files"}}]];
   "li": [["SnapshotNotice" | "div" | "ul", Props2], ["TurnReview" | "ScrollArea" | "ul", Props8]];
   "Icon": [["ChangeCard" | "div", Props1], ["ChangeCard" | "div" | "Row", Props1], ["ChangeCard" | "div" | "Row", Props1], ["TurnReview" | "ScrollArea" | "ul" | "li" | "Row", Props8]];
   "CardText": [["ChangeCard" | "div", Props1], ["ChangeCard" | "div" | "Row" | "span", Props1]];
@@ -33,7 +33,7 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "Counts": [["CardText", Props3], ["TurnReview" | "h2", Props7], ["FilePatch" | "article" | "header", Props9]];
   "Note": [["ReviewPanel" | "view", Props5], ["ReviewPanel" | "view", Props5], ["ReviewPanel" | "view", Props5], ["ReviewPanel" | "view", Props5]];
   "TurnReview": Props5;
-  "section": Props5;
+  "section": [["ReviewPanel", Props5, {"aria":{"label":"Review"}}]];
   "h2": Props7;
   "ScrollArea": Props7;
   "FileCounts": Props8;
