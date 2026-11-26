@@ -49,7 +49,10 @@ jobs:
         run: sccache --show-stats
   rust:
     # Build the Runner and cloud server and run their offline suites.
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    # Started by hand only for now (Run workflow): it is the slow stage, and it
+    # held every pull request until it finished. Run the stage locally with
+    # `moon run workspace:ci-rust` before changing Rust code.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     env:
