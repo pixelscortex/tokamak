@@ -1,0 +1,508 @@
+plugins/agent-proxy/tests/cli.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-267
+plugins/ai-profiles/src/client/lib/icons.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-22
+packages/ui/src/button.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 11-13,49,53,62,87-89
+plugins/ai-profiles/src/client/ui/profile-box.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-193
+e2e/fake-agent/harness.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 216,403,411,426
+plugins/ai/src/server/agent-turn.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3,44-46,52
+plugins/ai-profiles/src/server/_generated/internal.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-16
+packages/sdk/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 327-403,954-968,1123-1128
+  s_be4ee891f4fdb9::t_477cef70907d79 1129
+app/src-tauri/permissions/main-window.toml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-9
+plugins/ai-profiles/src/server/schema.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-44
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-332
+plugins/agent-proxy/src/server/company.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-124
+plugins/claude/tests/turns.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 4,14-19,48-52,57-61,78-144
+plugins/agent-proxy/src/server/_functions.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-145
+.moon/workspace.yml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 16-17
+plugins/agent-proxy/src/server/_generated/plugin.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-46
+plugins/ai-profiles/src/client/ui/add-dialog.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-468
+plugins/ai/src/client/lib/icons.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 37-44
+packages/ui/src/index.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 14-15
+plugins/ai-profiles/src/client/lib/manage.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-33
+packages/ui/src/kit/controls.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 72-81
+plugins/ai/src/contracts.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3,9,74
+packages/server/src/environment.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 62-68
+plugins/ai/src/server/turns.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 7,118,207-210,242-244,298-301,308-310,365,373-375,402-405,443-445,610-614,662,666,671,704-706,737-741
+plugins/ai-profiles/tsconfig.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-5
+plugins/ai-profiles/tests/list-identity.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-138
+plugins/ai-profiles/tests/profiles-server.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-364
+packages/ui/tests/lint.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 23
+plugins/ai-profiles/plugin.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-10
+plugins/ai-profiles/src/client/tsconfig.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-12
+plugins/ai-profiles/src/client/ui/subscription-card.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-160
+plugins/agent-proxy/tests/addresses.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-157
+plugins/ai-profiles/src/client/lib/sign-in-watch.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-141
+plugins/ai-profiles/src/client/lib/builder.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-215
+packages/host/src/http_action.js
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-66
+app/src-tauri/src/main.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 5,16,37-40
+packages/sdk/src/agent-turn.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 117-131,151-152,214-226
+plugins/agent-proxy/plugin.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-16
+plugins/agent-proxy/tests/fake-companies/oauth.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-81
+plugins/agent-proxy/tests/manage.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-430
+packages/sdk/src/functions.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 319-329,342
+app/src-tauri/Cargo.toml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 16
+plugins/codex/src/server/rpc.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 29-33,36-38
+plugins/agent-proxy/src/server/manage.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-398
+plugins/agent-proxy/src/server/openai.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-466
+packages/host/src/main.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 10-11,56-61
+plugins/ai-profiles/package.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-24
+plugins/ai-profiles/src/client/lib/format.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-50
+packages/build/src/vite.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 12,198-208
+  s_be4ee891f4fdb9::t_b9e94984b4bd5c 209
+plugins/ai-profiles/src/server/profile-uses.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-44
+plugins/ai-profiles/src/client/pages/subscription.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-370
+packages/build/tests/boundary.test.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 663-688
+plugins/ai-profiles/src/server/subscriptions.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-67
+e2e/starter.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 53,55,71-73
+plugins/ai/src/server/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-3
+packages/sdk/tools/plugin-compiler.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 102-105
+app/scripts/starter-plugins.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 7-16
+plugins/agent-proxy/tests/fake-companies/stream.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-130
+plugins/ai-profiles/tests/vitest.config.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-15
+design/ai.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 23,31-89,102,136-140,142-148,169,174-188
+  s_be4ee891f4fdb9::t_4e658d23498717 98-101,141
+  s_be4ee891f4fdb9::t_58d0665e415a7f 108-120
+  s_be4ee891f4fdb9::t_13acbb4467bd11 103
+plugins/agent-proxy/tests/sign-in.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-488
+plugins/ai-profiles/src/client/ui/thread-profile.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-164
+packages/server/src/host.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 338,390
+packages/sdk/tools/contracts.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 197-198
+plugins/agent-proxy/tests/openai.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-177
+plugins/ai/src/client/lib/choices.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 6,16-22,45-46,54-57,63-66,74,77-78,100,103,113-122,125,143,145,150
+plugins/ai/src/client/ui/agent-picker.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-304
+plugins/ai/src/server/agents.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 4,25,73-81
+plugins/ai/src/server/choices.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1,26-27,51-53
+plugins/ai-profiles/src/client/ui/profiles-section.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-103
+plugins/ai-profiles/src/server/profiles.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-380
+plugins/claude/src/server/turn.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 14,25,48-53,70,82,85,131
+packages/sdk/package.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 15
+plugins/agent-proxy/tsconfig.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-5
+plugins/agent-proxy/src/server/sets.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-265
+plugins/agent-proxy/src/server/pkce.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-78
+plugins/ai/src/server/liveness.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1,157,206-209
+plugins/agent-proxy/tests/proxy.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-868
+packages/server/src/service/action_coordination.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 283,290-294,312,319-321
+plugins/ai-profiles/tests/tsconfig.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-8
+plugins/ai-profiles/src/server/tsconfig.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-5
+packages/server/tests/http_actions.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-599
+e2e/browser.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 2,16,59-70
+plugins/agent-proxy/src/server/_generated/internal.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-60
+plugins/agent-proxy/src/server/addresses.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-57
+plugins/ai-profiles/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-60
+e2e/browser/quit.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 8,61
+plugins/ai/src/server/run.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 2,14-15,20,44-64,75-82,85-114,116-128,130-207,209-238,241-272,275,280-412
+plugins/ai/src/server/schema.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 182
+wiki/content/docs/design/index.mdx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 57,243-244,362-365
+plugins/agent-proxy/tests/fake-companies/record.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-75
+packages/sdk/tools/bundle.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 10,98,212,216-217,220,222-228,231-234,343-347
+  s_be4ee891f4fdb9::t_046a89223841db 348
+plugins/ai-profiles/src/client/ui/card-profiles.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-97
+e2e/browser/thread-list.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 4,15,29-30
+moon.yml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 58-62
+packages/server/tests/build-http-actions.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-191
+plugins/agent-proxy/src/server/companies.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-8
+plugins/ai-profiles/tests/desktop-listener.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-194
+design/ai-profiles.md
+  s_be4ee891f4fdb9::t_4e658d23498717 228,230
+  s_be4ee891f4fdb9::t_58d0665e415a7f 225-227,229
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-224,231-396
+packages/server/src/plugins/mod.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 21
+design/chat.md
+  s_be4ee891f4fdb9::t_58d0665e415a7f 39
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 62-67,78-81
+packages/sdk/tools/plugin-boundary.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 151
+plugins/ai-profiles/tests/desktop-sign-in.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-248
+plugins/ai/src/client/_generated/components.d.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 11-24,26-28,30-31,33,36-40,42-48,50,52,55-74,76-79,81-87,89-90
+  s_be4ee891f4fdb9::t_613b758ac20ea4 75,80,88,94-114,116-149
+plugins/agent-proxy/tests/cli-sandbox.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-83
+plugins/agent-proxy/src/server/logins.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-260
+e2e/browser/agent-picker.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3-10,13-32,36-61
+packages/worker/src/lib.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 49-54
+plugins/agent-proxy/tests/claude.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-74
+plugins/agent-proxy/tests/fake-companies/recorder.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-199
+plugins/agent-proxy/src/server/claude.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-298
+packages/sdk/tools/points.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 180,185,187-193
+packages/server/Cargo.toml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 42-44,80
+plugins/ai-profiles/tests/window-state.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-20
+e2e/browser/ai.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 7,27,29-30,57,59,209-211,300,354,371-372
+packages/ui/lint/plugin.js
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 31
+plugins/ai-profiles/src/client/ui/remove-dialog.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-94
+plugins/ai-profiles/src/server/thread-profiles.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-99
+e2e/fake-agent/profile-codex.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-77
+plugins/ai/src/client/ui/agent-row.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1,8-18,30,33-35,37-38,41,109,111,141,144-192,194-205,212,214,216-230,232-233,235
+app/src-tauri/src/sign_in_return.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-692
+packages/sdk/tools/http-actions.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-42
+plugins/ai-profiles/tests/thread-profile.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-119
+packages/sdk/tests/http-action.types.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-33
+packages/server/src/plugins/artifact.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 48-53,100,161-175
+  s_be4ee891f4fdb9::t_a140cf8f6a9e89 176-177
+plugins/ai-profiles/src/client/lib/profile-icons.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-10
+packages/server/src/plugin-skill.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 24-38
+packages/server/tests/ai-turns-driver.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 14-15,35-44,46
+plugins/ai-profiles/src/client/lib/drag.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-126
+plugins/chat/src/server/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3
+e2e/browser/ai-thread.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 5,8,18,26-31,33-35,37-38,41,45-46,76-78,101-103,110-111,126-127,130-131,135,140-145,151-152,154,156
+e2e/fake-agent/launch-settings.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-208
+plugins/codex/src/server/turn.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 19-24,53
+packages/sdk/caller/agent-launch.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-60
+plugins/codex/src/server/agent.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 6,24-32,38-56,58
+packages/sdk/src/host.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 51
+packages/server/src/service/plugin_control.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 99
+packages/server/src/http_actions/config.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-46
+plugins/claude/tests/replay.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 7,17-26,28-34,68-82
+plugins/code/contracts/ai.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3,9,74
+plugins/agent-proxy/tests/fake-companies/index.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-542
+plugins/ai/src/server/launch-args.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-106
+packages/sdk/src/agent-command.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 10,17
+plugins/agent-proxy/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-437
+plugins/agent-proxy/moon.yml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-8
+plugins/ai/tests/agent-turn.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 8,17,26-30,52,71-93
+  s_be4ee891f4fdb9::t_973e1f1960222b 94
+packages/server/src/host/process_frames.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 64
+e2e/browser/code.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 74
+plugins/ai-profiles/src/client/lib/sign-in-return.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-102
+plugins/claude/src/server/agent.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 6,18-22,24,36-37,59-67,145-146,150-157,159
+design/agent-proxy.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-191
+plugins/agent-proxy/tests/workspace.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-345
+plugins/ai/src/server/thread-deleted-local.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-11
+packages/ui/tests/primitives.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 205-273
+packages/build/src/exports.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 74
+plugins/ai-profiles/src/client/styles.css
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-17
+plugins/agent-proxy/tests/plan-known.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-81
+plugins/ai/src/client/lib/turn.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 4,54
+app/src-tauri/tauri.conf.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 32
+plugins/ai-profiles/src/client/ui/company-mark.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-104
+packages/sdk/tools/placement.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 41,46,52
+e2e/fake-agent/agent-turn.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 42-43,154
+plugins/ai-profiles/src/client/lib/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-25
+plugins/agent-proxy/src/server/subscriptions.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-120
+plugins/ai/src/client/lib/agents.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1,86-123
+  s_be4ee891f4fdb9::t_0c6283953ddc3b 124
+plugins/ai/package.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 18,20-21
+plugins/ai/tests/agent-row.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 2,17-18,31-32,42,46-51,57,67-70,76-77,136-137,144,153-154,156,159,163-164,173,252-375
+plugins/ai-profiles/src/client/lib/companies.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-56
+plugins/ai/src/client/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 62-63
+packages/ui/src/kit/inputs.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-53
+packages/server/src/actions.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 30-31,554,566-582,763-766,776-780,832-835,845-852
+plugins/agent-proxy/package.json
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-15
+plugins/ai-profiles/src/client/ui/profile-dialog.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-115
+plugins/agent-proxy/src/server/_generated/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-4
+packages/server/src/identity/call.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 30,134-155
+  s_be4ee891f4fdb9::t_c871e552e95503 156
+packages/ui/src/kit/kit.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 12,51
+packages/sdk/src/index.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 124
+packages/server/src/lib.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 14-15
+plugins/agent-proxy/src/server/proxy.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-311
+plugins/ai-profiles/tests/chatgpt.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-257
+plugins/codex/src/server/info.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 19-23,26,29-34,100-101
+plugins/codex/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 5,11-18
+  s_be4ee891f4fdb9::t_4290e197a945bc 19
+packages/server/src/web.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 17,32-36,39-40,45-51,54-61,70,159
+e2e/browser/desktop.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 30-31,55-57,61,82-97,149
+plugins/claude/src/server/wire.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 103-108,111,137-142
+packages/server/src/websocket.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 216,223-230,251-261,270-276,278,292-312,328,366,842
+plugins/ai-profiles/tests/manage.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-337
+plugins/ai-profiles/src/client/api.tsx
+  s_be4ee891f4fdb9::t_dd081c5b9e6dc4 18-22
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-17,23-24
+packages/server/src/host/hooks.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 65-81,175,210,222,228-232,237,239,248-252,269,277,296-328,611-664
+design/shell.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 19-23,62,65-83,92-94,139-142,145-146
+packages/server/src/service/http_actions.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-38
+packages/server/src/service/mod.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 223-227,332
+packages/ui/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3-24
+plugins/ai-profiles/src/client/ui/card-actions.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-99
+plugins/agent-proxy/tests/chatgpt-sign-in.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-327
+plugins/ai-profiles/src/server/_generated/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-56
+plugins/agent-proxy/src/server/signins.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-429
+plugins/ai/src/client/styles.css
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 5-12
+plugins/ai/src/client/ui/thread-status.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 3,6,8,35,41-56
+  s_be4ee891f4fdb9::t_73abdde3571603 57-59
+packages/server/src/http_actions.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-634
+plugins/ai-profiles/moon.yml
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-8
+e2e/browser/screens.spec.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 2-3,7-8,22,152-157,198,260,288-532
+packages/host/src/http_action.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-297
+.ci/check.sh
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 91,133
+design/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 18-27,54-55
+packages/server/tests/shutdown-driver.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 68-73
+plugins/agent-proxy/tests/fake-companies.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-328
+plugins/ai-profiles/src/client/lib/desktop.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-39
+packages/ui/src/input.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-86
+plugins/agent-proxy/src/server/reads.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-61
+plugins/ai-profiles/src/server/turn-profile.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-129
+plugins/agent-proxy/src/server/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-10
+packages/server/src/http_listener.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-47
+plugins/ai/src/server/_functions.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 13,57
+plugins/ai-profiles/src/server/manage.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-71
+plugins/ai-profiles/src/client/pages/profiles.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-306
+packages/ui/tests/fields.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-118
+packages/ui/src/switch.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-73
+plugins/ai/src/client/lib/queue.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 5,34-36
+app/README.md
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 80-87
+plugins/agent-proxy/src/server/schema.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-127
+plugins/ai/src/server/_generated/api.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 23,100
+packages/server/src/protocol.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 64
+plugins/codex/tests/e2e.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 4,9-14,42-47,132-200,475-481,498-508
+plugins/ai/src/shared/turn-shared.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 36-41
+plugins/ai-profiles/tests/profiles-section.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-465
+packages/sdk/src/http-action.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-50
+packages/server/src/plugins/manifest.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 67,78-85,189-191,217-226
+  s_be4ee891f4fdb9::t_0938bf166377f3 66
+packages/sdk/src/points.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 9,12,23,26-27,29,37
+plugins/agent-proxy/tests/manage-companies.test.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-144
+e2e/fake-agent/profile-turns.mjs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-442
+packages/server/src/actions/http.rs
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-105
+plugins/ai-profiles/tests/desktop-returns.test.tsx
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 1-240
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_be4ee891f4fdb9::t_ecfb2efd1c43b7 2-122
+  s_be4ee891f4fdb9::t_613b758ac20ea4 1,123-207
+Cargo.lock
+  s_be4ee891f4fdb9::t_37bf68aee5b5f2 6124-6126
+bun.lock
+  s_be4ee891f4fdb9::t_f88c276b66b9ce 117-126,139-160,846-847,850-851
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20c9932382aa7e171fe6c0ba3f51d07623b837de",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
