@@ -70,7 +70,12 @@ function linkedTurn(turnId: string, options: Partial<AgentTurnStart> = {}) {
 
 test("launch settings get space in the start frame before earlier history", async () => {
   const newest = { role: "user" as const, name: "Sam", text: "Keep this" };
-  const launchSettings = { env: { TOKEN: "x".repeat(20_000) }, args: [] };
+  const launchSettings = {
+    threadId: "thread",
+    identity: "a".repeat(64),
+    env: { TOKEN: "x".repeat(20_000) },
+    args: [],
+  };
   const turn = linkedTurn("large-history", {
     history: [{ ...newest, text: "x".repeat(1_020_000) }, newest],
     launchSettings,

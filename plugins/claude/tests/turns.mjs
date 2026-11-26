@@ -11,7 +11,12 @@ import { turnWire } from "./turn-wire.mjs";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { fileURLToPath } from "node:url";
 import { agentHarness, build, bunPath, connect } from "../../../e2e/fake-agent/harness.mjs";
-import { installLaunchHook, LAUNCH_VALUE } from "../../../e2e/fake-agent/launch-settings.mjs";
+import {
+  CLAUDE_PERSONAL_ENV,
+  inheritPersonalEnv,
+  installLaunchHook,
+  LAUNCH_VALUE,
+} from "../../../e2e/fake-agent/launch-settings.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -40,13 +45,20 @@ try {
   await h.assertLocalRuntime();
   build(source);
   await cp(join(source, "dist"), join(h.plugins, "claude"), { recursive: true });
-  if (!live) await installReplay();
+  if (!live) {
+    await inheritPersonalEnv(h, "claude", CLAUDE_PERSONAL_ENV);
+    await installReplay();
+  }
   const launch = live ? undefined : await installLaunchHook(h);
   const runner = live && binary.split(/[\\/]/).pop()?.startsWith("tokamak-runner");
   const address = runner ? undefined : await h.serve("local", { windowRouted: !live });
   const client = live
     ? await realClient(address)
-    : await h.connect(address, { local: true, observe: wire.observe });
+    : await h.connect(address, {
+        local: true,
+        observe: wire.observe,
+        env: { CLAUDE_CONFIG_DIR: join(h.home, ".claude") },
+      });
   const info = () => aboutClaude(client);
   assert.equal((await info())?.signedIn, true, "Claude is listed as signed in");
   const turns = agentTurns({
@@ -66,18 +78,66 @@ try {
     const personal = join(h.home, ".claude");
     const personalLogin = join(personal, ".credentials.json");
     await writeFile(personalLogin, "signed-out");
-    await launch.set({ TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CLAUDE_CONFIG_DIR: personal });
+    const hookEnv = { TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CLAUDE_CONFIG_DIR: personal };
+    await launch.set(hookEnv);
     try {
       const folder = await caseFolder("hello-launch");
+      await mkdir(join(folder, ".claude"));
+      await writeFile(join(folder, "CLAUDE.md"), "# Project instructions");
+      await writeFile(join(folder, ".claude", "settings.json"), '{"hooks":{}}');
+      await writeFile(join(folder, ".mcp.json"), '{"mcpServers":{}}');
       await h.gate(folder, "go");
+
+      const noAuth = await turns.run(folder, hello, { state: "failed" });
+      assert.match(noAuth.error, /must provide ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN/);
+      assert.equal(await Bun.file(join(folder, "isolated-home")).exists(), false);
+
+      const auth = { ...hookEnv, ANTHROPIC_API_KEY: "fake-turn-key-1" };
+      await launch.set({ ...auth, TOKAMAK_REPLAY_OLD: "old-cli-fixture" });
+      const { threadId, messageId } = await client.mutation(h.api.chat.threads.start, {
+        text: hello,
+        folder: { kind: "chosen", path: folder },
+      });
+      const outdated = await client.action(h.api.ai.run.turn, {
+        windowId: "claude-launch-setup",
+        threadId,
+        messageId,
+        folder,
+        agentId: "claude",
+      });
+      assert.equal(outdated.kind, "NotInstalled");
+      assert.equal(outdated.data.updateRequired, "Claude needs Claude Code 2.1.330 or later.");
+      assert.equal(await Bun.file(join(folder, "isolated-home")).exists(), false);
+      await launch.set(auth, ["--permission-mode=default"]);
+      const owned = await turns.run(folder, hello, { state: "failed" });
+      assert.match(owned.error, /launch-first.*--permission-mode.*Tokamak/);
+      assert.equal(await Bun.file(join(folder, "isolated-home")).exists(), false);
+
+      await launch.set(auth, ["--disable-slash-commands"]);
       const isolated = await turns.run(folder, hello);
       assert.equal(isolated.text, "Hello Tokamak.");
-      assert.equal(isolated.row.sessionId, undefined);
-      const temporary = await readFile(join(folder, "isolated-home"), "utf8");
-      await assert.rejects(stat(temporary), { code: "ENOENT" });
+      assert.ok(isolated.row.sessionId);
+      const home = await readFile(join(folder, "isolated-home"), "utf8");
+      assert.match(home, /[/]ai[/]launch-homes[/]/);
+      assert.equal((await stat(home)).mode & 0o777, 0o700);
+      assert.equal(await Bun.file(join(home, "cli-state")).exists(), true);
+
+      await launch.set({ ...auth, ANTHROPIC_API_KEY: "fake-turn-key-2" }, ["--disable-slash-commands"]);
+      const resumed = await turns.run(folder, recall, { threadId: isolated.threadId });
+      assert.equal(resumed.text.trim(), "TIDAL");
+      assert.equal(resumed.row.sessionId, isolated.row.sessionId);
+      assert.equal(await readFile(join(folder, "isolated-home"), "utf8"), home);
+
+      assert.equal(
+        await client.action(h.api.chat.threads.removeLocal, { threadId: isolated.threadId }),
+        null,
+      );
+      await assert.rejects(stat(home), { code: "ENOENT" });
       assert.equal(await readFile(personalLogin, "utf8"), "signed-out");
       assert.ok(!JSON.stringify(isolated).includes(LAUNCH_VALUE));
-      passed("launch environment and isolated Claude configuration");
+      passed(
+        "launch preserves Claude project inputs, strips inherited env, resumes across keys, and cleans up",
+      );
     } finally {
       await launch.clear();
       await writeFile(personalLogin, "signed-in");

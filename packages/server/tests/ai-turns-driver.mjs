@@ -33,7 +33,7 @@ try {
   await withoutAgents();
   await checkLaunchSettings(h);
   console.log(
-    "ai turns: agent listed, reply streamed, reports stored, one writer, steer, FIFO queue, graceful stop, force-stopped process group, permission questions, sender's device only, no agent",
+    "ai turns: agent listed, reply streamed, reports stored, one writer, steer, FIFO queue, graceful stop, force-stopped process group, permission questions, sender's device only, no agent, launch settings",
   );
 } finally {
   await h.close();

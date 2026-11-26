@@ -2,10 +2,32 @@
 import assert from "node:assert/strict";
 import { cp, mkdir, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { editBundle } from "../../packages/runner/tests/support/routing.mjs";
 import { agentTurns } from "./agent-turn.mjs";
 import { build, workspace } from "./harness.mjs";
 
 export const LAUNCH_VALUE = "tokamak-replay-launch-value";
+
+export const CLAUDE_PERSONAL_ENV = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_REPLAY_USER",
+  "CLAUDE_CODE_REPLAY_USER",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+];
+export const CODEX_PERSONAL_ENV = ["OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_REPLAY_USER"];
+
+// Runner already allowlists its input env. Inject these into the copied
+// provider's environment snapshot too, to exercise the SDK filter itself.
+export async function inheritPersonalEnv(h, agent, names) {
+  const env = Object.fromEntries(names.map((name) => [name, "fake-personal-value"]));
+  await editBundle(join(h.plugins, agent), `Object.assign(process.env, ${JSON.stringify(env)});`);
+}
 
 export async function installLaunchHook(h, id = "launch-first") {
   await install(
@@ -89,7 +111,9 @@ const start = action({
         await new Promise((resolve) => setTimeout(resolve, 10));
     }
     await writeFile(join(run.folder, "received.json"), JSON.stringify(run.launchSettings ?? null));
-    if (run.prompt === "agent failure") throw new Error(run.launchSettings?.env.TKM_ONE);
+    await writeFile(join(run.folder, "resumed"), run.sessionId ?? "");
+    if (run.prompt === "agent failure")
+      throw new Error(\`Proxy refused \${run.launchSettings?.env.TKM_ONE} with \${run.launchSettings?.args[0]}\`);
     return { sessionId: "recording-session" };
   },
 });
@@ -118,21 +142,33 @@ export async function checkLaunchSettings(h) {
 
   await first.set({ TKM_ONE: LAUNCH_VALUE }, ["one"]);
   const single = await run("launch-single", "snapshot", {
+    threadId: normal.threadId,
     async during(control) {
       await control.firstText();
       await first.set({ TKM_ONE: "next-value" }, ["one"]);
       await writeFile(join(h.home, "launch-single", "continue"), "go");
     },
   });
-  assert.deepEqual(await received(single), { env: { TKM_ONE: LAUNCH_VALUE }, args: ["one"] });
-  assert.equal(single.row.sessionId, undefined);
-  await absent(probe);
+  const firstSettings = await received(single);
+  assert.deepEqual(firstSettings.env, { TKM_ONE: LAUNCH_VALUE });
+  assert.deepEqual(firstSettings.args, ["one"]);
+  assert.equal(single.row.sessionId, "recording-session");
+  assert.equal(await readFile(join(single.folder, "resumed"), "utf8"), "");
+  assert.equal(await Bun.file(probe).exists(), true, "launch ran the setup probe");
+  await unlink(probe);
+
+  const resumed = await run("launch-resumed", "next", { threadId: single.threadId });
+  assert.equal((await received(resumed)).identity, firstSettings.identity);
+  assert.equal(await readFile(join(resumed.folder, "resumed"), "utf8"), "recording-session");
 
   await second.set({ TKM_TWO: "another-value" }, ["two"]);
   const both = await run("launch-both", "next", { threadId: single.threadId });
   const launch = await received(both);
   assert.deepEqual(launch.env, { TKM_ONE: "next-value", TKM_TWO: "another-value" });
   assert.deepEqual(launch.args.toSorted(), ["one", "two"]);
+  assert.notEqual(launch.identity, firstSettings.identity);
+  assert.equal(await readFile(join(both.folder, "resumed"), "utf8"), "");
+  await unlink(probe);
 
   // Even returning the exact same value counts as two plugins setting the name.
   await second.set({ TKM_ONE: "next-value" });
@@ -151,10 +187,15 @@ export async function checkLaunchSettings(h) {
   assert.ok(!JSON.stringify(badHook).includes(LAUNCH_VALUE));
   await second.clear();
 
-  await first.set({ TKM_ONE: LAUNCH_VALUE });
+  await first.set({ TKM_ONE: LAUNCH_VALUE }, ["private-argument"]);
   const badAgent = await run("launch-bad-agent", "agent failure", { state: "failed" });
   assert.ok(!JSON.stringify(badAgent).includes(LAUNCH_VALUE));
+  assert.ok(!JSON.stringify(badAgent).includes("private-argument"));
+  assert.match(badAgent.error, /Proxy refused \[redacted\] with \[redacted\]/);
   await first.clear();
+  const personal = await run("launch-personal", "personal", { threadId: single.threadId });
+  assert.equal(await received(personal), null);
+  assert.equal(await readFile(join(personal.folder, "resumed"), "utf8"), "");
   process.stdout.write(
     "PASS launch settings: default, one hook and snapshot, two distinct names and args, conflict, hook error privacy, agent error privacy\n",
   );
