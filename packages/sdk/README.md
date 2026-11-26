@@ -621,17 +621,14 @@ replaces it.
 
 ## Component actions
 
-The builder publishes typed paths for the elements of each plugin's screen
-under its public client `parts` export. Write ordinary JSX in the owner
-plugin. In the add-on, import the parts and export a placement:
+The builder generates a typed `find` function for each plugin's public
+client entry. In the add-on, import the owner and export a placement:
 
 ```tsx
 import { after } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Cost = after(chat.parts.Composer.div.box, (props) => (
-  <small>{props.draft.length} characters</small>
-));
+export const Cost = after(chat.find("box"), (props) => <small>{props.draft.length} characters</small>);
 ```
 
 Use `before` and `after` for siblings, `prepend` and `append` for children,
@@ -639,9 +636,12 @@ Use `before` and `after` for siblings, `prepend` and `append` for children,
 `hide` to remove it. A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row
-as `$row.parent`. If a path disappears or identifies a
-different element, the build warns and the window skips that placement. See the
-[builder guide](../build/README.md#extending-a-screen) for the naming rule.
+as `$row.parent`. Use a literal name, and add `{ in: "Header" }` or a
+1-based `nth` if a name matches several elements. The window keeps the
+original match on owner updates when possible and follows a unique named
+match that has moved. It skips missing or ambiguous targets and positional
+targets that changed. See the [builder guide](../build/README.md#extending-a-screen)
+for the naming rules.
 
 ## Caller identity
 

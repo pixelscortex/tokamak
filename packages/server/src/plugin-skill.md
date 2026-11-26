@@ -29,10 +29,10 @@ generated references in `src/server/_generated/` and component declarations in
   public generated references. Use `useClient().action(ref, args)` and handle the `noMachine`
   failure when the action needs a Runner. Use `auth.me()` to read the signed-in member.
   Export a page with `view({ route: "/", title: "Editor" }, () => <Editor />)`.
-  Write plain JSX. A build publishes typed paths under the client entry's
-  `parts` export. A dependent plugin imports `plugin:<id>/client` and
-  exports an action such as `after(owner.parts.Editor.section.button, Tools)`.
-  A static `data-part` or `id` supplies the path segment when present. The actions
+  Write plain JSX. A build generates a typed `find` function on the client entry.
+  A dependent plugin imports `plugin:<id>/client` and exports an action such as
+  `after(owner.find("button", { in: "Editor" }), Tools)`.
+  A static `data-part` or `id` supplies the element name when present. The actions
   are `before`, `after`, `prepend`, `append`, `wrap`, `replace`, and `hide`.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.

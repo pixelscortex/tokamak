@@ -32,28 +32,28 @@ expired question line, "Force stop".
 
 ## Parts it offers
 
-The compiler publishes every JSX tag under `parts` in `plugin:ai/client`,
+The compiler generates a typed `find` function in `plugin:ai/client` for its JSX elements,
 including the picker and the agent row. See
-`plugins/ai/src/client/_generated/components.d.ts` for the generated paths.
+`plugins/ai/src/client/_generated/components.d.ts` for the generated search types.
 Agent plugins supply data through `plugin:ai/contracts`.
 
 ## What it adds to others
 
 All actions are in `plugins/ai/src/client/api.ts`.
 
-| Target (chat part)                             | Action                                 | What is drawn                                                                                                                            | File                     | Paper artboard                                                                |
-| ---------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| `parts.Composer.div.box`                       | after                                  | Agent row: agent (mark and name), model, level, speed, mode, permission level; a line on the right ("esc to stop")                       | `ui/agent-row.tsx`       | all five `AI ·` artboards                                                     |
-| `parts.Composer.div.top`                       | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx` | `AI · permission question`                                                    |
-| `parts.Composer.div.box.div.SendButton`        | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`   | `AI · reply running`, `AI · permission question`                              |
-| `parts.Empty.div.div.heading`                  | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`         | `AI · new thread`                                                             |
-| `parts.Message.article.header`                 | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
-| `parts.Message.article.body`                   | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
-| `parts.Message.article.body`                   | after, agent replies                   | Tasks card, plan card, usage line (left out when the agent counted 0 in and 0 out)                                                       | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
-| `parts.Message.article.body`                   | replace, agent replies with steers     | The text cut where each steer arrived; between the parts "↳ Steer" (quiet label), then the person's author line and text                 | `ui/turn-steers.tsx`     | `AI · reply steered`                                                          |
-| `parts.ThreadRow.ListboxItem.span.span.status` | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
-| `parts.ThreadRow.ListboxItem.span.detail`      | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   | `AI · reply running`, `AI · permission question`                              |
-| `parts.ThreadRow.ListboxItem.span.detail`      | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   | `AI · reply running`                                                          |
+| Target (chat part)        | Action                                 | What is drawn                                                                                                                            | File                     | Paper artboard                                                                |
+| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| `chat.find("box")`        | after                                  | Agent row: agent (mark and name), model, level, speed, mode, permission level; a line on the right ("esc to stop")                       | `ui/agent-row.tsx`       | all five `AI ·` artboards                                                     |
+| `chat.find("top")`        | prepend, while a question waits        | Permission card: lock, "Fake agent wants to run", the command in mono, Approve / Always allow this session / Decline / Cancel (keys 1–4) | `ui/permission-card.tsx` | `AI · permission question`                                                    |
+| `chat.find("SendButton")` | replace, while this window's turn runs | Stop (then Force stop after 10 s)                                                                                                        | `ui/turn-controls.tsx`   | `AI · reply running`, `AI · permission question`                              |
+| `chat.find("heading")`    | replace                                | "What should Fake agent work on?" (the agent's name)                                                                                     | `ui/heading.tsx`         | `AI · new thread`                                                             |
+| `chat.find("header")`     | replace, agent replies                 | Agent mark and the model ("work" for the test agent), no time                                                                            | `ui/reply-header.tsx`    | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `chat.find("body")`       | before, agent replies                  | Thinking (quiet, folded), the actions line (folded, 32 px on the hover tone, at least 360 wide), one row per helper agent                | `ui/reply-work.tsx`      | `AI · reply running`, `reply finished`; opened in `AI · reply opened`         |
+| `chat.find("body")`       | after, agent replies                   | Tasks card, plan card, usage line (left out when the agent counted 0 in and 0 out)                                                       | `ui/reply-cards.tsx`     | `AI · reply running` (tasks), `reply finished`, `reply opened`                |
+| `chat.find("body")`       | replace, agent replies with steers     | The text cut where each steer arrived; between the parts "↳ Steer" (quiet label), then the person's author line and text                 | `ui/turn-steers.tsx`     | `AI · reply steered`                                                          |
+| `chat.find("status")`     | prepend                                | Status icon: running, needs you (amber lock), done, failed                                                                               | `ui/thread-status.tsx`   | `AI · reply running`, `reply finished`, `reply opened`, `permission question` |
+| `chat.find("detail")`     | append, while running or waiting       | Agent mark, model in mono, folder                                                                                                        | `ui/thread-status.tsx`   | `AI · reply running`, `AI · permission question`                              |
+| `chat.find("detail")`     | after, while helpers run               | Half rows, one per helper agent                                                                                                          | `ui/thread-status.tsx`   | `AI · reply running`                                                          |
 
 Where a steer goes: when it is recorded, the server keeps the length of the
 reply's stored text (`turns.steerOffsets`, parallel to `steers`). The reply
@@ -73,10 +73,10 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   button edge sits on the box edge above it.
 - `Picker` (the ghost `Menu.Trigger`): Button's `md` size owns its height and
   padding; changing Button's ghost look changes the whole row.
-- The permission card padding (`py-1 ps-3 pe-1`): chat's `parts.Composer.div.top`
+- The permission card padding (`py-1 ps-3 pe-1`): chat's `chat.find("top")`
   gap and the box below it.
 - The reply header (`h-5`, mark 14 px, model in `text-data`): chat's
-  `parts.Message.article.header` height; the user's header uses the same 20 px line.
+  `chat.find("header")` height; the user's header uses the same 20 px line.
 - Work lines and cards (`max-w-read` 560, `min-w-fold` 360): chat's message
   column (760) and `code`'s change card, which spans the full column.
 - The steered body (`ui/turn-steers.tsx`) repeats chat's body text style

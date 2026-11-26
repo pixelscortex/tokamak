@@ -123,40 +123,26 @@ reference metadata; installed artifacts remain independent of that source.
 
 ## Extending a screen
 
-Build the owner plugin to publish a typed `parts` export on its public client
-API. No part declarations are needed: every authored JSX element in window
-code is addressable. Solid control flow (`Show`, `For`, `Index`, `Switch`,
-`Match`, `Suspense`, `ErrorBoundary`/`Errored`, `Dynamic`, and `Portal`) is
-transparent, like fragments. Wrapping an element with one does not rename it.
+Build the owner plugin to publish a typed `find` on its public client API.
+Searches look at that plugin's authored JSX, including UI it contributes to
+other plugins. Each element is named by its nonempty static `data-part`,
+then its static `id`, then its tag or component name (such as `Menu.Item`).
+A bare `data-part-ignore` excludes an element and its descendants.
 
-A path follows the named render function and the element's JSX ancestry.
-Nested named functions add a segment under their enclosing function and
-inherit its props if they declare no parameter. Inline callbacks, including
-callbacks passed to calls such as `map` or `createMemo`, add no segment. A
-duplicate render name in the same scope fails the build with both locations
-rather than assigning file-order suffixes.
-
-Each element's segment is its nonempty static `data-part`, then its static
-`id`, then its tag or component name. A static name keeps its segment if a plain tag shares the name; the plain tag
-gets a positional suffix. Two explicit names cannot collide. Unnamed siblings with the same name use source order:
-`div`, `div$2`, `div$3`. Inserting another tag or editing another branch
-does not renumber them. Adding an earlier unnamed sibling with the same name
-can change a positional path; static names keep their paths. Names retain
-case. Punctuation is escaped as a dollar sign, its hex code, and a closing
-dollar sign (`Menu.Root` becomes `Menu$2e$Root`). The names `target`, `fingerprint`,
-`constructor`, `prototype`, and `__proto__` are prefixed with `$`.
-
-For example, Chat's message body is `chat.parts.Message.article.body` and
-AI's picker option is `ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item`.
+If a name has several matches, narrow it with `in` to an enclosing render
+function or element. Solid control flow and fragments are transparent.
+If the search is still ambiguous, use `nth` (1-based source order).
+The name and all filters must be literals. The build fails when the resulting
+search does not identify exactly one element and lists the candidates.
 
 Commit the generated `_generated/components.d.ts` next to the client entry.
 Export actions from the contributing plugin's client entry:
 
 ```tsx
 import { after } from "@tokamak/sdk/client";
-import * as ai from "plugin:ai/client";
+import * as chat from "plugin:chat/client";
 
-export const Profile = after(ai.parts.Picker.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item, ProfileColumn);
+export const Branch = after(chat.find("title", { in: "Header" }), BranchChip);
 ```
 
 `before` and `after` render siblings. `prepend` and `append` render inside
@@ -172,16 +158,13 @@ the index is a number. Layers at one position are
 ordered by `order` (default 0) and then plugin ID. The first installed
 replacement owns the position even while its condition is false.
 
-If an installed plugin targets a path that is renamed or removed, the build
-warns with the contributing plugin's ID. The window also warns once per
-add-on and path when a missing or changed target is skipped.
-
-Only positional segments add to a fingerprint: a shared tag or component
-name disambiguated by position. A path's fingerprint chains every positional
-segment from its render scope down, so a named part under a positional
-ancestor is still protected. A static `data-part` or `id`, or a name unique
-among its siblings, adds nothing. Paths with no positional segment carry no
-fingerprint and are never skipped for a fingerprint mismatch.
+An add-on's manifest records both the search and the element selected at
+build time. When the owner changes, a search keeps its original match if
+possible, or follows the only remaining match. If a search cannot be
+resolved, the owner's build warns with the add-on ID and the window skips
+the placement and raises an alert. Positional targets (`nth` and elements
+with positional fingerprints) are skipped when their position or identity
+changes. Give a target a stable `data-part` to avoid relying on position.
 
 A positional segment hashes the tag, the attributes `role`, `type`, `name`,
 `for` and `href` (each by its static string value or as "an expression"),
