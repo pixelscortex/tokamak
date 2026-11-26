@@ -19,7 +19,7 @@ interface DesktopWindow {
  */
 export async function asDesktop(
   context: BrowserContext,
-  { beforeConfirm }: { beforeConfirm?: (page: Page) => Promise<void> } = {},
+  options: { plugins?: string; beforeConfirm?: (page: Page) => Promise<void> } = {},
 ): Promise<{
   home: string;
   bin: string;
@@ -32,10 +32,12 @@ export async function asDesktop(
   readonly quitAnswers: readonly string[];
   /** The pages "Open sign-in page" asked the system browser to open, oldest first. */
   readonly opened: readonly string[];
+  /** How many times Settings → Plugins asked to reveal the plugins folder. */
+  readonly revealed: number;
 }> {
   // Inside the run's folder, which the runner removes at the end.
-  const plugins = process.env.TOKAMAK_PLUGIN_DIR!;
-  const scratch = await mkdtemp(join(dirname(plugins), "desktop-"));
+  const plugins = options.plugins ?? process.env.TOKAMAK_PLUGIN_DIR!;
+  const scratch = await mkdtemp(join(dirname(process.env.TOKAMAK_PLUGIN_DIR!), "desktop-"));
   const home = join(scratch, "home");
   const bin = join(scratch, "bin");
   await mkdir(home);
@@ -56,6 +58,7 @@ export async function asDesktop(
   let quitChannel: ((message: unknown) => Promise<void>) | undefined;
   const quitAnswers: string[] = [];
   const opened: string[] = [];
+  let revealed = 0;
   /** Return listeners the window opened, each ended by its cancel. */
   const listening = new Map<string, () => void>();
 
@@ -79,13 +82,16 @@ export async function asDesktop(
           quitAnswers.push(command.slice("quit_".length));
           return null;
         case "quit_confirm":
-          await beforeConfirm?.(page);
+          await options.beforeConfirm?.(page);
           await runner.stop();
           quitAnswers.push("confirm");
           return null;
         // The sign-in return (app/src-tauri/src/sign_in_return.rs): the test desktop opens no
         // browser, and its listener waits until cancelled without a return ever coming, so the
         // dialog shows the desktop's wording and the test finishes each sign-in by pasting.
+        case "reveal_plugins_folder":
+          revealed++;
+          return null;
         case "sign_in_open_browser":
           opened.push(args.url!);
           return "opened";
@@ -151,5 +157,8 @@ export async function asDesktop(
     },
     quitAnswers,
     opened,
+    get revealed() {
+      return revealed;
+    },
   };
 }

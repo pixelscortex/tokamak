@@ -10,13 +10,19 @@ proto run bun -- install --frozen-lockfile
 proto run bun -- run app
 ```
 
-The Tauri hooks build the starter set and the [Runner](../packages/runner/README.md),
-plus the plugin host on macOS and Linux. The app starts one Runner and the window
+The Tauri hooks build the [Runner](../packages/runner/README.md), plus the plugin
+host on macOS and Linux. The app starts one Runner and the window
 connects to it automatically. The app restarts the Runner if it exits; the
 window shows its existing disconnected state and Retry connects to the new port.
-`TOKAMAK_SERVER_DIR` still selects the store directory. Development uses the
-workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR` overrides
-the installation. Runner startup errors go to `runner.log` beside the store.
+The app ships with no plugins. It creates and loads `plugins` in its data folder:
+on macOS, `~/Library/Application Support/com.pixelscortex.Tokamak/plugins` for
+release and `~/Library/Application Support/com.pixelscortex.Tokamak.dev/plugins`
+for debug. `TOKAMAK_SERVER_DIR` overrides the data folder, and
+`TOKAMAK_PLUGIN_DIR` overrides the plugins folder. Until the plugins move to
+`tokamak-plugins`, `app:dev` (also `app`) builds the repo's plugins, reinstalls
+them in `app/.dev/plugins` and passes that path via `TOKAMAK_PLUGIN_DIR`. If that
+variable is already set, the launcher uses it as is and skips the install.
+Runner startup errors go to `runner.log` beside the store.
 On start the app's Runner stops any Tokamak server that holds this store,
 after verifying it: one left by a previous desktop version, or one started with
 `server:start` on the same `TOKAMAK_SERVER_DIR`. If another Runner owns the store, the app reports the conflict; close
@@ -101,9 +107,9 @@ proto run bun -- run --cwd app tauri build --no-sign
 ```
 
 Plugin typechecking first generates Chat's server API with the SDK bundler.
-Direct Cargo checks do not require bundled sidecars or plugin resources: the
-Tauri build script omits absent packaging inputs. Tauri dev/build hooks prepare
-the actual Runner binary and plugin resources before launching or bundling.
+Direct Cargo checks do not require bundled sidecars: the Tauri build script
+omits absent packaging inputs. Tauri dev/build hooks prepare the sidecars before
+launching or bundling.
 Release builds package the Runner as an external binary. No signing is required
 for this local build. The CSP permits loopback HTTP/styles and WebSockets, blob
 modules and a hashed import map, with no eval. Keep the Vite Solid runtime alias:

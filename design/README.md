@@ -32,7 +32,9 @@ Then **Open questions** for anything the code does not settle.
 
 Every change to what a screen looks like does three things in the same piece of work:
 
-1. Update the plugin's `design/<plugin>.md`.
+1. Update the design note: `shell.md` here for the shell, or the plugin's
+   `DESIGN.md` in its own folder once it has moved to `tokamak-plugins`
+   (`design/<plugin>.md` until then).
 2. Update that plugin's `App 1:1` page in Paper so it looks the same as the app.
 3. Read the "If you change X, check Y" notes of every plugin listed as
    affected, and check those screens too.

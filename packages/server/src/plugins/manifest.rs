@@ -106,18 +106,29 @@ impl Definition {
     pub(crate) fn declares_access_to(&self, owner: &str) -> bool {
         self.id == owner || self.depends.contains_key(owner) || self.optional.contains_key(owner)
     }
-
-    pub(super) fn dependencies(&self) -> impl DoubleEndedIterator<Item = (&String, &String)> {
-        self.depends.iter().chain(&self.optional)
-    }
 }
 
 impl Manifest {
     pub(super) fn read(directory: &Path) -> Result<Self, Error> {
-        serde_json::from_reader(std::io::BufReader::new(
-            File::open(directory.join("manifest.json")).map_err(|e| invalid(e.to_string()))?,
-        ))
-        .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+        serde_json::from_reader(Self::open(directory)?)
+            .map_err(|e| invalid(format!("Invalid plugin manifest: {e}")))
+    }
+
+    pub(super) fn open(directory: &Path) -> Result<std::io::BufReader<File>, Error> {
+        let path = directory.join("manifest.json");
+        if !path
+            .metadata()
+            .map_err(|e| invalid(e.to_string()))?
+            .is_file()
+        {
+            return Err(invalid(format!(
+                "Invalid plugin manifest: {} is not a file",
+                path.display()
+            )));
+        }
+        File::open(path)
+            .map(std::io::BufReader::new)
+            .map_err(|e| invalid(e.to_string()))
     }
 }
 

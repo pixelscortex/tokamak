@@ -2,19 +2,26 @@ use super::*;
 
 const INSTALL_ORDER_FILE: &str = "plugin-install-order.json";
 
+pub(super) struct ScanSkip {
+    reason: String,
+    folder: PathBuf,
+}
+
 impl Catalog {
     pub fn read(root: &Path) -> Result<Self, Error> {
-        Self::read_reusing(root, None)
+        Self::read_in_directory(root, None, root.parent().unwrap_or(root), &[])
     }
 
-    pub(crate) fn read_reusing(root: &Path, previous: Option<&Self>) -> Result<Self, Error> {
+    pub(crate) fn read_for_reload(
+        root: &Path,
+        previous: &Self,
+        reloaded: &str,
+    ) -> Result<Self, Error> {
         Self::read_in_directory(
             root,
-            previous,
-            previous
-                .map(|p| p.directory.as_path())
-                .unwrap_or(root.parent().unwrap_or(root)),
-            previous.map_or(&[], |p| p.install_order.as_slice()),
+            Some((previous, reloaded)),
+            &previous.directory,
+            &previous.install_order,
         )
     }
 
@@ -30,58 +37,49 @@ impl Catalog {
 
     fn read_in_directory(
         root: &Path,
-        previous: Option<&Self>,
+        reload: Option<(&Self, &str)>,
         directory: &Path,
         install_order: &[String],
     ) -> Result<Self, Error> {
-        let directories = if let Some(directory) = artifact_directory(root) {
-            vec![directory]
-        } else {
-            let mut result = Vec::new();
+        let plugins_folder = std::path::absolute(root).map_err(|e| invalid(e.to_string()))?;
+        let FolderScan {
+            mut plugins,
+            mut folders,
+            skips,
+            duplicates,
+            retained,
+        } = FolderScan::read(&plugins_folder, reload)?;
 
-            for entry in std::fs::read_dir(root).map_err(|e| invalid(e.to_string()))? {
-                let entry = entry.map_err(|e| invalid(e.to_string()))?;
-
-                if entry.file_name().to_string_lossy().starts_with('.') {
-                    continue;
-                }
-
-                let path = entry.path();
-
-                if let Some(directory) = artifact_directory(&path) {
-                    result.push(directory);
-                } else if path.join("package.json").is_file() {
-                    return Err(invalid(format!(
-                        "Plugin has not been built: {}",
-                        path.display()
-                    )));
-                }
+        let unreadable = skips.iter().map(|(key, _)| key.clone()).collect();
+        let (order, failures) = resolve(&plugins, &unreadable);
+        let mut occupied: BTreeSet<_> = plugins.keys().cloned().collect();
+        let mut skipped = BTreeMap::new();
+        for (id, failure) in failures {
+            if retained.contains(&id)
+                || reload
+                    .is_some_and(|(old, target)| id == target && old.plugins.contains_key(target))
+            {
+                return Err(failure.reload_error(&id));
             }
-            result.sort();
-            result
-        };
-
-        let mut plugins = BTreeMap::new();
-
-        for artifact_dir in directories {
-            // Read identity first to find reusable verified snapshots. The full
-            // read still verifies changed files, detecting incomplete builds.
-            let identity = Manifest::read(&artifact_dir)?;
-
-            let old = previous.and_then(|p| p.plugins.get(&identity.plugin.id));
-
-            let artifact = Artifact::read_reusing(&artifact_dir, old.map(AsRef::as_ref))?;
-
-            let id = artifact.manifest.plugin.id.clone();
-
-            if plugins.insert(id.clone(), Arc::new(artifact)).is_some() {
-                return Err(invalid(format!(
-                    "Duplicate installed plugin identity: {id}"
-                )));
-            }
+            plugins.remove(&id);
+            let folder = folders.remove(&id).expect("scanned plugin has a folder");
+            skipped.insert(
+                id,
+                ScanSkip {
+                    reason: failure.reason(),
+                    folder,
+                },
+            );
+        }
+        for (key, skip) in skips {
+            let key = available_key(key, "skipped", &mut occupied);
+            skipped.insert(key, skip);
+        }
+        for (key, skip) in duplicates {
+            let key = available_key(key, "duplicate", &mut occupied);
+            skipped.insert(key, skip);
         }
 
-        let order = resolve(&plugins)?;
         let (mut recorded, removed_plugins): (Vec<_>, Vec<_>) = install_order
             .iter()
             .cloned()
@@ -99,12 +97,19 @@ impl Catalog {
             install_order: recorded,
             removed_plugins,
             plugins,
+            folders,
+            skipped,
+            plugins_folder,
             revision: String::new(),
             root: root.to_owned(),
             directory: directory.to_owned(),
         };
         catalog.update_metadata()?;
         Ok(catalog)
+    }
+
+    pub(crate) fn scan_skip_reason(&self, id: &str) -> Option<&str> {
+        self.skipped.get(id).map(|skip| skip.reason.as_str())
     }
 
     pub(crate) fn persist_install_order(&self, directory: Option<&Path>) -> Result<(), Error> {
@@ -142,6 +147,21 @@ impl Catalog {
             }
         }
 
+        hash.update(self.plugins_folder.as_os_str().as_encoded_bytes());
+        for (id, folder) in &self.folders {
+            hash.update(id);
+            hash.update([0]);
+            hash.update(folder.as_os_str().as_encoded_bytes());
+            hash.update([0]);
+        }
+        for (id, skip) in &self.skipped {
+            hash.update(id);
+            hash.update([0]);
+            hash.update(skip.folder.as_os_str().as_encoded_bytes());
+            hash.update([0]);
+            hash.update(&skip.reason);
+            hash.update([0]);
+        }
         self.revision = format!("{:x}", hash.finalize());
         Ok(())
     }
@@ -166,7 +186,18 @@ impl Catalog {
             .enumerate()
             .map(|(index, id)| (id, index))
             .collect::<BTreeMap<_, _>>();
-        json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
+        let skipped = self
+            .skipped
+            .iter()
+            .map(|(id, skip)| (id, &skip.reason))
+            .collect::<BTreeMap<_, _>>();
+        let skipped_folders = self
+            .skipped
+            .iter()
+            .map(|(id, skip)| (id, skip.folder.to_string_lossy()))
+            .collect::<BTreeMap<_, _>>();
+        json!({"revision":self.revision,"pluginsFolder":self.plugins_folder.to_string_lossy(),
+            "skipped":skipped,"skippedFolders":skipped_folders,"plugins":self.order.iter().map(|id| {
             let manifest = &self.plugins[id].manifest;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
             if let Some(object) = value.as_object_mut() {
@@ -179,6 +210,7 @@ impl Catalog {
             if !routes.is_empty() {
                 value["runnerContractRoutes"] = Value::Object(routes);
             }
+            value["folder"] = json!(self.folders[id].to_string_lossy());
             value["revision"] = json!(self.revision);
             value["installOrder"] = json!(install_indexes[id]);
             value["uiUrl"] = manifest.entries.ui.as_ref().map(|ui| format!("/plugins/{id}/{}/assets/{}", self.revision, ui.code)).into();
@@ -209,6 +241,136 @@ impl Catalog {
     }
 }
 
+#[derive(Default)]
+struct FolderScan {
+    plugins: BTreeMap<String, Arc<Artifact>>,
+    folders: BTreeMap<String, PathBuf>,
+    skips: Vec<(String, ScanSkip)>,
+    duplicates: Vec<(String, ScanSkip)>,
+    retained: BTreeSet<String>,
+}
+
+impl FolderScan {
+    fn read(root: &Path, reload: Option<(&Catalog, &str)>) -> Result<Self, Error> {
+        use std::collections::btree_map::Entry;
+
+        let previous = reload.map(|(old, _)| old);
+        let old_folders: BTreeMap<_, _> = previous
+            .into_iter()
+            .flat_map(|old| old.plugins.keys().map(|id| (old.folders[id].as_path(), id)))
+            .collect();
+        let mut scan = Self::default();
+        let mut duplicates = Vec::new();
+
+        for folder in plugin_folders(root, old_folders.contains_key(root))? {
+            let old_id = old_folders.get(folder.as_path()).copied();
+            let artifact_dir = artifact_directory(&folder);
+            if artifact_dir.is_none() && old_id.is_none() && !folder.join("package.json").is_file()
+            {
+                continue;
+            }
+            let (id, artifact, keep_previous) = match read_artifact(artifact_dir, &folder, previous)
+            {
+                Ok(artifact) => (artifact.manifest.plugin.id.clone(), artifact, false),
+                Err((identity, error)) => {
+                    let previous_build = previous
+                        .and_then(|old| find_previous_artifact(old, old_id, identity.as_ref()));
+                    let Some((id, artifact)) = previous_build else {
+                        let key = identity.unwrap_or_else(|| folder_name(&folder));
+                        scan.skips.push((
+                            key,
+                            ScanSkip {
+                                reason: error.to_string(),
+                                folder,
+                            },
+                        ));
+                        continue;
+                    };
+                    if reload.is_some_and(|(_, target)| id == target) {
+                        return Err(error);
+                    }
+                    (id.clone(), Arc::clone(artifact), true)
+                }
+            };
+
+            // Preserve the last good snapshot even if a new duplicate sorts
+            // before the active folder.
+            let keep_previous = keep_previous && scan.retained.insert(id.clone());
+            match scan.folders.entry(id.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(folder);
+                    scan.plugins.insert(id, artifact);
+                }
+                Entry::Occupied(mut entry) if keep_previous => {
+                    duplicates.push((id.clone(), entry.insert(folder)));
+                    scan.plugins.insert(id, artifact);
+                }
+                Entry::Occupied(_) => duplicates.push((id, folder)),
+            }
+        }
+
+        for (id, folder) in duplicates {
+            let first = &scan.folders[&id];
+            let reason = format!(
+                "duplicate of plugin {id}, already loaded from {}",
+                first.display()
+            );
+            scan.duplicates
+                .push((folder_name(&folder), ScanSkip { reason, folder }));
+        }
+        Ok(scan)
+    }
+}
+
+fn read_artifact(
+    directory: Option<PathBuf>,
+    folder: &Path,
+    previous: Option<&Catalog>,
+) -> Result<Arc<Artifact>, (Option<String>, Error)> {
+    let Some(dir) = directory else {
+        return Err((
+            None,
+            invalid(format!("Plugin is not built: {}", folder.display())),
+        ));
+    };
+    let manifest = Manifest::read(&dir).map_err(|error| (read_identity(&dir), error))?;
+    let id = manifest.plugin.id.clone();
+    let old = previous.and_then(|old| old.plugins.get(&id));
+    Artifact::read_reusing(&dir, manifest, old.map(AsRef::as_ref))
+        .map(Arc::new)
+        .map_err(|error| (Some(id), error))
+}
+
+fn find_previous_artifact<'a>(
+    previous: &'a Catalog,
+    old_id: Option<&String>,
+    identity: Option<&String>,
+) -> Option<(&'a String, &'a Arc<Artifact>)> {
+    // An unreadable copy with a known ID only stands for a moved plugin if
+    // its previously active folder is gone.
+    let id = old_id.or_else(|| {
+        identity.filter(|id| previous.folders.get(*id).is_some_and(|path| !path.exists()))
+    })?;
+    previous.plugins.get_key_value(id)
+}
+
+fn plugin_folders(root: &Path, was_single_build: bool) -> Result<Vec<PathBuf>, Error> {
+    let entries = std::fs::read_dir(root).map_err(|e| invalid(e.to_string()))?;
+    if artifact_directory(root).is_some() || was_single_build {
+        return Ok(vec![root.to_owned()]);
+    }
+
+    let mut children = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| invalid(e.to_string()))?;
+        if !entry.file_name().to_string_lossy().starts_with('.') {
+            children.push(entry.path());
+        }
+    }
+    children.sort();
+    Ok(children)
+}
+
 fn read_install_order(directory: Option<&Path>) -> Result<Vec<String>, Error> {
     let Some(directory) = directory else {
         return Ok(Vec::new());
@@ -222,13 +384,48 @@ fn read_install_order(directory: Option<&Path>) -> Result<Vec<String>, Error> {
         .map_err(|error| invalid(format!("Read plugin installation order: {error}")))
 }
 
+fn folder_name(folder: &Path) -> String {
+    folder
+        .file_name()
+        .unwrap_or(folder.as_os_str())
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn available_key(key: String, suffix: &str, occupied: &mut BTreeSet<String>) -> String {
+    let mut candidate = key.clone();
+    while !occupied.insert(candidate.clone()) {
+        candidate.push_str(&format!(" ({suffix})"));
+    }
+    candidate
+}
+
+fn read_identity(directory: &Path) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Identity {
+        id: String,
+    }
+    #[derive(Deserialize)]
+    struct Header {
+        plugin: Identity,
+    }
+    let header: Header = serde_json::from_reader(Manifest::open(directory).ok()?).ok()?;
+    Some(header.plugin.id)
+}
+
 fn artifact_directory(root: &Path) -> Option<PathBuf> {
-    if root.join("manifest.json").is_file() {
+    let has_manifest = |path: &Path| match path.join("manifest.json").symlink_metadata() {
+        Ok(_) => true,
+        Err(error) => {
+            error.kind() != std::io::ErrorKind::NotFound
+                && error.kind() != std::io::ErrorKind::NotADirectory
+        }
+    };
+    if has_manifest(root) {
         Some(root.to_owned())
-    } else if root.join("dist/manifest.json").is_file() {
-        Some(root.join("dist"))
     } else {
-        None
+        let dist = root.join("dist");
+        has_manifest(&dist).then_some(dist)
     }
 }
 

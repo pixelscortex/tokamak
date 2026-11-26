@@ -26,7 +26,6 @@ fn main() {
             serde_json::from_str(&std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()))
                 .expect("Tauri configuration");
         config["bundle"]["externalBin"] = serde_json::json!([]);
-        config["bundle"]["resources"] = serde_json::json!([]);
         unsafe { std::env::set_var("TAURI_CONFIG", config.to_string()) };
     }
     tauri_build::build()

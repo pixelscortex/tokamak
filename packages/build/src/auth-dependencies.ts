@@ -1,12 +1,10 @@
 import type { PluginDefinition } from "@tokamak/sdk";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { functionPlacement } from "../../sdk/tools/placement.mjs";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { readDescriptor } from "./descriptor.ts";
 
-const workspacePlugins = fileURLToPath(new URL("../../../plugins", import.meta.url));
 const providesSignIn = (provider: { owner?: string; name: string }) =>
   provider.owner === "auth" && provider.name === "method";
 
@@ -20,7 +18,6 @@ export function signInDependency(root: string, plugin: PluginDefinition, catalog
     catalog && resolve(root, catalog),
     process.env.TOKAMAK_PLUGIN_DIR,
     dirname(root),
-    workspacePlugins,
   ]);
   for (const directory of catalogs) {
     if (!directory || !existsSync(directory)) continue;
@@ -31,16 +28,14 @@ export function signInDependency(root: string, plugin: PluginDefinition, catalog
   return sourceSignIn(root, dependencies);
 }
 
-// A source dependency in the checkout can be identified before its first build.
+// A sibling source dependency can be identified before its first build.
 function sourceSignIn(root: string, dependencies: Set<string>) {
-  for (const directory of [dirname(root), workspacePlugins]) {
-    for (const id of dependencies) {
-      const folder = resolve(directory, id);
-      const descriptor = readDescriptor(folder);
-      if (descriptor?.id !== id || !(descriptor.depends?.auth || descriptor.optional?.auth)) continue;
-      checkPluginImports(folder);
-      if (functionPlacement(folder)?.providers.some(providesSignIn)) return id;
-    }
+  for (const id of dependencies) {
+    const folder = resolve(dirname(root), id);
+    const descriptor = readDescriptor(folder);
+    if (descriptor?.id !== id || !(descriptor.depends?.auth || descriptor.optional?.auth)) continue;
+    checkPluginImports(folder);
+    if (functionPlacement(folder)?.providers.some(providesSignIn)) return id;
   }
 }
 
