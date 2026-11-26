@@ -1,0 +1,77 @@
+packages/sdk/tests/web/component-attach.test.tsx
+  s_b876ad15a45301::t_c44d1a3cd0f4fc 18,85-87,108-112,114-116
+  s_b876ad15a45301::t_3ba44fbf873357 1-5,7-17,19-22,48-50,59-60,83-84,88-107,113,117-131,182-192,201,205,222-231
+  s_b876ad15a45301::t_5d1c6f04ae4fc8 6,195
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 23-47,51-58,61-82,132-181,193-194,196-200,202-204,206-221
+packages/build/README.md
+  s_b876ad15a45301::t_eecdbd84372665 207-220
+packages/sdk/README.md
+  s_b876ad15a45301::t_eecdbd84372665 717-730
+packages/sdk/component-parts.tsx
+  s_b876ad15a45301::t_796f56a9e2232b 92
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 121-135,144-159
+  s_b876ad15a45301::t_c44d1a3cd0f4fc 95-96,98-120,136
+  s_b876ad15a45301::t_abaa059ac0524d 137-143,160-165
+  s_b876ad15a45301::t_6f613abab789b1 9,80-91,93-94,97,166-167,598
+packages/sdk/tests/web/built-component-addon.d.ts
+  s_b876ad15a45301::t_845ecfe43af0c2 17-18
+packages/sdk/screen-search.ts
+  s_b876ad15a45301::t_aba3806f2f63d8 10,65,96,98,127,133,162,164-165
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 97
+  s_b876ad15a45301::t_058ff96d7ed6ee 51-53,67-68,70-71,75,77
+packages/build/src/component-parts.ts
+  s_b876ad15a45301::t_f64811791ad92b 406
+  s_b876ad15a45301::t_2fcf43fa6f9def 33,39,138-141,155,219,265-271,278-279,362,390,396-398,403,422-425,452-467,598,603,610,614,641,672-673,678
+  s_b876ad15a45301::t_058ff96d7ed6ee 369,372-373,385
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 374-376,399-402,404-405,407-412,615-633,674-677
+packages/sdk/component-actions.ts
+  s_b876ad15a45301::t_15ac1e15a227b8 5,14-20,58,83-84,86-87,94-95,175-187,189,191-193
+  s_b876ad15a45301::t_5d1c6f04ae4fc8 25,190
+  s_b876ad15a45301::t_d8cc6e614aea4a 85,88-93
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 194,199-200
+  s_b876ad15a45301::t_aba3806f2f63d8 188,197-198
+packages/sdk/vitest.config.ts
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 44-45
+  s_b876ad15a45301::t_845ecfe43af0c2 46,61,72,81
+packages/build/tests/components.test.mjs
+  s_b876ad15a45301::t_5d3dfefa9990f2 26,80-81,88-95,104-110,113-132,137-144,156
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 82-87,96-103,111-112,133-136,145-155
+  s_b876ad15a45301::t_d0a8c17b59736d 157-159
+packages/sdk/client.tsx
+  s_b876ad15a45301::t_cf3eed9bfe806b 12,15,59-65,144,166,174-178,224,233-234,274,277-278,281-286,288,290,298,306-328,334-337,399-400,404-407,409-410,412-414,416-417,419
+  s_b876ad15a45301::t_796f56a9e2232b 393
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 28-34,83-86,235-238,329-333,408,415
+  s_b876ad15a45301::t_f64811791ad92b 140
+packages/sdk/tests/web/built-component-addon.test.tsx
+  s_b876ad15a45301::t_845ecfe43af0c2 3,10,17,22-29,47-52,54,56-61
+  s_b876ad15a45301::t_46ee13dec1a230 55
+  s_b876ad15a45301::t_1dacdea634d2cc 53
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 30-46
+  s_b876ad15a45301::t_c456dd3f5049eb 62
+packages/build/src/contributions.ts
+  s_b876ad15a45301::t_e4c4aafd3dcbf0 100,106-113,116-119,121-122,322-327
+  s_b876ad15a45301::t_39dd05c2310f5c 49,57,70-90,99,101-105,114-115,120,123-129,131,150,311,319
+packages/sdk/tests/web/fixtures/parts/addon/src/client/api.tsx
+  s_b876ad15a45301::t_845ecfe43af0c2 1,25-27,29-30
+  s_b876ad15a45301::t_46ee13dec1a230 3,28
+packages/build/tests/fixtures/browser/src/client/_generated/components.d.ts
+  s_b876ad15a45301::t_61ed1dafa335bf 9-11
+packages/sdk/tests/web/fixtures/parts/owner/src/client/_generated/components.d.ts
+  s_b876ad15a45301::t_781b488c347aed 35-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82d2e07a2079c7f2706477098809c5fbba3931d3",
+  "prompts": {},
+  "sessions": {
+    "s_b876ad15a45301": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a219c7-387e-7ab3-91f9-59300db01a5e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
