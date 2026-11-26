@@ -32,4 +32,12 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "a": [["RealisticRow" | "article" | "footer", Props9, {"href":"#status"}]];
   "svg": Props9;
   "path": Props9;
+}, {
+  "SendButton": [[never, Props1]];
+  "Composer": [[never, Props2]];
+  "Region": [[never, Props3]];
+  "Labels": [[never, Props4]];
+  "BenchmarkRow": [[never, Props7]];
+  "RowStatus": [[never, Props8]];
+  "RealisticRow": [[never, Props9]];
 }>;

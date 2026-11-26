@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import type { AttributeFilters } from "./screen-search";
 
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
+declare const renderFunctionBrand: unique symbol;
 declare const originalElementBrand: unique symbol;
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
 
@@ -10,12 +11,18 @@ export interface ComponentPart<Target extends string, Props extends object> {
   readonly target: Target;
 }
 
-export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "layer" | "hide";
+export interface RenderFunction<Props extends object> {
+  readonly [renderFunctionBrand]: (props: Props) => void;
+  readonly target: string;
+  readonly renderTarget?: string;
+}
+
+export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "layer" | "hide" | "attach";
 
 export interface ComponentActionOptions<P extends object = any> {
   order?: number;
   /**
-   * Live condition, read with the props of the element's component, so one
+   * Live condition, read with the props of the owning component, so one
    * action can show for some instances only (one message, one thread).
    */
   when?: (props: P) => boolean;
@@ -48,7 +55,7 @@ export function isComponentAction(value: unknown): value is ComponentAction {
 
 export function defineComponentAction<K extends ComponentActionKind, P extends object>(
   kind: K,
-  target: Part<P>,
+  target: { readonly target: string },
   layer: ComponentAction<K>["layer"],
   options?: ComponentActionOptions<P>,
 ): ComponentAction<K> {
@@ -72,6 +79,19 @@ export const before = insert("before");
 export const after = insert("after");
 export const prepend = insert("prepend");
 export const append = insert("append");
+
+export function attach<P extends object>(
+  target: RenderFunction<P>,
+  fn: (props: NoInfer<P>) => JSX.Element | void,
+  options?: ComponentActionOptions<NoInfer<P>>,
+) {
+  return defineComponentAction(
+    "attach",
+    { target: target.renderTarget ?? target.target },
+    fn as Addition<P>, // A void callback returns undefined, which Solid can render.
+    options,
+  );
+}
 
 export function hide<P extends object>(target: Part<P>, options?: ComponentActionOptions<NoInfer<P>>) {
   return defineComponentAction("hide", target, undefined, options);
@@ -152,13 +172,29 @@ type SearchProps<Value extends object, Filters> = Value extends readonly ScreenM
     >
   : Value;
 
-/** The compiler supplies one props type or a source-ordered list of matches and their filters. */
-export type ScreenFind<Names extends Record<string, object>> = <
-  Name extends keyof Names & string,
-  const Filters extends SearchOptions = {},
->(
+type ElementTarget<Names, Name, Filters> = Name extends keyof Names
+  ? ComponentPart<string, SearchProps<Extract<Names[Name], object>, Filters>>
+  : unknown;
+type FunctionTarget<Functions, Name, Filters> =
+  Extract<keyof Filters, keyof AttributeFilters> extends never
+    ? Name extends keyof Functions
+      ? SearchProps<Extract<Functions[Name], object>, Filters> extends infer P extends object
+        ? [P] extends [never]
+          ? unknown
+          : RenderFunction<P>
+        : never
+      : unknown
+    : unknown;
+type FindFilters<Names, Name> = AllowedFilters<Name extends keyof Names ? Names[Name] : {}>;
+
+/** Separate match lists let a name carry both element and render function props. */
+export type ScreenFind<
+  Names extends Record<string, object>,
+  Functions extends Record<string, object> = {},
+> = <Name extends (keyof Names | keyof Functions) & string, const Filters extends SearchOptions = {}>(
   name: Name,
   filters?: Filters &
-    AllowedFilters<Names[NoInfer<Name>]> &
-    CheckFilters<Filters, AllowedFilters<Names[NoInfer<Name>]>>,
-) => ComponentPart<string, SearchProps<Names[Name], Filters>>;
+    FindFilters<Names, NoInfer<Name>> &
+    CheckFilters<Filters, FindFilters<Names, NoInfer<Name>>>,
+) => { readonly target: string } & ElementTarget<Names, Name, Filters> &
+  FunctionTarget<Functions, Name, Filters>;
