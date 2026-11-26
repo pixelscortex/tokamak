@@ -370,11 +370,14 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         }
         type Site = { node: Element; part: Part; children: Site[]; holes: Element[] };
         const native = new Set<Element>();
-        const nativeRoots = new Map<Element, string>();
+        const nativeRoots = new Map<Element, { table: string; authored: string[] }>();
         const holes = new Map<Element, number>();
         const addresses = new Map<string, { variable: string; suffixes: string[] }>();
-        function address({ target }: Part) {
-          const segments = target.split(".");
+        const addressesByPart = new Map<Part, string>();
+        function address(part: Part) {
+          const cached = addressesByPart.get(part);
+          if (cached) return cached;
+          const segments = part.target.split(".");
           const prefix = segments.slice(0, 2).join(".");
           let group = addresses.get(prefix);
           if (!group) {
@@ -382,9 +385,39 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             addresses.set(prefix, group);
           }
           const index = group.suffixes.push(segments.slice(2).join(".")) - 1;
-          return `${group.variable}[${index}]`;
+          const reference = `${group.variable}[${index}]`;
+          addressesByPart.set(part, reference);
+          return reference;
         }
         const tables: string[] = [];
+        const beforeTemplates = output.clone();
+
+        // Native templates retain their real nodes for pass-through. An
+        // explicit children override can project the authored JSX independently,
+        // without moving live template insertion points into another element.
+        function authoredChildren(node: ts.JsxElement) {
+          const start = node.openingElement.end;
+          const end = node.closingElement.getStart(source);
+          if (node.children.every(ts.isJsxText)) return `<>${source.text.slice(start, end)}</>`;
+          const branch = beforeTemplates.clone();
+          for (const [child, part] of elements!) {
+            if (child.pos >= start && child.end <= end && !erased(child))
+              transformElement(child, part, address(part), branch, source, mounts?.get(child));
+          }
+          closeScopes(branch, start, end);
+          return `<>${branch.slice(start - 1, end + 1).slice(1, -1)}</>`;
+        }
+
+        function closeScopes(branch: MagicString, start = 0, end = source.end) {
+          for (const { node } of bindings.get(source) ?? []) {
+            if (node.pos >= start && node.end <= end && !erased(node) && !ts.isBlock(node))
+              branch.appendLeft(node.end, "); }");
+          }
+          for (const { node, item, index } of rows.get(source) ?? []) {
+            if (node.pos >= start && node.end <= end && !erased(node))
+              branch.appendLeft(node.end, `)(${item}, ${index})`);
+          }
+        }
         function collect(node: Element): Site | undefined {
           const opening = ts.isJsxElement(node) ? node.openingElement : node;
           const part = elements!.get(node);
@@ -444,8 +477,13 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             continue;
           let nextRef = 0;
           let nextHole = 0;
+          const authored: string[] = [];
           function serialize(site: Site, ref: number | null = null, root = false): string {
             native.add(site.node);
+            const contents =
+              ts.isJsxElement(site.node) && site.node.children.length
+                ? authored.push(`case ${authored.length + 1}: return ${authoredChildren(site.node)};`)
+                : 0;
             const grouped = site.holes.length ? nextHole++ : null;
             for (const hole of site.holes) holes.set(hole, grouped!);
             const children = site.children.map((child) => {
@@ -461,12 +499,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
               return serialize(child, ref);
             });
             if (root) return `[${children.join(",")}]`;
-            return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null ? `,${ref},${grouped}` : ""}]`;
+            return `[${address(site.part)},${JSON.stringify(site.part.fingerprint ?? null)},[${children.join(",")}]${ref !== null || grouped !== null || contents ? `,${ref},${grouped}` : ""}${contents ? `,${contents}` : ""}]`;
           }
           const name = `__tokamakIsland${nativeRoots.size + 1}`;
           const data = serialize(site, null, true);
           tables.push(`const ${name} = ${data};`);
-          nativeRoots.set(node, name);
+          nativeRoots.set(node, { table: name, authored });
         }
         // Edit in JSX postorder so adjacent boundaries at the same offset
         // close the previous sibling before opening the next one.
@@ -481,9 +519,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           const container = ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent);
           output.appendLeft(
             node.getStart(source),
-            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole) => `,
+            `${container ? "{" : ""}__tokamakRenderNativePart(${partArguments(part, address(part))}, (__tokamakRefs, __tokamakHole, __tokamakChild) => __tokamakChild === undefined ? `,
           );
-          output.appendLeft(node.end, `, ${island})${container ? "}" : ""}`);
+          output.appendLeft(
+            node.end,
+            ` : (() => { switch (__tokamakChild) { ${island.authored.join(" ")} } })(), ${island.table}, 1)${container ? "}" : ""}`,
+          );
         }
         if (tables.length) output.prepend(tables.join("\n") + "\n");
         output.prepend(
@@ -494,12 +535,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
             .join(""),
         );
-        for (const { node } of bindings.get(source) ?? []) {
-          if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
-        }
-        for (const { node, item, index } of rows.get(source) ?? []) {
-          if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
-        }
+        closeScopes(output);
         output.prepend(
           'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
         );

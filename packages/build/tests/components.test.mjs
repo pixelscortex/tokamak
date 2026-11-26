@@ -23,7 +23,7 @@ const screen = `
 `;
 const manifest = async (path) => JSON.parse(await readFile(resolve(path, "dist/manifest.json"), "utf8"));
 const imports = `
-  import { after, append, before, hide, prepend, replace, wrap } from "@tokamak/sdk/client";
+  import { after, append, before, hide, prepend, layer } from "@tokamak/sdk/client";
   import * as owner from "plugin:owner/client";
 `;
 
@@ -41,8 +41,8 @@ test("find resolves the placements and stores the literal search with the found 
       export const After = after(title, ({ heading }) => heading.toUpperCase());
       export const Prepend = prepend(owner.find("strong"), ({ amount }) => amount.toFixed(2));
       export const Append = append(owner.find("title", { nth: 2 }), ({ row }) => row.toFixed(0));
-      export const Wrap = wrap(owner.find("Price", { nth: 1 }), ({ children }) => <aside>{children}</aside>);
-      export const Replace = replace(owner.find("Price", { nth: 1 }), () => "Replaced");
+      export const Frame = layer(owner.find("Price", { nth: 1 }), (_, Original) => <aside><Original /></aside>);
+      export const Substitute = layer(owner.find("Price", { nth: 1 }), () => "Replaced");
       export const Hide = hide(owner.find("Price", { nth: 2 }));
     `,
     );
@@ -53,8 +53,8 @@ test("find resolves the placements and stores the literal search with the found 
       "after",
       "prepend",
       "append",
-      "wrap",
-      "replace",
+      "layer",
+      "layer",
       "hide",
     ]);
     expect(placements).toContainEqual({
@@ -155,7 +155,7 @@ test("ignored subtrees stay as JSX and cannot be found", async () => {
   });
 }, 30_000);
 
-test("two replacements of the same resolved element fail the build", async () => {
+test("two layers of the same resolved element are published", async () => {
   await scratch(async (root) => {
     built(await source(root, "owner", screen));
     const addon = await source(
@@ -163,12 +163,31 @@ test("two replacements of the same resolved element fail the build", async () =>
       "addon",
       imports +
         `
-      export const First = replace(owner.find("title", { in: "Header" }), () => "first");
-      export const Second = replace(owner.find("title", { nth: 1 }), () => "second");`,
+      export const First = layer(owner.find("title", { in: "Header" }), () => "first");
+      export const Second = layer(owner.find("title", { nth: 1 }), () => "second");`,
+    );
+    built(addon);
+    const placements = (await manifest(addon)).plugin.contributes["component-action"];
+    expect(placements.map(({ id, action, target }) => [id, action, target])).toEqual([
+      ["First", "layer", "owner.Header.header.title"],
+      ["Second", "layer", "owner.Header.header.title"],
+    ]);
+  });
+}, 30_000);
+
+test("a layer can supply children to Original but cannot set attributes", async () => {
+  await scratch(async (root) => {
+    built(await source(root, "owner", screen));
+    const addon = await source(
+      root,
+      "addon",
+      imports +
+        `export const Bad = layer(owner.find("strong"), (_, Original) =>
+        <Original class="custom">new</Original>);`,
     );
     const failure = build(addon);
-    expect(failure.status).not.toBe(0);
-    expect(failure.stderr).toContain("First and Second both replace owner.Header.header.title");
+    expect(failure.status, failure.stderr).not.toBe(0);
+    expect(failure.stderr).toMatch(/Type 'string' is not assignable to type 'never'/);
   });
 }, 30_000);
 

@@ -1,6 +1,6 @@
 // A test plugin that extends chat the way `ai` and `code` will: through the
 // elements chat publishes, never through chat's source.
-import { after, append, before, prepend, replace, wrap } from "@tokamak/sdk/client";
+import { after, append, before, prepend, layer } from "@tokamak/sdk/client";
 import { createSignal, onCleanup } from "solid-js";
 import * as chat from "plugin:chat/client";
 
@@ -17,17 +17,25 @@ export const ChangeCard = append(
   },
 );
 // Appending a user message takes away this frame while leaving the reply and its other layers in place.
-export const LastReplyFrame = wrap(chat.find("footer"), (props) => <aside>{props.children}</aside>, {
-  order: -1,
-  when: (props) => props.message.role === "assistant" && props.isLast,
-});
-// Local state detects an accidental remount when the neighboring frame's condition flips.
-export const ReplyActions = wrap(
+export const LastReplyFrame = layer(
   chat.find("footer"),
-  (props) => (
+  (_props, Original) => (
+    <aside>
+      <Original />
+    </aside>
+  ),
+  {
+    order: -1,
+    when: (props) => props.message.role === "assistant" && props.isLast,
+  },
+);
+// Local state detects an accidental remount when the neighboring frame's condition flips.
+export const ReplyActions = layer(
+  chat.find("footer"),
+  (props, Original) => (
     <>
       <ReplyDisclosure part="footer" message={props.message} />
-      {props.children}
+      <Original />
     </>
   ),
   { when: (props) => props.message.role === "assistant" && props.next?.role !== "assistant" },
@@ -61,7 +69,9 @@ function ReplyDisclosure(props: { part: "body" | "footer"; message: chat.Message
   );
 }
 
-export const Heading = replace(chat.find("heading"), () => <h2>What should Probe work on?</h2>);
+export const Heading = layer(chat.find("heading"), (_props, Original) => (
+  <Original>What should Probe work on?</Original>
+));
 export const Status = append(chat.find("status"), (props) => (
   <span aria-label={`Probe status of ${props.thread.title}`}>●</span>
 ));

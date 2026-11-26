@@ -1,12 +1,12 @@
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
-import { after, append, before, ExtensionProvider, hide, prepend, replace, wrap } from "../../client";
+import { after, append, before, ExtensionProvider, hide, prepend, layer } from "../../client";
 import { BenchmarkRow, Composer, Labels, RealisticRow } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
-import { host, layer, type Layer } from "./fixtures/parts/extension-host";
+import { host, layer as contribution, type Layer } from "./fixtures/parts/extension-host";
 
 test("a plugin can add live UI before another plugin's button", async () => {
   const [visible, setVisible] = createSignal(false);
@@ -16,7 +16,7 @@ test("a plugin can add live UI before another plugin's button", async () => {
   const lifecycle: string[] = [];
   const dispose = render(
     () => (
-      <ExtensionProvider host={host([layer("Cost", Cost, "before", target)])}>
+      <ExtensionProvider host={host([contribution("Cost", Cost, "before", target)])}>
         <Composer label="Send" lifecycle={(event) => lifecycle.push(event)} />
       </ExtensionProvider>
     ),
@@ -43,50 +43,59 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   const button = find("SendButton");
   const toolbar = find("section", { in: "Composer" });
   const layers = [
-    layer(
+    contribution(
       "Before",
       before(button, () => <i>before</i>),
       "before",
       button,
     ),
-    layer(
+    contribution(
       "After",
       after(button, () => <i>after</i>),
       "after",
       button,
     ),
-    layer(
+    contribution(
       "Last",
       append(toolbar, () => <em>last</em>),
       "append",
       toolbar,
     ),
-    layer(
+    contribution(
       "Second",
       prepend(toolbar, () => <em>second</em>),
       "prepend",
       toolbar,
     ),
-    layer(
+    contribution(
       "First",
       prepend(toolbar, () => <em>first</em>),
       "prepend",
       toolbar,
       -1,
     ),
-    layer(
+    contribution(
       "Tooltip",
-      wrap(button, (props) => <aside aria-label={props.label}>{props.children}</aside>, { when: wrapping }),
-      "wrap",
+      layer(
+        button,
+        (props, Original) => (
+          <aside aria-label={props.label}>
+            <Original />
+          </aside>
+        ),
+        { when: wrapping },
+      ),
+      "layer",
       button,
+      -1,
     ),
-    layer(
+    contribution(
       "Replace",
-      replace(button, (props) => <b>new {props.label}</b>, { when: replacing }),
-      "replace",
+      layer(button, (props) => <b>new {props.label}</b>, { when: replacing }),
+      "layer",
       button,
     ),
-    layer("Hide", hide(button, { when: hiding }), "hide", button),
+    contribution("Hide", hide(button, { when: hiding }), "hide", button),
   ];
   const root = document.createElement("div");
   const lifecycle: string[] = [];
@@ -113,6 +122,7 @@ test("two plugins compose around and inside elements, and hiding or replacing un
     flush();
     expect(root.querySelector("button")).toBeNull();
     expect(root.querySelector("aside > b")?.textContent).toBe("new Post");
+    expect(root.querySelector("section")?.textContent).toBe("firstsecondbeforenew Postafterlast");
     expect(lifecycle).toEqual(["send unloaded"]);
 
     setReplacing(false);
@@ -144,23 +154,24 @@ test("two plugins compose around and inside elements, and hiding or replacing un
   }
 });
 
-test("a later replacement is refused even while the first installed replacement is inactive", async () => {
-  const [active, setActive] = createSignal(false);
+test("layers pass through independently and the first installed layer is outermost", async () => {
+  const [first, setFirst] = createSignal(false);
+  const [second, setSecond] = createSignal(false);
   const target = find("SendButton");
   const layers = [
-    layer(
+    contribution(
       "Second",
-      replace(target, () => <b>second</b>),
-      "replace",
+      layer(target, () => <b>second</b>, { when: second }),
+      "layer",
       target,
       -100,
       "a-later",
       2,
     ),
-    layer(
+    contribution(
       "First",
-      replace(target, () => <b>first</b>, { when: active }),
-      "replace",
+      layer(target, () => <b>first</b>, { when: first }),
+      "layer",
       target,
       0,
       "z-first",
@@ -180,17 +191,19 @@ test("a later replacement is refused even while the first installed replacement 
   );
   try {
     expect(root.textContent).toBe("Send");
-    await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/a-later.*refused.*z-first.*installed first/)),
-    );
-    expect(alerts).toHaveBeenCalledWith([
-      expect.stringMatching(/a-later.*refused.*z-first.*installed first/),
-    ]);
-    setActive(true);
-    await waitFor(() => expect(root.textContent).toBe("first"));
-    setActive(false);
+    setSecond(true);
+    await waitFor(() => expect(root.textContent).toBe("second"));
+    setFirst(true);
+    flush();
+    expect(root.textContent).toBe("first");
+    setSecond(false);
+    flush();
+    expect(root.textContent).toBe("first");
+    setFirst(false);
     flush();
     expect(root.textContent).toBe("Send");
+    expect(alerts).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/refused/));
   } finally {
     dispose();
     warn.mockRestore();
@@ -203,25 +216,25 @@ test("render props, forwarded and explicit children, and void elements keep thei
   const body = find("span", { in: "Region" });
   const button = find("button", { in: "Labels" });
   const layers = [
-    layer(
+    contribution(
       "Result",
       append(list, () => <em>!</em>),
       "append",
       list,
     ),
-    layer(
+    contribution(
       "Label",
       before(search, () => <b>Filter</b>),
       "before",
       search,
     ),
-    layer(
+    contribution(
       "Body",
       append(body, () => "!"),
       "append",
       body,
     ),
-    layer(
+    contribution(
       "Forwarded",
       append(button, () => "?"),
       "append",
@@ -255,25 +268,25 @@ test("each action's `when` reads the props of the instance it would change", asy
   const cases: [Layer[], string][] = [
     [
       [
-        layer(
+        contribution(
           "Before",
           before(button, (p) => <i>b-{p.label}</i>, { when: onPost }),
           "before",
           button,
         ),
-        layer(
+        contribution(
           "After",
           after(button, (p) => <i>a-{p.label}</i>, { when: onPost }),
           "after",
           button,
         ),
-        layer(
+        contribution(
           "First",
           prepend(toolbar, () => <em>p</em>, { when: onPost }),
           "prepend",
           toolbar,
         ),
-        layer(
+        contribution(
           "Last",
           append(toolbar, () => <em>q</em>, { when: onPost }),
           "append",
@@ -284,10 +297,18 @@ test("each action's `when` reads the props of the instance it would change", asy
     ],
     [
       [
-        layer(
+        contribution(
           "Wrap",
-          wrap(button, (p) => <aside>[{p.children}]</aside>, { when: onPost }),
-          "wrap",
+          layer(
+            button,
+            (_p, Original) => (
+              <aside>
+                [<Original />]
+              </aside>
+            ),
+            { when: onPost },
+          ),
+          "layer",
           button,
         ),
       ],
@@ -295,16 +316,16 @@ test("each action's `when` reads the props of the instance it would change", asy
     ],
     [
       [
-        layer(
+        contribution(
           "Replace",
-          replace(button, (p) => <b>new {p.label}</b>, { when: onPost }),
-          "replace",
+          layer(button, (p) => <b>new {p.label}</b>, { when: onPost }),
+          "layer",
           button,
         ),
       ],
       "new Post",
     ],
-    [[layer("Hide", hide(button, { when: onPost }), "hide", button)], ""],
+    [[contribution("Hide", hide(button, { when: onPost }), "hide", button)], ""],
   ];
   for (const [layers, changed] of cases) {
     const root = document.createElement("div");
@@ -334,44 +355,48 @@ test("a cloned native subtree supports live placements and restores its original
   const header = find("header", { in: "BenchmarkRow" });
   const bold = find("b", { in: "BenchmarkRow" });
   const additions = [
-    layer(
+    contribution(
       "Before",
       before(header, () => <i>before</i>),
       "before",
       header,
     ),
-    layer(
+    contribution(
       "After",
       after(header, () => <i>after</i>),
       "after",
       header,
     ),
-    layer(
+    contribution(
       "Prepend",
       prepend(header, () => <i>prepend</i>),
       "prepend",
       header,
     ),
-    layer(
+    contribution(
       "Append",
       append(header, () => <i>append</i>),
       "append",
       header,
     ),
-    layer(
+    contribution(
       "Wrap",
-      wrap(header, (p) => <aside>{p.children}</aside>),
-      "wrap",
+      layer(header, (_p, Original) => (
+        <aside>
+          <Original />
+        </aside>
+      )),
+      "layer",
       header,
     ),
-    layer(
+    contribution(
       "Replace",
-      replace(header, () => <strong>replacement</strong>, { when: replaced }),
-      "replace",
+      layer(header, () => <strong>replacement</strong>, { when: replaced }),
+      "layer",
       header,
     ),
-    layer("Hide", hide(header, { when: hidden }), "hide", header),
-    layer(
+    contribution("Hide", hide(header, { when: hidden }), "hide", header),
+    contribution(
       "Nested",
       after(bold, () => <i>nested</i>),
       "after",
@@ -430,13 +455,13 @@ test("a child component is a hole in the native template and unloads when its co
     () => (
       <ExtensionProvider
         host={host([
-          layer(
+          contribution(
             "Label",
             after(person, () => <i>Added</i>),
             "after",
             person,
           ),
-          layer("Hide", hide(header, { when: hidden }), "hide", header),
+          contribution("Hide", hide(header, { when: hidden }), "hide", header),
         ])}
       >
         <RealisticRow text="test" unloaded={unloaded} />
@@ -460,4 +485,279 @@ test("a child component is a hole in the native template and unloads when its co
   } finally {
     dispose();
   }
+});
+
+test("a native layer changes contents without changing the element, and can project the owner's contents", async () => {
+  const [project, setProject] = createSignal(false);
+  const [styled, setStyled] = createSignal(true);
+  const [label, setLabel] = createSignal("Send");
+  const toolbar = find("section", { in: "Composer" });
+  const root = document.createElement("div");
+  const lifecycle = vi.fn();
+  const actions = [
+    contribution(
+      "Lead",
+      prepend(toolbar, () => <em>lead</em>),
+      "prepend",
+      toolbar,
+      0,
+      "companion",
+    ),
+    contribution(
+      "Tail",
+      append(toolbar, () => <em>tail</em>),
+      "append",
+      toolbar,
+      0,
+      "companion",
+    ),
+    contribution(
+      "Content",
+      layer(
+        toolbar,
+        (_, Original) => (
+          <Original>
+            <b>new</b>
+            {project() && (
+              <div data-projection>
+                <Original.Children />
+              </div>
+            )}
+          </Original>
+        ),
+        { when: styled },
+      ),
+      "layer",
+      toolbar,
+    ),
+  ];
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <Composer label={label()} lifecycle={lifecycle} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.textContent).toBe("new"));
+  const owner = root.querySelector("section");
+  expect(owner?.getAttribute("aria-label")).toBe("toolbar");
+
+  setProject(true);
+  flush();
+  expect(root.querySelector("[data-projection]")?.textContent).toBe("leadSendtail");
+  expect(root.querySelector("section")).toBe(owner);
+  setLabel("Post");
+  flush();
+  expect(root.textContent).toBe("newleadPosttail");
+
+  setProject(false);
+  flush();
+  expect(root.textContent).toBe("new");
+  expect(root.querySelector("section")).toBe(owner);
+
+  setStyled(false);
+  flush();
+  expect(root.textContent).toBe("leadPosttail");
+  expect(root.querySelector("section")).toBe(owner);
+});
+
+test("a layer works in list rows and on a void element", async () => {
+  const list = find("span", { in: "Labels", nth: 1 });
+  const search = find("input");
+  const forwarded = find("button", { in: "Labels" });
+  const region = find("Region");
+  const actions = [
+    contribution(
+      "Row",
+      layer(list, (props, Original) => (
+        <Original>
+          Row {props.$row.index() + 1}: <Original.Children />
+        </Original>
+      )),
+      "layer",
+      list,
+    ),
+    contribution(
+      "Search",
+      layer(search, (_, Original) => (
+        <label>
+          Filter
+          <Original />
+        </label>
+      )),
+      "layer",
+      search,
+    ),
+    contribution(
+      "Forwarded",
+      layer(forwarded, (_, Original) => (
+        <Original>
+          [<Original.Children />]
+        </Original>
+      )),
+      "layer",
+      forwarded,
+    ),
+    contribution(
+      "Explicit",
+      layer(region, (_, Original) => (
+        <Original>
+          New <Original.Children />
+        </Original>
+      )),
+      "layer",
+      region,
+    ),
+  ];
+  const root = document.createElement("div");
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <Labels labels={["one", "two"]} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.querySelector("label > input")?.getAttribute("aria-label")).toBe("Search"));
+  expect(root.textContent).toContain("Row 1: 1: oneRow 2: 2: two");
+  expect(root.querySelector("input")?.childNodes).toHaveLength(0);
+  expect(root.querySelector("button")?.textContent).toBe("[Forwarded]");
+  expect(root.querySelector("main")?.textContent).toBe("New Body");
+});
+
+test("a duplicate Original draws nothing and warns once across instances", async () => {
+  const target = find("SendButton");
+  const root = document.createElement("div");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  onTestFinished(() => warn.mockRestore());
+  const actions = [
+    contribution(
+      "Duplicate",
+      layer(target, (_, Original) => (
+        <aside>
+          <Original />
+          <Original />
+        </aside>
+      )),
+      "layer",
+      target,
+      0,
+      "duplicate",
+    ),
+  ];
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <Composer label="Send" lifecycle={vi.fn()} />
+          <Composer label="Post" lifecycle={vi.fn()} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.querySelectorAll("aside")).toHaveLength(2));
+  expect([...root.querySelectorAll("aside")].map((node) => node.textContent)).toEqual(["Send", "Post"]);
+  expect(
+    warn.mock.calls.flat().filter((message) => /duplicate\/Duplicate.*Original twice/.test(message)),
+  ).toHaveLength(1);
+});
+
+test("a throwing layer passes through to the next layer and warns once", async () => {
+  const target = find("SendButton");
+  const [broken, setBroken] = createSignal(false);
+  const root = document.createElement("div");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  onTestFinished(() => warn.mockRestore());
+  const actions = [
+    contribution(
+      "Broken",
+      layer(target, (_, Original) => {
+        if (broken()) throw new Error("broken layer");
+        return (
+          <aside>
+            <Original />
+          </aside>
+        );
+      }),
+      "layer",
+      target,
+      -1,
+      "broken",
+    ),
+    contribution(
+      "Lower",
+      layer(target, (_, Original) => (
+        <strong>
+          <Original />
+        </strong>
+      )),
+      "layer",
+      target,
+    ),
+  ];
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <Composer label="Send" lifecycle={vi.fn()} />
+          <Composer label="Post" lifecycle={vi.fn()} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.querySelectorAll("aside > strong > button")).toHaveLength(2));
+  const button = root.querySelector("button");
+  setBroken(true);
+  flush();
+  expect(root.querySelector("aside")).toBeNull();
+  expect(root.querySelector("strong > button")).toBe(button);
+  expect(
+    warn.mock.calls.flat().filter((message) => /broken\/Broken.*broken layer/.test(message)),
+  ).toHaveLength(1);
+});
+
+test("an error in children supplied by a layer falls back to the original", async () => {
+  const [broken, setBroken] = createSignal(false);
+  const target = find("Region");
+  const root = document.createElement("div");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  onTestFinished(() => warn.mockRestore());
+  function Custom() {
+    if (broken()) throw new Error("broken projection");
+    return "custom";
+  }
+  const actions = [
+    contribution(
+      "Custom",
+      layer(target, (_, Original) => <Original>{broken() ? <Custom /> : "custom"}</Original>),
+      "layer",
+      target,
+      0,
+      "projector",
+    ),
+  ];
+  onTestFinished(
+    render(
+      () => (
+        <ExtensionProvider host={host(actions)}>
+          <Labels labels={[]} />
+        </ExtensionProvider>
+      ),
+      root,
+    ),
+  );
+  await waitFor(() => expect(root.querySelector("main")?.textContent).toBe("custom"));
+  setBroken(true);
+  flush();
+  expect(root.querySelector("main")?.textContent).toBe("Body");
+  expect(
+    warn.mock.calls.flat().filter((message) => /projector\/Custom.*broken projection/.test(message)),
+  ).toHaveLength(1);
 });

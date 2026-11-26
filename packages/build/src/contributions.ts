@@ -39,7 +39,6 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
   const runtime = runtimeNames(source);
   const module = checker.getSymbolAtLocation(source);
   const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
-  const replacements = new Map<string, string>();
   const owners = new Map<string, ReturnType<typeof componentParts>>();
   const edits = new Map<string, [number, number, string][]>();
   function lookup(owner: string, search: ScreenSearch) {
@@ -121,12 +120,6 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
       const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
       if (!kind.isStringLiteral()) throw problem(declaration, "Declare a single component action");
       const values = componentActionOptions(declaration, kind.value, checker, plugin, searches, checkAction);
-      if (kind.value === "replace") {
-        const target = String(values.target);
-        const first = replacements.get(target);
-        if (first) throw problem(declaration, `${first} and ${exported.name} both replace ${target}`);
-        replacements.set(target, exported.name);
-      }
       (contributes["component-action"] ??= []).push({ id: exported.name, ...values });
       continue;
     }

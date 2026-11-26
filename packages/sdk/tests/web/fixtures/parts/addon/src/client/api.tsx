@@ -1,4 +1,4 @@
-import { after, replace } from "@tokamak/sdk/client";
+import { after, layer } from "@tokamak/sdk/client";
 import { find } from "plugin:owner/client";
 
 export const Badge = after(find("SendButton"), ({ label }) => <small>Built for {label}</small>);
@@ -10,7 +10,7 @@ export const Profile = after(find("span", { in: "Labels", nth: 1 }), ({ labels, 
   </small>
 ));
 
-export const Body = replace(find("div", { in: "Composer", nth: 1 }), () => <div aria-label="replacement" />);
+export const Body = layer(find("div", { in: "Composer", nth: 1 }), () => <div aria-label="replacement" />);
 
 export const Nested = after(find("em"), ({ $row }) => (
   <small>
