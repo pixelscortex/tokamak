@@ -1371,10 +1371,31 @@ async fn revoke_member_over_http(address: std::net::SocketAddr, owner: &str, id:
 }
 
 #[test]
-fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
-    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let scratch = tempfile::tempdir_in(workspace.join("target")).unwrap();
-    let folder = scratch.path().join("hello");
+fn plugin_create_makes_a_plugin_that_builds_in_tokamak_plugins() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    // A tokamak-plugins layout: plugins/<id> and the links setup.sh makes in
+    // the repository's node_modules, pointing into this checkout.
+    let repo = tempfile::tempdir().unwrap();
+    for (name, target) in [
+        ("@tokamak/sdk", "packages/sdk"),
+        ("@tokamak/build", "packages/build"),
+        ("@tokamak/ui", "packages/ui"),
+        ("@tokamak/runtime", "packages/runtime"),
+        ("solid-js", "packages/build/node_modules/solid-js"),
+        ("@solidjs/web", "packages/build/node_modules/@solidjs/web"),
+        ("tailwindcss", "packages/ui/node_modules/tailwindcss"),
+        ("vite", "node_modules/vite"),
+        ("@types/node", "node_modules/@types/node"),
+    ] {
+        let link = repo.path().join("node_modules").join(name);
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(workspace.join(target), link).unwrap();
+    }
+    let folder = repo.path().join("plugins/hello");
+    std::fs::create_dir_all(folder.parent().unwrap()).unwrap();
     let create = || {
         std::process::Command::new(env!("CARGO_BIN_EXE_tokamak-server"))
             .args(["plugin", "create"])
@@ -1389,11 +1410,45 @@ fn plugin_create_writes_the_current_skill_and_refuses_overwrites() {
         String::from_utf8_lossy(&created.stderr)
     );
     let skill = std::fs::read_to_string(folder.join("SKILL.md")).unwrap();
-    assert!(skill.contains("ctx.auth.user") && skill.contains("ctx.proc"));
+    assert_eq!(
+        skill,
+        std::fs::read_to_string(workspace.join("skills/develop-tokamak-plugin/SKILL.md")).unwrap()
+    );
+    let package = std::fs::read_to_string(folder.join("package.json")).unwrap();
+    assert!(!package.contains("@tokamak/"), "{package}");
     assert!(!create().status.success());
     assert_eq!(
         std::fs::read_to_string(folder.join("SKILL.md")).unwrap(),
         skill
+    );
+
+    // Build it as tokamak-plugins does: from the repository root, with the
+    // builder found through the link. A temp folder has no .prototools, so
+    // pass the checkout's pinned Bun version to proto directly.
+    let tools = std::fs::read_to_string(workspace.join(".prototools")).unwrap();
+    let bun = tools
+        .lines()
+        .find_map(|line| line.strip_prefix("bun = "))
+        .expect(".prototools pins bun")
+        .trim_matches('"');
+    let built = std::process::Command::new("proto")
+        .args(["run", "bun", "--"])
+        .env("PROTO_BUN_VERSION", bun)
+        .args(["node_modules/@tokamak/build/src/build.ts", "plugins/hello"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&built.stdout),
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(folder.join("dist/manifest.json")).unwrap()).unwrap();
+    assert_eq!(
+        manifest["plugin"]["contributes"]["view"],
+        json!([{"id":"Home","route":"/","title":"hello"}])
     );
 }
 
