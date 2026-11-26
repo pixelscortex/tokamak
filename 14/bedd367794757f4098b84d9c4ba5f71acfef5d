@@ -1,0 +1,35 @@
+wiki/scripts/check-api.mjs
+  s_a914bbb366216b::t_9a5428f7e8beeb 47
+design/ai.md
+  s_a914bbb366216b::t_dade345d48cdfc 108-120
+design/chat.md
+  s_a914bbb366216b::t_d927c23d95487d 74,85
+packages/build/README.md
+  s_a914bbb366216b::t_7af25289a959a1 149-162,167
+packages/sdk/README.md
+  s_a914bbb366216b::t_f71d1bde86bec0 711-734
+packages/server/src/plugin-skill.md
+  s_a914bbb366216b::t_3cc43cd847f90d 51-57
+plugins/ai/README.md
+  s_a914bbb366216b::t_170e79f42f82c7 55
+plugins/chat/README.md
+  s_a914bbb366216b::t_d34ac2bc0452b5 77,87-89
+wiki/content/docs/api/window.mdx
+  s_a914bbb366216b::t_6c0f8aa729463c 37-44,50-59,65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14bedd367794757f4098b84d9c4ba5f71acfef5d",
+  "prompts": {},
+  "sessions": {
+    "s_a914bbb366216b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218b8-bcf3-7e83-97d5-537dbe9e7f8e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
