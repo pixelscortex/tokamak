@@ -1,0 +1,27 @@
+plugins/ai-profiles/README.md
+  s_3c3e6807a80329::t_65fe552f1b02ab 15
+plugins/ai-profiles/src/client/lib/api.ts
+  s_3c3e6807a80329::t_289e35d8178eb8 13,17
+plugins/ai-profiles/src/client/ui/company-mark.tsx
+  s_3c3e6807a80329::t_e85a74f8a44007 3,11,22,25,29-40
+plugins/ai-profiles/tests/profiles.test.tsx
+  s_3c3e6807a80329::t_0c2eea0f13ed1f 5,44-45,54-57,72,81,86,269,274
+plugins/ai-profiles/src/client/_generated/components.d.ts
+  s_3c3e6807a80329::t_ae8128c62ba67a 1-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dcd66588406163a70ee8c2cda1dbe583b64d59dd",
+  "prompts": {},
+  "sessions": {
+    "s_3c3e6807a80329": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21717-f345-7953-b663-129c38e1eb2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
