@@ -44,6 +44,7 @@ try {
     await replayExecutable();
   }
   const launch = real ? undefined : await installLaunchHook(h);
+  const secondLaunch = real ? undefined : await installLaunchHook(h, "launch-second");
 
   const { ai } = h.api;
   const binary = process.argv[2];
@@ -131,14 +132,47 @@ try {
   if (launch) {
     await writeFile(status, "signed-out\n");
     const hookEnv = { TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CODEX_HOME: codexHome };
-    const args = ["-c", 'model_provider="replay"'];
-    await launch.set(hookEnv, ["--config=approval_policy=never"]);
     try {
-      const owned = await run("hello-launch", "Reply only: Hello from Codex.", { state: "failed" });
-      assert.match(owned.error, /launch-first.*approval_policy.*Tokamak/);
-      assert.equal(await Bun.file(join(owned.folder, "isolated-home")).exists(), false);
+      for (const key of [
+        "approval_policy",
+        "approvals_reviewer",
+        "sandbox_mode",
+        "sandbox_workspace_write",
+        "model",
+        "model_reasoning_effort",
+        "service_tier",
+        "cli_auth_credentials_store",
+        "model_provider",
+        "model_providers",
+        "profile",
+        "profiles",
+        "openai_base_url",
+        "chatgpt_base_url",
+        "shell_environment_policy",
+      ]) {
+        for (const args of [
+          ["-c", `${key}="guard-value"`],
+          [`--config=${key}.test.base_url="guard-value"`],
+        ]) {
+          await launch.set(hookEnv, args);
+          const rejected = await run("hello-launch", "Reject the launch override.", { state: "failed" });
+          assert.match(rejected.error, new RegExp(`launch-first.*-c ${key},.*Tokamak`));
+          assert.ok(!JSON.stringify(rejected).includes("guard-value"));
+          assert.equal(await Bun.file(join(rejected.folder, "isolated-home")).exists(), false);
+        }
+      }
 
-      await launch.set(hookEnv, args);
+      const provider = { baseUrl: "https://example.test", keyEnv: "TEST_PROVIDER_KEY", key: "fixture-key" };
+      await launch.set({}, [], provider);
+      await secondLaunch.set({}, [], provider);
+      const clash = await run("hello-launch", "Reject competing providers.", { state: "failed" });
+      assert.match(clash.error, /launch-first.*launch-second.*both set provider/);
+      assert.ok(!JSON.stringify(clash).includes(provider.key));
+      await secondLaunch.set({ [provider.keyEnv]: "a-different-key" });
+      const envClash = await run("hello-launch", "Reject a competing key.", { state: "failed" });
+      assert.match(envClash.error, /launch-first.*TEST_PROVIDER_KEY.*launch-second/);
+      await secondLaunch.clear();
+      await launch.set(hookEnv, ["-c", 'model_provider_other="replay"']);
       const isolated = await run("hello-launch", "Reply only: Hello from Codex.");
       assert.equal(isolated.text, "Hello from Codex.");
       assert.equal(isolated.row.sessionId, "codex-session");
@@ -465,7 +499,7 @@ case "$1" in
       hello-launch|plan-launch)
         [ "$TOKAMAK_LAUNCH_TEST" = ${shellQuote(LAUNCH_VALUE)} ] || exit 3
         [ ! -e "$CODEX_HOME/auth.json" ] || exit 5
-        [ "$*" = 'app-server -c model_provider="replay" -c cli_auth_credentials_store="file"' ] || exit 6
+        [ "$*" = 'app-server -c model_provider_other="replay" -c cli_auth_credentials_store="file"' ] || exit 6
         if [ "$tape" = plan-launch ]; then [ -f "$CODEX_HOME/cli-state" ] || exit 7; fi
         : > "$CODEX_HOME/cli-state"
         printf '%s' "$CODEX_HOME" > isolated-home

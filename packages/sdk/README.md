@@ -951,8 +951,10 @@ manager settles a turn, Force stop can also kill groups left by a completed
 needs a session file the CLI is still writing. Agent authors
 do not implement the message transport.
 
-`Run.launchSettings`, when present, holds the environment and arguments for
-that start. Its values stay in the caller; don't log or report them. The
+`Run.launchSettings`, when present, holds the environment, arguments, and
+optional OpenAI-compatible Responses provider (`{ baseUrl, keyEnv, key }`) for
+that start. Only one hook may supply the provider. Its values stay in the
+caller; don't log or report them. The
 caller-only `withAgentLaunch` helper from `@tokamak/sdk/agent-launch` gives
 Claude or Codex a private CLI home under the Runner's data folder. It is
 shared only by turns of the same thread, agent, and set of contributing

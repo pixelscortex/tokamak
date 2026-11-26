@@ -308,24 +308,45 @@ async function resolveLaunch(
         request?: { agentId: string; launchId: string; model?: string };
         blocked?: string;
         identity?: string;
+        provider?: { baseUrl: string; keyEnv: string; key: string };
       },
       { collect: true },
     );
     const env = new Map<string, { plugin: string; name: string; value: string }>();
     const args: string[] = [];
     const contributors = new Map<string, string>();
+    let provider: { plugin: string; value: NonNullable<LaunchSettings["provider"]> } | undefined;
     for (const { plugin, value } of contributions) {
       // The point validator checks the shape, but leaves index signatures open.
       if (!value.env || typeof value.env !== "object" || Array.isArray(value.env))
         throw new TypeError("Invalid launch environment");
       const entries = Object.entries(value.env);
       if (value.blocked) return { error: value.blocked };
-      if (entries.length || value.args.length) contributors.set(plugin, value.identity ?? "");
+      if (entries.length || value.args.length || value.provider)
+        contributors.set(plugin, value.identity ?? "");
       const owned = ownedAgentLaunchArg(agentId, value.args);
       if (owned)
         return {
           error: `Could not start the turn: plugin "${plugin}" supplied ${owned}, which Tokamak sets.`,
         };
+      if (value.provider) {
+        if (provider)
+          return {
+            error: `Could not start the turn: plugins "${provider.plugin}" and "${plugin}" both set provider.`,
+          };
+        const { baseUrl, keyEnv, key } = value.provider;
+        const url = new URL(baseUrl);
+        if (
+          (url.protocol !== "http:" && url.protocol !== "https:") ||
+          /[\u0000-\u001f\u007f]/.test(baseUrl) ||
+          !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(keyEnv) ||
+          (agentId === "codex" && keyEnv.toUpperCase() === "CODEX_HOME") ||
+          !key ||
+          /[\0\r\n]/.test(key)
+        )
+          throw new TypeError("Invalid launch provider");
+        provider = { plugin, value: { baseUrl, keyEnv, key } };
+      }
       for (const [name, setting] of entries) {
         if (!name || /[=\0\r\n]/.test(name) || typeof setting !== "string" || setting.includes("\0"))
           throw new TypeError("Invalid launch environment entry");
@@ -339,7 +360,15 @@ async function resolveLaunch(
       }
       for (const arg of value.args) args.push(arg);
     }
-    if (!env.size && !args.length) return {};
+    if (provider) {
+      const name = provider.value.keyEnv;
+      const previous = env.get(name);
+      if (previous)
+        return {
+          error: `Could not start the turn: plugin "${provider.plugin}" set provider with ${name}, which plugin "${previous.plugin}" also set in the environment.`,
+        };
+    }
+    if (!env.size && !args.length && !provider) return {};
     return {
       settings: {
         threadId,
@@ -357,6 +386,7 @@ async function resolveLaunch(
           .digest("hex"),
         env: Object.fromEntries([...env.values()].map(({ name, value }) => [name, value])),
         args,
+        ...(provider && { provider: provider.value }),
       },
     };
   } catch (cause) {
@@ -372,7 +402,8 @@ function redactLaunchError(message: string, settings?: LaunchSettings): string {
     const equals = arg.indexOf("=");
     return equals < 0 ? [arg] : [arg, arg.slice(equals + 1)];
   });
-  const values = [...new Set([...Object.values(settings.env), ...argValues])]
+  const providerValues = settings.provider ? [settings.provider.key, settings.provider.baseUrl] : [];
+  const values = [...new Set([...Object.values(settings.env), ...argValues, ...providerValues])]
     .filter((value) => value && message.includes(value))
     .sort((a, b) => b.length - a.length);
   if (!values.length) return message;

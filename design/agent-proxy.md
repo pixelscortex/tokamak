@@ -46,6 +46,11 @@ on stop or failure. It can end a key by the turn's random lease ID without
 keeping or passing the raw key after launch. If a process crashes, the idle
 deadline still applies.
 
+Codex excludes the turn key from the environment of commands it runs. As with
+Claude's turn token, other processes running as the same user can still read the
+CLI's environment (for example, with `ps eww`). The key is short-lived and
+bound to one set and company.
+
 | Company   | Methods and paths after the returned address                                          | Upstream                                          |
 | --------- | ------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | Anthropic | POST `/v1/messages`, `/v1/messages/count_tokens`; GET `/v1/models`, `/v1/models/<id>` | `https://api.anthropic.com` with the same path    |
@@ -73,6 +78,9 @@ before sending and records last use only on a 2xx response. A 401 forces one
 renewal and allows one replay. If the company refuses renewal, the account
 is signed out and the replay uses the next eligible account of that company.
 A 429 is returned to the CLI and holds the account out of later requests.
+For ChatGPT the holdout uses the usage-limit body's reset, then the Codex reset
+headers, then Retry-After, then 60 seconds. The upstream body is forwarded
+unchanged. The proxy drops Set-Cookie and Set-Cookie2 from both companies.
 When every candidate is held out, the proxy returns 429 with the earliest
 reset in Retry-After. A set with no usable subscription for the company
 otherwise returns 403.

@@ -36,13 +36,24 @@ const start = action({
   handler: async (ctx, run: ai.Run) => {
     try {
       if (!run.launchSettings) return await codexTurn(ctx, run);
-      return await withAgentLaunch(run.launchSettings, "codex", ({ env, args }) =>
-        codexTurn(ctx, run, {
-          env,
+      return await withAgentLaunch(run.launchSettings, "codex", ({ env, args, provider }) => {
+        const config = [
           // This turn must not fall back to a login in the system keyring.
-          args: [...args, "-c", 'cli_auth_credentials_store="file"'],
-        }),
-      );
+          'cli_auth_credentials_store="file"',
+        ];
+        if (provider) {
+          const keyEnv = JSON.stringify(provider.keyEnv);
+          config.push(
+            'model_provider="tokamak_profile"',
+            `model_providers.tokamak_profile={ name="Tokamak Profile", base_url=${JSON.stringify(provider.baseUrl)}, env_key=${keyEnv}, wire_api="responses", requires_openai_auth=false, supports_websockets=false }`,
+            `shell_environment_policy.exclude=[${keyEnv}]`,
+          );
+        }
+        return codexTurn(ctx, run, {
+          env: provider ? { ...env, [provider.keyEnv]: provider.key } : env,
+          args: [...args, ...config.flatMap((entry) => ["-c", entry])],
+        });
+      });
     } catch (error) {
       if (!run.launchSettings) discovery.invalidate();
       throw error;

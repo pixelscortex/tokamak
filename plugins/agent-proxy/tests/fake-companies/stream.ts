@@ -34,6 +34,25 @@ export function stream(
   );
 }
 
+export function codexCommand(model: string, command: string) {
+  const response = { id: "resp_fake_command", object: "response", created_at: 1, model };
+  const item = {
+    id: "fc_fake",
+    type: "function_call",
+    call_id: "call_fake",
+    name: "exec_command",
+    arguments: JSON.stringify({ cmd: command, login: false }),
+    status: "completed",
+  };
+  return [
+    event("response.created", { response: { ...response, status: "in_progress", output: [] } }),
+    event("response.output_item.done", { output_index: 0, item }),
+    event("response.completed", {
+      response: { ...response, status: "completed", output: [item] },
+    }),
+  ];
+}
+
 export function turn(company: Company, model: string, partial: boolean) {
   const text = ["Fake ", "reply."];
   if (company === "anthropic") {

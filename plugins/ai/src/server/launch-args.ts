@@ -50,6 +50,13 @@ const codexOwned = new Set([
   "model_reasoning_effort",
   "service_tier",
   "cli_auth_credentials_store",
+  "model_provider",
+  "model_providers",
+  "profile",
+  "profiles",
+  "openai_base_url",
+  "chatgpt_base_url",
+  "shell_environment_policy",
 ]);
 
 const earlyExit = new Set(["--", "--help", "-h", "--version", "-V"]);
@@ -61,13 +68,15 @@ function claudeOption(flag: string) {
 }
 
 function codexConfigKey(config: string) {
-  if (!config.includes("=") || config.startsWith("-")) return "-c without a key=value";
-  const root = config
-    .split(/[.=]/, 1)[0]!
-    .trim()
-    .replace(/^["']|["']$/g, "");
-  if (root.includes("\\")) return "-c with an escaped key";
-  if (codexOwned.has(root)) return `-c ${root}`;
+  const equals = config.indexOf("=");
+  const path = config.slice(0, equals).trim();
+  if (equals < 0 || !path || path.startsWith("-")) return "-c without a key=value";
+  if (path.includes("\\")) return "-c with an escaped key";
+  const parts = path.split(".").map((part) => part.trim().replace(/^["']|["']$/g, ""));
+  const normalized = parts.join(".");
+  for (const owned of codexOwned) {
+    if (normalized === owned || normalized.startsWith(owned + ".")) return `-c ${owned}`;
+  }
 }
 
 function attachedCodexConfig(arg: string) {

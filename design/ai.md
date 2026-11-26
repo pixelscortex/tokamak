@@ -67,10 +67,13 @@ An out-of-date model, level, speed or mode falls back to the first offered one
 (`shared/offered.ts`). With launch settings the CLI validates the choices;
 AI does not use the ordinary personal catalog for the launch probe.
 
-A launch hook can supply environment variables and CLI arguments. If two
-plugins set the same variable, the existing error reply names both plugins
-and that variable. If a hook tries to replace a flag Tokamak owns, the reply
-names the plugin and the flag. Both checks run before the agent CLI starts.
+A launch hook can supply environment variables and CLI arguments. It can also
+supply one OpenAI-compatible Responses provider as `provider: { baseUrl, keyEnv,
+key }`. Codex builds the provider arguments and keeps the key out of command
+environments. If two plugins set the same variable or both set a provider, the
+error names both plugins. If a hook tries to replace a flag or config key
+Tokamak owns, the reply names the plugin and the setting. These checks run
+before the agent CLI starts.
 
 Launched turns use the project's settings and a private CLI home on the
 Runner. A thread resumes its previous agent session only when the same

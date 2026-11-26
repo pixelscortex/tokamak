@@ -114,11 +114,19 @@ export interface Usage {
   readonly costUsd?: number;
 }
 
+/** An OpenAI-compatible Responses endpoint with a bearer key. */
+export interface LaunchProvider {
+  readonly baseUrl: string;
+  readonly keyEnv: string;
+  readonly key: string;
+}
+
 export interface LaunchSettings {
   readonly threadId: string;
   readonly identity: string;
   readonly env: Readonly<Record<string, string>>;
   readonly args: readonly string[];
+  readonly provider?: LaunchProvider;
 }
 
 /**

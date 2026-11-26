@@ -13,16 +13,6 @@ const profileAgent = (id: string | undefined): id is keyof typeof companyOf =>
 
 const CODEX_TURN_KEY = "CODEX_TOKAMAK_TURN_KEY";
 
-function codexProxyArgs(address: string) {
-  return [
-    "-c",
-    'model_provider="tokamak_profile"',
-    "-c",
-    `model_providers.tokamak_profile={ name="Tokamak Profile", base_url=${JSON.stringify(address)}, env_key="${CODEX_TURN_KEY}", wire_api="responses", requires_openai_auth=false, supports_websockets=false }`,
-    "-c",
-    `shell_environment_policy.exclude=["${CODEX_TURN_KEY}"]`,
-  ];
-}
 const PICK_PROFILE = "Pick a profile to send.";
 const NOT_AVAILABLE = "Pick an available agent or another profile.";
 export const syncEnabled = hook(proxy.setEnabled, {
@@ -100,8 +90,7 @@ export const launchProfile = hook(ai.turn.points.launch, {
         return {
           ...launch,
           identity: selected.id,
-          args: [...launch.args, ...codexProxyArgs(reply.address)],
-          env: { ...launch.env, [CODEX_TURN_KEY]: reply.key },
+          provider: { baseUrl: reply.address, keyEnv: CODEX_TURN_KEY, key: reply.key },
         };
       }
       return {

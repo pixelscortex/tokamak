@@ -153,6 +153,100 @@ describe.skipIf(!available.length).each(available)("Subscription proxy on the $n
       },
     });
 
+  test("strips upstream cookies for both companies", async () => {
+    const claude = await signIn("cookies-claude");
+    const chatgpt = await signInOpenai("cookies-chatgpt");
+    const set = await register([claude.subscription.id, chatgpt.subscription.id]);
+    const [codex, anthropic] = await Promise.all([
+      respond(await key(set, "openai"), "/responses?cookies"),
+      stream(await key(set), "/v1/messages?cookies"),
+    ]);
+    for (const response of [codex, anthropic]) {
+      expect(response.status).toBe(200);
+      expect(response.headers.has("set-cookie")).toBe(false);
+      expect(response.headers.has("set-cookie2")).toBe(false);
+      expect(await response.text()).toContain("Fake ");
+    }
+  });
+
+  test("uses the ChatGPT usage-limit body over Retry-After and routes the next request to the spare", async () => {
+    const first = await signInOpenai("limited-openai");
+    const spare = await signInOpenai("spare-openai");
+    const address = await key(await register([first.subscription.id, spare.subscription.id]), "openai");
+    const resetAt = Math.floor(Date.now() / 1000) + 120;
+    fake.script(first.account.id, [{ kind: "limit", resetAt, retryAfter: "1" }]);
+    const start = responses().length;
+
+    const capped = await respond(address);
+    expect(capped.status).toBe(429);
+    expect(capped.headers.get("retry-after")).toBe("1");
+    expect(await capped.text()).toBe(
+      JSON.stringify({
+        error: { type: "usage_limit_reached", resets_at: resetAt, plan_type: "plus", message: "Fake limit" },
+      }),
+    );
+    const next = await respond(address);
+    expect(next.status).toBe(200);
+    await next.text();
+    expect(
+      responses()
+        .slice(start)
+        .map(({ account }) => account),
+    ).toEqual([first.account.id, spare.account.id]);
+
+    await client.mutation(profiles.subscriptions.setEnabled, { id: spare.subscription.id, enabled: false });
+    const before = Date.now();
+    const held = await respond(address);
+    const after = Date.now();
+    await rejected(held, 429, "ChatGPT subscriptions in this set are rate limited.");
+    const retry = Number(held.headers.get("retry-after"));
+    expect(retry).toBeGreaterThanOrEqual(Math.ceil((resetAt * 1000 - after) / 1000));
+    expect(retry).toBeLessThanOrEqual(Math.ceil((resetAt * 1000 - before) / 1000));
+    expect(responses()).toHaveLength(start + 2);
+  });
+
+  test.each<{
+    name: string;
+    body?: string;
+    headers?: Record<string, string>;
+    retryAfter?: string;
+    seconds: number;
+  }>([
+    {
+      name: "relative JSON reset",
+      body: JSON.stringify({ error: { type: "usage_limit_reached", resets_in_seconds: 20 } }),
+      headers: { "x-codex-primary-reset-after-seconds": "40" },
+      retryAfter: "1",
+      seconds: 20,
+    },
+    {
+      name: "secondary window for an oversized body",
+      body: JSON.stringify({ error: { type: "usage_limit_reached", resets_in_seconds: 120 } }).padEnd(65_537),
+      headers: {
+        "x-codex-primary-reset-after-seconds": "40",
+        "x-codex-secondary-reset-after-seconds": "20",
+        "x-codex-secondary-used-percent": "100",
+      },
+      retryAfter: "1",
+      seconds: 20,
+    },
+    { name: "Retry-After for invalid JSON", body: "invalid", retryAfter: "20", seconds: 20 },
+    { name: "default without a reset", seconds: 60 },
+  ])("uses the $name when ChatGPT does not give an absolute reset", async ({ name, seconds, ...reply }) => {
+    const { account, subscription } = await signInOpenai(`fallback-openai-${name.split(" ")[0]}`);
+    const address = await key(await register([subscription.id]), "openai");
+    fake.script(account.id, [{ kind: "bare-limit", ...reply }]);
+    const first = await respond(address);
+    expect(first.status).toBe(429);
+    const body = await first.text();
+    if (reply.body !== undefined) expect(body === reply.body).toBe(true);
+    const held = await respond(address);
+    await rejected(held, 429, "ChatGPT subscriptions in this set are rate limited.");
+    const retry = Number(held.headers.get("retry-after"));
+    expect(retry).toBeGreaterThanOrEqual(seconds - 1);
+    expect(retry).toBeLessThanOrEqual(seconds);
+  });
+
   test("streams ChatGPT SSE with the selected account while Claude uses its own account in the same set", async () => {
     const claude = await signIn("mixed-claude");
     const first = await signInOpenai("mixed-openai-first");

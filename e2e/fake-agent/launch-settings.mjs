@@ -47,13 +47,19 @@ export const launch = hook(api.turn.points.launch, {
     if (data === undefined) return initial;
     const value = JSON.parse(data);
     if (value.error) throw new Error(value.error);
-    return { env: { ...initial.env, ...value.env }, args: [...initial.args, ...value.args] };
+    return {
+      ...initial,
+      env: { ...initial.env, ...value.env },
+      args: [...initial.args, ...value.args],
+      ...(value.provider && { provider: value.provider }),
+    };
   },
 });
 `,
   );
   return {
-    set: (env, args = []) => writeFile(join(h.home, `${id}.json`), JSON.stringify({ env, args })),
+    set: (env, args = [], provider) =>
+      writeFile(join(h.home, `${id}.json`), JSON.stringify({ env, args, provider })),
     throws: (error) => writeFile(join(h.home, `${id}.json`), JSON.stringify({ error })),
     clear: () => unlink(join(h.home, `${id}.json`)),
   };

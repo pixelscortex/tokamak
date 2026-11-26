@@ -18,7 +18,52 @@ function requestKey(headers: Headers) {
   return key && turnKeyHash(key);
 }
 
-function accountLimit(response: Response, company: Company): number {
+const MAX_LIMIT_BODY = 64 * 1024;
+
+async function openaiLimitBody(response: Response, now: number) {
+  if (!response.body || Number(response.headers.get("content-length")) > MAX_LIMIT_BODY) return;
+  const reader = response.clone().body!.getReader();
+  try {
+    const bytes = new Uint8Array(MAX_LIMIT_BODY);
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (size + value.byteLength > MAX_LIMIT_BODY) return;
+      bytes.set(value, size);
+      size += value.byteLength;
+    }
+    const body = JSON.parse(new TextDecoder().decode(bytes.subarray(0, size))) as {
+      error?: { type?: string; resets_at?: number; resets_in_seconds?: number };
+    } | null;
+    const limit = body?.error;
+    if (limit?.type !== "usage_limit_reached") return;
+    const at = typeof limit.resets_at === "number" ? limit.resets_at * 1000 : 0;
+    if (Number.isFinite(at) && at > now) return at;
+    if (typeof limit.resets_in_seconds === "number") return resetAfter(limit.resets_in_seconds, now);
+  } catch {
+    // A non-JSON or unreadable body leaves the header fallbacks in charge.
+  } finally {
+    // The clone's cancellation may wait for the forwarded branch to finish.
+    void reader.cancel().catch(() => {});
+  }
+}
+
+function resetAfter(seconds: number, now: number) {
+  const at = now + seconds * 1000;
+  if (Number.isFinite(at) && at > now) return at;
+}
+
+function openaiLimitHeaders(headers: Headers, now: number) {
+  const windows = ["primary", "secondary"].map((name) => ({
+    reset: resetAfter(Number(headers.get(`x-codex-${name}-reset-after-seconds`)), now) ?? 0,
+    exhausted: Number(headers.get(`x-codex-${name}-used-percent`)) >= 100,
+  }));
+  const exhausted = Math.max(0, ...windows.filter(({ exhausted }) => exhausted).map(({ reset }) => reset));
+  return exhausted || windows[0]!.reset || windows[1]!.reset;
+}
+
+async function accountLimit(response: Response, company: Company): Promise<number> {
   const now = Date.now();
   let rejected = response.status === 429;
   let reset = 0;
@@ -31,6 +76,8 @@ function accountLimit(response: Response, company: Company): number {
     if (Number.isFinite(at) && at > now) reset = Math.max(reset, at);
   }
   if (!rejected) return 0;
+  if (company === "openai")
+    reset = (await openaiLimitBody(response, now)) ?? openaiLimitHeaders(response.headers, now);
   const unified =
     company === "anthropic" ? Number(response.headers.get("anthropic-ratelimit-unified-reset")) * 1000 : 0;
   if (Number.isFinite(unified) && unified > now) reset = Math.max(reset, unified);
@@ -128,6 +175,13 @@ type Credential = { access: string; expiresAt: number };
 
 const discard = (response?: Response) => response?.body?.cancel();
 
+function forward(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.delete("set-cookie");
+  headers.delete("set-cookie2");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 async function recordForward(
   ctx: HttpActionContext,
   owner: string,
@@ -137,7 +191,7 @@ async function recordForward(
   company: Company,
 ) {
   const account = { owner, account: candidate.id };
-  const limitedUntil = accountLimit(response, company);
+  const limitedUntil = await accountLimit(response, company);
   if (response.ok || limitedUntil)
     await ctx.runMutation(internal.sets.recordForward, {
       ...account,
@@ -246,8 +300,8 @@ export const proxy = httpAction({
         return current.ok ? unavailable(current, name) : error(401, "authentication_error", current.error);
       }
       if (first.error) return first.error;
-      if (first.upstream.status !== 401) return first.upstream;
-      return await recover(first.candidate, first.login, first.upstream);
+      if (first.upstream.status !== 401) return forward(first.upstream);
+      return forward(await recover(first.candidate, first.login, first.upstream));
     } catch {
       await discard(response)?.catch(() => {});
       // Fetch and host errors may carry request details. Never surface those.

@@ -7,12 +7,14 @@ import { gzipSync, zstdDecompressSync } from "node:zlib";
 import type { Addresses, Company } from "../../src/server/addresses";
 import { challenge, oauth, syntheticJwt } from "./oauth";
 import type { Fixture } from "./recorder";
-import { stream, turn } from "./stream";
+import { codexCommand, stream, turn } from "./stream";
 
 export type Answer =
   | { kind: "normal" | "signed-out" | "overloaded" }
-  | { kind: "limit" | "partial-limit"; resetAt: number; scope?: "account" | "model" }
-  | { kind: "bare-limit"; retryAfter?: string }
+  | { kind: "limit"; resetAt: number; scope?: "account" | "model"; retryAfter?: string }
+  | { kind: "partial-limit"; resetAt: number; scope?: "account" | "model" }
+  | { kind: "codex-command"; command: string }
+  | { kind: "bare-limit"; retryAfter?: string; headers?: Record<string, string>; body?: string }
   | { kind: "unified-limit"; resetAt: number };
 /**
  * How the account's token endpoint answers: `unavailable` gives HTTP 503 and
@@ -379,7 +381,10 @@ export async function startFakeCompanies({
       return company === "anthropic" ? error(529, "overloaded_error") : error(503, "server_is_overloaded");
     if (answer?.kind === "limit") {
       const reset = String(answer.resetAt);
-      const headers = { "retry-after": String(Math.max(0, answer.resetAt - Math.floor(Date.now() / 1000))) };
+      const headers = {
+        "retry-after":
+          answer.retryAfter ?? String(Math.max(0, answer.resetAt - Math.floor(Date.now() / 1000))),
+      };
       if (company === "openai")
         return Response.json(
           {
@@ -406,14 +411,25 @@ export async function startFakeCompanies({
           : { "anthropic-ratelimit-unified-overage-status": "rejected" }),
       });
     }
-    if (answer?.kind === "bare-limit")
-      return error(429, "rate_limit_error", answer.retryAfter ? { "retry-after": answer.retryAfter } : {});
+    if (answer?.kind === "bare-limit") {
+      const headers = { ...answer.headers, ...(answer.retryAfter && { "retry-after": answer.retryAfter }) };
+      return answer.body === undefined
+        ? error(429, "rate_limit_error", headers)
+        : stream([answer.body], { "content-type": "application/json", ...headers }, delayMs, 429);
+    }
     const responseHeaders: Record<string, string> = { "content-type": "text/event-stream" };
+    if (url.searchParams.has("cookies")) {
+      responseHeaders["set-cookie"] = "upstream-session=fake";
+      responseHeaders["set-cookie2"] = "upstream-session2=fake";
+    }
     if (answer?.kind === "unified-limit") {
       responseHeaders["anthropic-ratelimit-unified-status"] = "rejected";
       responseHeaders["anthropic-ratelimit-unified-reset"] = String(answer.resetAt);
     }
-    const chunks = turn(company, fields?.model ?? "fake", answer?.kind === "partial-limit");
+    const chunks =
+      answer?.kind === "codex-command"
+        ? codexCommand(fields?.model ?? "fake", answer.command)
+        : turn(company, fields?.model ?? "fake", answer?.kind === "partial-limit");
     if (isTurn && url.searchParams.has("gzip")) {
       const zipped = gzipSync(chunks.join(""));
       responseHeaders["content-encoding"] = "gzip";

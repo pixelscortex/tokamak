@@ -1,5 +1,6 @@
 // A small Codex app-server stand-in that makes the actual Responses HTTP request.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
 const args = process.argv.slice(2);
@@ -37,6 +38,17 @@ for await (const line of createInterface({ input: process.stdin })) {
     const [, address] = /base_url="([^"]+)"/.exec(provider);
     assert.match(address, /^http:\/\/127\.0\.0\.1:\d+\/plugins\/agent-proxy\/[^/]+\/openai$/);
     const [, key] = /env_key="([^"]+)"/.exec(provider);
+    const exclude = config.find((value) => value.startsWith("shell_environment_policy.exclude="));
+    assert.equal(exclude, `shell_environment_policy.exclude=${JSON.stringify([key])}`);
+    // The stand-in models this config when spawning a command. The installed
+    // offline proof exercises the real CLI's command runner.
+    const env = { ...process.env };
+    for (const name of JSON.parse(exclude.split("=", 2)[1])) delete env[name];
+    const commandEnv = execFileSync("/usr/bin/env", { env, encoding: "utf8" });
+    assert.equal(
+      commandEnv.split("\n").some((entry) => entry.startsWith(key + "=")),
+      false,
+    );
     const response = await fetch(address + "/responses", {
       method: "POST",
       headers: { authorization: `Bearer ${process.env[key]}`, "content-type": "application/json" },

@@ -87,7 +87,9 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
   await cp(join(codexSource, "dist"), join(h.plugins, "codex"), { recursive: true });
   // The normal suite uses a deterministic app-server. The optional proof runs
   // the installed binary in the same test, with a fresh home and no off-host network.
-  const installedCodex = process.env.TOKAMAK_TEST_OFFLINE_CODEX;
+  const offlineCodex = process.env.TOKAMAK_TEST_OFFLINE_CODEX;
+  const installedCodex = offlineCodex === "1" ? Bun.which("codex") : offlineCodex;
+  assert.ok(offlineCodex !== "1" || installedCodex, "Offline Codex CLI was not found on PATH");
   assert.ok(!installedCodex || isAbsolute(installedCodex));
   const blocked = installedCodex ? await blockingProxy() : null;
   const codex = installedCodex
@@ -251,10 +253,23 @@ ${codex}
 
     const codexThread = await thread("codex-profile-alpha", alpha);
     const codexTurns = agentTurns({ h, client, agent: { id: "codex", name: "Codex" }, model: codexModel });
+    if (installedCodex) {
+      fake.script("alpha-chatgpt", [
+        {
+          kind: "codex-command",
+          // Emit the result only; never write or report the key itself.
+          command:
+            "if /usr/bin/env | /usr/bin/cut -d= -f1 | /usr/bin/grep -qx CODEX_TOKAMAK_TURN_KEY; " +
+            "then printf present; else printf absent; fi > turn-key-visibility.txt",
+        },
+      ]);
+    }
     const firstCodex = await codexTurns.run(codexThread.folder, "hello from the profile", {
       threadId: codexThread.threadId,
     });
     assert.equal(firstCodex.text, "Fake reply.");
+    if (installedCodex)
+      assert.equal(await readFile(join(codexThread.folder, "turn-key-visibility.txt"), "utf8"), "absent");
 
     await turns.run(a.folder, "check", { threadId: a.threadId });
     await ended(await receive(a.folder));
@@ -285,7 +300,7 @@ ${codex}
     const codexRequests = fake.requests.filter(({ path }) => path === "/openai/backend-api/codex/responses");
     assert.deepEqual(
       codexRequests.map(({ account }) => account),
-      ["alpha-chatgpt", "alpha-chatgpt"],
+      Array(installedCodex ? 3 : 2).fill("alpha-chatgpt"),
     );
     for (const { body, headers } of codexRequests) {
       assert.equal(body.model, codexModel);
@@ -415,7 +430,7 @@ ${codex}
     assert.ok(ordinaryCatalog.some(({ id }) => id === "fake-agent"));
 
     process.stdout.write(
-      `PASS ${installedCodex ? "installed offline" : "fixture"} Codex: two profile turns through the Responses proxy, including resume and a concurrent Claude turn\n`,
+      `PASS ${installedCodex ? "installed offline" : "fixture"} Codex: two profile turns through the Responses proxy, resume, concurrent Claude, and turn key absent from command environment\n`,
     );
     process.stdout.write(
       "PASS profile turns: personal login, required pick, catalog, concurrent account isolation, snapshot, stop/failure cleanup, deletion, member ownership and uninstall\n",
