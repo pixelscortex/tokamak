@@ -15,9 +15,13 @@ const updateRequired = `Claude needs Claude Code ${minimumVersion} or later.`;
 const setup = { install: "curl -fsSL https://claude.ai/install.sh | bash", signIn: "claude auth login" };
 const noCatalog = { models: [], modes: [], speeds: [] } as const;
 
-async function claudeInfo(ctx: CallerActionContext, setupDeadline?: number): Promise<ai.Info> {
+async function claudeInfo(
+  ctx: CallerActionContext,
+  setupDeadline?: number,
+  env?: Readonly<Record<string, string>>,
+): Promise<ai.Info> {
   const remaining = () => (setupDeadline === undefined ? undefined : setupDeadline - Date.now());
-  const version = await usableVersion(ctx, remaining());
+  const version = await usableVersion(ctx, remaining(), env);
   if (version === undefined || (setupDeadline !== undefined && version === "old"))
     throw new Error("Could not check the Claude Code version");
   if (version !== "ready") {
@@ -29,6 +33,8 @@ async function claudeInfo(ctx: CallerActionContext, setupDeadline?: number): Pro
       ...noCatalog,
     };
   }
+  // Launch auth is checked at start, without asking the CLI to inspect an account.
+  if (env) return { installed: true, signedIn: true, ...setup, ...noCatalog };
   const ready = await signedIn(ctx, remaining());
   if (ready === undefined) throw new Error("Could not check Claude Code sign-in");
   return {
@@ -50,8 +56,15 @@ const discovery = agentInfoCache(claudeInfo, async () => {
 });
 const info = action({
   on: "caller",
-  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
-    setupDeadline === undefined ? discovery.read(ctx) : claudeInfo(ctx, setupDeadline),
+  handler: (
+    ctx,
+    { setupDeadline, launchSettings }: { setupDeadline?: number; launchSettings?: ai.LaunchSettings },
+  ) =>
+    launchSettings
+      ? withAgentLaunch(launchSettings, "claude", ({ env }) => claudeInfo(ctx, undefined, env))
+      : setupDeadline === undefined
+        ? discovery.read(ctx)
+        : claudeInfo(ctx, setupDeadline),
 });
 
 /**
@@ -134,6 +147,8 @@ const start = action({
       if (version === undefined) throw new Error("Could not check the Claude Code version");
       if (version !== "ready")
         throw new Error(version === "old" ? updateRequired : "Claude isn't installed.");
+      if (env && !env.ANTHROPIC_API_KEY?.trim() && !env.ANTHROPIC_AUTH_TOKEN?.trim())
+        throw new Error("Claude launch settings must provide ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN.");
       return turn(ctx, run, env);
     };
     try {

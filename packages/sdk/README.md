@@ -877,9 +877,15 @@ do not implement the message transport.
 `Run.launchSettings`, when present, holds the environment and arguments for
 that start. Its values stay in the caller; don't log or report them. The
 caller-only `withAgentLaunch` helper from `@tokamak/sdk/agent-launch` gives
-the Claude or Codex CLI a fresh config directory and cleans it up when the
-turn ends. The provider is responsible for disabling any system credential
-store and waiting for its CLI to exit before cleanup.
+Claude or Codex a private CLI home under the Runner's data folder. It is
+shared only by turns of the same thread, agent, and set of contributing
+plugins, even when the hook values change. The Runner that deletes the thread
+cleans up its homes. The helper removes inherited CLI-specific environment
+variables before adding the hook's variables. Providers still load project
+settings, check the CLI version in the isolated environment, and wait for it
+to finish writing its session. Claude requires an explicit Anthropic key or
+token; Codex uses file storage for credentials. Hook arguments come before
+Tokamak's flags and cannot override them. AI redacts launch values from errors.
 
 The adapter in `packages/sdk/worker/contracts.ts` special-cases
 `owner === "ai" && name === "agent" && method === "start"` to build that

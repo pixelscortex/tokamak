@@ -11,6 +11,7 @@ function launchArgs(run: Run, resume?: string) {
   const settings = { env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" }, fastMode };
   // oxfmt-ignore
   return [
+    ...(run.launchSettings?.args ?? []),
     ...streamArgs(),
     "--include-partial-messages",
     "--replay-user-messages",
@@ -21,8 +22,7 @@ function launchArgs(run: Run, resume?: string) {
     ...(run.model && run.model !== "default" ? ["--model", run.model] : []),
     ...(run.effort ? ["--effort", run.effort] : []),
     ...(resume ? ["--resume", resume] : []),
-    // Even with a fresh config directory, don't let Claude try the OS keychain.
-    ...(run.launchSettings ? [...run.launchSettings.args, "--bare"] : []),
+    ...(run.launchSettings ? ["--setting-sources", "project,local"] : []),
   ];
 }
 

@@ -21,8 +21,15 @@ const discovery = agentInfoCache(codexInfo, async () => {
 });
 const info = action({
   on: "caller",
-  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
-    setupDeadline === undefined ? discovery.read(ctx) : codexInfo(ctx, setupDeadline),
+  handler: (
+    ctx,
+    { setupDeadline, launchSettings }: { setupDeadline?: number; launchSettings?: ai.LaunchSettings },
+  ) =>
+    launchSettings
+      ? withAgentLaunch(launchSettings, "codex", ({ env }) => codexInfo(ctx, undefined, env))
+      : setupDeadline === undefined
+        ? discovery.read(ctx)
+        : codexInfo(ctx, setupDeadline),
 });
 const start = action({
   on: "caller",

@@ -115,6 +115,8 @@ export interface Usage {
 }
 
 export interface LaunchSettings {
+  readonly threadId: string;
+  readonly identity: string;
   readonly env: Readonly<Record<string, string>>;
   readonly args: readonly string[];
 }

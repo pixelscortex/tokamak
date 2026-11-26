@@ -10,7 +10,7 @@ export type Turn = Doc<Model, "turns">;
  * the question's token, and without its long texts (the reply is chat's
  * message; thinking is read when opened).
  */
-export type TurnView = Omit<Turn, "replyToken" | "questionToken" | "text" | "thinking"> & {
+export type TurnView = Omit<Turn, "replyToken" | "questionToken" | "text" | "thinking" | "sessionHome"> & {
   hasThinking: boolean;
 };
 
@@ -54,6 +54,7 @@ export function view({
   questionToken: _question,
   text: _text,
   thinking,
+  sessionHome: _sessionHome,
   ...turn
 }: Turn): TurnView {
   return { ...turn, hasThinking: Boolean(thinking) };

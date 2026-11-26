@@ -139,8 +139,7 @@ export async function usableVersion(
   timeout = 5_000,
   env?: Readonly<Record<string, string>>,
 ) {
-  const args: ["claude", ...string[]] = ["claude", "--version", ...(env ? ["--bare"] : [])];
-  const answer = await agentCommand(ctx, args, timeout, env);
+  const answer = await agentCommand(ctx, ["claude", "--version"], timeout, env);
   if (answer === "missing") return answer;
   if (answer?.code !== 0) return;
   const version = answer.stdout.match(/(?:^|[^\w])v?(\d+\.\d+\.\d+)\b/i)?.[1];

@@ -30,9 +30,17 @@ Not drawn yet: the thread list after several turns (its status icons show on the
 "Only Sam can run the agent here"), a picker menu open, a pending steer, queued messages, the
 expired question line, "Force stop".
 
-If two launch hooks set the same environment variable, the turn fails before
-the agent starts. The existing error reply names the two plugins and the
-variable. This error is not drawn on the Paper page.
+A launch hook can supply environment variables and CLI arguments. If two
+plugins set the same variable, the existing error reply names both plugins
+and that variable. If a hook tries to replace a flag Tokamak owns, the reply
+names the plugin and the flag. Both checks run before the agent CLI starts.
+
+Launched turns use the project's settings and a private CLI home on the
+Runner. A thread resumes its previous agent session only when the same
+plugins contributed launch settings; changing a key does not change the home.
+Deleting the thread from the Runner removes its local homes. The same setup
+messages cover missing or outdated CLIs, and turn errors hide launch values.
+These states use the existing error reply and are not drawn on the Paper page.
 
 ## Parts it offers
 

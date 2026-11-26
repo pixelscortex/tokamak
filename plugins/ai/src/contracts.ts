@@ -1,6 +1,6 @@
 import { contract, type Failure, type Id, type JsonValue, type CallerActionContext } from "@tokamak/sdk";
 
-import type { Run, TurnResult } from "@tokamak/sdk/agent-turn";
+import type { LaunchSettings, Run, TurnResult } from "@tokamak/sdk/agent-turn";
 export type {
   Access,
   Answer,
@@ -71,7 +71,7 @@ export interface Agent {
    */
   readonly icon?: string;
   /** With a setup deadline (Unix milliseconds), check install and login only. Throw if unknown. */
-  info(options: { setupDeadline?: number }): Promise<Info>;
+  info(options: { setupDeadline?: number; launchSettings?: LaunchSettings }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }
