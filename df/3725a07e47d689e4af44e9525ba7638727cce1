@@ -1,0 +1,21 @@
+design/agent-proxy.md
+  s_b2ce2444f775e6::t_c067cf54a6bd0c 43-60
+design/ai-profiles.md
+  s_b2ce2444f775e6::t_5a8a64aeb33051 20-21,25-29,38,47-50,100-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "df3725a07e47d689e4af44e9525ba7638727cce1",
+  "prompts": {},
+  "sessions": {
+    "s_b2ce2444f775e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbee511c-645a-4eb2-b398-9e791117eb81",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
