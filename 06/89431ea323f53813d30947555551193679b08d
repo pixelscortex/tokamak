@@ -1,0 +1,21 @@
+wiki/scripts/check-api.mjs
+  s_a914bbb366216b::t_09c05e1c732a29 41
+packages/sdk/component-parts.tsx
+  s_a914bbb366216b::t_09c05e1c732a29 87,100,188,203,211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0689431ea323f53813d30947555551193679b08d",
+  "prompts": {},
+  "sessions": {
+    "s_a914bbb366216b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a218b8-bcf3-7e83-97d5-537dbe9e7f8e",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
