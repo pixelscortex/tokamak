@@ -1,0 +1,37 @@
+plugins/agent-proxy/src/server/sets.ts
+  s_8f45cf81ac6fad::t_bcfce15931d416 14-15,72-73,82,87-88,119-120,134-135,142,152,161,168,185-192,217,229
+  s_8f45cf81ac6fad::t_6020a883fc2afc 237-238
+plugins/agent-proxy/README.md
+  s_8f45cf81ac6fad::t_dc8394cc4ac5ba 42-64,226
+plugins/agent-proxy/src/server/schema.ts
+  s_8f45cf81ac6fad::t_bcfce15931d416 49,73-74
+plugins/agent-proxy/src/server/proxy.ts
+  s_8f45cf81ac6fad::t_304d51f9608a1e 86
+  s_8f45cf81ac6fad::t_bcfce15931d416 4,21,25-27,34-35,41-42,44,46,49,72-85,87-110,113-116,118,121,137,140,159-161,167,176,181-182,184-185,198-201,206,240,246,254
+  s_8f45cf81ac6fad::t_dc8394cc4ac5ba 174-175
+  s_8f45cf81ac6fad::t_4fae310bff5a97 111-112,173
+  s_8f45cf81ac6fad::t_fa54fba1e6c236 43,183
+plugins/agent-proxy/tests/workspace.ts
+  s_8f45cf81ac6fad::t_a3d590d1825319 161
+plugins/agent-proxy/tests/proxy.test.ts
+  s_8f45cf81ac6fad::t_2d696e974abe8f 14,19,24,31,77,96-97,100,119-120,128-269,283,289,293,297
+  s_8f45cf81ac6fad::t_d61ed4ddb265a3 270-282,284-288,290-292,294-296,298-299
+design/agent-proxy.md
+  s_8f45cf81ac6fad::t_dc8394cc4ac5ba 31,37-41,49-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cdb935b49500adb5404d21fe210135248830410",
+  "prompts": {},
+  "sessions": {
+    "s_8f45cf81ac6fad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a217e3-9793-77b3-913a-c592c3c24123",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
