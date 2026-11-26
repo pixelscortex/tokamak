@@ -1,0 +1,33 @@
+packages/build/src/contributions.ts
+  s_be4ee891f4fdb9::t_14a4f110c40289 87-88
+packages/build/README.md
+  s_be4ee891f4fdb9::t_d6f512372220e3 130,165-168,176-178
+packages/build/src/component-parts.ts
+  s_be4ee891f4fdb9::t_1ee30671f5bac8 253
+  s_be4ee891f4fdb9::t_14a4f110c40289 108-112
+packages/sdk/README.md
+  s_be4ee891f4fdb9::t_d6f512372220e3 719-720
+wiki/content/docs/api/window.mdx
+  s_be4ee891f4fdb9::t_d6f512372220e3 14
+packages/sdk/screen-search.ts
+  s_be4ee891f4fdb9::t_14a4f110c40289 78-81,86-87,90,95
+packages/build/tests/components.test.mjs
+  s_be4ee891f4fdb9::t_1ee30671f5bac8 184,187,215-219,248-250
+  s_be4ee891f4fdb9::t_567a35695796c8 131,139,175,179,185-186,188-189,192-204,206-214,220-230,233,237,255-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b93b599cb31e84fa33a22edc7d45947d3bcdbb67",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
