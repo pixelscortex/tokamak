@@ -38,7 +38,7 @@ function mount(profiles: (typeof profile)[]) {
     async mutation(_name: string, args: JsonValue) {
       saved = args;
       for (const listener of subscriptions)
-        listener({ value: { id: profile.id, code: profile.code, claude: false, models: [] } });
+        listener({ value: { id: profile.id, code: profile.code, agents: { claude: null, codex: null } } });
       return null;
     },
   } as unknown as ClientTransport);

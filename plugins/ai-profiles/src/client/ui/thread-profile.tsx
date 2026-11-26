@@ -40,7 +40,7 @@ export function PickerProfileChip(
   createEffect(
     () => {
       const picked = selection.data();
-      return picked ? `${picked.id}:${JSON.stringify([picked.claude, picked.models])}` : undefined;
+      return picked ? `${picked.id}:${JSON.stringify(picked.agents)}` : undefined;
     },
     (current, previous) => {
       if (current !== undefined || previous !== undefined) untrack(props.refreshCatalog);

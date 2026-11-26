@@ -194,7 +194,10 @@ ink-3 (the number of threads that have picked that profile).
 
 - New and open thread composers: a Profile column after the agent, model and effort.
   Each radio item has a grey mark and the profile code. The closed picker shows
-  the code in a small chip.
+  the code in a small chip. An enabled Claude subscription offers Claude and
+  its models; an enabled ChatGPT subscription offers Codex and its models.
+  A mixed profile offers both in the Agent and model column. See
+  `Profiles · Codex picker` on the `App 1:1 · AI profiles plugin` page.
 - With profiles and no pick, the chip says "Profile" in the warning tone, the
   composer says "Pick a profile to send.", and Send is held. If the thread's
   agent isn't offered, the picker labels it "Not available" and keeps the choice
@@ -272,8 +275,9 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   current agent. The warning and row layout also depend on [Chat](chat.md).
 - Set creation and subscription order or enable changes update the profile's
   [proxy set](agent-proxy.md). A launch reads the thread pick from the call note,
-  checks the requested model against the profile's catalog, then gets a
-  Claude-only key. AI's `ended` point revokes the key, even if starting the CLI
+  checks the requested model against the selected agent's profile catalog,
+  then gets a company-bound key. Claude uses the existing launch environment;
+  Codex uses a custom HTTP Responses provider and the isolated launch home. AI's `ended` point revokes the key, even if starting the CLI
   failed. If the profile is deleted mid-turn, the running turn keeps its set
   snapshot. A later turn must pick a profile again if the person still has profiles.
 - Uninstall removes the picker and launch hooks. Agent-proxy's set rows remain;
@@ -343,8 +347,7 @@ Switch's transparent 2 px border is left out (Paper measures from inside it).
 ## Open questions
 
 - Per-thread scope on `agents:list` (with a separate draft scope) is pending owner
-  confirmation. Codex profile routing and provider-side model/effort validation
-  are deferred.
+  confirmation. Further per-account model and effort matching is deferred.
 - Update both the desktop app and its Runner before installing AI Profiles.
   Older callers cannot run the launch and ended hooks, even for people who
   have no profiles. The thread asks the person to update Tokamak on that computer.

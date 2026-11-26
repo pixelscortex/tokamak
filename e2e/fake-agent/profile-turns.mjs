@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { cp, readFile, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { createApi, isFailure } from "../../packages/sdk/src/index.ts";
+import { blockingProxy } from "../../plugins/agent-proxy/tests/cli-sandbox.ts";
 import { startFakeCompanies } from "../../plugins/agent-proxy/tests/fake-companies/index.ts";
 import { api } from "../../plugins/ai-profiles/src/server/_generated/api.ts";
 import { agentTurns } from "./agent-turn.mjs";
-import { build, copySource, workspace } from "./harness.mjs";
+import { build, bunPath, copySource, workspace } from "./harness.mjs";
 import { installAgentFixture } from "./launch-settings.mjs";
 
 const model = "claude-sonnet-4-6";
@@ -52,7 +53,7 @@ export const setCount = query({
     "recording-claude",
     `
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { action, provide } from "@tokamak/sdk";
 import { agent, type Info, type Run } from "plugin:ai/contracts";
 const info = action({
@@ -79,6 +80,42 @@ const start = action({
 });
 export default provide(agent, { id: "claude", name: "Recording Claude", info, start });
 `,
+  );
+
+  const codexSource = join(workspace, "plugins/codex");
+  build(codexSource);
+  await cp(join(codexSource, "dist"), join(h.plugins, "codex"), { recursive: true });
+  // The normal suite uses a deterministic app-server. The optional proof runs
+  // the installed binary in the same test, with a fresh home and no off-host network.
+  const installedCodex = process.env.TOKAMAK_TEST_OFFLINE_CODEX;
+  assert.ok(!installedCodex || isAbsolute(installedCodex));
+  const blocked = installedCodex ? await blockingProxy() : null;
+  const codex = installedCodex
+    ? `exec ${JSON.stringify(installedCodex)} -c 'cli_auth_credentials_store="file"' "$@"`
+    : `exec ${JSON.stringify(bunPath())} ${JSON.stringify(join(workspace, "e2e/fake-agent/profile-codex.mjs"))} "$@"`;
+  const codexHome = join(h.home, ".codex");
+  await mkdir(codexHome);
+  await writeFile(
+    join(h.bin, "codex"),
+    `#!/bin/sh
+set -eu
+case "${"$"}{CODEX_HOME:-$HOME/.codex}" in
+  "${codexHome}") ;;
+  "${join(h.scratch, "profile-turns")}/ai/launch-homes/"*) ;;
+  *) exit 9 ;;
+esac
+: "\${CODEX_HOME:=${codexHome}}"
+export CODEX_HOME
+${
+  blocked
+    ? `export XDG_CONFIG_HOME="$HOME" XDG_DATA_HOME="$HOME" XDG_STATE_HOME="$HOME" XDG_CACHE_HOME="$HOME"
+export HTTP_PROXY="${blocked.url}" HTTPS_PROXY="${blocked.url}" ALL_PROXY="${blocked.url}" NO_PROXY="127.0.0.1,localhost"
+export http_proxy="$HTTP_PROXY" https_proxy="$HTTPS_PROXY" all_proxy="$ALL_PROXY" no_proxy="$NO_PROXY"`
+    : ""
+}
+${codex}
+`,
+    { mode: 0o700 },
   );
 
   const fake = await startFakeCompanies({ delayMs: 1 });
@@ -123,11 +160,11 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     const normal = await turns.run(await h.folder("profile-personal"), "normal");
     assert.equal(await receive(normal.folder), null);
 
-    async function subscribe(account, as = client) {
-      fake.addAccount("anthropic", account);
+    async function subscribe(account, as = client, company = "anthropic") {
+      fake.addAccount(company, account);
       const pending = success(
         await as.action(api.subscriptions.startSignIn, {
-          company: "anthropic",
+          company,
           method: "subscription",
         }),
       );
@@ -191,6 +228,34 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     assert.ok(catalog[0].info.models.some(({ id }) => id === model));
     assert.ok((await client.action(ai.agents.list, {})).some(({ id }) => id === "fake-agent"));
 
+    const codexModel = "gpt-5";
+    const codexOnly = success(await client.mutation(profiles.create, { name: "Codex only", code: "GPT" }));
+    const chatgpt = await subscribe("alpha-chatgpt", client, "openai");
+    const elsewhere = await subscribe("elsewhere-chatgpt", client, "openai");
+    for (const [profile, subscription] of [
+      [alpha, chatgpt],
+      [codexOnly, elsewhere],
+    ])
+      success(await client.mutation(profiles.add, { profile: profile.id, subscription: subscription.id }));
+    const codexOnlyThread = await thread("openai-only", codexOnly);
+    const offered = async (threadId) =>
+      (await client.action(ai.agents.list, { threadId }))
+        .map(({ id, info }) => [id, info.models.map(({ id }) => id)])
+        .sort();
+    assert.deepEqual(await offered(a.threadId), [
+      ["claude", [model]],
+      ["codex", [codexModel]],
+    ]);
+    assert.deepEqual(await offered(b.threadId), [["claude", [model]]]);
+    assert.deepEqual(await offered(codexOnlyThread.threadId), [["codex", [codexModel]]]);
+
+    const codexThread = await thread("codex-profile-alpha", alpha);
+    const codexTurns = agentTurns({ h, client, agent: { id: "codex", name: "Codex" }, model: codexModel });
+    const firstCodex = await codexTurns.run(codexThread.folder, "hello from the profile", {
+      threadId: codexThread.threadId,
+    });
+    assert.equal(firstCodex.text, "Fake reply.");
+
     await turns.run(a.folder, "check", { threadId: a.threadId });
     await ended(await receive(a.folder));
 
@@ -211,6 +276,33 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     assert.notEqual(settingsA.env.ANTHROPIC_AUTH_TOKEN, settingsB.env.ANTHROPIC_AUTH_TOKEN);
     await upstream(settingsA, "alice");
     await upstream(settingsB, "bob");
+
+    const concurrentCodex = await codexTurns.run(codexThread.folder, "still using the profile", {
+      threadId: codexThread.threadId,
+    });
+    assert.equal(concurrentCodex.text, "Fake reply.");
+    assert.equal(concurrentCodex.row.sessionId, firstCodex.row.sessionId);
+    const codexRequests = fake.requests.filter(({ path }) => path === "/openai/backend-api/codex/responses");
+    assert.deepEqual(
+      codexRequests.map(({ account }) => account),
+      ["alpha-chatgpt", "alpha-chatgpt"],
+    );
+    for (const { body, headers } of codexRequests) {
+      assert.equal(body.model, codexModel);
+      assert.equal(headers.authorization, "Bearer fake-alpha-chatgpt-access");
+      assert.equal(headers["chatgpt-account-id"], "alpha-chatgpt");
+    }
+    await upstream(settingsA, "alice");
+    await pick(beta.id, codexThread.threadId);
+    const unavailable = await codexTurns.run(codexThread.folder, "not on this profile", {
+      threadId: codexThread.threadId,
+      state: "failed",
+    });
+    assert.equal(unavailable.error, "Pick an available agent or another profile.");
+
+    await client.mutation(chat.threads.remove, { threadId: codexThread.threadId });
+    await client.mutation(chat.threads.remove, { threadId: codexOnlyThread.threadId });
+    await client.mutation(profiles.discard, { profile: codexOnly.id });
 
     success(await client.mutation(profiles.add, { profile: alpha.id, subscription: bob.id, at: 0 }));
     success(await client.mutation(api.subscriptions.setEnabled, { id: alice.id, enabled: false }));
@@ -323,9 +415,13 @@ export default provide(agent, { id: "claude", name: "Recording Claude", info, st
     assert.ok(ordinaryCatalog.some(({ id }) => id === "fake-agent"));
 
     process.stdout.write(
+      `PASS ${installedCodex ? "installed offline" : "fixture"} Codex: two profile turns through the Responses proxy, including resume and a concurrent Claude turn\n`,
+    );
+    process.stdout.write(
       "PASS profile turns: personal login, required pick, catalog, concurrent account isolation, snapshot, stop/failure cleanup, deletion, member ownership and uninstall\n",
     );
   } finally {
+    blocked?.stop();
     await fake.stop();
   }
 }

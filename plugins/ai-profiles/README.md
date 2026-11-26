@@ -9,7 +9,16 @@ that use it), checks it again or removes it. Profiles: a person makes a
 profile (a name and a code of up to four characters, unique for them) and
 drags subscription cards into it, in the order they are used, first one first;
 "Add to profile" on a card's action row does the same from the keyboard. The
-picker column and the launch settings come with a later ticket (TKM-266).
+composer’s Profile column narrows the picker to the enabled subscriptions
+in that profile: Claude for Claude subscriptions and Codex for ChatGPT
+subscriptions, with each agent’s own models. A mixed profile offers both.
+The thread keeps its agent when switching profiles; if it isn't offered,
+the picker says "Not available" and holds Send until the pick changes.
+
+Each turn gets a company-bound key from agent-proxy and runs inside a private
+CLI home. Profile turns need an attached or connected Runner. Update both
+the desktop app and Runner before installing AI Profiles so launch and cleanup
+hooks can run; older callers show an update message.
 
 It depends on `ai` and `agent-proxy`. Subscriptions belong to `agent-proxy`;
 this plugin stores only profiles (`src/server/schema.ts`), each one person's,

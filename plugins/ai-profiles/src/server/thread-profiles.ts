@@ -42,20 +42,22 @@ export const selection = query({
     if (picked?.owner !== ctx.auth.user.id) return null;
     const row = await own(ctx, picked.profile);
     if (!row) return null;
-    const subscriptions = enabledOf(row, await subscriptionsOf(ctx)).filter(
-      (subscription) => subscription.company === "anthropic",
-    );
-    const models = new Map<string, SubscriptionView["models"][number]>();
-    for (const subscription of subscriptions) {
-      for (const model of subscription.models) {
-        if (!models.has(model.id)) models.set(model.id, model);
+    const subscriptions = enabledOf(row, await subscriptionsOf(ctx));
+    const offering = (company: SubscriptionView["company"]) => {
+      const matching = subscriptions.filter((subscription) => subscription.company === company);
+      if (matching.length === 0) return null;
+      const models = new Map<string, SubscriptionView["models"][number]>();
+      for (const subscription of matching) {
+        for (const model of subscription.models) {
+          if (!models.has(model.id)) models.set(model.id, model);
+        }
       }
-    }
+      return [...models.values()];
+    };
     return {
       id: row._id as string,
       code: row.code,
-      claude: subscriptions.length > 0,
-      models: [...models.values()],
+      agents: { claude: offering("anthropic"), codex: offering("openai") },
     };
   },
 });

@@ -315,6 +315,21 @@ test("profiles screens", async ({ browser }) => {
     } finally {
       process.env.TOKAMAK_PLUGIN_DIR = shared;
     }
+    // The catalog needs installed CLIs but no personal logins.
+    await writeFile(
+      join(desktop.bin, "claude"),
+      `#!/bin/sh
+if [ "$1" = --version ]; then echo '2.1.330 (Claude Code)'; else echo '{"loggedIn":false}'; fi
+`,
+      { mode: 0o700 },
+    );
+    await writeFile(
+      join(desktop.bin, "codex"),
+      `#!/bin/sh
+exec ${JSON.stringify(process.env.TOKAMAK_E2E_BUN)} ${JSON.stringify(join(process.cwd(), "e2e/fake-agent/profile-codex.mjs"))} "$@"
+`,
+      { mode: 0o700 },
+    );
     /** The sign-in page the dialog's "Open sign-in page" asks the desktop to open. */
     const signInPage = async () => {
       await dialog.getByRole("button", { name: "Open sign-in page" }).click();
@@ -441,6 +456,23 @@ test("profiles screens", async ({ browser }) => {
     await expect(box("SBOX").getByRole("listitem")).toHaveCount(1);
     await rest();
     await shot(page, "profiles-profiles");
+
+    const chat = await context.newPage();
+    try {
+      await chat.goto("/");
+      await agentChip(chat).click();
+      const menu = chat.getByRole("menu");
+      const profile = menu.getByRole("group", { name: "Profile", exact: true });
+      await profile.getByRole("menuitemradio", { name: "PERS", exact: true }).click();
+      const codex = menu.getByRole("group", { name: "Codex", exact: true });
+      await expect(codex.getByRole("menuitemradio", { name: "Fake GPT", exact: true })).toBeVisible();
+      await expect(menu.getByRole("group", { name: "Claude", exact: true })).toBeVisible();
+      await codex.getByRole("menuitemradio", { name: "Fake GPT", exact: true }).click();
+      await chat.mouse.move(5, 5);
+      await shot(chat, "profiles-codex-picker");
+    } finally {
+      await chat.close();
+    }
 
     // Pointing at a profile dims the cards it does not hold: Claude's, for SBOX.
     await box("SBOX").hover();
