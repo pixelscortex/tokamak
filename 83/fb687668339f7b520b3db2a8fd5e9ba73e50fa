@@ -57,6 +57,7 @@ packages/host/src/http_action.js
   s_dcb5093083cc27::t_487363100745c4 1-32
 packages/sdk/tools/placement.mjs
   s_dcb5093083cc27::t_d77ccb953cb03f 46
+  s_3c3e6807a80329::t_99e23c13e22410 41
 packages/server/src/plugins/manifest.rs
   s_dcb5093083cc27::t_c756d84e66d2cc 217-226
   s_dcb5093083cc27::t_4a7db7daf25bdf 67,78-85,189-190
@@ -71,6 +72,10 @@ packages/server/src/service/http_actions.rs
   s_dcb5093083cc27::t_5e3c2d3f3ff258 1-30
 packages/server/src/service/plugin_control.rs
   s_dcb5093083cc27::t_9fd3cb95c883eb 99
+packages/build/src/exports.ts
+  s_3c3e6807a80329::t_99e23c13e22410 74
+packages/sdk/tools/plugin-boundary.mjs
+  s_3c3e6807a80329::t_99e23c13e22410 151
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -78,6 +83,14 @@ packages/server/src/service/plugin_control.rs
   "base_commit_sha": "83fb687668339f7b520b3db2a8fd5e9ba73e50fa",
   "prompts": {},
   "sessions": {
+    "s_3c3e6807a80329": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21717-f345-7953-b663-129c38e1eb2b",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    },
     "s_dcb5093083cc27": {
       "agent_id": {
         "tool": "codex",
