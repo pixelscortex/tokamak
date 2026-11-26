@@ -1,0 +1,28 @@
+packages/sdk/component-parts.tsx
+  s_be4ee891f4fdb9::t_07a80390e17d81 398-400
+  s_be4ee891f4fdb9::t_05cbb778e6714f 189
+packages/build/README.md
+  s_be4ee891f4fdb9::t_b486e00144389d 172-175
+packages/sdk/tests/web/component-actions.test.tsx
+  s_be4ee891f4fdb9::t_e32cf0049735db 1035-1038,1040,1042-1054,1058-1067,1070,1077-1080
+  s_be4ee891f4fdb9::t_07a80390e17d81 1055-1057
+  s_be4ee891f4fdb9::t_96d835d0b45ecf 1039,1041,1068-1069,1071-1076
+packages/sdk/README.md
+  s_be4ee891f4fdb9::t_b486e00144389d 694-697
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9bdbdb3942412332484f616930a2682641879c59",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
