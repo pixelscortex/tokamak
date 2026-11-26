@@ -120,29 +120,14 @@ function nativeText(): Plugin {
         if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
           const name = node.expression.text;
           if (name === "__tokamakScalarText") uncompiled = true;
-          if (inserts.has(name)) {
-            const read = node.arguments[1];
-            if (read && ts.isArrowFunction(read)) {
-              const first =
-                ts.isBlock(read.body) && read.body.statements.length === 1 && read.body.statements[0];
-              let body = ts.isBlock(read.body)
-                ? first && ts.isReturnStatement(first) && first.expression
-                : read.body;
-              while (body && ts.isParenthesizedExpression(body)) body = body.expression;
-              if (
-                body &&
-                ts.isCallExpression(body) &&
-                ts.isIdentifier(body.expression) &&
-                body.expression.text === "__tokamakScalarText"
-              ) {
-                const value = body.arguments[0]!;
-                output.overwrite(node.expression.getStart(source), node.expression.end, "__tokamakText");
-                output.overwrite(body.getStart(source), value.getStart(source), "(");
-                output.overwrite(value.end, body.end, ")");
-                visit(value);
-                return;
-              }
-            }
+          const body = inserts.has(name) && scalarTextBinding(node.arguments[1]);
+          if (body) {
+            const value = body.arguments[0]!;
+            output.overwrite(node.expression.getStart(source), node.expression.end, "__tokamakText");
+            output.overwrite(body.getStart(source), value.getStart(source), "(");
+            output.overwrite(value.end, body.end, ")");
+            visit(value);
+            return;
           }
         }
         ts.forEachChild(node, visit);
@@ -154,4 +139,18 @@ function nativeText(): Plugin {
       return { code: output.toString(), map: output.generateMap({ source: id, hires: true }) };
     },
   };
+}
+
+function scalarTextBinding(read: ts.Expression | undefined) {
+  if (!read || !ts.isArrowFunction(read)) return;
+  const first = ts.isBlock(read.body) && read.body.statements.length === 1 && read.body.statements[0];
+  let body = ts.isBlock(read.body) ? first && ts.isReturnStatement(first) && first.expression : read.body;
+  while (body && ts.isParenthesizedExpression(body)) body = body.expression;
+  if (
+    body &&
+    ts.isCallExpression(body) &&
+    ts.isIdentifier(body.expression) &&
+    body.expression.text === "__tokamakScalarText"
+  )
+    return body;
 }

@@ -242,7 +242,6 @@ export function renderNativePart(
   return renderPart(target, fingerprint, props, row, (contents) => {
     const refs: Element[] = [];
     const active: ReturnType<typeof createSignal<HoleState>>[] = [];
-    let element: Element;
     const hole: RenderHole = (id, render) => {
       let state = active[id];
       if (!state) active[id] = state = createSignal<HoleState>(true, { ownedWrite: true });
@@ -266,7 +265,7 @@ export function renderNativePart(
       for (const [, , descendants, , hole] of sites) setHoles(hole, descendants, enabled === true);
     }
 
-    element = create(refs, hole) as Element;
+    const element = create(refs, hole) as Element;
     const scope = { registry, refs, owner: getOwner(), props, row, setHoles };
     let bindings: NativeBinding[] | undefined = registerNative(element, children, scope);
     onCleanup(() => stopNative(bindings));
