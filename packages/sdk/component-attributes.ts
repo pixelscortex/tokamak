@@ -55,10 +55,11 @@ export function attributeValues(
     // Children are drawn by the layer stage. Reading that getter here would
     // render a second copy of the children in the attribute effect.
     const keys = Object.keys(values).filter((key) => reads || key !== "children");
-    for (const raw of keys) {
-      const key = name(raw);
+    const entries = keys.map((raw) => {
       const blocked = forbidden(item, raw);
-      const value = blocked ? undefined : values[raw];
+      return { raw, key: name(raw), blocked, value: blocked ? undefined : values[raw] };
+    });
+    for (const { raw, key, blocked, value } of entries) {
       if (blocked || typeof value === "function" || (key !== "class" && typeof owner[key] === "function")) {
         warnAttribute(
           registry,
@@ -304,7 +305,7 @@ export function bindNativeAttributes(
           element.setAttribute(key, String(value));
         } else if (/^on/i.test(key)) {
           // Solid reserves camel-case on* names even when the DOM has no such event.
-          if (value == null || value === false) element.removeAttribute(key);
+          if (value === null || value === undefined || value === false) element.removeAttribute(key);
           else element.setAttribute(key, value === true ? "" : String(value));
         } else assign(element, { [key]: value }, true);
       }
