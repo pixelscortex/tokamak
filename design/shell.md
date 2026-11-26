@@ -16,7 +16,7 @@ Paper page: `App 1:1 · Shell`.
 | Sign-in dialog over the "needs you to sign in" band                | `sign-in.tsx`, `credential-fields.tsx`, `states.tsx` (`Unreachable`) | `Shell · sign-in`      |
 | Members on a shared server                                         | `members.tsx`                                                        | `Shell · members`      |
 | Devices on a shared server: people's devices, then plugin machines | `devices.tsx`                                                        | `Shell · devices`      |
-| `/kit`: Input and Switch in every state (dark column)           | `packages/ui/src/kit/inputs.tsx`                                     | `Kit · Input, Switch`  |
+| `/kit`: Input and Switch in every state (dark column)              | `packages/ui/src/kit/inputs.tsx`                                     | `Kit · Input, Switch`  |
 
 The kit artboard copies only the Input and Switch section of `/kit` (Controls
 tab, dark column), the first primitives with a Paper copy; the rest of the kit is
