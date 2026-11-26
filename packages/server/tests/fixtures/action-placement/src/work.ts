@@ -1,4 +1,5 @@
-import { action, fail, internalQuery, isFailure, mutation, query, v } from "@tokamak/sdk";
+import { action, fail, internalQuery, isFailure, mutation, point, query, v } from "@tokamak/sdk";
+import { machines } from "@tokamak/sdk/unstable";
 import { readProjectFile } from "./read-project";
 import { api } from "./_generated/api";
 import { internal } from "./_generated/internal";
@@ -110,9 +111,12 @@ export const callerPoint = action({
   on: "caller",
   args: { verifyPipeline: v.optional(v.boolean()) },
   async handler(ctx, { verifyPipeline }) {
-    const result = await ctx.point("load", { search: "owner" }, ({ search }) => "loaded:" + search);
+    const result = await ctx.withPrograms((_stop, scoped) =>
+      point(scoped, "load", { search: "owner" }, ({ search }) => "loaded:" + search),
+    );
     if (verifyPipeline) {
-      if (!Array.isArray(await ctx.machines.list())) throw new Error("Caller machine list unavailable");
+      if ("machines" in ctx) throw new Error("Machine management leaked onto the caller action context");
+      if (!Array.isArray(await machines(ctx).list())) throw new Error("Caller machine list unavailable");
       const marker = await ctx.runQuery(api.work.marker, {});
       await ctx.runMutation(api.work.store, { text: "pipeline:" + marker });
     }
@@ -125,7 +129,7 @@ export const pointLoop = action({
   args: { count: v.number() },
   async handler(ctx, { count }) {
     let result = 0;
-    for (let i = 0; i < count; i++) result = await ctx.point("loop", result);
+    for (let i = 0; i < count; i++) result = await point(ctx, "loop", result);
     return result;
   },
 });

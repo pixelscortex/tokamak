@@ -55,7 +55,11 @@ tasks:
       proto run bun -- check --no-script --project plugins/ai/tests/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/claude/src/server/tsconfig.json &&
       proto run bun -- check --no-script --project plugins/codex/src/server/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/basic-auth/src/server/tsconfig.json
+      proto run bun -- check --no-script --project plugins/basic-auth/src/server/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/agent-proxy/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai-profiles/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai-profiles/src/client/tsconfig.json &&
+      proto run bun -- check --no-script --project plugins/ai-profiles/tests/tsconfig.json
     options:
       cache: false
   e2e-check:

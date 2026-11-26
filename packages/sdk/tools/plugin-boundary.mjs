@@ -148,7 +148,7 @@ function publicReferences(folder, entry) {
       if (!runtime.has(exported.name)) continue;
       const target = original(exported);
       const definition = definitionInfo(checker, target, source);
-      if (!definition) continue;
+      if (!definition || definition.kind === "httpAction") continue;
       const moduleName = isServerRoot(backend) ? basename(local, ".ts") : local.slice(0, -3);
       if (!targets.has(target) || target.valueDeclaration?.getSourceFile() === source)
         targets.set(target, [

@@ -192,35 +192,14 @@ action on a connected Runner, `ctx.env` comes from the Runner's environment.
 
 #### Run actions on a sandbox machine
 
-A server action can create a machine for its plugin. Pass the returned key to
-your sandbox provider as a secret. The provider starts a Runner with
-`--server` set to the workspace URL and `--key-file` pointing to the key in a
-private file. Install the full plugin build in the Runner's `--plugins`
-directory. The Runner identifies itself with the key; it does not need the id.
+The machine management API is available under `@tokamak/sdk/unstable` and may
+change.
+
+Connect a sandbox Runner using
+[`--server` and `--key-file`](../runner/README.md#connect-a-headless-runner-to-a-shared-server).
+Target a known machine id when calling an action:
 
 ```ts
-import { action, fail, isFailure } from "@tokamak/sdk";
-import { api } from "./_generated/api";
-
-export const newSandbox = action({
-  handler: async (ctx) => {
-    const server = await ctx.server.url();
-    if (!server) return fail("sandboxServerUrlMissing");
-
-    const machine = await ctx.machines.create({
-      name: "Thread sandbox",
-      member: ctx.auth.user.id,
-    });
-    if (isFailure(machine)) return machine;
-    const { id, key } = machine;
-    await startSandbox({ server, runnerKey: key }); // Your provider code.
-    const ready = await ctx.machines.waitOnline(id);
-    if (isFailure(ready)) return ready;
-    await ctx.runMutation(api.threads.saveMachine, { threadId: ctx.call.threadId, machineId: id });
-    return id; // Save only the id, never the key.
-  },
-});
-
 // Inside a server action:
 await ctx.runAction(api.jobs.collect, { cwd }, { on: machineId });
 // From the owning plugin's window:
@@ -231,9 +210,9 @@ Set `TOKAMAK_PUBLIC_URL` on the server to its reachable HTTP(S) origin, for
 example `https://workspace.example.com`. `ctx.server.url()` returns `null` if
 it is unset. Use HTTPS for a Runner outside loopback.
 
-`MachineId` is a branded string. Keep ids returned by `create` or `list` and
-supply them in per-call options for dynamic placement. For a fixed default in
-an action declaration, use a literal such as `on: "device:example" as MachineId`
+`MachineId` is a branded string. Supply a machine id in per-call options for
+dynamic placement. For a fixed default in an action declaration, use a
+literal such as `on: "device:example" as MachineId`
 with an actual issued id. The action has the Runner capabilities described
 above. The original caller and call note reach the action, including the
 thread, and queries and mutations still execute on the server.
@@ -241,39 +220,24 @@ thread, and queries and mutations still execute on the server.
 Only actions owned by a machine's plugin may run on it. A machine bound to
 a member accepts only calls whose original call note identifies that member.
 For thread turns, read the saved machine id and pass it as `{ on: id }`.
-Omitting `member` makes a machine server-only: only the owning plugin's server
-code can dispatch its own actions to it with `ctx.runAction`. A signed-in
-creator does not implicitly bind the machine. Binding is fixed at creation.
 A person's device is available only to calls started by that person.
 
-An unbound machine is only reachable through the owning plugin's server code,
-so if a server action accepts a machine id from a window, check `ctx.auth` and
-the plugin's own records before passing the id through.
-Bind a machine with `member` when a window should target it directly.
-`create({ member })` returns `machineForbidden` if the id is not an active member.
+Only the owning plugin's server code can dispatch its own actions to an
+unbound machine using `ctx.runAction`. If a server action accepts a machine id
+from a window, check `ctx.auth` and the plugin's records before passing it through.
 
 Unknown, removed and unauthorized ids all return `machineForbidden`.
 An authorized machine without a Runner returns `machineOffline` immediately.
 If its Runner disconnects or its key is removed during an action, that action
 returns `machineLost`. Calls are never queued or replayed.
 
-`ctx.machines.list()` returns the plugin's machines bound to the caller and
-that member's issued devices, with `owner`, `online`, and `lastSeen` (Unix
-milliseconds or `null`). Bound plugin entries also carry the member id in
-`member`. Without a person, the ordinary list is empty. Server actions
-can use `ctx.machines.listAll()` for the plugin's own bookkeeping.
-Lists are snapshots; presence does not refresh query subscriptions.
-
-`create`, `waitOnline`, and `remove` run only in server actions. The credential
-store is separate from plugin transactions. `create` returns the key once
-and returns `machineLimit` when the plugin already has 100 active machines.
-`waitOnline` returns `null` when connected and `machineOffline` when it times
-out (30 seconds by default; `timeoutMs` is capped at two minutes). To delete a
-sandbox, revoke the key with `ctx.machines.remove(id)`, then delete the
-container with your provider. Uninstalling a plugin revokes its machine keys.
+Machine management can also return `machineLimit` when the plugin already has
+100 active machines, `machineForbidden` for an unauthorized machine or for a
+machine bound to a member who cannot be found, and `machineOffline` if waiting
+for a connection times out. Uninstalling a plugin revokes its machine keys.
 
 A per-call override can move a server action to a Runner, where machine
-management methods and `ctx.server.url()` fail with the typed `serverOnly` error.
+management and `ctx.server.url()` fail with the typed `serverOnly` error.
 
 `ctx.proc` starts an executable directly. Its `stdout` and `stderr` yield
 one line at a time. Use `write` and `closeInput` for stdin and `stop` to send
@@ -323,6 +287,83 @@ and has none, or when it requests a file or program from the server action
 process. This includes calls to stubbed modules such as `node:path`,
 `node:os`, `node:crypto`, `node:url`, and `node:fs/promises`. Use their
 bindings inside the handler so the server bundle can load independently.
+
+## HTTP actions
+
+Export an `httpAction` from the plugin's server part to answer requests from
+programs outside Tokamak. Its path is relative to `/plugins/<plugin-id>`.
+
+```ts
+import type {} from "@tokamak/sdk/web";
+import { httpAction } from "@tokamak/sdk";
+
+export const proxy = httpAction({
+  path: "/:profile/*",
+  handler: async (ctx, request) => {
+    if (!checkKey(request.headers.get("x-api-key"))) {
+      return new Response(null, { status: 401 });
+    }
+    const target = upstreamUrl(ctx.params.profile, ctx.params["*"]);
+    return fetch(target, { signal: request.signal });
+  },
+});
+```
+
+For example, `POST /plugins/my-proxy/ACME/v1/messages?format=sse` sets
+`ctx.path` to `/ACME/v1/messages`, with `ctx.params.profile` equal to `ACME`
+and `ctx.params["*"]` equal to `v1/messages`. Use a literal path; `:name`
+captures one segment and a final `*` captures the remainder. Literal segments
+take precedence over parameters, and parameters over the wildcard.
+The core routes `/plugins/<id>/<revision>/assets/<name...>` and
+`/plugins/<id>/reload` take precedence over HTTP actions. Dot segments,
+including percent-encoded dots, and encoded slash or backslash are rejected.
+There is no member sign-in: check the caller in the handler before doing work.
+Functions called through the handler receive no member or device. A function
+that requires a signed-in member refuses the call as it would any anonymous call.
+`OPTIONS` reaches the handler; the plugin is responsible for CORS answers.
+
+`ctx.serverUrl` is the bound loopback origin in the Runner. Set
+`TOKAMAK_PUBLIC_URL` to the CLI-reachable origin in the Server. If it is unset,
+the Server logs a startup warning and reading `ctx.serverUrl` throws.
+The request's Host header is never used to derive the origin.
+
+Use `ctx.runQuery(ref, args)`, `ctx.runMutation(ref, args)`, and
+`ctx.runAction(ref, args)` with the same typed references as a server action.
+The handler can call its own plugin's `_generated/api`, `_generated/internal`,
+and `_generated/plugin` functions. Each call starts at depth zero; calls made
+from those functions increase depth as usual. The handler has no `ctx.db`;
+each query or mutation runs in its own transaction. `ctx.runAction` accepts the
+usual optional placement argument. A placement that needs the member's
+Runner returns `noMachine` because the request has no member.
+
+Use `await ctx.env("NAME")` to read a value from the server environment or the
+installation's `.env.local`. Declare `env:NAME` in the plugin's permissions.
+An unset value returns `null`; an undeclared name rejects.
+
+The `Request` provides the method, URL (including query), headers and body
+using the same [web API subset](../engine/WEB_APIS.md) as `fetch`. Uploads are
+buffered up to 32 MiB and must finish within 30 seconds. The server gives
+request headers 10 seconds. It removes Host, Content-Length and hop-by-hop
+headers before handing the request to the plugin. The original Host is
+available as `ctx.originalHost` and is untrusted. Duplicate headers are joined
+by the web Headers implementation; the server drops response `Set-Cookie`.
+
+Outbound requests require the usual `net:<hostname>` permission. Each
+outbound `fetch` from a fresh host performs its own DNS lookup and, for HTTPS,
+TLS handshake. Return the upstream `Response` directly to stream its body
+with backpressure.
+
+HTTP actions run in a separate plugin host process per request on macOS and
+Linux. `TOKAMAK_HTTP_PLUGIN_SLOTS` (default 32) and
+`TOKAMAK_HTTP_TOTAL_SLOTS` (default 96) cap concurrent hosts. After reading the
+upload, the server waits up to 250 ms for a slot and replies with
+`503 Retry-After: 1` if none becomes available. The time to response headers
+is bounded by `TOKAMAK_HTTP_FIRST_HEADERS_MS` (default 300000); the normal action
+wall deadline does not apply to the response stream. On disconnect or server
+shutdown, the host aborts `request.signal` and has up to 500 ms for cleanup
+before it is killed. A disconnect does not roll back a mutation that already
+started. The HTTP route itself has no generated function reference and cannot
+be hooked, exported to windows, or provided as a contract method.
 
 ## Internal functions and expected failures
 
@@ -621,17 +662,14 @@ replaces it.
 
 ## Component actions
 
-The builder publishes typed paths for the elements of each plugin's screen
-under its public client `parts` export. Write ordinary JSX in the owner
-plugin. In the add-on, import the parts and export a placement:
+The builder generates a typed `find` function for each plugin's public
+client entry. In the add-on, import the owner and export a placement:
 
 ```tsx
 import { after } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Cost = after(chat.parts.Composer.div.box, (props) => (
-  <small>{props.draft.length} characters</small>
-));
+export const Cost = after(chat.find("box"), (props) => <small>{props.draft.length} characters</small>);
 ```
 
 Use `before` and `after` for siblings, `prepend` and `append` for children,
@@ -639,9 +677,16 @@ Use `before` and `after` for siblings, `prepend` and `append` for children,
 `hide` to remove it. A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row
-as `$row.parent`. If a path disappears or identifies a
-different element, the build warns and the window skips that placement. See the
-[builder guide](../build/README.md#extending-a-screen) for the naming rule.
+as `$row.parent`. Use a literal name. Narrow it with `{ in: "Header" }` or
+with literal `type`, `href`, `role`, and `aria` filters, such as
+`chat.find("button", { aria: { label: "Stop" } })`. Attribute filters
+match only static strings and the typed API offers values for that name.
+Use a 1-based `nth` among the remaining matches. Both builds warn when
+an add-on finds a plain tag with no static `data-part` or `id` and ask the
+owner to add `data-part`. The window keeps the original match on owner updates when possible and follows a unique named
+match that has moved. It skips missing or ambiguous targets, and an `nth`
+target whose position another element took. See the [builder guide](../build/README.md#extending-a-screen)
+for the naming rules.
 
 ## Caller identity
 
@@ -874,6 +919,21 @@ manager settles a turn, Force stop can also kill groups left by a completed
 needs a session file the CLI is still writing. Agent authors
 do not implement the message transport.
 
+`Run.launchSettings`, when present, holds the environment, arguments, and
+optional OpenAI-compatible Responses provider (`{ baseUrl, keyEnv, key }`) for
+that start. Only one hook may supply the provider. Its values stay in the
+caller; don't log or report them. The
+caller-only `withAgentLaunch` helper from `@tokamak/sdk/agent-launch` gives
+Claude or Codex a private CLI home under the Runner's data folder. It is
+shared only by turns of the same thread, agent, and set of contributing
+plugins, even when the hook values change. The Runner that deletes the thread
+cleans up its homes. The helper removes inherited CLI-specific environment
+variables before adding the hook's variables. Providers still load project
+settings, check the CLI version in the isolated environment, and wait for it
+to finish writing its session. Claude requires an explicit Anthropic key or
+token; Codex uses file storage for credentials. Hook arguments come before
+Tokamak's flags and cannot override them. AI redacts launch values from errors.
+
 The adapter in `packages/sdk/worker/contracts.ts` special-cases
 `owner === "ai" && name === "agent" && method === "start"` to build that
 `Run`. The Runner's linked call transport is general and does not inspect
@@ -1013,20 +1073,32 @@ plugin still loads; the server skips that hook and logs a warning.
 ### Hook a named point inside a function
 
 A query, mutation, or action can expose a named spot in its handler with
-`ctx.point`. Use a unique, nonempty string literal without `#`. A helper
-in the same module can take `ctx` and call a point if the compiler can trace it
-to exactly one exported handler. Points are not allowed in triggers or hook stages.
+`point(ctx, name, value)` from `@tokamak/sdk`. Use a unique, nonempty string literal
+without `#`. A helper in the same module can take `ctx` and call a point if the
+compiler can trace it to exactly one exported handler. Pass that handler’s
+context, or the inner context from its `withPrograms` callback: a point runs
+for the call whose context it is given, and fails once that call has ended.
+Points are not allowed in triggers or hook stages.
 
 ```ts
-const launch = await ctx.point("launch", { env: {} as Record<string, string>, args: [] as string[] });
+import { point } from "@tokamak/sdk";
 
-const rows = await ctx.point("load", { search }, (input) => load(input.search));
+const launch = await point(ctx, "launch", { env: {} as Record<string, string>, args: [] as string[] });
+
+const rows = await point(ctx, "load", { search }, (input) => load(input.search));
 ```
 
 The first form lets `before` hooks change the value. A value point cannot have
 an `after` hook. In the second form, `before` hooks change the input, the owner
 runs its callback in its own process, and `after(ctx, result, input)` hooks can
 change the result. `input` in an after hook is the input the callback received.
+
+Use `point(ctx, "launch", initial, { collect: true })` for a value point whose
+owner needs to combine contributions. Each `before` hook receives the same
+initial value. The point returns a list of `{ plugin, value }` entries, one
+per hook, with the plugin ID supplied by the host. Without hooks it returns
+an empty list. Order across plugins is unspecified. Update both server and
+Runner for a hooked point using this option.
 
 The generated API puts each point under the function it belongs to. For example,
 a plugin that depends on `ai` could hook a point named `launch` on its exported

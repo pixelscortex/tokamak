@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { checkPluginImports } from "../../sdk/tools/plugin-boundary.mjs";
 import { contractDeclarations, contractEntry } from "../../sdk/tools/contracts.mjs";
 import { serverDirectory } from "../../sdk/tools/server-files.mjs";
+import { httpActionEntry } from "../../sdk/tools/http-actions.mjs";
 import {
   functionPlacement,
   lanes,
@@ -193,6 +194,18 @@ export function tokamak(
               }
               this.emitFile({ type: "asset", fileName: name, source });
             }
+          }
+          const http = placement && httpActionEntry(placement, server, server !== resolve(root, "src"));
+          if (http) {
+            const code = "http-actions.js";
+            const map = code + ".map";
+            for (const name of [code, map])
+              this.emitFile({
+                type: "asset",
+                fileName: name,
+                source: await readFile(resolve(server, "dist", name), "utf8"),
+              });
+            entries.http = { code, map, paths: http.paths };
           }
           if (hasLocal) {
             for (const name of ["local.js", "local.js.map", "local-entry.js"]) {

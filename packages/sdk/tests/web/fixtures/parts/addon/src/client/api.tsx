@@ -1,21 +1,23 @@
 import { after, replace } from "@tokamak/sdk/client";
-import { parts } from "plugin:owner/client";
+import { find } from "plugin:owner/client";
 
-export const Badge = after(parts.Composer.section.SendButton, ({ label }) => (
-  <small>Built for {label}</small>
-));
-export const Note = after(parts.Composer.section, ({ label }) => <p>Notes for {label}</p>);
+export const Badge = after(find("SendButton"), ({ label }) => <small>Built for {label}</small>);
+export const Note = after(find("section", { in: "Composer" }), ({ label }) => <p>Notes for {label}</p>);
 
-export const Profile = after(parts.Labels.section.span, ({ labels, $row }) => (
+export const Profile = after(find("span", { in: "Labels", nth: 1 }), ({ labels, $row }) => (
   <small>
     Profile {$row.index() + 1}: {$row.item} of {labels.length}
   </small>
 ));
 
-export const Body = replace(parts.Composer.section.div, () => <div aria-label="replacement" />);
+export const Body = replace(find("div", { in: "Composer", nth: 1 }), () => <div aria-label="replacement" />);
 
-export const Nested = after(parts.Labels.section.groups.em, ({ $row }) => (
+export const Nested = after(find("em"), ({ $row }) => (
   <small>
     Group {$row.parent.index() + 1}: {$row.parent.item} / {$row.index}: {$row.item()}
   </small>
+));
+
+export const UploadNote = after(find("select", { aria: { label: "Upload" } }), ({ label }) => (
+  <small>Upload for {label}</small>
 ));

@@ -99,6 +99,10 @@ export function actionPlacementLiteral(checker, options) {
 }
 
 export function definitionTypeInfo(checker, type, source) {
+  if (type.getProperties().some((property) => property.name.startsWith("__@httpActionBrand@"))) {
+    const path = type.getProperty("path");
+    return { kind: "httpAction", path: path && checker.getTypeOfSymbolAtLocation(path, source).value };
+  }
   if (!type.getProperties().some((property) => property.name.startsWith("__@definitionBrand@"))) return;
   const kind = type.getProperty("kind");
   const property = type.getProperty("visibility");

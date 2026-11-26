@@ -48,7 +48,7 @@ export interface HostOperations {
     result: (import("./functions").CallContext & { hookPoints?: readonly string[] }) | null;
   };
   "point.stage": {
-    args: { name: string; stage: "before" | "after"; args: JsonValue; result?: JsonValue };
+    args: { name: string; stage: "before" | "after" | "collect"; args: JsonValue; result?: JsonValue };
     result: JsonValue;
   };
   "crypto.hashPassword": { args: { password: string }; result: string };
@@ -63,11 +63,11 @@ export interface HostOperations {
   "db.replace": { args: { id: string; value: JsonObject }; result: null };
   "db.delete": { args: { id: string }; result: null };
   "db.query": { args: QueryRequest; result: StoredDocument[] };
-  "machines.list": { args: {}; result: import("./functions").MachineEntry[] };
-  "machines.listAll": { args: {}; result: import("./functions").MachineEntry[] };
+  "machines.list": { args: {}; result: import("./unstable").MachineEntry[] };
+  "machines.listAll": { args: {}; result: import("./unstable").MachineEntry[] };
   "machines.create": {
     args: { name: string; member?: string };
-    result: import("./functions").MachineCreation;
+    result: import("./unstable").MachineCreation;
   };
   "machines.remove": {
     args: { id: import("./functions").MachineId };

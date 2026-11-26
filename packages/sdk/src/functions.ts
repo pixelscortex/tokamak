@@ -18,46 +18,15 @@ import {
   withServerContracts,
   type ContractContext,
 } from "./internal/contracts";
+import { bindMachineScope } from "./internal/machine-scope";
 import { Visibility } from "./visibility";
-import { bindPoint, type Point } from "./points";
+import { bindPoint, type PointLifetime } from "./points";
 
 export type FunctionKind = "query" | "mutation" | "action";
 declare const machineId: unique symbol;
 export type MachineId = string & { readonly [machineId]: true };
 export type ActionTarget = "server" | "caller" | MachineId;
 
-export interface MachineEntry {
-  id: MachineId;
-  name: string;
-  owner: { kind: "plugin"; plugin: string } | { kind: "person"; user: string };
-  online: boolean;
-  lastSeen: number | null;
-  member?: string;
-}
-
-interface MachineList {
-  /** A snapshot; presence changes do not invalidate query subscriptions. */
-  list(): Promise<MachineEntry[]>;
-}
-
-interface MachineManagement extends MachineList {
-  create(options: { name: string; member?: string }): Promise<MachineCreation>;
-  /** Available in a server action. Lists all machines owned by this plugin. */
-  listAll(): Promise<MachineEntry[]>;
-  remove(id: MachineId): Promise<null | Failure<"machineForbidden", null>>;
-  waitOnline(
-    id: MachineId,
-    options?: { timeoutMs?: number },
-  ): Promise<null | Failure<"machineForbidden" | "machineOffline", null>>;
-}
-
-export type MachineCreation =
-  | { id: MachineId; key: string }
-  | Failure<"machineLimit" | "machineForbidden", null>;
-
-const machineList = (host: HostBridge): MachineList => ({
-  list: () => callHost(host, "machines.list", {}),
-});
 export type MachineFailure =
   | Failure<"noMachine", null>
   | Failure<"machineLost", null>
@@ -187,8 +156,6 @@ type RunFunction<K extends FunctionKind> = <A, R>(
 ) => Promise<R>;
 
 export interface QueryContext<M extends DataModel> extends ContractContext {
-  readonly point: Point;
-  readonly machines: MachineList;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseReader<M>;
@@ -197,8 +164,6 @@ export interface QueryContext<M extends DataModel> extends ContractContext {
 }
 
 export interface MutationContext<M extends DataModel> extends ContractContext {
-  readonly point: Point;
-  readonly machines: MachineList;
   readonly auth: AuthContext;
   readonly call: CallContext;
   readonly db: DatabaseWriter<M>;
@@ -209,9 +174,6 @@ export interface MutationContext<M extends DataModel> extends ContractContext {
 
 /** Actions have no database capability; each nested call owns its transaction. */
 export interface ActionContext extends ContractContext {
-  readonly point: Point;
-  /** Management operations run on the server. */
-  readonly machines: MachineManagement;
   readonly server: { url(): Promise<string | null> };
   readonly auth: AuthContext;
   readonly call: CallContext;
@@ -244,8 +206,7 @@ interface RunAction {
   ): Promise<R | MachineFailure>;
 }
 
-export interface CallerActionContext extends Omit<ActionContext, "machines" | "server"> {
-  readonly machines: MachineList;
+export interface CallerActionContext extends Omit<ActionContext, "server"> {
   readonly signal: NonNullable<HostBridge["signal"]>;
   readonly retiring?: HostBridge["signal"];
   readonly proc: LocalProcess;
@@ -316,10 +277,22 @@ class ServerOnlyError extends Error {
   }
 }
 
+/** Bind the typed action calls to a request-scoped host bridge. */
+export function bindActionCall(bridge: HostBridge, kind: FunctionKind) {
+  return (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
+    callHost(bridge, "plugin.call", {
+      name: reference[functionName],
+      args: jsonSnapshot(input, "nested call args"),
+      kind,
+      ...(options?.on === undefined ? {} : { on: options.on }),
+    });
+}
+
 function actionContext(
   bridge: HostBridge,
   auth: AuthContext | null,
   call: CallContext,
+  lifetime: PointLifetime,
   on?: ActionTarget,
   pointScope = bridge,
 ): CallerActionContext {
@@ -328,37 +301,12 @@ function actionContext(
     return operation();
   };
   const machine = requireActionMachine;
-  const run =
-    (expected: FunctionKind) =>
-    (reference: { [functionName]: string }, input: unknown, options?: ActionOptions) =>
-      callHost(bridge, "plugin.call", {
-        name: reference[functionName],
-        args: jsonSnapshot(input, "nested call args"),
-        kind: expected,
-        ...(options?.on === undefined ? {} : { on: options.on }),
-      });
-  return Object.freeze({
+  const run = (kind: FunctionKind) => bindActionCall(bridge, kind);
+  const context: CallerActionContext = Object.freeze({
     call,
-    point: bindPoint(bridge, pointScope),
-    ...(on !== undefined && on !== "server"
-      ? { machines: Object.freeze(machineList(bridge)) }
-      : {
-          machines: Object.freeze({
-            ...machineList(bridge),
-            create: (options: { name: string; member?: string }) =>
-              besideServer(() => callHost(bridge, "machines.create", options)),
-            listAll: () => besideServer(() => callHost(bridge, "machines.listAll", {})),
-            remove: (id: MachineId) => besideServer(() => callHost(bridge, "machines.remove", { id })),
-            waitOnline: (id: MachineId, options?: { timeoutMs?: number }) =>
-              besideServer(() =>
-                callHost(bridge, "machines.waitOnline", {
-                  id,
-                  ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-                }),
-              ),
-          }),
-          server: Object.freeze({ url: () => besideServer(() => callHost(bridge, "server.url", {})) }),
-        }),
+    ...(on === undefined || on === "server"
+      ? { server: Object.freeze({ url: () => besideServer(() => callHost(bridge, "server.url", {})) }) }
+      : {}),
     get auth() {
       if (!auth) throw new Error("There is no caller before sign-in");
       return auth;
@@ -375,7 +323,7 @@ function actionContext(
     proc: bridge.proc ?? machine,
     withPrograms: <T>(work: (stop: () => Promise<void>, ctx: CallerActionContext) => Promise<T>) =>
       bridge.withPrograms?.((stop, scoped) =>
-        work(stop, actionContext(scoped, auth, call, on, pointScope)),
+        work(stop, actionContext(scoped, auth, call, lifetime, on, pointScope)),
       ) ?? machine(),
     crypto: Object.freeze({
       hashPassword: (password: string) => callHost(bridge, "crypto.hashPassword", { password }),
@@ -401,6 +349,12 @@ function actionContext(
           }),
     runAction: run("action"),
   } as CallerActionContext);
+
+  bindMachineScope(context, {
+    host: bridge,
+    besideServer: on === undefined || on === "server" ? besideServer : undefined,
+  });
+  return bindPoint(context, bridge, lifetime, pointScope);
 }
 
 function builder<
@@ -427,8 +381,23 @@ function builder<
         ? {
             // Contract members are called in the same worker and can receive
             // live objects. Window calls still enter invoke() and validate JSON.
-            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call: CallContext) =>
-              handler(actionContext(host, auth, call, definition.on), input as Parameters<typeof handler>[1]),
+            invokeLocal: (input: unknown, host: HostBridge, auth: AuthContext, call: CallContext) => {
+              const lifetime = { active: true };
+              let pending = false;
+              try {
+                const ctx = actionContext(host, auth, call, lifetime, definition.on);
+                const result: unknown = handler(ctx, input as Parameters<typeof handler>[1]);
+                if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+                  pending = true;
+                  return Promise.resolve(result).finally(() => {
+                    lifetime.active = false;
+                  });
+                }
+                return result;
+              } finally {
+                if (!pending) lifetime.active = false;
+              }
+            },
           }
         : {}),
       async invoke(input: unknown, host: HostBridge) {
@@ -464,26 +433,30 @@ function builder<
           };
           return callHost(host, "plugin.call", { ...payload, kind: expected });
         };
-        const ctx = Object.freeze(
+        const lifetime = { active: true };
+        const ctx =
           kind === "action"
-            ? actionContext(host, auth, call, definition.on)
-            : {
-                call,
-                point: bindPoint(host),
-                machines: Object.freeze(machineList(host)),
-                get auth() {
-                  return caller();
-                },
-                db:
-                  kind === "query"
-                    ? createDatabase<M>(host, false, schema)
-                    : createDatabase<M>(host, true, schema),
-                runQuery: run("query"),
-                ...(kind === "mutation" ? { runMutation: run("mutation") } : {}),
-                [contractScope]: serverContracts(host),
-                use: <T>(api: T) => bindCalls(api, host),
-              },
-        );
+            ? actionContext(host, auth, call, lifetime, definition.on)
+            : bindPoint(
+                Object.freeze({
+                  call,
+                  get auth() {
+                    return caller();
+                  },
+                  db:
+                    kind === "query"
+                      ? createDatabase<M>(host, false, schema)
+                      : createDatabase<M>(host, true, schema),
+                  runQuery: run("query"),
+                  ...(kind === "mutation" ? { runMutation: run("mutation") } : {}),
+                  [contractScope]: serverContracts(host),
+                  use: <T>(api: T) => bindCalls(api, host),
+                }),
+                host,
+                lifetime,
+              );
+        if (kind !== "action") bindMachineScope(ctx, { host });
+
         // The generic kind determines the context; the branch above enforces it
         // at runtime as well. Plugin reference kinds are erased, so the kernel
         // also enforces query-only calls. This cast never widens author types.
@@ -506,6 +479,8 @@ function builder<
           )
             return fail("runnerCapabilityUnavailable", error.data);
           throw error;
+        } finally {
+          lifetime.active = false;
         }
       },
     }) as BuiltFunction<K, ObjectValue<F>, R, V, S>;

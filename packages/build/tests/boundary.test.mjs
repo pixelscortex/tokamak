@@ -453,13 +453,13 @@ test("owner build names an installed plugin that hooks a removed function", asyn
 test("publishes typed points and warns the owner when a hooked point is renamed", async () => {
   await scratch(async (root) => {
     const owner = await backend(root, "owner");
-    const ownerSource = `import { mutation } from "@tokamak/sdk";
+    const ownerSource = `import { mutation, point } from "@tokamak/sdk";
       interface PrivateItem { weight: number; next?: PrivateItem }
       type Input = { name: string; nested?: PrivateItem; labels: readonly string[] };
       export const save = mutation({
         async handler(ctx) {
           const input: Input = { name: "owner", labels: [] };
-          return ctx.point("prepare", input, ({ name }) => name.length);
+          return point(ctx, "prepare", input, ({ name }) => name.length);
         },
       });`;
     await file(owner, "src/server/functions.ts", ownerSource);
@@ -508,23 +508,25 @@ test("publishes typed points and warns the owner when a hooked point is renamed"
 test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
   await scratch(async (root) => {
     const owner = await backend(root, "owner");
-    for (const [body, diagnostic] of [
-      ['return ctx.point("name", { fn: () => 1 });', "describe it as data, or use `after`"],
+    for (const [body, diagnostic, setup = ""] of [
+      ['return ctx.point("name", 1);', "write point(ctx, ...)"],
+      ['return point(ctx, "name", { fn: () => 1 });', "describe it as data, or use `after`"],
       [
-        'return ctx.point("name", 1, async () => ({ nested: [() => 1] }));',
+        'return point(ctx, "name", 1, async () => ({ nested: [() => 1] }));',
         "describe it as data, or use `after`",
       ],
-      ['return ctx.point("name", { date: new Date() });', "describe it as data, or use `after`"],
-      ['return ctx.point("name", { promise: Promise.resolve(1) });', "describe it as data, or use `after`"],
-      ['return ctx.point("name", { token: Symbol() });', "describe it as data, or use `after`"],
-      ['const name = "name"; return ctx.point(name, 1);', "pass a literal name"],
-      ['await ctx.point("name", 1); return ctx.point("name", 2);', 'Duplicate point name "name"'],
+      ['return point(ctx, "name", { date: new Date() });', "describe it as data, or use `after`"],
+      ['return point(ctx, "name", { promise: Promise.resolve(1) });', "describe it as data, or use `after`"],
+      ['return point(ctx, "name", { token: Symbol() });', "describe it as data, or use `after`"],
+      ['const name = "name"; return point(ctx, name, 1);', "pass a literal name"],
+      ['await point(ctx, "name", 1); return point(ctx, "name", 2);', 'Duplicate point name "name"'],
     ]) {
       await file(
         owner,
         "src/server/functions.ts",
         `
-        import { query } from "@tokamak/sdk";
+        import { point, query, type QueryContext } from "@tokamak/sdk";
+        ${setup}
         export const read = query({ async handler(ctx) { ${body} } });
       `,
       );
@@ -536,8 +538,8 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
       owner,
       "src/server/functions.ts",
       `
-      import { query, type QueryContext } from "@tokamak/sdk";
-      const load = (ctx: Pick<QueryContext<{}>, "point">) => ctx.point("shared", 1);
+      import { point, query, type QueryContext } from "@tokamak/sdk";
+      const load = (ctx: Pick<QueryContext<{}>, "call">) => point(ctx, "shared", 1);
       export const a = query({ handler: (ctx) => load(ctx) });
       export const b = query({ handler: (ctx) => load(ctx) });
     `,
@@ -550,9 +552,9 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
       owner,
       "src/server/functions.ts",
       `
-      import { createTrigger, defineSchema, defineTable } from "@tokamak/sdk";
+      import { createTrigger, defineSchema, defineTable, point } from "@tokamak/sdk";
       export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
-        await ctx.point("trigger", 1);
+        await point(ctx, "trigger", 1);
       });
     `,
     );
@@ -561,12 +563,12 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
     expect(trigger.stdout + trigger.stderr).toContain('Cannot attribute point "trigger"');
 
     const ownerWithHelper = `
-      import { createTrigger, defineSchema, defineTable, query, type QueryContext } from "@tokamak/sdk";
-      export const load = (ctx: Pick<QueryContext<{}>, "point">) => ctx.point("shared", 1);
+      import { createTrigger, defineSchema, defineTable, point, query, type QueryContext } from "@tokamak/sdk";
+      export const load = (ctx: Pick<QueryContext<{}>, "call">) => point(ctx, "shared", 1);
       export const a = query({ handler: (ctx) => load(ctx) });
     `;
     const invalidUsers = [
-      [`export const plain = (ctx: Pick<QueryContext<{}>, "point">) => load(ctx);`, "functions.ts"],
+      [`export const plain = (ctx: Pick<QueryContext<{}>, "call">) => load(ctx);`, "functions.ts"],
       [
         `export const trigger = createTrigger(defineSchema({ rows: defineTable({}) }))("rows", async (ctx) => {
         await load(ctx);
@@ -582,7 +584,7 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
           owner,
           "src/server/other.ts",
           `
-          import { query } from "@tokamak/sdk";
+          import { point, query } from "@tokamak/sdk";
           import { load as imported } from "./functions";
           export const b = query({ handler: (ctx) => imported(ctx) });
         `,
@@ -605,15 +607,15 @@ test("publishes independent helper methods, null results, and optional point fie
       owner,
       "src/server/functions.ts",
       `
-      import { mutation, type MutationContext } from "@tokamak/sdk";
-      type Context = Pick<MutationContext<{}>, "point">;
+      import { mutation, point, type MutationContext } from "@tokamak/sdk";
+      type Context = Pick<MutationContext<{}>, "call">;
       const helpers = {
         save(ctx: Context) {
           const input: { search: string | undefined } = { search: undefined };
-          return ctx.point("save", input, async () => {});
+          return point(ctx, "save", input, async () => {});
         },
         launch(ctx: Context) {
-          return ctx.point("launch", { env: {}, args: [] });
+          return point(ctx, "launch", { env: {}, args: [] });
         },
       };
       export const save = mutation({ handler: (ctx) => helpers.save(ctx) });
@@ -636,8 +638,8 @@ test("value points do not accept an after hook", async () => {
     await file(
       owner,
       "src/server/functions.ts",
-      `import {query} from "@tokamak/sdk";
-      export const read = query({ handler: (ctx) => ctx.point("value", 1) });`,
+      `import {point, query} from "@tokamak/sdk";
+      export const read = query({ handler: (ctx) => point(ctx, "value", 1) });`,
     );
     await file(owner, "src/server/api.ts", 'export {read} from "./functions";');
     const consumer = await backend(root, "consumer");
@@ -660,3 +662,29 @@ test("value points do not accept an after hook", async () => {
     );
   });
 }, 30_000);
+
+test("the build rejects ambiguous and fully shadowed HTTP action routes", async () => {
+  await scratch(async (root) => {
+    const path = await backend(root, "http-routes");
+    for (const [routes, diagnostic] of [
+      [["/:a", "/:b"], "Ambiguous HTTP action path"],
+      [["/reload"], "reserved core route"],
+      [["/latest/assets/bundle.js"], "reserved core route"],
+    ]) {
+      await file(
+        path,
+        "src/server/ops.ts",
+        'import { httpAction } from "@tokamak/sdk";\n' +
+          routes
+            .map(
+              (route, i) =>
+                `export const route${i} = httpAction({ path: ${JSON.stringify(route)}, handler: () => new Response() });`,
+            )
+            .join("\n"),
+      );
+      const result = build(path);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(diagnostic);
+    }
+  });
+}, 60_000);

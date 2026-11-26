@@ -1,42 +1,44 @@
-import { For, Show, createEffect, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { TokamakClient } from "@tokamak/sdk";
 import { auth, useClient, useQuery, useShortcuts } from "@tokamak/sdk/client";
-import { Menu } from "@tokamak/ui";
 import { holdSend, type ComposerProps } from "plugin:chat/client";
-import type { Picked } from "../../shared/offered";
 import { errorText, isSendersDevice } from "../../shared/turn-shared";
-import { agents, api, machineNotice, modelLabel, notice, refreshAgents, unavailable } from "../lib/agents";
 import {
-  ACCESS_LABEL,
+  agentCatalog,
+  agents,
+  api,
+  machineNotice,
+  notice,
+  refreshAgents,
+  rememberCatalog,
+  unavailable,
+  type AgentEntry,
+} from "../lib/agents";
+import {
   creatorOnlyLine,
   deviceChoices,
-  label,
   newThreadChoices,
   pick,
   storedChoices,
-  type Access,
   type Change,
   type Resolved,
 } from "../lib/choices";
 import { watchQuestions } from "../lib/questions";
 import { listenForQueue } from "../lib/turn";
 import { activeFor, localActiveTurn, onTurnDraft, stopTurn } from "../lib/turn-controls";
-import { AgentMark } from "./agent-mark";
+import { AgentPicker } from "./agent-picker";
 
 /**
- * The agent row under the composer box (Paper "Stage · thread", composer):
- * separate pickers for agent (its mark and name), model, level,
- * speed, mode and permission level on the left, a short line on the right.
- * The pickers are quiet text until hovered; no chevrons. A picker hides when the agent offers
- * nothing for it; each one asks every agent for its `info` again as it opens.
+ * The agent row under the composer box: the agent picker on the left (one chip that
+ * opens one popover with columns, `ui/agent-picker.tsx`), a short line on the right.
+ * Opening the picker asks every agent for its `info` again.
  * The choices belong to the thread (the new thread's stay in this window
- * until its first Send). A missing or signed-out agent shows only its line,
- * and Send stays off in this composer until it is fixed; the agent picker
+ * until its first Send). A missing or signed-out agent's chip names only the agent,
+ * its line says why, and Send stays off in this composer until it is fixed; the picker
  * always opens, so even a single agent can be asked again.
  *
- * Empty when no agent plugin is installed or there is no local part (a plain
- * browser), so chat stays plain chat. Each Send in this window begins a turn
+ * Empty when no agent plugin can be reached, so chat stays plain chat. Each Send in this window begins a turn
  * with these choices (lib/turn.ts). The row also starts following this
  * person's waiting questions (lib/questions.ts) for the permission card.
  */
@@ -104,9 +106,9 @@ function OpenThreadRow(props: {
     const started = creator.data();
     return started && started.id !== me.id ? started : undefined;
   };
-  const resolved = () => {
+  const resolved = (catalog?: readonly AgentEntry[]) => {
     const choices = stored.data();
-    return choices ? storedChoices(choices) : deviceChoices();
+    return choices ? storedChoices(choices, catalog) : deviceChoices(undefined, catalog);
   };
   return (
     <Show when={!stored.loading() && !creator.loading()}>
@@ -136,43 +138,101 @@ function OpenThreadRow(props: {
 function Row(props: {
   client: TokamakClient;
   threadId: string | undefined;
-  resolved: () => Resolved | undefined;
+  resolved: (catalog?: readonly AgentEntry[]) => Resolved | undefined;
   turnLine: () => string | undefined;
 }): JSX.Element {
-  const missing = () => {
-    const current = props.resolved();
-    return current && unavailable(current.agent);
+  let row: HTMLDivElement | undefined;
+  const [catalog, setCatalog] = createSignal<readonly AgentEntry[] | undefined>(undefined);
+  const [checking, setChecking] = createSignal(false);
+  let revision = 0;
+  let catalogJson: string | undefined;
+  let retired = false;
+  onCleanup(() => {
+    revision++;
+    retired = true;
+  });
+  const resetCatalog = () => {
+    if (retired) return;
+    revision++;
+    rememberCatalog(props.client, props.threadId, undefined);
+    setCatalog(undefined);
+    setChecking(false);
+    catalogJson = undefined;
   };
-  // Send waits in this thread's composer while its agent cannot answer.
-  onCleanup(holdSend((composer) => composer.threadId === props.threadId && missing() !== undefined));
-  const refresh = (open: boolean) => open && void refreshAgents(props.client);
+  const refreshCatalog = (check = true) => {
+    if (retired) return;
+    if (check) setChecking(true);
+    const request = ++revision;
+    void agentCatalog(props.client, props.threadId).then(
+      (list) => {
+        if (request !== revision) return;
+        setChecking(false);
+        rememberCatalog(props.client, props.threadId, list);
+        const json = JSON.stringify(list);
+        if (json === catalogJson) return;
+        catalogJson = json;
+        setCatalog(list);
+      },
+      () => {
+        if (request !== revision) return;
+        resetCatalog();
+      },
+    );
+  };
+  const resolved = () => props.resolved(catalog());
+  const notOffered = () => {
+    const current = resolved();
+    const list = catalog();
+    return Boolean(
+      current &&
+      list &&
+      agents().some((entry) => entry.id === current.agent.id) &&
+      !list.some((entry) => entry.id === current.agent.id),
+    );
+  };
+  const missing = () => {
+    const current = resolved();
+    return notOffered()
+      ? "Pick an available agent or change your selection."
+      : current && unavailable(current.agent);
+  };
+  onCleanup(
+    holdSend((composer) => composer.threadId === props.threadId && (checking() || missing() !== undefined)),
+  );
+  const refresh = (open: boolean) => {
+    if (!open) return;
+    void refreshAgents(props.client);
+    refreshCatalog(false);
+  };
   const change = (current: Resolved, next: Change) =>
     void pick(props.client, props.threadId, current, next).catch((cause: unknown) =>
       notice.set(errorText(cause)),
     );
   return (
-    <Show when={props.resolved()}>
+    <Show when={resolved()}>
       {(current) => (
-        // No padding at the start: the agent button's edge sits on the box's edge above it, and
+        // No padding at the start: the picker's edge sits on the box's edge above it, and
         // 4 px from the tray on the left and below alike.
-        <div role="group" aria-label="Agent" class="flex h-8 shrink-0 items-center pe-3">
-          <Picker
-            name="Agent"
-            options={agents().map((agent) => ({ id: agent.id, label: agent.name }))}
-            always
-            lead={<AgentMark agentId={current().agent.id} />}
+        <div
+          ref={(element: HTMLDivElement) => (row = element)}
+          role="group"
+          aria-label="Agent"
+          class="flex h-8 shrink-0 items-center pe-3"
+        >
+          <AgentPicker
+            current={current()}
+            threadId={props.threadId}
+            agents={catalog() ?? agents()}
+            notOffered={notOffered()}
+            refreshCatalog={refreshCatalog}
+            resetCatalog={resetCatalog}
+            missing={missing()}
+            anchor={() => row?.parentElement ?? undefined}
             onOpen={refresh}
-            onPick={(id) => {
-              const agent = agents().find((entry) => entry.id === id);
-              if (agent) change(current(), { agent });
-            }}
-          >
-            {current().agent.name}
-          </Picker>
-          <Show when={!missing()}>
-            <Choosers current={current()} refresh={refresh} change={change} />
-          </Show>
+            change={(next) => change(current(), next)}
+          />
           <span class="flex-1" />
+          <span data-part="statusExtras" class="contents" />
           <Show when={machineNotice() ?? notice() ?? props.turnLine() ?? missing()}>
             {(line) => (
               <span role="status" class="text-label text-ink-3">
@@ -182,134 +242,6 @@ function Row(props: {
           </Show>
         </div>
       )}
-    </Show>
-  );
-}
-
-/** The pickers drawn from what the agent offers, in the row's order; each hides when it offers nothing. */
-const OFFERED: readonly {
-  readonly name: string;
-  readonly key: keyof Picked;
-  readonly options: (current: Resolved) => readonly { id: string; label: string }[];
-  readonly value: (current: Resolved) => string | undefined;
-}[] = [
-  {
-    name: "Model",
-    key: "model",
-    options: (current) =>
-      current.agent.info.models.map((model) => ({
-        id: model.id,
-        label: modelLabel(current.agent.name, model.name) ?? model.name,
-      })),
-    value: (current) => modelLabel(current.agent.name, current.model?.name),
-  },
-  {
-    name: "Level",
-    key: "effort",
-    options: (current) => labelled(current.model?.efforts ?? []),
-    value: (current) => current.effort && label(current.effort),
-  },
-  {
-    name: "Speed",
-    key: "speed",
-    options: (current) => labelled(current.agent.info.speeds),
-    value: (current) => current.speed && label(current.speed),
-  },
-  {
-    name: "Mode",
-    key: "mode",
-    options: (current) => labelled(current.agent.info.modes),
-    value: (current) => current.mode && label(current.mode),
-  },
-];
-
-function labelled(ids: readonly string[]) {
-  return ids.map((id) => ({ id, label: label(id) }));
-}
-
-/** Model, level, speed, mode and permission level. */
-function Choosers(props: {
-  current: Resolved;
-  refresh: (open: boolean) => void;
-  change: (current: Resolved, next: Change) => void;
-}): JSX.Element {
-  return (
-    <>
-      <For each={OFFERED}>
-        {(picker) => (
-          <Show when={picker.value(props.current)}>
-            {(value) => (
-              <Picker
-                name={picker.name}
-                options={picker.options(props.current)}
-                onOpen={props.refresh}
-                onPick={(id) => props.change(props.current, { [picker.key]: id })}
-              >
-                {/* Plain text: the button owns its text size, weight and tone. A different size
-                    inside it sat off its cap-height centring. */}
-                {value()}
-              </Picker>
-            )}
-          </Show>
-        )}
-      </For>
-      <Picker
-        name="Permission level"
-        options={(["full", "ask"] as const).map((id) => ({ id, label: ACCESS_LABEL[id] }))}
-        onOpen={props.refresh}
-        onPick={(id) => props.change(props.current, { access: id as Access })}
-      >
-        {ACCESS_LABEL[props.current.access]}
-      </Picker>
-    </>
-  );
-}
-
-/**
- * One picker: its current value, opening a menu of the
- * options; with one option, a plain label unless it `always` opens. Its text
- * for screen readers (and tests) is "<name>: <value>", e.g. "Model: opus 5.5".
- */
-function Picker(props: {
-  name: string;
-  options: readonly { id: string; label: string }[];
-  /** Opens even with one option (or none): opening asks the agents again. */
-  always?: boolean;
-  /** A mark before the value (the agent's logo). */
-  lead?: JSX.Element;
-  onOpen: (open: boolean) => void;
-  onPick: (id: string) => void;
-  children: JSX.Element;
-}): JSX.Element {
-  const value = () => (
-    <>
-      <span class="sr-only">{props.name}: </span>
-      {props.children}
-    </>
-  );
-  return (
-    <Show
-      when={props.always || props.options.length > 1}
-      fallback={
-        // Not a button, but the same box as one, so it lines up with its neighbours.
-        <span class="inline-flex h-8 items-center gap-2 px-3 text-row text-ink-2">
-          {props.lead}
-          <span class="text-trim">{value()}</span>
-        </span>
-      }
-    >
-      {/* The standard ghost trigger, untouched: its size owns height, padding and text. No
-          negative margins, so neighbouring hover fills never overlap. */}
-      <Menu.Root onOpenChange={props.onOpen} onAction={props.onPick}>
-        <Menu.Trigger variant="ghost" lead={props.lead}>
-          {value()}
-        </Menu.Trigger>
-        <Menu.Content>
-          <For each={props.options}>
-            {(option) => <Menu.Item value={option.id}>{option.label}</Menu.Item>}
-          </For>
-        </Menu.Content>
-      </Menu.Root>
     </Show>
   );
 }

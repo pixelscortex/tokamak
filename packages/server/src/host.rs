@@ -335,9 +335,7 @@ fn operations(
                     payload.get("contract").and_then(Json::as_str),
                 )?;
                 target.kind.check_requested(&payload)?;
-                if note.auth.is_none() {
-                    target.check_anonymous_scope(&owner)?;
-                }
+                note.check_anonymous_scope(&target, &owner)?;
 
                 let child_note = note.enter(name, Some(&target.args), &args)?;
 
@@ -389,7 +387,7 @@ mod database_queries;
 pub(crate) mod hooks;
 pub(crate) mod triggers;
 
-mod process_frames;
+pub(crate) mod process_frames;
 
 async fn finish_transaction(
     tx: Transaction,

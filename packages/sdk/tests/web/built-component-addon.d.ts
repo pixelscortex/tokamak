@@ -6,7 +6,15 @@ declare module "virtual:built-component-addon" {
     };
     entries: { ui: { code: string } };
   };
-  export const renamedParts: object;
-  export const RenamedComposer: typeof import("./fixtures/parts/owner/src/client/api").Composer;
+  type Owner = {
+    Composer: typeof import("./fixtures/parts/owner/src/client/api").Composer;
+    find: typeof import("./fixtures/parts/owner/src/client/_generated/components").find;
+  };
+  export const moved: Owner;
+  export const duplicate: Owner;
+  export const changed: Owner;
+  export const noUploadLabel: Owner;
+  export const filteredWarnings: string;
+  export const warnings: string;
   export function loadActions(): Promise<Record<string, unknown>>;
 }

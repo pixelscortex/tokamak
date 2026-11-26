@@ -9,9 +9,9 @@ and actions from your plugin's `src/client/api.tsx` so the build can discover th
 ## Pages and components
 
 `view` gives a page a literal route and can supply its title and icon.
-The build publishes typed paths under `parts` for plain JSX elements. Path
-segments follow the render function and its JSX ancestry, using a static
-`data-part` or `id` when present, and the tag name otherwise.
+The build publishes a typed `find` function for a plugin's JSX elements.
+Names come from a static `data-part`, then a static `id`, then the component
+or tag name. `data-part-ignore` excludes a subtree.
 
 ```tsx
 import { view } from "@tokamak/sdk/client";
@@ -30,7 +30,9 @@ export const Work = view({ route: "/work", title: "Work" }, () => <Composer />);
 ## Actions on elements
 
 Import another plugin's window entry through `plugin:example/client`.
-An action targets a component's published path, such as `parts.Composer.section.button`.
+An action targets a named element, such as `example.find("button", { in: "Composer" })`.
+Use literal arguments. If a name matches several elements, narrow it with
+`in` or use a 1-based `nth`.
 
 | Action    | Effect                                                                   |
 | --------- | ------------------------------------------------------------------------ |

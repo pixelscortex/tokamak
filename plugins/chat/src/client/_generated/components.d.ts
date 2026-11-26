@@ -1,4 +1,4 @@
-// Generated plugin screen paths. Commit this file.
+// Generated plugin screen search types. Commit this file.
 export * from "../api";
 type Props1 = Extract<NonNullable<{ client: import("@tokamak/sdk").TokamakClient }>, object>;
 type Props2 = Extract<NonNullable<{
@@ -43,193 +43,68 @@ type Props18 = Extract<NonNullable<{
   onNew: () => void;
 }>, object>;
 type Props19 = Extract<NonNullable<Props18 & { readonly $row: { readonly item: () => import("../lib/api").Thread; readonly index: () => number } }>, object>;
-export declare const parts: {
-  readonly "Chat": {
-    readonly "Region$2e$Sidebar": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.Region$2e$Sidebar", {}> & {
-      readonly "ThreadList": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.Region$2e$Sidebar.ThreadList", {}>;
-    };
-    readonly "Region$2e$Header": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.Region$2e$Header", {}> & {
-      readonly "Header": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.Region$2e$Header.Header", {}>;
-    };
-    readonly "section": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.section", {}> & {
-      readonly "NewThread": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.section.NewThread", {}>;
-      readonly "OpenThread": import("@tokamak/sdk/client").ComponentPart<"chat.Chat.section.OpenThread", {}>;
-    };
-  };
-  readonly "NewThread": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.NewThread.div", Props1> & {
-      readonly "Empty": import("@tokamak/sdk/client").ComponentPart<"chat.NewThread.div.Empty", Props1>;
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.NewThread.div.div", Props1> & {
-        readonly "ErrorLine": import("@tokamak/sdk/client").ComponentPart<"chat.NewThread.div.div.ErrorLine", Props1>;
-        readonly "Composer": import("@tokamak/sdk/client").ComponentPart<"chat.NewThread.div.div.Composer", Props1>;
-      };
-    };
-  };
-  readonly "OpenThread": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div", Props2> & {
-      readonly "ScrollArea": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.ScrollArea", Props2> & {
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.ScrollArea.div", Props2> & {
-          readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.ScrollArea.div.div", Props2> & {
-            readonly "Message": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.ScrollArea.div.div.Message", Props3>;
-          };
-        };
-      };
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.div", Props2> & {
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.div.div", Props2> & {
-          readonly "ErrorLine": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.div.div.ErrorLine", Props2>;
-          readonly "Composer": import("@tokamak/sdk/client").ComponentPart<"chat.OpenThread.div.div.div.Composer", Props2>;
-        };
-      };
-    };
-  };
-  readonly "ErrorLine": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.ErrorLine.div", Props4> & {
-      readonly "StatusIcon": import("@tokamak/sdk/client").ComponentPart<"chat.ErrorLine.div.StatusIcon", Props4>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.ErrorLine.div.span", Props4>;
-      readonly "Button": import("@tokamak/sdk/client").ComponentPart<"chat.ErrorLine.div.Button", Props4>;
-    };
-  };
-  readonly "Composer": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div", Props5> & {
-      readonly "top": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.top", Props5>;
-      readonly "box": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box", Props5> & {
-        readonly "Textarea": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box.Textarea", Props5>;
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box.div", Props5> & {
-          readonly "tools": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box.div.tools", Props5>;
-          readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box.div.span", Props5>;
-          readonly "SendButton": import("@tokamak/sdk/client").ComponentPart<"chat.Composer.div.box.div.SendButton", Props5>;
-        };
-      };
-    };
-  };
-  readonly "SendButton": {
-    readonly "Button": import("@tokamak/sdk/client").ComponentPart<"chat.SendButton.Button", Props6>;
-  };
-  readonly "Empty": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div", Props7> & {
-      readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div.div", Props7> & {
-        readonly "icon": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div.div.icon", Props7> & {
-          readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div.div.icon.Icon", Props7>;
-        };
-        readonly "heading": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div.div.heading", Props7>;
-      };
-      readonly "FolderPicker": import("@tokamak/sdk/client").ComponentPart<"chat.Empty.div.FolderPicker", Props7>;
-    };
-  };
-  readonly "FolderPicker": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div", Props8> & {
-      readonly "Choice": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Choice", Props9>;
-      readonly "Choice$2": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Choice$2", Props8>;
-      readonly "Choice$3": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Choice$3", Props8>;
-      readonly "Dialog$2e$Root": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root", Props8> & {
-        readonly "Dialog$2e$Backdrop": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Backdrop", Props8>;
-        readonly "Dialog$2e$Content": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content", Props8> & {
-          readonly "Dialog$2e$Title": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.Dialog$2e$Title", Props8>;
-          readonly "Dialog$2e$Description": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.Dialog$2e$Description", Props8>;
-          readonly "form": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form", Props8> & {
-            readonly "Textarea": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form.Textarea", Props8>;
-            readonly "p": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form.p", Props8>;
-            readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form.div", Props8> & {
-              readonly "Dialog$2e$Close": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form.div.Dialog$2e$Close", Props8>;
-              readonly "Button": import("@tokamak/sdk/client").ComponentPart<"chat.FolderPicker.div.Dialog$2e$Root.Dialog$2e$Content.form.div.Button", Props8>;
-            };
-          };
-        };
-      };
-    };
-  };
-  readonly "Choice": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Choice.div", Props10> & {
-      readonly "Row": import("@tokamak/sdk/client").ComponentPart<"chat.Choice.div.Row", Props10> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.Choice.div.Row.Icon", Props10>;
-        readonly "Icon$2": import("@tokamak/sdk/client").ComponentPart<"chat.Choice.div.Row.Icon$2", Props10>;
-      };
-    };
-  };
-  readonly "Message": {
-    readonly "article": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article", Props11> & {
-      readonly "header": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.header", Props11> & {
-        readonly "Avatar": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.header.Avatar", Props11>;
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.header.span", Props11>;
-        readonly "time": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.header.time", Props11>;
-      };
-      readonly "body": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.body", Props11> & {
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.body.div", Props11>;
-      };
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.span", Props11>;
-      readonly "footer": import("@tokamak/sdk/client").ComponentPart<"chat.Message.article.footer", Props11>;
-    };
-  };
-  readonly "Header": {
-    readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div", Props12> & {
-      readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.Icon", Props12>;
-      readonly "title": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.title", Props12> & {
-        readonly "h1": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.title.h1", Props12>;
-        readonly "TitleInput": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.title.TitleInput", Props12>;
-      };
-      readonly "FolderChip": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.FolderChip", Props12>;
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.span", Props12>;
-      readonly "ThreadMenu": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.ThreadMenu", Props12>;
-      readonly "DeleteDialog": import("@tokamak/sdk/client").ComponentPart<"chat.Header.div.DeleteDialog", Props12>;
-    };
-  };
-  readonly "FolderChip": {
-    readonly "Chip": import("@tokamak/sdk/client").ComponentPart<"chat.FolderChip.Chip", Props13>;
-  };
-  readonly "ThreadMenu": {
-    readonly "Menu$2e$Root": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root", Props14> & {
-      readonly "Menu$2e$Trigger": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Trigger", Props14>;
-      readonly "Menu$2e$Content": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content", Props14> & {
-        readonly "Menu$2e$Item": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item", Props14> & {
-          readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item.Icon", Props14>;
-        };
-        readonly "Menu$2e$Separator": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content.Menu$2e$Separator", Props14>;
-        readonly "Menu$2e$Item$2": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item$2", Props14> & {
-          readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadMenu.Menu$2e$Root.Menu$2e$Content.Menu$2e$Item$2.Icon", Props14>;
-        };
-      };
-    };
-  };
-  readonly "DeleteDialog": {
-    readonly "Dialog$2e$Root": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root", Props15> & {
-      readonly "Dialog$2e$Backdrop": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Backdrop", Props15>;
-      readonly "Dialog$2e$Content": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content", Props15> & {
-        readonly "Dialog$2e$Title": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.Dialog$2e$Title", Props15>;
-        readonly "Dialog$2e$Description": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.Dialog$2e$Description", Props15>;
-        readonly "p": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.p", Props15>;
-        readonly "div": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.div", Props15> & {
-          readonly "Dialog$2e$Close": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.div.Dialog$2e$Close", Props15>;
-          readonly "Button": import("@tokamak/sdk/client").ComponentPart<"chat.DeleteDialog.Dialog$2e$Root.Dialog$2e$Content.div.Button", Props15>;
-        };
-      };
-    };
-  };
-  readonly "TitleInput": {
-    readonly "input": import("@tokamak/sdk/client").ComponentPart<"chat.TitleInput.input", Props16>;
-  };
-  readonly "ThreadRow": {
-    readonly "ListboxItem": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem", Props17> & {
-      readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span", Props17> & {
-        readonly "span": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span.span", Props17> & {
-          readonly "status": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span.span.status", Props17>;
-          readonly "title": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span.span.title", Props17>;
-          readonly "age": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span.span.age", Props17>;
-        };
-        readonly "detail": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadRow.ListboxItem.span.detail", Props17>;
-      };
-    };
-  };
-  readonly "ThreadList": {
-    readonly "nav": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav", Props18> & {
-      readonly "Row": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.Row", Props18> & {
-        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.Row.Icon", Props18>;
-        readonly "Kbd": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.Row.Kbd", Props18>;
-      };
-      readonly "RowList$2e$Root": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.RowList$2e$Root", Props18> & {
-        readonly "RowList$2e$Group": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.RowList$2e$Root.RowList$2e$Group", Props18> & {
-          readonly "ThreadRow": import("@tokamak/sdk/client").ComponentPart<"chat.ThreadList.nav.RowList$2e$Root.RowList$2e$Group.ThreadRow", Props19>;
-        };
-      };
-    };
-  };
-};
+export declare const find: import("@tokamak/sdk/client").ScreenFind<{
+  "Region.Sidebar": {};
+  "ThreadList": {};
+  "Region.Header": {};
+  "Header": {};
+  "section": [["Chat", {}, {"aria":{"label":"Chat"}}]];
+  "NewThread": {};
+  "OpenThread": {};
+  "div": [["NewThread", Props1], ["NewThread" | "div", Props1], ["OpenThread", Props2], ["OpenThread" | "div" | "ScrollArea", Props2], ["OpenThread" | "div" | "ScrollArea", Props2, {"role":"log","aria":{"label":"Conversation"}}], ["OpenThread" | "div", Props2], ["OpenThread" | "div", Props2], ["ErrorLine", Props4, {"role":"alert"}], ["Composer", Props5], ["Composer" | "div" | "box", Props5], ["Empty", Props7], ["Empty" | "div", Props7], ["FolderPicker", Props8, {"role":"radiogroup","aria":{"label":"Folder"}}], ["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content" | "form", Props8], ["Choice", Props10], ["Message" | "article" | "body", Props11], ["Header", Props12], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content", Props15]];
+  "Empty": Props1;
+  "ErrorLine": [["NewThread" | "div", Props1], ["OpenThread" | "div", Props2]];
+  "Composer": [["NewThread" | "div", Props1], ["OpenThread" | "div", Props2]];
+  "ScrollArea": Props2;
+  "Message": Props3;
+  "StatusIcon": Props4;
+  "span": [["ErrorLine" | "div", Props4], ["Composer" | "div" | "box", Props5], ["Message" | "article" | "header", Props11], ["Message" | "article", Props11], ["Header" | "div", Props12], ["ThreadRow" | "ListboxItem", Props17], ["ThreadRow" | "ListboxItem" | "span", Props17]];
+  "Button": [["ErrorLine" | "div", Props4], ["SendButton", Props6], ["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content" | "form", Props8, {"type":"submit"}], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content" | "div", Props15]];
+  "top": Props5;
+  "box": Props5;
+  "Textarea": [["Composer" | "div" | "box", Props5, {"aria":{"label":"Message"}}], ["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content" | "form", Props8, {"aria":{"label":"Folder path"}}]];
+  "tools": Props5;
+  "SendButton": Props5;
+  "icon": Props7;
+  "Icon": [["Empty" | "div" | "icon", Props7], ["Choice" | "div" | "Row", Props10], ["Choice" | "div" | "Row", Props10], ["Header" | "div", Props12], ["ThreadMenu" | "Menu.Root" | "Menu.Content" | "Menu.Item", Props14], ["ThreadMenu" | "Menu.Root" | "Menu.Content" | "Menu.Item", Props14], ["ThreadList" | "nav" | "Row", Props18]];
+  "heading": Props7;
+  "FolderPicker": Props7;
+  "Choice": [["FolderPicker" | "div", Props9], ["FolderPicker" | "div", Props8], ["FolderPicker" | "div", Props8]];
+  "Dialog.Root": [["FolderPicker" | "div", Props8], ["DeleteDialog", Props15]];
+  "Dialog.Backdrop": [["FolderPicker" | "div" | "Dialog.Root", Props8], ["DeleteDialog" | "Dialog.Root", Props15]];
+  "Dialog.Content": [["FolderPicker" | "div" | "Dialog.Root", Props8], ["DeleteDialog" | "Dialog.Root", Props15]];
+  "Dialog.Title": [["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content", Props8], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content", Props15]];
+  "Dialog.Description": [["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content", Props8], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content", Props15]];
+  "form": Props8;
+  "p": [["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content" | "form", Props8, {"role":"alert"}], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content", Props15, {"role":"alert"}]];
+  "Dialog.Close": [["FolderPicker" | "div" | "Dialog.Root" | "Dialog.Content" | "form", Props8], ["DeleteDialog" | "Dialog.Root" | "Dialog.Content" | "div", Props15]];
+  "Row": [["Choice" | "div", Props10], ["ThreadList" | "nav", Props18]];
+  "article": Props11;
+  "header": Props11;
+  "Avatar": Props11;
+  "time": Props11;
+  "body": Props11;
+  "footer": Props11;
+  "title": [["Header" | "div", Props12], ["ThreadRow" | "ListboxItem" | "span", Props17]];
+  "h1": Props12;
+  "TitleInput": Props12;
+  "FolderChip": Props12;
+  "ThreadMenu": Props12;
+  "DeleteDialog": Props12;
+  "Chip": Props13;
+  "Menu.Root": Props14;
+  "Menu.Trigger": Props14;
+  "Menu.Content": Props14;
+  "Menu.Item": [["ThreadMenu" | "Menu.Root" | "Menu.Content", Props14], ["ThreadMenu" | "Menu.Root" | "Menu.Content", Props14]];
+  "Menu.Separator": Props14;
+  "input": [["TitleInput", Props16, {"aria":{"label":"Thread title"}}]];
+  "ListboxItem": Props17;
+  "status": Props17;
+  "age": Props17;
+  "detail": Props17;
+  "nav": [["ThreadList", Props18, {"aria":{"label":"Chat threads"}}]];
+  "Kbd": Props18;
+  "RowList.Root": [["ThreadList" | "nav", Props18, {"aria":{"label":"Threads"}}]];
+  "RowList.Group": Props18;
+  "ThreadRow": Props19;
+}>;

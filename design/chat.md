@@ -22,23 +22,23 @@ stopped reply line ("Stopped", "Failed · …"), a queued message (dashed box).
 
 ## Parts it offers
 
-The compiler publishes every JSX tag under `parts` in `plugin:chat/client`.
-See `plugins/chat/src/client/_generated/components.d.ts` for the full tree.
-These are the paths used by the starter add-ons:
+The compiler generates a typed `find` function in `plugin:chat/client`.
+See `plugins/chat/src/client/_generated/components.d.ts` for all available names.
+These are the searches used by the starter add-ons:
 
-| Path under `parts`                       | File                   | What goes there                                                                                  |
-| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `Composer.div.top`                       | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
-| `Composer.div.box`                       | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
-| `Composer.div.box.div.SendButton`        | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
-| `Empty.div.div.heading`                  | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
-| `Message.article.header`                 | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
-| `Message.article.body`                   | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
-| `Message.article.footer`                 | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
-| `ThreadRow.ListboxItem.span.span.status` | `ui/thread-list.tsx`   | Status icon in the lane before the title.                                                        |
-| `ThreadRow.ListboxItem.span.detail`      | `ui/thread-list.tsx`   | Agent detail inside the second line; helper rows after it.                                       |
-| `Header.div.title`                       | `ui/thread-header.tsx` | Branch chip after the title.                                                                     |
-| `Header.div.ThreadMenu`                  | `ui/thread-header.tsx` | Review toggle before the menu; review panel mount after it.                                      |
+| Search                                 | File                   | What goes there                                                                                  |
+| -------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `chat.find("top")`                     | `ui/composer.tsx`      | Permission card and cleanup inside the top lane.                                                 |
+| `chat.find("box")`                     | `ui/composer.tsx`      | Agent row after the prompt box.                                                                  |
+| `chat.find("SendButton")`              | `ui/composer.tsx`      | Stop in place of Send.                                                                           |
+| `chat.find("heading")`                 | `ui/empty.tsx`         | Agent heading in place of the default.                                                           |
+| `chat.find("header")`                  | `ui/message.tsx`       | Agent reply header in place of the author line.                                                  |
+| `chat.find("body")`                    | `ui/message.tsx`       | Work lines before the text, cards after it, and a steered body in place of the text when needed. |
+| `chat.find("footer")`                  | `ui/message.tsx`       | Change card and notices inside the footer.                                                       |
+| `chat.find("status")`                  | `ui/thread-list.tsx`   | Status icon in the lane before the title.                                                        |
+| `chat.find("detail")`                  | `ui/thread-list.tsx`   | Agent, model and optional profile code in the second line; helper rows after it.                 |
+| `chat.find("title", { in: "Header" })` | `ui/thread-header.tsx` | Branch chip after the title.                                                                     |
+| `chat.find("ThreadMenu")`              | `ui/thread-header.tsx` | Review toggle before the menu; review panel mount after it.                                      |
 
 Other hooks (not drawn): `holdSend` turns Send off in a composer, `onSent`
 announces each Send, `onDraftSubmit` handles a draft before Send.
@@ -59,7 +59,12 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
 - The composer tray (`nest-lg/1 surface-tray`, gap 4) or the box padding
   (`py-3 ps-2 pe-3`, plus the input's own `ps-2`): `ai` agent row (no start padding, so its first button
   sits on the box edge), `ai` permission card (`ps-3 pe-1` on the tray), `ai`
-  Stop button (same size as Send).
+  Stop button (same size as Send). `ai`'s agent picker opens its popover 8 px above
+  the tray, aligned to its start: it finds the tray as the agent row's parent, so the
+  row must stay a direct child of the tray.
+- The composer tray's picker and Send hold: check [AI](ai.md) and
+  [AI Profiles](ai-profiles.md) for picked, unpicked, unavailable and no-profile
+  states. The first Send stores the thread before a plugin can start a turn.
 - The message column width (`max-w-thread` 760, `px-8`) or the composer
   column: `code` change card (full width of the column), `ai` work lines and
   cards (`max-w-read` 560), the new thread's composer (same column on purpose).
@@ -70,7 +75,10 @@ Chat fills the shell's `Region.Sidebar` (thread list) and `Region.Header`
   body of a steered reply and draws each steer as the person's message with
   the same classes (`plugins/ai/src/client/ui/turn-steers.tsx`).
 - `ThreadRow` box (`min-h-8`, `px-row`, `py-1`) or the lead lane (`w-4`):
-  `ai` status icon, detail line and helper rows (half rows start at the title edge).
+  `ai` status icon, detail line and helper rows (half rows start at the title edge). Check the
+  [AI Profiles](ai-profiles.md) code beside agent and model, including idle rows.
+- The thread table or `threads:start`: AI Profiles uses a typed thread reference
+  and a mutation hook to inherit the last profile on the first Send.
 - The header layout (`gap-2`, chip after the title, `flex-1` before the menu):
   `code` branch chip (`ms-2`), layout control and review panel mount.
 - The empty state heading style (`text-read font-semibold`): `ai`
@@ -88,7 +96,7 @@ composer uses the bare ui-sdk textarea), the `surface-*`, `nest-*`,
 
 ## Open questions
 
-- The README's component table lists `Composer.tools`, but no plugin fills it yet.
-- `Message.avatar` comes from the `<Avatar>` tag's name (a tag publishes its
+- The README's component table lists `chat.find("tools")`, but no plugin fills it yet.
+- `chat.find("avatar")` comes from the `<Avatar>` tag's name (a tag publishes its
   own name), not from a `part`; replacing it also needs care with the header's
   `h-5` line. No plugin acts on it yet.

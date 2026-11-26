@@ -179,6 +179,7 @@ export default defineSchema({
     plan: v.optional(v.string()),
     /** The agent's own session, a shortcut on the computer that has it. */
     sessionId: v.optional(v.string()),
+    sessionHome: v.optional(v.string()),
     /** Chat's capability for the reply, chosen by the sender’s Runner. Never sent to windows. */
     replyToken: v.optional(v.string()),
     startedAt: v.number(),

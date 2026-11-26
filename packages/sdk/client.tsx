@@ -11,8 +11,18 @@ export {
   wrapPart as wrap,
   replacePart as replace,
   type ComponentPart,
+  type ScreenFind,
   type ComponentActionOptions,
 } from "./component-actions";
+import {
+  flattenAttributes,
+  resolveScreenSearch,
+  screenElements,
+  screenTarget,
+  type ScreenElement,
+  type ScreenSearch,
+  type ScreenTree,
+} from "./screen-search";
 import { PartActions, type LoadedPartAction, type PartObserver, type PartRegistry } from "./component-parts";
 export { auth, useClient, useQuery } from "./solid";
 export { onQuit, quitBlockers, type QuitBlocker, type QuitCheck } from "./quit";
@@ -33,9 +43,15 @@ export interface ExtensionHost {
   partOwner?(id: string): Promise<Record<string, unknown> | undefined>;
   onError(id: string, listener: (cause: unknown) => void): () => void;
 }
-type CatalogExtension = ExtensionContribution & { version: number; ownerVersion: number };
+type CatalogExtension = ExtensionContribution & {
+  version: number;
+  ownerVersion: number;
+  resolved?: ScreenElement;
+};
+const actionTarget = (c: CatalogExtension) => c.resolved?.target ?? String(c.options.target);
 
-const partOwner = (target: unknown) => String(target).split(".")[0]!;
+const partOwner = ({ options }: ExtensionContribution) =>
+  typeof options.owner === "string" ? options.owner : String(options.target).split(".")[0]!;
 
 /** Catalog discovery loads only extension contributors. Removing a plugin clears
  * its layers synchronously; late loads cannot publish into a retired owner. */
@@ -98,7 +114,7 @@ export function ExtensionProvider(props: {
     for (const observer of observers.get(target) ?? []) observer.update(next);
   }
 
-  const plugins = new Map<string, { signature: string; stop(): void }>();
+  const plugins = new Map<string, { signature: string; catalog: string; stop(): void }>();
   const targets = new Map<string, Set<string>>();
   function clear(id: string) {
     for (const target of targets.get(id) ?? [])
@@ -131,120 +147,144 @@ export function ExtensionProvider(props: {
     for (const plugin of plugins.values()) plugin.stop();
     plugins.clear();
   });
+  // Resolve the catalog before arbitrating replacements: different historical
+  // addresses can now point to one element in the current owner.
+  let generation = 0;
+  onCleanup(() => generation++);
   createEffect(
     () =>
       props.host.contributions("component-action").map((contribution) => ({
         ...contribution,
         version: props.host.version(contribution.plugin),
-        ownerVersion: props.host.version(partOwner(contribution.options.target)),
+        ownerVersion: props.host.version(partOwner(contribution)),
       })),
     (contributions) => {
-      const { accepted, refused } = resolveReplacements(contributions);
-      for (const message of refused) if (!reported.has(message)) console.warn(message);
-      const changed =
-        refused.size !== reported.size || [...refused].some((message) => !reported.has(message));
-      reported = refused;
-      if (changed) alerts();
-
-      const groups = new Map<string, CatalogExtension[]>();
-      for (const c of accepted) {
-        const group = groups.get(c.plugin) ?? [];
-        group.push(c);
-        groups.set(c.plugin, group);
-      }
-      // A competing replacement can change the accepted exports without changing
-      // this plugin's version. Include the accepted catalog entries as well.
-      const signatures = new Map([...groups].map(([id, group]) => [id, JSON.stringify(group)]));
+      const revision = ++generation;
+      const previous = new Map<string, string>();
+      for (const c of contributions)
+        previous.set(c.plugin, (previous.get(c.plugin) ?? "") + JSON.stringify(c));
       for (const [id, plugin] of plugins) {
-        if (plugin.signature !== signatures.get(id)) {
+        if (plugin.catalog !== previous.get(id)) {
           plugin.stop();
           plugins.delete(id);
           clear(id);
         }
       }
-      for (const [id, group] of groups) {
-        if (plugins.has(id)) continue;
-        let failed = false;
-        const plugin = {
-          signature: signatures.get(id)!,
-          stop: props.host.onError(id, (cause) => {
-            failed = true;
-            clear(id);
-            console.warn(`Extension ${id} failed: ${String(cause)}`);
-          }),
-        };
-        plugins.set(id, plugin);
-        void props.host.load(id).then(
-          async (exports) => {
-            if (plugins.get(id) !== plugin || failed) return;
-            const parts: LoadedPartAction[] = [];
-            for (const c of group) {
-              const value = exports[c.id];
-              if (
-                isComponentAction(value) &&
-                value.target === c.options.target &&
-                componentActionKind(value) === c.options.action
-              ) {
-                parts.push(loadedPart(c, value));
-              } else {
-                console.warn(
-                  `Component action ${id}/${c.id} does not match its manifest: expected ${c.options.action} for ${c.options.target}`,
-                );
-              }
-            }
-            let valid = parts;
-            if (props.host.partOwner) {
-              const owners = new Map(
-                await Promise.all(
-                  [...new Set(parts.map(({ action }) => partOwner(action.target)))].map(async (owner) => {
-                    try {
-                      return [owner, (await props.host.partOwner!(owner))?.parts] as const;
-                    } catch {
-                      // A retired generation will be checked again by the next catalog update.
-                      return [owner, undefined] as const;
-                    }
-                  }),
-                ),
-              );
-              if (plugins.get(id) !== plugin || failed) return;
-              valid = parts.filter(({ action, fingerprint }) => {
-                let node: unknown = owners.get(partOwner(action.target));
-                // An unavailable owner has no authoritative list to check yet.
-                if (!node || typeof node !== "object" || Array.isArray(node)) return true;
-                for (const key of action.target.split(".").slice(1))
-                  node =
-                    node && typeof node === "object" && Object.hasOwn(node, key)
-                      ? (node as Record<string, unknown>)[key]
-                      : undefined;
-                const part = node as { target?: string; fingerprint?: string } | undefined;
-                if (part?.target !== action.target) {
-                  warnStale(id, action.target, "targets missing screen part");
-                  return false;
-                }
-                if (fingerprint && part.fingerprint && fingerprint !== part.fingerprint) {
-                  registry.mismatch(id, action.target);
-                  return false;
-                }
-                return true;
-              });
-            }
-            if (valid.length) publish(id, valid);
-          },
-          (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
+      if (!props.host.partOwner) return apply(contributions, previous, []);
+      const ids = new Set(contributions.map(partOwner));
+      if (!ids.size) return apply(contributions, previous, []);
+      void Promise.all(
+        [...ids].map(async (id) => {
+          try {
+            const owner = await props.host.partOwner!(id);
+            return [id, owner] as const;
+          } catch {
+            // The next catalog generation rechecks an owner that is not available yet.
+            return [id, undefined] as const;
+          }
+        }),
+      ).then((entries) => {
+        if (revision !== generation) return;
+        const owners = new Map(
+          entries.map(([id, owner]) => [
+            id,
+            {
+              elements: typeof owner?.find === "function" ? authoredElements.get(owner.find)?.() : undefined,
+              legacy: owner?.parts,
+            },
+          ]),
         );
-      }
+        const rejected: string[] = [];
+        const valid = contributions.flatMap((c): CatalogExtension[] => {
+          const target = screenTarget(c.options);
+          const owner = owners.get(partOwner(c));
+          if (!owner?.elements && !owner?.legacy) return [c];
+          const result = owner.elements
+            ? resolveScreenSearch(owner.elements, target.search, target)
+            : resolveLegacyPart(owner.legacy, partOwner(c), target);
+          if (!result.element) {
+            rejected.push(`Plugin "${c.plugin}": ${result.reason}; skipping this addition`);
+            return [];
+          }
+          const { target: path, fingerprint } = result.element;
+          return [{ ...c, resolved: { target: path, fingerprint } }];
+        });
+        apply(valid, previous, rejected);
+      });
     },
   );
+
+  function apply(contributions: CatalogExtension[], catalog: Map<string, string>, rejected: string[]) {
+    const { accepted, refused } = resolveReplacements(contributions);
+    for (const message of rejected) refused.add(message);
+    for (const message of refused) if (!reported.has(message)) console.warn(message);
+    const changed = refused.size !== reported.size || [...refused].some((message) => !reported.has(message));
+    reported = refused;
+    if (changed) alerts();
+
+    const groups = new Map<string, CatalogExtension[]>();
+    for (const c of accepted) {
+      const group = groups.get(c.plugin) ?? [];
+      group.push(c);
+      groups.set(c.plugin, group);
+    }
+    // A competing replacement can change the accepted exports without changing
+    // this plugin's version. Include the accepted catalog entries as well.
+    const signatures = new Map([...groups].map(([id, group]) => [id, JSON.stringify(group)]));
+    for (const [id, plugin] of plugins) {
+      if (plugin.signature !== signatures.get(id)) {
+        plugin.stop();
+        plugins.delete(id);
+        clear(id);
+      }
+    }
+    for (const [id, group] of groups) {
+      if (plugins.has(id)) continue;
+      let failed = false;
+      const plugin = {
+        signature: signatures.get(id)!,
+        catalog: catalog.get(id)!,
+        stop: props.host.onError(id, (cause) => {
+          failed = true;
+          clear(id);
+          console.warn(`Extension ${id} failed: ${String(cause)}`);
+        }),
+      };
+      plugins.set(id, plugin);
+      void props.host.load(id).then(
+        (exports) => {
+          if (plugins.get(id) !== plugin || failed) return;
+          const parts: LoadedPartAction[] = [];
+          for (const c of group) {
+            const value = exports[c.id];
+            if (
+              isComponentAction(value) &&
+              value.target === c.options.target &&
+              componentActionKind(value) === c.options.action
+            ) {
+              parts.push(loadedPart(c, value));
+            } else {
+              console.warn(
+                `Component action ${id}/${c.id} does not match its manifest: expected ${c.options.action} for ${c.options.target}`,
+              );
+            }
+          }
+          if (parts.length) publish(id, parts);
+        },
+        (cause) => console.warn(`Extension ${id} failed: ${String(cause)}`),
+      );
+    }
+  }
   return <PartActions value={registry}>{props.children}</PartActions>;
 }
 
-function loadedPart(c: ExtensionContribution, action: ComponentAction): LoadedPartAction {
+function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAction {
   return {
     id: c.id,
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
-    action,
-    fingerprint: typeof c.options.fingerprint === "string" ? c.options.fingerprint : undefined,
+    action: c.resolved ? { ...action, target: c.resolved.target } : action,
+    fingerprint: c.resolved ? c.resolved.fingerprint : screenTarget(c.options).fingerprint,
     enabled(props) {
       try {
         return action.when?.(props) ?? true;
@@ -266,16 +306,16 @@ function resolveReplacements(contributions: CatalogExtension[]) {
   // Resolve from the catalog, before any module loads or when accessors run.
   for (const c of contributions) {
     if (!isReplacement(c)) continue;
-    const target = String(c.options.target);
+    const target = actionTarget(c);
     const first = winners.get(target);
     if (!first || (c.installOrder ?? Infinity) < (first.installOrder ?? Infinity)) winners.set(target, c);
   }
   const accepted = contributions.filter((c) => {
     if (!isReplacement(c)) return true;
-    const winner = winners.get(String(c.options.target))!;
+    const winner = winners.get(actionTarget(c))!;
     if (winner === c) return true;
     refused.add(
-      `Replacement from ${c.plugin} (${c.id}) refused for ${c.options.target}: ${winner.plugin} (${winner.id}) installed first`,
+      `Replacement from ${c.plugin} (${c.id}) refused for ${actionTarget(c)}: ${winner.plugin} (${winner.id}) installed first`,
     );
     return false;
   });
@@ -309,17 +349,47 @@ export {
 
 export { renderPart as __renderPart, renderNativePart as __renderNativePart } from "./component-parts";
 
-type ScreenShape = { "": string | null } | { [name: string]: ScreenShape | string | null };
+const authoredElements = new WeakMap<object, () => ReturnType<typeof screenElements>>();
 
-/** Materialize the public tree once without repeating complete paths in the bundle. */
-export function __defineScreenParts(prefix: string, shape: ScreenShape) {
+/** Generated by the client compiler. Production calls are resolved during the build. */
+export function __defineScreenFind(plugin: string, packedTree: string) {
+  let elements: ReturnType<typeof screenElements> | undefined;
+  const read = () => (elements ??= screenElements(plugin, JSON.parse(packedTree) as ScreenTree));
+  function find(name: string, filters?: Omit<ScreenSearch, "name">) {
+    const result = resolveScreenSearch(read(), { name, ...filters });
+    if (!result.element) throw new Error(result.reason);
+    return { target: result.element.target };
+  }
+  authoredElements.set(find, read);
+  return find;
+}
+
+function resolveLegacyPart(node: unknown, owner: string, target: ReturnType<typeof screenTarget>) {
+  // A legacy owner has paths but no attributes to verify a filtered search.
+  if (target.search && flattenAttributes(target.search).length)
+    return resolveScreenSearch([], target.search, target);
+  for (const key of target.target.slice(owner.length + 1).split("."))
+    node =
+      node && typeof node === "object" && Object.hasOwn(node, key)
+        ? (node as Record<string, unknown>)[key]
+        : undefined;
+  const part = node as typeof target | undefined;
+  return resolveScreenSearch(
+    part?.target === target.target ? [{ ...part, name: "", ancestors: [] }] : [],
+    undefined,
+    target,
+  );
+}
+
+/** Existing owner bundles call this until they are rebuilt. */
+export function __defineScreenParts(prefix: string, shape: Record<string, unknown>) {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(shape)) {
     if (key === "") {
       result.target = prefix;
       if (value) result.fingerprint = value;
     } else if (value && typeof value === "object") {
-      result[key] = __defineScreenParts(`${prefix}.${key}`, value);
+      result[key] = __defineScreenParts(`${prefix}.${key}`, value as Record<string, unknown>);
     }
   }
   return result;

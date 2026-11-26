@@ -194,6 +194,8 @@ export function discoverProviders(root, files, program, checker) {
           const value = ts.isShorthandPropertyAssignment(field) ? field.name : field.initializer;
           const actual = checker.getTypeAtLocation(value);
           const info = definitionTypeInfo(checker, actual, value);
+          if (info?.kind === "httpAction")
+            throw new Error(`${path}: HTTP actions cannot provide contract methods`);
           const expression = ts.isShorthandPropertyAssignment(field)
             ? checker.getShorthandAssignmentValueSymbol(field)?.valueDeclaration?.initializer
             : value;
