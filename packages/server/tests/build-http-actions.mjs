@@ -16,7 +16,10 @@ import { definePlugin } from "@tokamak/sdk";
 export default definePlugin(${JSON.stringify({
       id,
       version: "1.0.0",
-      permissions: id === "http-proxy" ? ["net:127.0.0.1"] : [],
+      permissions:
+        id === "http-proxy"
+          ? ["net:127.0.0.1", "env:TOKAMAK_HTTP_FIXTURE_KEY", "env:TOKAMAK_HTTP_FIXTURE_UNSET"]
+          : [],
     })});
 `,
   );
@@ -32,6 +35,43 @@ export default { plugins: [tokamak({ ui: false })] };`,
       ? `
 import type {} from "@tokamak/sdk/web";
 import { httpAction } from "@tokamak/sdk";
+import { api } from "./_generated/api";
+import { internal } from "./_generated/internal";
+import { plugin } from "./_generated/plugin";
+
+async function errorMessage(work: () => Promise<unknown>) {
+  try { await work(); } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  return "unexpected success";
+}
+
+export const data = httpAction({
+  path: "/data",
+  handler: async (ctx, request) => {
+    if (request.headers.get("x-key") !== await ctx.env("TOKAMAK_HTTP_FIXTURE_KEY"))
+      return new Response(null, { status: 401 });
+    const id = await ctx.runMutation(internal.records.write, { text: "saved by HTTP" });
+    // Exercise operations both before and after sending the response headers.
+    return new Response(new ReadableStream({
+      async start(stream) {
+        stream.enqueue(new TextEncoder().encode("{"));
+      },
+      async pull(stream) {
+        const [row, renewed, member, denied, unset] = await Promise.all([
+          ctx.runQuery(plugin.records.read, { id }),
+          ctx.runAction(internal.records.renew, {}),
+          errorMessage(() => ctx.runQuery(api.records.member, {})),
+          errorMessage(() => ctx.env("TOKAMAK_HTTP_FIXTURE_SECRET")),
+          ctx.env("TOKAMAK_HTTP_FIXTURE_UNSET"),
+        ]);
+        const json = JSON.stringify({ row, renewed, member, denied, unset });
+        stream.enqueue(new TextEncoder().encode(json.slice(1)));
+        stream.close();
+      },
+    }));
+  },
+});
 
 export const proxy = httpAction({
   path: "/:profile/*",
@@ -99,8 +139,46 @@ export const normal = action({ handler: () => "normal" });
 export const overBudget = query({ handler: () => { for (;;) {} } });
 `,
   );
-  if (id === "http-peer")
+  if (id === "http-peer") {
     await writeFile(join(path, "src/server/api.ts"), 'export { normal, overBudget } from "./ops";\n');
+  } else {
+    await writeFile(join(path, "src/server/api.ts"), 'export { read, member } from "./records";\n');
+    await writeFile(
+      join(path, "src/server/schema.ts"),
+      `
+import { defineSchema, defineTable, v } from "@tokamak/sdk";
+export default defineSchema({ records: defineTable({ text: v.string() }) });
+`,
+    );
+    await writeFile(
+      join(path, "src/server/records.ts"),
+      `
+import { createFunctions, pluginOnly, v } from "@tokamak/sdk";
+import { plugin } from "./_generated/plugin";
+import schema from "./schema";
+const { internalMutation, internalAction, query } = createFunctions(schema);
+
+export const write = internalMutation({
+  args: { text: v.string() },
+  handler: (ctx, { text }) => ctx.db.insert("records", { text }),
+});
+export const read = pluginOnly(query({
+  args: { id: v.id("records") },
+  handler: async (ctx, { id }) => ({ text: (await ctx.db.get(id))?.text, depth: ctx.call.depth }),
+}));
+export const renew = internalAction({
+  handler: async (ctx): Promise<{ text?: string; depth: number; childDepth: number; user: null }> => {
+    const id = await ctx.runMutation(internal.records.write, { text: "renewed" });
+    const child = await ctx.runQuery(plugin.records.read, { id });
+    if (ctx.call.user !== null || ctx.call.device !== null) throw new Error("unexpected identity");
+    return { text: child.text, depth: ctx.call.depth, childDepth: child.depth, user: ctx.call.user };
+  },
+});
+export const member = query({ handler: (ctx) => ctx.auth.user.id });
+import { internal } from "./_generated/internal";
+`,
+    );
+  }
   const child = Bun.spawn([process.execPath, join(workspace, "packages/build/src/build.ts"), path], {
     cwd: workspace,
     stdout: "inherit",
@@ -108,5 +186,6 @@ export const overBudget = query({ handler: () => { for (;;) {} } });
   });
   if ((await child.exited) !== 0) throw new Error(`HTTP action fixture failed to build: ${id}`);
   const api = await Bun.file(join(path, "src/server/_generated/api.ts")).text();
-  if (/ops:(proxy|fail|fast)\b/.test(api)) throw new Error("HTTP action leaked into callable references");
+  if (/ops:(proxy|fail|fast|data)\b/.test(api))
+    throw new Error("HTTP action leaked into callable references");
 }

@@ -26,6 +26,9 @@ generated references in `src/server/_generated/` and component declarations in
   in the handler; these routes do not require member sign-in. Use the web
   `Request` and return a `Response`, including a direct `fetch` response to
   stream it. The context provides `ctx.serverUrl`, `ctx.path` and `ctx.params`.
+  Use `ctx.runQuery`, `ctx.runMutation`, and `ctx.runAction` with your own
+  plugin's generated references. Those calls have no signed-in member.
+  Read declared `env:NAME` permissions with `await ctx.env("NAME")`.
   Set `TOKAMAK_PUBLIC_URL` on the Server to read `ctx.serverUrl`. Core routes
   `/plugins/<id>/<revision>/assets/<name...>` and `/plugins/<id>/reload` take
   precedence. Handle `OPTIONS` yourself if you need CORS. Duplicate headers

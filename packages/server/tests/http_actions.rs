@@ -16,7 +16,7 @@ async fn http_actions_stream_and_cancel_without_using_normal_action_slots() {
     let fixture = build_fixture();
     let mut pool = PoolConfig::default();
     pool.limits.call_timeout = Duration::from_millis(50);
-    let backend = Backend::start_plugins(Storage::Memory, pool, fixture.path())
+    let backend = Backend::start_plugins(Storage::Memory, pool, &fixture.path().join("plugins"))
         .await
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -25,6 +25,7 @@ async fn http_actions_stream_and_cancel_without_using_normal_action_slots() {
     let server = tokio::spawn(serve(listener, &backend, shutdown));
     let route = format!("{origin}/plugins/http-proxy/ACME/v1/messages");
     check_routing(&origin, &route).await;
+    check_data_access(&origin).await;
     check_uploads(&origin, &route).await;
     check_slot_wait(&origin).await;
     check_response_failures(&origin).await;
@@ -41,6 +42,11 @@ fn build_fixture() -> tempfile::TempDir {
     let target = workspace.join("packages/server/target");
     std::fs::create_dir_all(&target).unwrap();
     let fixture = tempfile::tempdir_in(target).unwrap();
+    std::fs::write(
+        fixture.path().join(".env.local"),
+        "TOKAMAK_HTTP_FIXTURE_KEY=fixture-secret-key\nTOKAMAK_HTTP_FIXTURE_SECRET=undeclared-value\n",
+    )
+    .unwrap();
     let output = Command::new("proto")
         .args([
             "run",
@@ -48,7 +54,7 @@ fn build_fixture() -> tempfile::TempDir {
             "--",
             "packages/server/tests/build-http-actions.mjs",
         ])
-        .arg(fixture.path())
+        .arg(fixture.path().join("plugins"))
         .current_dir(workspace)
         .output()
         .unwrap();
@@ -86,6 +92,40 @@ fn serve(
     );
     #[cfg(not(feature = "local-runtime"))]
     websocket::serve_with_access(listener, server, shutdown, Some(access))
+}
+
+async fn check_data_access(origin: &str) {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap();
+    let url = format!("{origin}/plugins/http-proxy/data");
+    assert_eq!(client.get(&url).send().await.unwrap().status(), 401);
+    let response = client
+        .get(&url)
+        .header("x-key", "fixture-secret-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let result = response.json::<Value>().await.unwrap();
+    assert_eq!(result["row"], json!({"text": "saved by HTTP", "depth": 0}));
+    assert_eq!(
+        result["renewed"],
+        json!({"text": "renewed", "depth": 0, "childDepth": 1, "user": null})
+    );
+    assert!(
+        result["member"]
+            .as_str()
+            .unwrap()
+            .contains("There is no caller before sign-in"),
+        "{result}"
+    );
+    assert_eq!(
+        result["denied"],
+        "environment permission denied: requires env:TOKAMAK_HTTP_FIXTURE_SECRET"
+    );
+    assert_eq!(result["unset"], Value::Null);
 }
 
 async fn check_routing(origin: &str, route: &str) {

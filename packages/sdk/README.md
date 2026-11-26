@@ -354,12 +354,27 @@ The core routes `/plugins/<id>/<revision>/assets/<name...>` and
 `/plugins/<id>/reload` take precedence over HTTP actions. Dot segments,
 including percent-encoded dots, and encoded slash or backslash are rejected.
 There is no member sign-in: check the caller in the handler before doing work.
+Functions called through the handler receive no member or device. A function
+that requires a signed-in member refuses the call as it would any anonymous call.
 `OPTIONS` reaches the handler; the plugin is responsible for CORS answers.
 
 `ctx.serverUrl` is the bound loopback origin in the Runner. Set
 `TOKAMAK_PUBLIC_URL` to the CLI-reachable origin in the Server. If it is unset,
 the Server logs a startup warning and reading `ctx.serverUrl` throws.
 The request's Host header is never used to derive the origin.
+
+Use `ctx.runQuery(ref, args)`, `ctx.runMutation(ref, args)`, and
+`ctx.runAction(ref, args)` with the same typed references as a server action.
+The handler can call its own plugin's `_generated/api`, `_generated/internal`,
+and `_generated/plugin` functions. Each call starts at depth zero; calls made
+from those functions increase depth as usual. The handler has no `ctx.db`;
+each query or mutation runs in its own transaction. `ctx.runAction` accepts the
+usual optional placement argument. A placement that needs the member's
+Runner returns `noMachine` because the request has no member.
+
+Use `await ctx.env("NAME")` to read a value from the server environment or the
+installation's `.env.local`. Declare `env:NAME` in the plugin's permissions.
+An unset value returns `null`; an undeclared name rejects.
 
 The `Request` provides the method, URL (including query), headers and body
 using the same [web API subset](../engine/WEB_APIS.md) as `fetch`. Uploads are
@@ -382,8 +397,9 @@ upload, the server waits up to 250 ms for a slot and replies with
 is bounded by `TOKAMAK_HTTP_FIRST_HEADERS_MS` (default 300000); the normal action
 wall deadline does not apply to the response stream. On disconnect or server
 shutdown, the host aborts `request.signal` and has up to 500 ms for cleanup
-before it is killed. HTTP actions have no generated function references and
-cannot be exported to windows or provided as contract methods.
+before it is killed. A disconnect does not roll back a mutation that already
+started. The HTTP route itself has no generated function reference and cannot
+be hooked, exported to windows, or provided as a contract method.
 
 ## Internal functions and expected failures
 
