@@ -1,0 +1,19 @@
+packages/sdk/tests/web/component-parts-budget.test.tsx
+  s_be4ee891f4fdb9::t_88b861a8848fa6 95-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c60651b4ffa83e446483b379f61e81b08544ae7a",
+  "prompts": {},
+  "sessions": {
+    "s_be4ee891f4fdb9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "412dc64c-de5d-49f9-ba71-d3334182b4ea",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
