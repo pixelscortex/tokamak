@@ -79,8 +79,10 @@ export async function startFakeCompanies({
     path: string;
     headers: Record<string, string>;
     body: unknown;
+    rawBody: string;
     account?: string;
   }[] = [];
+  const disconnected: string[] = [];
   let replay: Fixture["exchanges"] = [];
   /** Refresh tokens already used, by the account they belonged to (strict accounts revoke on reuse). */
   const usedRefresh = new Map<string, string>();
@@ -130,6 +132,7 @@ export async function startFakeCompanies({
       path: url.pathname + url.search,
       headers,
       body,
+      rawBody: raw,
       account: account?.id,
     });
 
@@ -413,6 +416,9 @@ export async function startFakeCompanies({
           body: body.length ? body : undefined,
         }),
       );
+      outgoing.once("close", () => {
+        if (!outgoing.writableFinished) disconnected.push(incoming.url ?? "/");
+      });
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       if (response.body)
         await pipeline(Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>), outgoing);
@@ -446,6 +452,7 @@ export async function startFakeCompanies({
     address,
     addresses,
     requests,
+    disconnected,
     addAccount(
       company: Company,
       id: string,

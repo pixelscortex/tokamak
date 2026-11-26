@@ -1,7 +1,19 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rmdir,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
@@ -117,6 +129,55 @@ export interface Patch {
   readonly replace: string;
 }
 
+/** The caller is installed only for proxy tests; the shipped API stays plugin-only. */
+async function installTurnCaller(installation: string) {
+  const plugins = join(installation, "plugins");
+  const source = join(plugins, "turn-caller");
+  const sdkModules = join(root, "plugins/agent-proxy/node_modules");
+  await mkdir(join(source, "src/server"), { recursive: true });
+  await symlink(sdkModules, join(source, "node_modules"), "dir");
+  const proxy = join(plugins, "agent-proxy");
+  await symlink(sdkModules, join(proxy, "node_modules"), "dir");
+  await symlink(join(root, "plugins/agent-proxy/src"), join(proxy, "src"), "dir");
+  await writeFile(join(source, "package.json"), '{"name":"turn-caller","type":"module"}');
+  await writeFile(
+    join(source, "plugin.ts"),
+    'import { definePlugin } from "@tokamak/sdk"; export default definePlugin({ id: "turn-caller", version: "0.0.1", depends: ["agent-proxy"] });',
+  );
+  await writeFile(
+    join(source, "src/server/turns.ts"),
+    `
+import { action, mutation, v } from "@tokamak/sdk";
+import { api as proxy } from "plugin:agent-proxy/server";
+export const register = mutation({
+  args: { set: v.optional(v.string()), subscriptions: v.array(v.string()) },
+  handler: (ctx, args) => ctx.use(proxy).registerSet(args),
+});
+export const key = action({
+  args: { set: v.string() },
+  handler: (ctx, args) => ctx.use(proxy).turnKey(args),
+});
+export const end = mutation({
+  args: { key: v.string() },
+  handler: (ctx, args) => ctx.use(proxy).endTurnKey(args),
+});
+`,
+  );
+  await execute("proto", ["run", "bun", "--", "packages/build/src/build.ts", source], {
+    cwd: root,
+    timeout: 120_000,
+  });
+}
+
+async function freePort() {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => server.once("error", reject).listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  if (!address || typeof address === "string") throw new Error("No test port");
+  return address.port;
+}
+
 /**
  * `signInTtlMs` builds the installed copy with a shorter sign-in lifetime, so a
  * test can watch a sign-in expire without waiting 15 minutes: the server's own
@@ -126,7 +187,11 @@ export interface Patch {
 export async function startWorkspace(
   build: Build,
   addresses: Addresses,
-  { signInTtlMs, patches = [] }: { signInTtlMs?: number; patches?: readonly Patch[] } = {},
+  {
+    signInTtlMs,
+    patches = [],
+    turnCaller = false,
+  }: { signInTtlMs?: number; patches?: readonly Patch[]; turnCaller?: boolean } = {},
 ): Promise<Workspace> {
   await buildPlugins();
   const target = join(root, "target");
@@ -169,12 +234,23 @@ export async function startWorkspace(
   await mkdir(join(installation, "web"));
   await writeFile(join(installation, "web/index.html"), "Sign-in tests");
 
+  let port = 0;
+  try {
+    if (turnCaller) {
+      await installTurnCaller(installation);
+      port = await freePort();
+    }
+  } catch (error) {
+    await empty(installation);
+    throw error;
+  }
   const ownerToken = "sign-in-tests-owner-token-of-at-least-32-characters";
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     TOKAMAK_PLUGIN_HOST: build.host,
     TOKAMAK_OWNER_NAME: "Sam",
     TOKAMAK_ACCESS_TOKEN: ownerToken,
+    ...(turnCaller && { TOKAMAK_PUBLIC_URL: `http://127.0.0.1:${port}` }),
   };
   delete env[addressesVariable];
   let output = "";
@@ -184,7 +260,7 @@ export async function startWorkspace(
       build.server,
       ["--plugins", join(installation, "plugins"), "--data", join(installation, "store")].concat([
         "--listen",
-        "127.0.0.1:0",
+        `127.0.0.1:${port}`,
         "--web",
         join(installation, "web"),
       ]),
