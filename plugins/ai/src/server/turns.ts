@@ -4,6 +4,7 @@ import {
   type AuthContext,
   type DatabaseReader,
   type DatabaseWriter,
+  type ArgsOf,
   type Id,
   type MutationContext,
   type QueryContext,
@@ -19,7 +20,7 @@ import { append, jsonBytes, line, LINE_CHARS, PLAN_BYTES, TASKS_MAX, TEXT_BYTES 
 import { access, question, stepReport, task, usage, who } from "./schema";
 
 /**
- * A turn's rows. The sender's local part (`run:turn`) calls these mutations on
+ * A turn's rows. The sender’s Runner (`run:turn`) calls these mutations on
  * the window's session, so any member's window can reach them too: each one
  * checks inside that the caller is the turn's sender, on the sender's device.
  */
@@ -114,7 +115,7 @@ export const enqueue = mutation({
     if (head && !isSendersDevice(head, ctx.auth)) return busy(head);
     const { messageId, createdAt } = await ctx
       .use(chat)
-      .stageMessage({ threadId: threadId as Id<"threads">, text });
+      .stageMessage({ threadId: threadId as ArgsOf<typeof chat.getThread>["threadId"], text });
     const turnId = await ctx.db.insert("turns", {
       threadId,
       messageId,
@@ -203,7 +204,10 @@ export const helper = query({
 
 /** Whether the caller can see the thread: it is a thread chat shows them. */
 async function canSee(ctx: QueryContext<Model>, threadId: string): Promise<boolean> {
-  return (await ctx.use(chat).getThread({ threadId: threadId as Id<"threads"> })) !== null;
+  return (
+    (await ctx.use(chat).getThread({ threadId: threadId as ArgsOf<typeof chat.getThread>["threadId"] })) !==
+    null
+  );
 }
 
 /** The turn, if it exists in a thread the caller can see. */
@@ -230,12 +234,14 @@ export const begin = mutation({
     messageId: v.string(),
     folder: v.optional(v.string()),
     ...agentSettings,
-    /** Chat's reply capability, chosen by the local part (mutations have no secret randomness). */
+    /** Chat's reply capability, chosen by the Runner (mutations have no secret randomness). */
     replyToken: v.string(),
   },
   handler: async (ctx, { threadId, messageId, folder, replyToken, ...settings }) => {
     const { user, device } = ctx.auth;
-    const message = await ctx.use(chat).readPrompt({ messageId: messageId as Id<"messages"> });
+    const message = await ctx
+      .use(chat)
+      .readPrompt({ messageId: messageId as ArgsOf<typeof chat.writeReply>["messageId"] });
     if (!message || message.threadId !== threadId) throw new Error("That message is not in this thread");
     if (message.authorId !== user.id)
       throw new Error("Only the person who sent a message can begin its turn");
@@ -275,7 +281,7 @@ export const begin = mutation({
 });
 
 /**
- * What `begin` hands the local part for the agent: the prompt, the earlier
+ * What `begin` hands the Runner for the agent: the prompt, the earlier
  * messages and the session to carry on when the thread's last turn was this
  * agent's on this device. Keeps the turn's settings as the thread's choices
  * when its sender started the thread.
@@ -289,16 +295,19 @@ async function handOver(
   startSettings: Pick<Turn, "model" | "effort" | "speed" | "mode" | "access">,
 ) {
   const { agent, model, effort, speed, mode, access, sender } = turn;
-  const history = await ctx
-    .use(chat)
-    .historyBefore({ threadId: turn.threadId as Id<"threads">, before: message.createdAt });
+  const history = await ctx.use(chat).historyBefore({
+    threadId: turn.threadId as ArgsOf<typeof chat.getThread>["threadId"],
+    before: message.createdAt,
+  });
   const sessionId =
     earlier?.agent.id === agent.id && earlier.sender.device === sender.device ? earlier.sessionId : undefined;
   const input = {
     turnId: turn._id,
     prompt: message.text,
     history,
-    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(sessionId === undefined
+      ? {}
+      : { sessionId, ...(earlier?.sessionHome && { sessionHome: earlier.sessionHome }) }),
   };
   const {
     model: pickedModel,
@@ -353,7 +362,7 @@ async function openReply(
   replyToken: string,
 ) {
   const replyId = await ctx.use(chat).startReply({
-    threadId: threadId as Id<"threads">,
+    threadId: threadId as ArgsOf<typeof chat.getThread>["threadId"],
     token: replyToken,
     author: { id: `agent:${agent.id}`, name: agent.name },
   });
@@ -361,11 +370,13 @@ async function openReply(
 }
 
 async function promoteQueued(ctx: MutationContext<Model>, turn: Turn, replyToken: string) {
-  await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages"> });
+  await ctx
+    .use(chat)
+    .deliverMessage({ messageId: turn.messageId as ArgsOf<typeof chat.writeReply>["messageId"] });
   await ctx.db.patch(turn._id, await openReply(ctx, turn.threadId, turn.agent, replyToken));
 }
 
-/** The local part reads the queued snapshot before choosing which provider to start. */
+/** The Runner reads the queued snapshot before choosing which provider to start. */
 export const queuedForMessage = query({
   args: { messageId: v.string() },
   handler: async ({ db, auth }, { messageId }) => {
@@ -388,7 +399,10 @@ export const stopQueued = mutation({
   handler: async (ctx) => {
     const queued = await queuedOn(ctx.db, ctx.auth);
     for (const turn of queued) {
-      await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages">, stopped: true });
+      await ctx.use(chat).deliverMessage({
+        messageId: turn.messageId as ArgsOf<typeof chat.writeReply>["messageId"],
+        stopped: true,
+      });
       await ctx.db.patch(turn._id, { state: "stopped", finishedAt: Date.now() });
     }
     return queued.length;
@@ -426,7 +440,9 @@ export const failQueued = mutation({
 });
 
 async function settleQueuedFailure(ctx: MutationContext<Model>, turn: Turn, error: string) {
-  await ctx.use(chat).deliverMessage({ messageId: turn.messageId as Id<"messages">, error });
+  await ctx
+    .use(chat)
+    .deliverMessage({ messageId: turn.messageId as ArgsOf<typeof chat.writeReply>["messageId"], error });
   const now = Date.now();
   await ctx.db.patch(turn._id, { state: "failed", error, startedAt: now, finishedAt: now });
 }
@@ -535,8 +551,8 @@ export const questions = query({
 
 /**
  * The agent asks: the turn waits for the sender's answer, with no time limit.
- * Called by the sender's local part (`run.ask`), never on Full access, with a
- * token that local part keeps to itself for `turns:answer`.
+ * Called by the sender’s Runner (`run.ask`), never on Full access, with a
+ * token that Runner keeps to itself for `turns:answer`.
  */
 export const ask = mutation({
   args: { turnId: v.id("turns"), question, token: v.string() },
@@ -551,7 +567,7 @@ export const ask = mutation({
 
 /**
  * Clears the waiting question and lets the turn run on; the answer itself goes
- * from the local part to the agent and is not stored. Only the local part that
+ * from the Runner to the agent and is not stored. Only the Runner that
  * asked can call it: it checks the caller is the sender on the device that
  * runs the turn and holds the question's token, so neither another member nor
  * another window of the same device can let a turn run on while its agent
@@ -591,7 +607,11 @@ export const write = mutation({
     const patch: Partial<Turn> = {};
     if (text !== undefined) {
       patch.text = append(turn.text ?? "", text, TEXT_BYTES);
-      await ctx.use(chat).writeReply({ messageId: turn.replyId, token: turn.replyToken, text: patch.text });
+      await ctx.use(chat).writeReply({
+        messageId: turn.replyId as string as ArgsOf<typeof chat.writeReply>["messageId"],
+        token: turn.replyToken,
+        text: patch.text,
+      });
     }
     if (thinking !== undefined) patch.thinking = append(turn.thinking ?? "", thinking, TEXT_BYTES);
     if (tasks !== undefined)
@@ -639,15 +659,16 @@ export const finish = mutation({
     state: v.union(v.literal("done"), v.literal("failed"), v.literal("stopped"), v.literal("interrupted")),
     error: v.optional(v.string()),
     sessionId: v.optional(v.string()),
+    sessionHome: v.optional(v.string()),
     acknowledgedSteer: v.optional(v.string()),
     finishedAt: v.number(),
   },
-  handler: async (ctx, { turnId, state, error, sessionId, acknowledgedSteer, finishedAt }) => {
+  handler: async (ctx, { turnId, state, error, sessionId, sessionHome, acknowledgedSteer, finishedAt }) => {
     const turn = await sendersRunningTurn(ctx, turnId);
     if (turn.stoppingAt !== undefined && state !== "interrupted") state = "stopped";
     const reason = error === undefined ? undefined : line(error, LINE_CHARS * 4);
     await ctx.use(chat).writeReply({
-      messageId: turn.replyId,
+      messageId: turn.replyId as string as ArgsOf<typeof chat.writeReply>["messageId"],
       token: turn.replyToken,
       text: turn.text ?? "",
       done: true,
@@ -680,7 +701,9 @@ export const finish = mutation({
       current: undefined,
       finishedAt: Date.now(),
       ...((state === "failed" || state === "interrupted") && reason !== undefined ? { error: reason } : {}),
-      ...(sessionId === undefined ? {} : { sessionId: line(sessionId) }),
+      ...(sessionId === undefined
+        ? {}
+        : { sessionId: line(sessionId), ...(sessionHome && { sessionHome: line(sessionHome) }) }),
     });
     return state;
   },
@@ -711,7 +734,11 @@ async function sendersRunningTurn(
   checkSender(turn, auth);
   if (!turn.replyId || !turn.replyToken || !ACTIVE.some((state) => state === turn.state))
     throw new Error("This turn has ended");
-  return { ...turn, replyId: turn.replyId as Id<"messages">, replyToken: turn.replyToken };
+  return {
+    ...turn,
+    replyId: turn.replyId as ArgsOf<typeof chat.writeReply>["messageId"],
+    replyToken: turn.replyToken,
+  };
 }
 
 function checkSender(turn: Turn, auth: AuthContext) {

@@ -1,4 +1,4 @@
-import { v, type DatabaseWriter, type Id, type MutationContext } from "@tokamak/sdk";
+import { v, type DatabaseWriter, type ArgsOf, type MutationContext } from "@tokamak/sdk";
 import { api as chat } from "plugin:chat/server";
 import { mutation, query, type Model } from "./_functions";
 import { choiceFields, type Choices } from "./schema";
@@ -23,13 +23,14 @@ export const get = query({
 /** Who started the thread, the one person who runs its agent; null once the thread is gone. */
 export const creator = query({
   args: { threadId: v.string() },
-  handler: (ctx, { threadId }) => ctx.use(chat).threadCreator({ threadId: threadId as Id<"threads"> }),
+  handler: (ctx, { threadId }) =>
+    ctx.use(chat).threadCreator({ threadId: threadId as ArgsOf<typeof chat.getThread>["threadId"] }),
 });
 
 /**
  * Sets every choice of the thread at once, when a picker changes. Only the
  * person who started the thread may change them (coding alone: its owner).
- * The local part checks them against the agent before a turn uses them.
+ * The Runner checks them against the agent before a turn uses them.
  */
 export const set = mutation({
   args: { threadId: v.string(), ...choiceFields },
@@ -47,7 +48,9 @@ export async function startedBy(
   threadId: string,
   userId: string,
 ): Promise<boolean> {
-  const creator = await ctx.use(chat).threadCreator({ threadId: threadId as Id<"threads"> });
+  const creator = await ctx
+    .use(chat)
+    .threadCreator({ threadId: threadId as ArgsOf<typeof chat.getThread>["threadId"] });
   if (!creator) throw new Error("That thread no longer exists");
   return creator.id === userId;
 }

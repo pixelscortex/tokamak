@@ -11,13 +11,13 @@ pub(crate) async fn inspect_legacy(code: &Path) -> Result<bool, String> {
         .ok_or_else(|| "Invalid plugin host inspection response".into())
 }
 
-pub(super) async fn inspect_action(code: &Path, worker_entry: bool) -> Result<(), String> {
+pub(super) async fn inspect_action(code: &Path, worker_entry: bool) -> Result<Value, String> {
     let heap = tokamak_worker::configured_action_heap_bytes()?;
-    let message = inspect(code, Some((heap, worker_entry)), "plugin action bundle").await?;
+    let mut message = inspect(code, Some((heap, worker_entry)), "plugin action bundle").await?;
     if message["ok"] != true {
         return Err("Invalid plugin host inspection response".into());
     }
-    Ok(())
+    Ok(message["validators"].take())
 }
 
 async fn inspect(

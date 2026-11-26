@@ -7,6 +7,8 @@ mod builtins;
     any(target_os = "linux", target_os = "macos")
 ))]
 mod fs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod http_action;
 #[cfg(all(
     feature = "local-runtime",
     any(target_os = "linux", target_os = "macos")
@@ -51,6 +53,12 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Some(mode) if mode == "--actions" => action_process::run().await,
+        Some(mode) if mode == "--http-action" => {
+            let bundle = args
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Expected an HTTP action bundle path"))?;
+            http_action::run(std::path::Path::new(&bundle)).await
+        }
         Some(mode) if mode == "--inspect-actions" => {
             let bundle = args
                 .next()
@@ -64,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "local-runtime")]
         Some(code) => protocol::run(std::path::Path::new(code), None).await,
         #[cfg(feature = "local-runtime")]
-        None => anyhow::bail!("Expected a local function bundle path"),
+        None => anyhow::bail!("Expected a caller action bundle path"),
         #[cfg(not(feature = "local-runtime"))]
         _ => anyhow::bail!("This host runs only server actions"),
     }
@@ -85,7 +93,7 @@ mod local_plugin {
             .ok_or_else(|| anyhow::anyhow!("Expected a local plugin ID"))?;
         let bundle = args
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Expected a local function bundle path"))?;
+            .ok_or_else(|| anyhow::anyhow!("Expected a caller action bundle path"))?;
         let native = args
             .next()
             .map(|arg| -> anyhow::Result<UnixDatagram> {

@@ -10,6 +10,7 @@ impl Coordinator {
         let mut metadata = plugins.catalog.metadata();
         metadata["functions"] = plugins.descriptor["functions"].clone();
         metadata["schema"] = plugins.descriptor["schema"].clone();
+        metadata["triggers"] = plugins.descriptor["triggers"].clone();
         metadata["skipped"] = serde_json::json!(plugins.skipped);
 
         Ok(metadata)
@@ -83,6 +84,7 @@ impl Coordinator {
                 let _ = reply.send(result);
             }
             Command::RunFunction(call) => self.run_function(call).await,
+            Command::CurrentPlugins(reply) => drop(reply.send(self.plugins.clone())),
             Command::Plugins(reply) => {
                 let _ = reply.send(self.metadata());
             }
@@ -94,6 +96,7 @@ impl Coordinator {
                 };
                 let _ = reply.send(result);
             }
+            Command::HttpAction(id, path, reply) => self.reply_http_route(&id, &path, reply),
             Command::Asset(revision, id, name, reply) => {
                 let result = self
                     .plugins
@@ -162,7 +165,7 @@ impl Coordinator {
                 &target,
                 args.clone(),
                 true,
-                None,
+                Default::default(),
             ))
             .await;
             if !matches!(result, Ok(value) if crate::protocol::failure_kind(&value).is_none()) {
@@ -208,13 +211,17 @@ impl Coordinator {
         candidate
             .catalog
             .persist_install_order(self.database.directory())?;
+        let candidate = Arc::new(candidate);
+        self.runner
+            .update_plugins(Some(candidate.clone()))
+            .map_err(|error| Error::Invalid(error.to_string()))?;
         // This command follows every previously accepted invocation's complete
         // commit/rollback. Nothing below can fail before the generation swap.
         self.retire_actions_for_reload(&candidate);
         self.kinds = candidate.client_kinds();
 
         let changed = self.changed_plugins(&candidate);
-        self.plugins = Some(Arc::new(candidate));
+        self.plugins = Some(candidate);
 
         let catalog = self.metadata()?;
         // Use the same bounded ordered stream as data updates. A stale asset

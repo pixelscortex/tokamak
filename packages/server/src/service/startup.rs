@@ -199,6 +199,10 @@ impl Server {
 
         let (closed_sender, closed) = watch::channel(None);
 
+        let runner = Arc::new(crate::actions::Machines::default());
+        runner
+            .update_plugins(plugins.clone())
+            .map_err(|error| Error::Invalid(error.to_string()))?;
         let actor = Coordinator {
             database,
             pool,
@@ -211,7 +215,9 @@ impl Server {
             changes,
             action_process,
             legacy_action_source,
+            runner: runner.clone(),
             action_jobs: tokio::task::JoinSet::new(),
+            action_cancellations: BTreeMap::new(),
             commands: commands.downgrade(),
             sessions: BTreeMap::new(),
             next_session: 0,
@@ -227,6 +233,7 @@ impl Server {
             commands,
             closing,
             descriptor,
+            runner,
             cleanup,
             closed,
         })
@@ -270,6 +277,13 @@ pub(crate) async fn inspect(pool: &Pool, bundle: Arc<Bundle>) -> Result<Inspecte
             Error::Invalid("function kind must be query, mutation or action".into())
         })?;
 
+        if let Some(on) = function.get("on")
+            && (kind != FunctionKind::Action
+                || serde_json::from_value::<ActionTarget>(on.clone()).is_err())
+        {
+            return Err(Error::Invalid("Invalid action target".into()));
+        }
+
         if kinds.insert(name.to_owned(), kind).is_some() {
             return Err(Error::Invalid("duplicate function name".into()));
         }
@@ -307,7 +321,21 @@ async fn initialize_standalone_schema(
         .await
         .map_err(|e| Error::Invalid(e.to_string()))?;
 
-    match Box::pin(schema.apply(&mut tx, space, true)).await {
+    let result = async {
+        let empty = std::collections::BTreeMap::new();
+        let targets = || crate::schema::RefTargets {
+            depends: &empty,
+            declares: &|_, _| false,
+        };
+        let reset = Box::pin(schema.apply(&mut tx, space, targets(), true)).await?;
+        if let Some(reason) = &reset {
+            Box::pin(schema.reset(&mut tx, space, reason)).await?;
+            Box::pin(schema.apply(&mut tx, space, targets(), false)).await?;
+        }
+        Ok::<_, Error>(reset)
+    }
+    .await;
+    match result {
         Ok(reset) => {
             Box::pin(tx.commit())
                 .await

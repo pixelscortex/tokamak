@@ -1,0 +1,55 @@
+[
+  {
+    "name": "typed argument with an arbitrary name",
+    "schema": { "kind": "object", "fields": { "selection": { "kind": "id", "table": "threads" } } },
+    "args": { "selection": "chat/threads:one" },
+    "thread": "chat/threads:one"
+  },
+  {
+    "name": "untyped and non-chat IDs are ignored",
+    "schema": {
+      "kind": "object",
+      "fields": {
+        "string": { "kind": "string" },
+        "local": { "kind": "id", "table": "threads" },
+        "other": { "kind": "id", "table": "threads" }
+      }
+    },
+    "args": { "string": "chat/threads:one", "local": "threads:two", "other": "other/threads:three" },
+    "thread": null
+  },
+  {
+    "name": "unknown kind does not invalidate sibling thread",
+    "schema": {
+      "kind": "object",
+      "fields": { "before": { "kind": "ref" }, "selection": { "kind": "id", "table": "threads" } }
+    },
+    "args": { "before": "chat/threads:ignored", "selection": "chat/threads:one" },
+    "thread": "chat/threads:one"
+  },
+  {
+    "name": "ordered fields and array items with a missing optional",
+    "schema": {
+      "kind": "object",
+      "fields": {
+        "z": { "kind": "id", "table": "threads" },
+        "absent": { "kind": "optional", "inner": { "kind": "id", "table": "threads" } },
+        "a": { "kind": "array", "item": { "kind": "id", "table": "threads" } }
+      }
+    },
+    "args": { "z": "chat/threads:last", "a": ["threads:local", "chat/threads:first", "chat/threads:second"] },
+    "thread": "chat/threads:first"
+  },
+  {
+    "name": "union skips a nonmatching member",
+    "schema": { "kind": "union", "members": [{ "kind": "number" }, { "kind": "id", "table": "threads" }] },
+    "args": "chat/threads:one",
+    "thread": "chat/threads:one"
+  },
+  {
+    "name": "first matching union member wins even without a thread",
+    "schema": { "kind": "union", "members": [{ "kind": "string" }, { "kind": "id", "table": "threads" }] },
+    "args": "chat/threads:one",
+    "thread": null
+  }
+]

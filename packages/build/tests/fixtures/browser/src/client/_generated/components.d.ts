@@ -1,6 +1,9 @@
-// Generated plugin component paths. Commit this file.
+// Generated plugin screen search types. Commit this file.
 export * from "../api";
-declare const _part_FixtureBody: import("@tokamak/sdk/client").ComponentParts<(typeof import("../api"))["FixtureBody"], {
-  readonly "body": { readonly target: "browser-fixture.fixtureBody.body"; readonly locked: false };
+type Props1 = Extract<NonNullable<Parameters<typeof import("../api")["FixtureBody"]>[0]>, object>;
+export declare const find: import("@tokamak/sdk/client").ScreenFind<{
+  "section": Props1;
+  "h1": Props1;
+  "p": Props1;
+  "FixtureBody": {};
 }>;
-export { _part_FixtureBody as FixtureBody };

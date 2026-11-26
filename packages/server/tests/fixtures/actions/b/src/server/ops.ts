@@ -1,5 +1,8 @@
 /// <reference lib="dom" />
 import { action, mutation, query, v, createApi } from "@tokamak/sdk";
+import { actionLoop, callLoop } from "../contracts";
+import { readCall, writeCall } from "plugin:record/server";
+
 export const publicRead = query({ handler: () => "public" });
 export const callerQuery = query({ handler: (ctx) => ctx.auth.user });
 export const callerMutation = mutation({ handler: (ctx) => ctx.auth.user });
@@ -88,5 +91,31 @@ export const attackTurn = action({
       }
     }
     return { run, errors };
+  },
+});
+
+export const loop = query({
+  handler: async (ctx): Promise<null> => {
+    const [provider] = await callLoop.list(ctx);
+    return provider.next();
+  },
+});
+
+export const noteQuery = query({ handler: ({ call }) => call });
+export const noteMutation = mutation({ handler: ({ call }) => call });
+export const noteViaAction = action({
+  args: { other: v.optional(v.id("threads")), call: v.any() },
+  handler: async ({ call, runQuery, runMutation }) => ({
+    call,
+    query: await runQuery(readCall, {}),
+    mutation: await runMutation(writeCall, {}),
+  }),
+});
+
+export const loopAction = action({
+  handler: async (ctx): Promise<null> => {
+    const [provider] = await actionLoop.list(ctx);
+    if (!provider) throw new Error("Missing action loop provider");
+    return provider.next();
   },
 });

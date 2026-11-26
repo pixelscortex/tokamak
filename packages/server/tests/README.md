@@ -281,3 +281,22 @@ The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
 
 Use `.ci/check.sh rust` for the offline suites, including Chat threads, agent
 turns, liveness, code snapshots, and the Claude and Codex replays.
+
+## Table trigger timing
+
+Build the release server and use the plugin host from the local test build:
+
+```sh
+cargo build --locked -p tokamak-plugin-host
+cargo build --locked --release -p server --bin tokamak-server
+TOKAMAK_PLUGIN_HOST="$PWD/target/debug/tokamak-plugin-host" \
+  proto run bun -- packages/server/tests/triggers-driver.mjs target/release/tokamak-server --benchmark
+```
+
+The driver measures 201 SDK mutation round trips per case after 30 warmups.
+It rotates among a server with no triggers installed and four saves on a
+server with triggers installed: unwatched, one own no-op trigger, one own
+trigger that writes, and one cross-plugin trigger that writes. It also
+measures 11 saves of 300 rows per server after two warmups. Timing uses the
+default server limits. The acceptance test uses a 5 s call deadline so a
+busy build machine does not turn the delegation limit test into a timing test.

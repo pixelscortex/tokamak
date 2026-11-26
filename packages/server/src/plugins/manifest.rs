@@ -64,6 +64,8 @@ pub struct WorkerEntry {
 #[serde(deny_unknown_fields)]
 pub struct Entries {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker: Option<WorkerEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local: Option<WorkerEntry>,
@@ -71,6 +73,14 @@ pub struct Entries {
     pub server: Option<ServerEntry>,
     #[serde(default)]
     pub ui: Option<UiEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpEntry {
+    pub code: String,
+    pub map: String,
+    pub paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -83,6 +93,8 @@ pub struct Manifest {
     pub public_functions: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub plugin_functions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub hook_targets: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contracts: Vec<ContractDeclaration>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -91,7 +103,7 @@ pub struct Manifest {
 }
 
 impl Definition {
-    pub(super) fn declares_access_to(&self, owner: &str) -> bool {
+    pub(crate) fn declares_access_to(&self, owner: &str) -> bool {
         self.id == owner || self.depends.contains_key(owner) || self.optional.contains_key(owner)
     }
 
@@ -174,6 +186,9 @@ impl Manifest {
                 "Action process entry does not match the declared plugin runtime",
             ));
         }
+        if let Some(http) = &self.entries.http {
+            crate::http_actions::validate_paths(&http.paths).map_err(invalid)?;
+        }
         self.validate_contracts()?;
         self.validate_entries()
     }
@@ -199,7 +214,16 @@ impl Manifest {
             .into_iter()
             .flatten()
             .flat_map(|e| [&e.entry, &e.code, &e.map]);
-        for name in backend_paths.chain(ui_paths).chain(worker_paths) {
+        let http_paths = self
+            .entries
+            .http
+            .iter()
+            .flat_map(|entry| [&entry.code, &entry.map]);
+        for name in backend_paths
+            .chain(ui_paths)
+            .chain(worker_paths)
+            .chain(http_paths)
+        {
             if !names.insert(name) {
                 return Err(invalid(
                     "Artifact entry paths must be distinct; UI cannot alias backend files",

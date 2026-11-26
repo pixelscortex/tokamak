@@ -4,6 +4,7 @@ import { installConsole } from "./quickjs-console";
 import { invocationProcesses } from "./program-scope";
 import { quickJsPrograms, type NativeSpawn } from "./quickjs-process";
 import { dataContracts, workerContracts } from "./contracts";
+import type { HookRegistry } from "../src/hooks";
 import type { FunctionRegistry } from "../src/functions";
 import type { Provider } from "../src/internal/contracts";
 
@@ -24,7 +25,7 @@ async function loadLocalModule(path: string) {
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   // QuickJS can reject with null if it cannot allocate its own InternalError.
-  return error === null || message === "out of memory" ? "Plugin local function ran out of memory" : message;
+  return error === null || message === "out of memory" ? "Plugin action ran out of memory" : message;
 }
 
 export async function initialize(
@@ -34,11 +35,14 @@ export async function initialize(
   bundle: string,
   spawn: NativeSpawn,
 ): Promise<(frame: string) => void> {
+  const { stringify, parse } = JSON;
+  const { setPrototypeOf } = Object;
+  const serialize = (message: object) => stringify(setPrototypeOf(message, null));
   const emit = (message: object) => {
-    if (!trySend(JSON.stringify(message))) throw new Error("Plugin process output queue exceeds 4 MiB limit");
+    if (!trySend(serialize(message))) throw new Error("Plugin process output queue exceeds 4 MiB limit");
   };
   const emitWaiting = (message: object) => {
-    const json = JSON.stringify(message);
+    const json = serialize(message);
     // Preserve immediate operation delivery unless the writer is actually full.
     if (!trySend(json)) return sendWaiting(json);
   };
@@ -48,9 +52,11 @@ export async function initialize(
 
   const root = (await loadLocalModule(bundle)) as {
     functions: FunctionRegistry;
-    contractProviders?: Record<string, Provider<"local">>;
+    hooks?: HookRegistry;
+    contractProviders?: Record<string, Provider<"caller">>;
   };
-  const dispatch = workerDispatch("local", root.functions, emit, nextOp, {
+  const dispatch = workerDispatch("runner", root.functions, emit, nextOp, {
+    hooks: root.hooks,
     createPrograms: (signal, call) => invocationProcesses(signal, quickJsPrograms(spawn, call)),
     contracts: workerContracts(),
     contract: dataContracts(root),
@@ -71,7 +77,7 @@ export async function initialize(
     errorMessage,
   });
   return (frame) => {
-    const message = JSON.parse(frame) as WorkerMessage | PeerMessage;
+    const message = parse(frame) as WorkerMessage | PeerMessage;
     if (message.type === "peer") void channels.receive(message).catch(() => {});
     else dispatch(message);
   };

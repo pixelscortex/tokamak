@@ -10,7 +10,7 @@ pub fn json_object(value: &serde_json::Value) -> Result<Object> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DataSpace {
     plugin: Option<String>,
     prefix: String,

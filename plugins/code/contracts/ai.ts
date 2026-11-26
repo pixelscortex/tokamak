@@ -1,11 +1,12 @@
-import { contract, type Failure, type Id, type JsonValue, type LocalContext } from "@tokamak/sdk";
+import { contract, type Failure, type Id, type JsonValue, type CallerActionContext } from "@tokamak/sdk";
 
-import type { Run, TurnResult } from "@tokamak/sdk/agent-turn";
+import type { LaunchSettings, Run, TurnResult } from "@tokamak/sdk/agent-turn";
 export type {
   Access,
   Answer,
   Helper,
   HistoryMessage,
+  LaunchSettings,
   Question,
   Run,
   StepState,
@@ -70,23 +71,25 @@ export interface Agent {
    */
   readonly icon?: string;
   /** With a setup deadline (Unix milliseconds), check install and login only. Throw if unknown. */
-  info(options: { setupDeadline?: number }): Promise<Info>;
+  info(options: { setupDeadline?: number; launchSettings?: LaunchSettings }): Promise<Info>;
   /** Runs one turn to its end and reports its outcome. */
   start(run: Run): Promise<TurnResult>;
 }
 
 /**
  * The agent contract. QuickJS adapts the provider's Run to plain data across
- * processes. Agent plugins provide it from their `local` code:
+ * processes. Agent plugins provide it as caller actions:
  *
  * ```ts
  * import * as ai from "plugin:ai/contracts";
- * const info = local({ handler: async (ctx): Promise<ai.Info> => ({ ... }) });
- * const start = local({ handler: async (ctx, run: ai.Run) => { run.text("Hi"); return { sessionId } } });
+ * const info = action({
+ *   on: "caller", handler: async (ctx): Promise<ai.Info> => ({ ... }) });
+ * const start = action({
+ *   on: "caller", handler: async (ctx, run: ai.Run) => { run.text("Hi"); return { sessionId } } });
  * export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
  * ```
  */
-export const agent = contract<Agent>("agent", { place: "local", dataMethods: true });
+export const agent = contract<Agent>("agent", { on: "caller", dataMethods: true });
 
 /** The turn and the signal for the hook currently handling it. */
 export interface TurnInfo {
@@ -94,7 +97,7 @@ export interface TurnInfo {
   readonly turnId: string;
   readonly folder: string;
   /** Aborted when this hook is cancelled; use it to stop work. */
-  readonly signal: LocalContext["signal"];
+  readonly signal: CallerActionContext["signal"];
 }
 
 export interface TurnHooks {
@@ -107,4 +110,4 @@ export interface TurnHooks {
 }
 
 /** Local hooks around a turn, called with a 60-second limit before the thread is freed. */
-export const turnHooks = contract<TurnHooks>("turnHooks", { place: "local", dataMethods: true });
+export const turnHooks = contract<TurnHooks>("turnHooks", { on: "caller", dataMethods: true });

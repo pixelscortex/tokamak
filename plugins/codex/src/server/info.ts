@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import { agentCommand } from "@tokamak/sdk/agent-turn";
 import type { Info } from "plugin:ai/contracts";
 import { AppServer, isRecord } from "./rpc";
@@ -16,13 +16,22 @@ const UNAVAILABLE: Info = {
   speeds: [],
 };
 
-export async function codexInfo(ctx: LocalContext, setupDeadline?: number): Promise<Info> {
+export async function codexInfo(
+  ctx: CallerActionContext,
+  setupDeadline?: number,
+  env?: Readonly<Record<string, string>>,
+): Promise<Info> {
   const remaining = (fallback: number) =>
     setupDeadline === undefined ? fallback : Math.max(0, setupDeadline - Date.now());
-  const version = await support(ctx, remaining(5_000));
+  const version = await support(ctx, remaining(5_000), env);
   if (version === undefined || (setupDeadline !== undefined && version === "old"))
     throw new Error("Could not check the Codex version");
-  if (version !== "ready") return UNAVAILABLE;
+  if (version !== "ready")
+    return env && version === "old"
+      ? { ...UNAVAILABLE, updateRequired: `Codex needs Codex CLI ${MINIMUM_VERSION} or later.` }
+      : UNAVAILABLE;
+  // Launch settings may use a custom provider. The real turn checks its auth.
+  if (env) return { ...UNAVAILABLE, installed: true, signedIn: true };
   if (remaining(Infinity) === 0) throw new Error("Could not check Codex sign-in");
   const app = new AppServer(ctx);
   const available = { ...UNAVAILABLE, installed: true };
@@ -88,8 +97,8 @@ async function listModes(app: AppServer) {
   return ["default", "plan"].filter((mode) => data.some((preset) => preset.mode === mode));
 }
 
-async function support(ctx: LocalContext, timeout: number) {
-  const answer = await agentCommand(ctx, ["codex", "--version"], timeout);
+async function support(ctx: CallerActionContext, timeout: number, env?: Readonly<Record<string, string>>) {
+  const answer = await agentCommand(ctx, ["codex", "--version"], timeout, env);
   if (answer === "missing") return answer;
   if (answer?.code !== 0) return;
   const version = answer.stdout.match(/^codex-cli (\d+)\.(\d+)\.(\d+)(?:-[\w.-]+)?(?:\+[\w.-]+)?$/m);

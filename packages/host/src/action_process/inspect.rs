@@ -22,8 +22,9 @@ async fn inspect(path: &Path) -> Result<Value> {
         let (heap, worker_entry) = options
             .split_once(':')
             .context("Invalid action inspection options")?;
-        super::call::inspect(&source, heap.parse()?, worker_entry.parse()?).await?;
-        return Ok(json!({"ok": true}));
+        let validators =
+            super::call::inspect(&source, heap.parse()?, worker_entry.parse()?).await?;
+        return Ok(json!({"ok": true, "validators": validators}));
     }
 
     Ok(json!({"hasActions": contains_actions(source).await?}))

@@ -46,6 +46,12 @@ type Containment = Group;
 
 /// Bound protocol messages before buffering untrusted worker output.
 pub const WORKER_FRAME_BYTES: usize = 1024 * 1024;
+
+// HTTP action stdout mixes response bytes and control frames; stdin carries
+// length-prefixed operation replies after the request body.
+pub const HTTP_ACTION_OP_PACKET: u32 = 1 << 31;
+pub const HTTP_ACTION_LOG_PACKET: u32 = 1 << 30;
+pub const HTTP_ACTION_OP_CAPACITY: usize = 32;
 /// Bound the local worker registry and both lanes' write queues.
 pub const WORKER_CAPACITY: usize = 128;
 
@@ -298,4 +304,19 @@ fn spawn_group(
     let group = Group(child.id().ok_or("Plugin host has no PID")?);
     let guardian = guardian(group.0)?;
     Ok((child, group, guardian))
+}
+
+/// Qualified record IDs for chat threads.
+pub const CHAT_THREAD_ID_PREFIX: &str = "chat/threads:";
+
+/// The root call is at depth zero.
+pub const MAX_CALL_DEPTH: usize = 15;
+
+/// Advance the depth before admitting a nested invocation.
+pub fn next_call_depth(depth: usize, target: &str) -> Result<usize, String> {
+    if depth >= MAX_CALL_DEPTH {
+        return Err(format!("Plugin call cycle or depth limit at {target}"));
+    }
+
+    Ok(depth + 1)
 }

@@ -1,11 +1,17 @@
 // Drive the installed Codex provider through chat and ai on a real server.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { homedir } from "node:os";
 import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
 import { agentHarness, build, bunPath, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
+import {
+  CODEX_PERSONAL_ENV,
+  inheritPersonalEnv,
+  installLaunchHook,
+  LAUNCH_VALUE,
+} from "../../../e2e/fake-agent/launch-settings.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
 import { scanReplays } from "../../../e2e/fake-agent/replay-privacy.mjs";
 
@@ -33,7 +39,12 @@ try {
   await h.assertLocalRuntime();
   build(module);
   await cp(join(module, "dist"), join(h.plugins, "codex"), { recursive: true });
-  if (!real) await replayExecutable();
+  if (!real) {
+    await inheritPersonalEnv(h, "codex", CODEX_PERSONAL_ENV);
+    await replayExecutable();
+  }
+  const launch = real ? undefined : await installLaunchHook(h);
+  const secondLaunch = real ? undefined : await installLaunchHook(h, "launch-second");
 
   const { ai } = h.api;
   const binary = process.argv[2];
@@ -64,7 +75,7 @@ try {
       })
     : replayClient;
   const info = async (client) => {
-    const codex = (await client.local(ai.agents.list, {})).find((agent) => agent.id === "codex");
+    const codex = (await client.action(ai.agents.list, {})).find((agent) => agent.id === "codex");
     assert.equal(codex?.name, "Codex");
     assert.match(codex.info.install, /@openai\/codex/);
     assert.equal(codex.info.signIn, "codex login");
@@ -117,6 +128,75 @@ try {
     timeout: real ? 120_000 : undefined,
   });
   const run = async (tape, prompt, options) => turns.run(await h.folder(tape), prompt, options);
+
+  if (launch) {
+    await writeFile(status, "signed-out\n");
+    const hookEnv = { TOKAMAK_LAUNCH_TEST: LAUNCH_VALUE, CODEX_HOME: codexHome };
+    try {
+      for (const key of [
+        "approval_policy",
+        "approvals_reviewer",
+        "sandbox_mode",
+        "sandbox_workspace_write",
+        "model",
+        "model_reasoning_effort",
+        "service_tier",
+        "cli_auth_credentials_store",
+        "model_provider",
+        "model_providers",
+        "profile",
+        "profiles",
+        "openai_base_url",
+        "chatgpt_base_url",
+        "shell_environment_policy",
+      ]) {
+        for (const args of [
+          ["-c", `${key}="guard-value"`],
+          [`--config=${key}.test.base_url="guard-value"`],
+        ]) {
+          await launch.set(hookEnv, args);
+          const rejected = await run("hello-launch", "Reject the launch override.", { state: "failed" });
+          assert.match(rejected.error, new RegExp(`launch-first.*-c ${key},.*Tokamak`));
+          assert.ok(!JSON.stringify(rejected).includes("guard-value"));
+          assert.equal(await Bun.file(join(rejected.folder, "isolated-home")).exists(), false);
+        }
+      }
+
+      const provider = { baseUrl: "https://example.test", keyEnv: "TEST_PROVIDER_KEY", key: "fixture-key" };
+      await launch.set({}, [], provider);
+      await secondLaunch.set({}, [], provider);
+      const clash = await run("hello-launch", "Reject competing providers.", { state: "failed" });
+      assert.match(clash.error, /launch-first.*launch-second.*both set provider/);
+      assert.ok(!JSON.stringify(clash).includes(provider.key));
+      await secondLaunch.set({ [provider.keyEnv]: "a-different-key" });
+      const envClash = await run("hello-launch", "Reject a competing key.", { state: "failed" });
+      assert.match(envClash.error, /launch-first.*TEST_PROVIDER_KEY.*launch-second/);
+      await secondLaunch.clear();
+      await launch.set(hookEnv, ["-c", 'model_provider_other="replay"']);
+      const isolated = await run("hello-launch", "Reply only: Hello from Codex.");
+      assert.equal(isolated.text, "Hello from Codex.");
+      assert.equal(isolated.row.sessionId, "codex-session");
+      const home = await readFile(join(isolated.folder, "isolated-home"), "utf8");
+      assert.equal((await stat(home)).mode & 0o777, 0o700);
+      assert.equal(await Bun.file(join(home, "cli-state")).exists(), true);
+
+      const resumed = await run("plan-launch", planPrompt, { threadId: isolated.threadId, mode: "plan" });
+      assert.equal(resumed.row.sessionId, isolated.row.sessionId);
+      assert.equal(await readFile(join(resumed.folder, "isolated-home"), "utf8"), home);
+      assert.equal(
+        await agentClient.action(h.api.chat.threads.removeLocal, { threadId: isolated.threadId }),
+        null,
+      );
+      await assert.rejects(stat(home), { code: "ENOENT" });
+
+      assert.equal(await readFile(status, "utf8"), "signed-out\n");
+      assert.ok(!JSON.stringify(isolated).includes(LAUNCH_VALUE));
+      passed("launch strips inherited env, resumes Codex in its private home, and cleans up");
+    } finally {
+      await launch.clear();
+      await writeFile(status, "signed-in\n");
+    }
+  }
 
   const greeting = !real && (await run("hello", "Reply only: Hello from Codex."));
   if (greeting) {
@@ -392,7 +472,13 @@ async function replayExecutable() {
   await writeFile(
     join(path, "codex"),
     `#!/bin/sh
-status=$(cat "$CODEX_HOME/auth.json")
+status=$(cat "$CODEX_HOME/auth.json" 2>/dev/null)
+if [ -n "$TOKAMAK_LAUNCH_TEST" ]; then
+  [ -z "$status" ] || exit 8
+  for name in ${CODEX_PERSONAL_ENV.join(" ")}; do
+    if /usr/bin/printenv "$name" >/dev/null; then exit 9; fi
+  done
+fi
 case "$1" in
   --version)
     case "$status" in
@@ -409,6 +495,17 @@ case "$1" in
     else
       tape="\${PWD##*/}"
     fi
+    case "$tape" in
+      hello-launch|plan-launch)
+        [ "$TOKAMAK_LAUNCH_TEST" = ${shellQuote(LAUNCH_VALUE)} ] || exit 3
+        [ ! -e "$CODEX_HOME/auth.json" ] || exit 5
+        [ "$*" = 'app-server -c model_provider_other="replay" -c cli_auth_credentials_store="file"' ] || exit 6
+        if [ "$tape" = plan-launch ]; then [ -f "$CODEX_HOME/cli-state" ] || exit 7; fi
+        : > "$CODEX_HOME/cli-state"
+        printf '%s' "$CODEX_HOME" > isolated-home
+        tape="\${tape%-launch}"
+        ;;
+    esac
     if [ "$tape" = hello ]; then
       trap '' TERM
       ${shellQuote(bunPath())} ${shellQuote(replay)} --replay "codex/$tape"

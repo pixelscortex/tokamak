@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import type { Run, TurnResult } from "plugin:ai/contracts";
 import { approvals } from "./approvals";
 import { turnHelpers } from "./helpers";
@@ -16,8 +16,12 @@ function input(text: string) {
   return [{ type: "text", text, text_elements: [] }];
 }
 
-export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult> {
-  const app = new AppServer(ctx, run.folder);
+export async function codexTurn(
+  ctx: CallerActionContext,
+  run: Run,
+  launch?: ConstructorParameters<typeof AppServer>[2],
+): Promise<TurnResult> {
+  const app = new AppServer(ctx, run.folder, launch);
   const controls = registerTurnControls(app, run);
   let mustFlushSession = false;
   try {
@@ -46,7 +50,7 @@ export async function codexTurn(ctx: LocalContext, run: Run): Promise<TurnResult
     return await waitForTurn(app, run, sessionId, turn, resumed, early, controls);
   } finally {
     controls.close();
-    if (mustFlushSession) await app.close();
+    if (mustFlushSession || launch) await app.close();
     else app.stop();
   }
 }

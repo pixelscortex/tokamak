@@ -12,8 +12,11 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 mod accounts;
+mod call;
 mod cli;
+pub(crate) use call::{CallNote, HookBudget};
 mod devices;
+mod plugin_machines;
 pub(crate) use accounts::AccountBinding;
 pub use cli::command;
 pub(crate) use devices::{DeviceSocket, RevokeError};
@@ -56,6 +59,9 @@ pub struct AuthContext {
     pub device: Device,
 }
 
+const SERVER_USER_ID: &str = "server";
+pub(crate) const LOCAL_DEVICE_ID: &str = "device:local";
+
 impl AuthContext {
     pub fn local() -> Self {
         Self::in_process(User::local())
@@ -66,7 +72,7 @@ impl AuthContext {
     pub fn server() -> Self {
         Self {
             user: User {
-                id: "server".into(),
+                id: SERVER_USER_ID.into(),
                 name: "Tokamak".into(),
                 role: Role::Owner,
             },
@@ -75,6 +81,14 @@ impl AuthContext {
                 name: "Server".into(),
             },
         }
+    }
+
+    pub(crate) fn is_on_this_machine(&self) -> bool {
+        self.device.id == LOCAL_DEVICE_ID
+    }
+
+    pub(crate) fn is_person(&self) -> bool {
+        self.user.id != SERVER_USER_ID
     }
 
     pub(crate) fn in_process(user: User) -> Self {
@@ -86,21 +100,10 @@ impl AuthContext {
     }
 }
 
-pub(crate) fn register_caller(
-    caller: Option<&AuthContext>,
-    ops: &mut engine::OpRegistry,
-) -> Result<(), engine::Error> {
-    // Old bundles still ask for the user alone.
-    let user = serde_json::json!(caller.map(|auth| &auth.user));
-    ops.register_sync("user.current", move |_| Ok(user.clone()))?;
-    let auth = serde_json::json!(caller);
-    ops.register_sync("auth.current", move |_| Ok(auth.clone()))
-}
-
 impl Device {
     fn local() -> Self {
         Self {
-            id: "device:local".into(),
+            id: LOCAL_DEVICE_ID.into(),
             name: local_device_name().to_owned(),
         }
     }
@@ -170,10 +173,11 @@ pub struct Member {
 
 pub struct Identities {
     path: Option<PathBuf>,
+    plugin_machines: plugin_machines::Store,
     members: Mutex<Vec<Member>>,
     writer: Mutex<()>,
     anonymous: bool,
-    device_changes: watch::Sender<()>,
+    pub(crate) device_changes: watch::Sender<()>,
 }
 
 fn hash(token: &str) -> String {
@@ -211,12 +215,18 @@ impl Identities {
                 &std::env::var("TOKAMAK_OWNER_NAME").unwrap_or_else(|_| "Owner".into()),
             )
         } else {
-            Ok(Self::local(token))
+            Ok(Self {
+                plugin_machines: plugin_machines::Store::open(
+                    data.with_file_name(plugin_machines::FILE_NAME),
+                )?,
+                ..Self::local(token)
+            })
         }
     }
     pub fn bootstrap(token: &str) -> Self {
         Self {
             path: None,
+            plugin_machines: Default::default(),
             members: Mutex::new(vec![Self::owner(
                 token,
                 std::env::var("TOKAMAK_OWNER_NAME").unwrap_or_else(|_| "Owner".into()),
@@ -229,6 +239,7 @@ impl Identities {
     pub fn local(token: Option<&str>) -> Self {
         Self {
             path: None,
+            plugin_machines: Default::default(),
             members: Mutex::new(vec![Member {
                 user: User::local(),
                 token_hash: None,
@@ -265,6 +276,9 @@ impl Identities {
             ));
         }
         let identities = Self {
+            plugin_machines: plugin_machines::Store::open(
+                path.with_file_name(plugin_machines::FILE_NAME),
+            )?,
             path: Some(path),
             members: Mutex::new(members),
             anonymous: false,
@@ -361,6 +375,15 @@ impl Identities {
             token.cancel();
         }
         Ok(user)
+    }
+
+    pub(crate) fn member_name(&self, id: &str) -> Option<String> {
+        self.members
+            .lock()
+            .expect("members lock")
+            .iter()
+            .find(|member| member.user.id == id)
+            .map(|member| member.user.name.clone())
     }
 
     pub(crate) fn active_member(&self, id: &str) -> Option<User> {

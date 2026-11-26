@@ -20,7 +20,3 @@ export type LocalProcess = (
   argv: readonly [string, ...string[]],
   options?: LocalProcessOptions,
 ) => RunningProcess;
-
-export type WithPrograms = <T>(
-  run: (forceStop: () => Promise<void>, context: import("./functions").LocalContext) => Promise<T>,
-) => Promise<T>;

@@ -50,7 +50,9 @@ try {
   assert.equal(list.status, 200);
   const catalog = await list.json();
   assert.deepEqual(catalog.plugins.map((item) => item.plugin.id).sort(), [
+    "agent-proxy",
     "ai",
+    "ai-profiles",
     "basic-auth",
     "chat",
     "claude",
@@ -66,7 +68,9 @@ try {
   });
   const [message] = await browser.query(api.chat.messages.list, { threadId: first.threadId });
   assert.equal(message.parts[0].text, "Fresh install");
-  console.log("Starter install: all six plugins loaded, local device authenticated, Chat stored a message.");
+  console.log(
+    "Starter install: all eight plugins loaded, local device authenticated, Chat stored a message.",
+  );
 
   if (requested.length) {
     const env = {
@@ -98,7 +102,7 @@ try {
     });
     cleanup.push(runner.stop);
     const client = await connect(address, { token, cleanup, launch: runner.launch });
-    const available = await client.local(api.ai.agents.list, {});
+    const available = await client.action(api.ai.agents.list, {});
     for (const id of new Set(requested)) {
       const info = available.find((agent) => agent.id === id)?.info;
       assert.ok(info?.installed && info.signedIn, `${names[id]} must be installed and signed in`);

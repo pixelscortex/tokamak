@@ -65,7 +65,7 @@ They cover loopback, desktop token authentication and a configured origin list.
 
 ## Plugin imports
 
-Production source (server, window and local part; tests excluded) must stay inside
+Production source (server, window and caller actions; tests excluded) must stay inside
 its own plugin folder. Relative paths, absolute paths, source aliases and
 symlinks cannot reach another folder. Dependencies installed through
 `node_modules`, including workspace packages, are allowed; another plugin's
@@ -85,6 +85,11 @@ queries, mutations and actions. The `api` object uses the public export names;
 named imports also carry references. No runtime helpers or handlers cross the
 boundary. Public APIs are inspected
 statically and are never executed by the builder.
+
+`plugin:<id>/tables` exposes generated handles for the tables in a sibling
+plugin's server schema. Add the owner to `depends` to use one in `v.ref`. The
+builder makes a local type copy in `.tokamak/types/<id>/tables.d.ts` and emits
+only qualified table names at runtime. Do not check in or hand edit the copy.
 
 Within a plugin, use `src/server/_generated/api.ts` from the window. Its runtime
 references contain only public names. The window build refuses imports of other
@@ -116,55 +121,88 @@ paths to the plugin's tsconfig (relative to the plugin root):
 The current authoring build requires sibling public source APIs for type and
 reference metadata; installed artifacts remain independent of that source.
 
-## Extending a component
+## Extending a screen
 
-Export the component from the plugin's window API, then build the owner plugin.
-In the render function, a tag such as `<SendButton />` publishes `sendButton`.
-Use `part="name"` on a native element or to give two uses of the same tag
-different names. Solid controls such as `Show` and `For` publish paths only
-with an explicit `part`. Mark an element `locked` to prevent actions on it.
+Build the owner plugin to publish a typed `find` on its public client API.
+Searches look at that plugin's authored JSX, including UI it contributes to
+other plugins. Each element is named by its nonempty static `data-part`,
+then its static `id`, then its tag or component name (such as `Menu.Item`).
+`data-part-ignore` excludes an element and its descendants.
+
+If a name has several matches, narrow it with `in` to an enclosing render
+function or element. Solid control flow and fragments are transparent.
+You can also narrow a name by static `type`, `href`, `role`, and `aria-*`
+attributes. Write ARIA keys without the prefix, for example
+`find("button", { aria: { label: "Stop" } })`. The typed API offers the
+attribute filters and values the owner writes for that name. Computed JSX
+values, class, style, data attributes and text cannot match a filter, and
+neither can an attribute written before a spread, which can replace it. A
+value is matched as written in the source: `aria-label="Save &amp; quit"` is
+found with `"Save &amp; quit"`.
+
+Filters must all match. If the search is still ambiguous, use `nth` to select
+a 1-based position among the remaining matches in source order. The name
+and filters in the search must be literals. If the search does not identify
+exactly one element, the build fails and lists the candidates.
+
+When an add-on finds a plain tag without a static `data-part` or `id`,
+both builds warn and suggest adding `data-part`. The owner's build reports
+this once per installed add-on and target.
+
+Commit the generated `_generated/components.d.ts` next to the client entry.
+Export actions from the contributing plugin's client entry:
 
 ```tsx
-// chat/src/client/api.tsx
-import { component } from "@tokamak/sdk/client";
-
-const SendButton = () => <button>Send</button>;
-export const Composer = component("composer", {}, () => (
-  <section part="toolbar">
-    <SendButton />
-    <span part="status" locked>
-      Ready
-    </span>
-  </section>
-));
-```
-
-Commit the generated `src/client/_generated/components.d.ts` with the component.
-Other plugins use the public client import and export each action from their own
-window API:
-
-```tsx
-import { append, before } from "@tokamak/sdk/client";
+import { after } from "@tokamak/sdk/client";
 import * as chat from "plugin:chat/client";
 
-export const Cost = before(chat.Composer.sendButton, () => <small>Free</small>);
-export const Mic = append(chat.Composer.toolbar, MicLevel, { when: micEnabled, order: 10 });
+export const Branch = after(chat.find("title", { in: "Header" }), BranchChip);
 ```
 
-`before` and `after` render siblings; `prepend` and `append` render inside the
-element. `wrap` gets the current element as `props.children`. The remaining
-actions are `replace(path, UI, options?)` and `hide(path, options?)`, which
-dispose the original element and its descendants when active. Hiding also
-removes its `before` and `after` additions. Actions receive
-the declaring component's props, and so does `when`, a live check such as `(m) => m.isLast`. Layers at one
-position are ordered by `order` (default 0) and then plugin ID. The first
-installed replacement owns the position even while its condition is false.
+`before` and `after` render siblings. `prepend` and `append` render inside
+elements that accept children.
 
-A named native element can place the inside layers explicitly with a sole
-function child, for example `{(added) => <><header>{added.prepend}</header><footer>{added.append}</footer></>}`.
-The callback receives `PartAdditions`. On a component tag, use its ordinary
-render prop for the data it supplies; put any placement callback on a named
-native child.
+Use `layer(target, (props, Original) => …)` to take over the element.
+Render `<Original />` to draw the next layer down, or the owner's element
+at the bottom. Pass children to change the contents without changing the
+element or its attributes. Put `<Original.Children />` inside `<Original>` to
+draw the contents that would appear without this layer: the children supplied
+by an outer layer, or the owner's contents with other plugins' `prepend` and
+`append`. Draw `Original` and `Original.Children` at most once per layer.
+If no layer draws `Original`, the owner's element is unloaded. While a layer
+supplies the contents, the owner's plain tags inside keep their DOM nodes,
+but components inside mount again each time the contents change hands, so
+their own state starts over. A layer with a
+false `when` passes through.
+Layers run outermost first by plugin install order, then `order` (default
+0), plugin ID, and export name. `before` and `after` stay outside all layers;
+`hide` also removes those sibling additions.
+
+Actions and their live `when` option receive the
+props of the render function that owns the tag. Parts inside an inline list
+callback get `props.$row.item` and `props.$row.index`, typed as Solid passes
+them to that callback. Nested rows expose the enclosing row as `$row.parent`.
+With `Index` (or Solid 2’s `For keyed={false}`), the item is an accessor and
+the index is a number.
+
+An add-on's manifest records both the search and the element selected at
+build time. When the owner changes, a search keeps its original match if
+possible, or follows the only remaining match. If a search cannot be
+resolved, the owner's build warns with the add-on ID and the window skips
+the placement and raises an alert. A search with `nth` stays on the element
+it found: when the owner's change puts another element at that position, the
+placement is skipped, never moved. Give a target a `data-part` to avoid
+relying on position.
+
+A positional segment hashes the tag, the attributes `role`, `type`, `name`,
+`for` and `href` (each by its static string value or as "an expression"),
+and any `aria-*` attribute that has a static string value. It ignores every
+other attribute, including `class`, `style`, `data-*`, computed `aria-*`,
+event handlers, `ref`, spread attributes, and the source text of
+expressions. If two positional siblings
+still have the same identity, a swap of the two cannot be seen; an add-on
+build that picks one of them with `nth` warns that the target is ambiguous
+and asks the owner for a `data-part` or `id`.
 
 ### Contract registrations
 

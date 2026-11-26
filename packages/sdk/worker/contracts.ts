@@ -1,3 +1,4 @@
+import { validate } from "../src/validators";
 import {
   openChannel,
   providerIdentity,
@@ -5,15 +6,21 @@ import {
   type ContractScope,
   type Provider,
 } from "../src/internal/contracts";
-import type { AuthContext, FunctionDefinition } from "../src/functions";
+import {
+  callContext,
+  threadArgument,
+  type AuthContext,
+  type CallContext,
+  type FunctionDefinition,
+} from "../src/functions";
 import { callHost, type ChannelHandler, type HostBridge, type HostOperations } from "../src/host";
-import type { JsonValue } from "../src/values";
+import type { Id, JsonValue } from "../src/values";
 import type { AgentTurnOpen } from "../src/agent-turn";
 import { agentTurn } from "./agent-turn";
 
 import { wireData } from "./wire-data";
 
-type ProviderModule = { contractProviders?: Record<string, Provider<"local">> };
+type ProviderModule = { contractProviders?: Record<string, Provider<"caller">> };
 export type ContractInvocation = {
   plugin: string;
   owner: string;
@@ -40,7 +47,7 @@ function checkedProvider(module: ProviderModule, { plugin, owner, name, registra
   if (
     !provider ||
     provider.contract.name !== name ||
-    provider.contract.place !== "local" ||
+    provider.contract.on !== "caller" ||
     (provider.contract.owner ?? plugin) !== owner
   )
     throw new Error(`Missing local contract registration: ${owner}/${name} ${registration}`);
@@ -49,10 +56,22 @@ function checkedProvider(module: ProviderModule, { plugin, owner, name, registra
 
 function localMethod(value: unknown) {
   const method = value as FunctionDefinition | null | undefined;
-  return method?.kind === "local" ? method.invokeLocal : undefined;
+  return method?.kind === "action" && method.on === "caller" ? method.invokeLocal : undefined;
 }
 
-function requirePlainData(provider: Provider<"local">, owner: string | undefined) {
+function localThread(value: unknown, args: JsonValue) {
+  const method = value as FunctionDefinition | null | undefined;
+  if (!localMethod(method) || !method?.args) return;
+  try {
+    validate(method.args, args);
+    return threadArgument(method.args, args);
+  } catch {
+    // Local contract methods can declare live inputs outside the JSON validators.
+    return;
+  }
+}
+
+function requirePlainData(provider: Provider<"caller">, owner: string | undefined) {
   if (provider.contract.dataMethods !== true)
     throw new Error(
       `Local contract ${owner ? owner + "/" : ""}${provider.contract.name} is not all plain data; QuickJS requires dataMethods: true. Rebuild or update this plugin.`,
@@ -62,7 +81,12 @@ function requirePlainData(provider: Provider<"local">, owner: string | undefined
 export function dataContracts(root: ProviderModule) {
   for (const provider of Object.values(root.contractProviders ?? {}))
     requirePlainData(provider, provider.contract.owner);
-  return async (target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue> => {
+  return async (
+    target: ContractInvocation,
+    args: JsonValue,
+    bridge: HostBridge,
+    recordThread: (threadId: Id<"threads">) => void,
+  ): Promise<JsonValue> => {
     const provider = checkedProvider(root, target);
     const { method, owner, name } = target;
     const definition = provider.implementation;
@@ -81,22 +105,27 @@ export function dataContracts(root: ProviderModule) {
     if (!Array.isArray(args)) throw new Error(`${label} arguments must be an array`);
     const value = definition[method];
     const local = localMethod(value);
-    const auth = await callHost(bridge, "auth.current", {});
-    if (!auth) throw new Error("Local contracts require a signed-in caller");
+    const thread = localThread(value, args[0] ?? {});
+    if (thread) recordThread(thread);
+    const note = await callHost(bridge, "auth.current", { call: true });
+    if (!note || note.user === null || note.device === null)
+      throw new Error("Local contracts require a signed-in caller");
+    const auth = { user: note.user, device: note.device };
+    const call = callContext(auth, note, thread);
     if (local && args.length > 1) throw new Error(`${label} expects at most one argument`);
     // Agent plugins keep providing start(ctx, Run). Only the QuickJS
     // provider dispatcher constructs that object, inside its own scope.
     if (owner === "ai" && name === "agent" && method === "start") {
       if (!target.channel || args.length !== 1) throw new Error(`${label} requires a turn channel`);
       const result = await agentTurn(args[0] as unknown as AgentTurnOpen, bridge, (run, scoped) => {
-        const start = bindProvider(definition, scoped, auth)[method];
+        const start = bindProvider(definition, scoped, auth, call)[method];
         if (typeof start !== "function") throw new Error(`${label} is not a method`);
         return start(run);
       });
       return wireData(result === undefined ? null : result, `${label} result`);
     }
     if (target.channel) throw new Error(`${label} does not accept a channel`);
-    const implementation = bindProvider(definition, bridge, auth);
+    const implementation = bindProvider(definition, bridge, auth, call);
     const handler = implementation[method];
     if (typeof handler !== "function") throw new Error(`${label} is not a method`);
     let input: unknown[] = args;
@@ -126,7 +155,7 @@ export function workerContracts() {
   return function bind(bridge: HostBridge): ContractScope {
     return {
       async list(key, selected, options) {
-        if (key.place !== "local") throw new Error("Server contracts run in server functions");
+        if (key.on !== "caller") throw new Error("Server contracts run in server functions");
         const signal = options?.signal;
         const inputSignal = options?.inputSignal ?? signal;
         const catalog = await callHost(
@@ -277,15 +306,14 @@ export function workerContracts() {
   };
 }
 
-function bindProvider(definition: object, bridge: HostBridge, auth: AuthContext) {
+function bindProvider(definition: object, bridge: HostBridge, auth: AuthContext, call: CallContext) {
   const implementation: Readonly<Record<string, unknown>> = Object.freeze(
     Object.fromEntries(
       Object.entries(definition).map(([member, value]) => {
         if (typeof value === "function")
           return [member, (...args: unknown[]) => Reflect.apply(value, implementation, args)];
-        const method = value as FunctionDefinition | null | undefined;
-        if (method?.kind === "local" && method.invokeLocal)
-          return [member, (input: unknown = {}) => method.invokeLocal!(input, bridge, auth)];
+        const invoke = localMethod(value);
+        if (invoke) return [member, (input: unknown = {}) => invoke(input, bridge, auth, call)];
         return [member, value];
       }),
     ),

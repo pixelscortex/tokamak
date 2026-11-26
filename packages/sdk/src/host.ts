@@ -43,7 +43,14 @@ export interface QueryRequest {
  */
 export interface HostOperations {
   "user.current": { args: {}; result: import("./functions").User };
-  "auth.current": { args: {}; result: import("./functions").AuthContext | null };
+  "auth.current": {
+    args: { call?: true };
+    result: (import("./functions").CallContext & { hookPoints?: readonly string[] }) | null;
+  };
+  "point.stage": {
+    args: { name: string; stage: "before" | "after" | "collect"; args: JsonValue; result?: JsonValue };
+    result: JsonValue;
+  };
   "crypto.hashPassword": { args: { password: string }; result: string };
   "crypto.verifyPassword": { args: { password: string; hash: string }; result: boolean };
   "crypto.verifyAndRehashPassword": {
@@ -56,6 +63,21 @@ export interface HostOperations {
   "db.replace": { args: { id: string; value: JsonObject }; result: null };
   "db.delete": { args: { id: string }; result: null };
   "db.query": { args: QueryRequest; result: StoredDocument[] };
+  "machines.list": { args: {}; result: import("./unstable").MachineEntry[] };
+  "machines.listAll": { args: {}; result: import("./unstable").MachineEntry[] };
+  "machines.create": {
+    args: { name: string; member?: string };
+    result: import("./unstable").MachineCreation;
+  };
+  "machines.remove": {
+    args: { id: import("./functions").MachineId };
+    result: null | import("./functions").Failure<"machineForbidden", null>;
+  };
+  "machines.waitOnline": {
+    args: { id: import("./functions").MachineId; timeoutMs?: number };
+    result: null | import("./functions").Failure<"machineForbidden" | "machineOffline", null>;
+  };
+  "server.url": { args: {}; result: string | null };
   "action.env": { args: { name: string }; result: string | null };
   "action.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
   "action.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
@@ -97,15 +119,13 @@ export interface HostOperations {
   };
   "local.contract.close": { args: { channel: number }; result: null };
   "local.contract.stopPrograms": { args: { channel: number }; result: null };
-  "local.runQuery": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "local.runMutation": { args: { name: string; args: JsonValue }; result: JsonValue };
-  "local.runAction": { args: { name: string; args: JsonValue }; result: JsonValue };
   "plugin.call": {
     args: {
       name: string;
       args: JsonValue;
-      kind?: import("./functions").ServerFunctionKind;
+      kind?: import("./functions").FunctionKind;
       contract?: string;
+      on?: import("./functions").ActionTarget;
     };
     result: JsonValue;
   };
@@ -125,6 +145,9 @@ export interface ActionSignal {
 }
 
 export interface HostBridge {
+  readonly hookPoints?: readonly string[];
+  readonly pointOwner?: { name: string; declared?: readonly string[] };
+  readonly call?: import("./functions").CallContext | null;
   readonly auth?: import("./functions").AuthContext | null;
   readonly user?: import("./functions").User;
   readonly signal?: ActionSignal;
@@ -150,6 +173,8 @@ export interface LocalChannel {
   close(): Promise<void>;
   stopPrograms(): Promise<void>;
 }
+
+export type RunnerCapability = "serverContracts" | "privateFunctions";
 
 /** Keep operation call sites tied to the contract even though the bridge is erased. */
 export async function callHost<K extends HostOperation>(

@@ -1,5 +1,8 @@
+import { isRemoteFunctionError, RemoteFunctionError, type CallError } from "../src/call-error";
+import { Visibility } from "../src/visibility";
+import { invokeHook, type HookRegistry } from "../src/hooks";
 import { invokeFunction, type FunctionRegistry } from "../src/functions";
-import type { JsonValue } from "../src/values";
+import type { Id, JsonValue } from "../src/values";
 import type { ActionSignal, HostBridge, HostOperation } from "../src/host";
 import { invocationHost } from "./invocation-host";
 import { WORKER_CAPACITY } from "../src/worker-limits";
@@ -13,12 +16,13 @@ export type WorkerMessage =
       args: JsonValue;
       contract?: ContractInvocation;
       routed?: boolean;
+      admittedAction?: boolean;
     }
   | {
       type: "opResult";
       id: number;
       value: JsonValue;
-      error?: string;
+      error?: CallError;
       unavailable?: true;
       providerError?: true;
     }
@@ -40,11 +44,12 @@ type AttachChannel = (
 ) => { bridge: HostBridge["channel"]; dispose(): void };
 
 export function workerDispatch(
-  kind: "local" | "action",
+  lane: "runner" | "server",
   functions: FunctionRegistry,
   send: (message: object) => void,
   allocateOp: () => number,
   options: {
+    hooks?: HookRegistry;
     createPrograms?: (
       signal: AbortSignal,
       call: number,
@@ -54,7 +59,12 @@ export function workerDispatch(
     errorMessage(error: unknown): string;
     errorStack?(error: unknown): string | undefined;
     abort(controller: AbortController): void;
-    contract?(target: ContractInvocation, args: JsonValue, bridge: HostBridge): Promise<JsonValue>;
+    contract?(
+      target: ContractInvocation,
+      args: JsonValue,
+      bridge: HostBridge,
+      recordThread: (threadId: Id<"threads">) => void,
+    ): Promise<JsonValue>;
     attachChannel?: AttachChannel;
     sendWaiting?(message: object): void | Promise<void>;
   },
@@ -108,9 +118,14 @@ export function workerDispatch(
     args: JsonValue,
     target?: ContractInvocation,
     routed?: boolean,
+    admittedAction?: boolean,
   ) {
     if (calls.has(id) || calls.size >= WORKER_CAPACITY)
       throw new Error("Plugin process invocation capacity exceeded");
+    let threadId: Id<"threads"> | undefined;
+    const recordThread = (id: Id<"threads">) => {
+      threadId ??= id;
+    };
     const controller = new AbortController();
     const retiring = routed && !target ? new AbortController() : undefined;
     const call = {
@@ -184,6 +199,7 @@ export function workerDispatch(
               ...(signal && { cancellable: true }),
               ...(plugin === undefined ? {} : { plugin }),
               ...metadata,
+              ...(name === "auth.current" && threadId !== undefined && { threadId }),
             };
             sending = transmit(message);
             if (sending) void sending.catch(failed);
@@ -212,12 +228,24 @@ export function workerDispatch(
       void invocation.close().catch(() => {});
     }
     try {
-      if (!(target && options.contract) && functions[name]?.kind !== kind)
-        throw new Error(`Unknown local ${kind} function: ${name}`);
-      const value =
-        target && options.contract
-          ? await options.contract(target, args, invocation.host())
-          : await invokeFunction(functions, { name, args }, invocation.host());
+      const hook = name.startsWith("@hook/") && options.hooks && (lane === "server" || admittedAction);
+      if (
+        !hook &&
+        !(target && options.contract) &&
+        (functions[name]?.kind !== "action" ||
+          (lane === "runner" && functions[name]?.visibility !== Visibility.Public && !admittedAction))
+      )
+        throw new Error(`Unknown action: ${name}`);
+      const value = hook
+        ? await invokeHook(options.hooks!, args as Parameters<typeof invokeHook>[1], invocation.host())
+        : target && options.contract
+          ? await options.contract(target, args, invocation.host(), recordThread)
+          : await invokeFunction(
+              functions,
+              { name, args },
+              invocation.host(),
+              lane === "runner" ? recordThread : undefined,
+            );
       close();
       if (calls.get(id) === call) {
         const sending = transmit({ type: "result", id, value });
@@ -237,6 +265,18 @@ export function workerDispatch(
           type: "result",
           id,
           error: message,
+          ...(isRemoteFunctionError(error) &&
+            error.kind && {
+              details: {
+                message,
+                plugin: error.plugin ?? "",
+                hook: error.hook ?? "",
+                stage: error.stage ?? "",
+                kind: error.kind,
+                data: error.data ?? null,
+                ...(error.point === undefined ? {} : { point: error.point }),
+              },
+            }),
           ...(stack === undefined ? {} : { stack }),
         });
         if (sending) await sending;
@@ -247,18 +287,25 @@ export function workerDispatch(
   }
   return (message: WorkerMessage) => {
     if (message.type === "invoke") {
-      const invocation = invoke(message.id, message.fn, message.args, message.contract, message.routed);
+      const invocation = invoke(
+        message.id,
+        message.fn,
+        message.args,
+        message.contract,
+        message.routed,
+        message.admittedAction,
+      );
       if (options.observeInvocation) return invocation;
     } else if (message.type === "opResult") {
       const op = pending.get(message.id);
       pending.delete(message.id);
       if (op) {
-        if (typeof message.error === "string") {
+        if (message.error !== undefined) {
           const { error, unavailable, providerError } = message;
           op.reject(
-            unavailable || providerError
+            typeof error === "string" && (unavailable || providerError)
               ? new ContractCallError(error, unavailable === true, providerError === true)
-              : new Error(error),
+              : new RemoteFunctionError(error),
           );
         } else op.resolve(message.value);
       }
@@ -276,7 +323,7 @@ export function workerDispatch(
       for (const [id, op] of pending)
         if (op.call === message.id) {
           pending.delete(id);
-          op.reject(new Error(`Plugin ${kind} function cancelled`));
+          op.reject(new Error("Plugin action cancelled"));
         }
       retire(message.id);
     } else throw new Error("Invalid plugin process message");

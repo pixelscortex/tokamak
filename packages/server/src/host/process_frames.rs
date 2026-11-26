@@ -61,10 +61,10 @@ pub(in crate::host) async fn write_messages(
     Ok(())
 }
 
-pub(in crate::host) fn operation_reply(
+pub(crate) fn operation_reply(
     route: Option<(u64, u64)>,
     op: u64,
-    result: Result<Value, String>,
+    result: Result<Value, engine::CallError>,
 ) -> Result<Value, String> {
     let mut message = json!({"type":"opResult","id":op});
     if let Some((slot, call)) = route {
@@ -73,7 +73,7 @@ pub(in crate::host) fn operation_reply(
     }
     match result {
         Ok(value) => message["value"] = value,
-        Err(error) => message["error"] = json!(error),
+        Err(error) => message["error"] = error.details.unwrap_or_else(|| json!(error.message)),
     }
     if oversized(&message)? {
         if let Some(object) = message.as_object_mut() {

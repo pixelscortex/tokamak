@@ -94,15 +94,13 @@ impl Catalog {
             .collect();
         recorded.extend(added);
 
-        let environment = root.parent().unwrap_or(root).join(".env.local");
-
         let mut catalog = Self {
             order,
             install_order: recorded,
             removed_plugins,
             plugins,
             revision: String::new(),
-            environment,
+            root: root.to_owned(),
             directory: directory.to_owned(),
         };
         catalog.update_metadata()?;
@@ -148,6 +146,19 @@ impl Catalog {
         Ok(())
     }
 
+    pub(crate) fn runner_contract_providers(
+        &self,
+        owner: &str,
+        declaration: &ContractDeclaration,
+    ) -> Vec<Value> {
+        self.order
+            .iter()
+            .flat_map(|plugin| {
+                runner_provider_routes(&self.plugins[plugin].manifest, owner, declaration)
+            })
+            .collect()
+    }
+
     pub fn metadata(&self) -> Value {
         let install_indexes = self
             .install_order
@@ -158,13 +169,15 @@ impl Catalog {
         json!({"revision":self.revision,"plugins":self.order.iter().map(|id| {
             let manifest = &self.plugins[id].manifest;
             let mut value = serde_json::to_value(manifest).expect("manifest serialization");
-            // Only the local part needs provider registrations from the client
-            // catalog. Server dispatch keeps its private addresses on the server.
             if let Some(object) = value.as_object_mut() {
                 object.remove("pluginFunctions");
-                if let Some(Value::Array(providers)) = object.get_mut("contractProviders") {
-                    providers.retain(|provider| provider["place"] == "local");
-                }
+                object.remove("contractProviders");
+            }
+            let routes = manifest.contracts.iter().filter(|key| key.on == ContractTarget::Caller)
+                .map(|key| (key.name.clone(), json!(self.runner_contract_providers(id, key))))
+                .collect::<serde_json::Map<_, _>>();
+            if !routes.is_empty() {
+                value["runnerContractRoutes"] = Value::Object(routes);
             }
             value["revision"] = json!(self.revision);
             value["installOrder"] = json!(install_indexes[id]);
@@ -217,4 +230,49 @@ fn artifact_directory(root: &Path) -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+pub(crate) fn runner_provider_routes(
+    manifest: &Manifest,
+    owner: &str,
+    declaration: &ContractDeclaration,
+) -> Vec<Value> {
+    let plugin = &manifest.plugin.id;
+    if !manifest.plugin.declares_access_to(owner) {
+        return Vec::new();
+    }
+    let registrations: Vec<_> = manifest
+        .contract_providers
+        .iter()
+        .filter(|entry| {
+            entry.owner == owner
+                && entry.name == declaration.name
+                && entry.on == ContractTarget::Caller
+        })
+        .collect();
+    if registrations
+        .iter()
+        .any(|entry| entry.declaration_hash != declaration.declaration_hash)
+    {
+        return vec![json!({"plugin":plugin, "incompatible":true})];
+    }
+    let Some((entry_hash, code_hash)) = crate::actions::runner_hashes(manifest) else {
+        return Vec::new();
+    };
+    registrations
+        .into_iter()
+        .map(|registration| {
+            let mut route = json!({
+                "plugin":plugin,
+                "owner":owner,
+                "own":plugin == owner,
+                "registration":registration.registration,
+                "build":format!("{entry_hash}:{code_hash}"),
+            });
+            if let Some(reason) = &registration.unavailable {
+                route["unavailable"] = json!(reason);
+            }
+            route
+        })
+        .collect()
 }

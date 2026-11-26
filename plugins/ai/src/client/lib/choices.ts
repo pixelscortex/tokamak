@@ -3,7 +3,7 @@ import { state } from "@tokamak/sdk/client";
 import type { Access, Info } from "../../contracts";
 import type { Choices } from "../../server/schema";
 import { offered, type Offered, type Picked } from "../../shared/offered";
-import { agents, api, type AgentEntry } from "./agents";
+import { agents, api, cachedCatalog, type AgentEntry } from "./agents";
 
 export type { Access, Choices };
 
@@ -13,8 +13,13 @@ export interface Resolved extends Offered {
   readonly access: Access;
 }
 
-/** One picker's change: another agent, or a new model, level, speed, mode or permission level. */
-export type Change = { readonly agent: AgentEntry } | (Picked & { readonly access?: Access });
+/**
+ * One change in the picker: another agent (with one of its models when picked from the model
+ * list), or a new model, level, speed, mode or access level for the same agent.
+ */
+export type Change =
+  | { readonly agent: AgentEntry; readonly model?: string }
+  | (Picked & { readonly access?: Access });
 
 /** What a removed agent offers: nothing, so the row says it isn't installed. */
 const GONE: Info = {
@@ -37,8 +42,8 @@ const lastPicks = state<Readonly<Record<string, Picked>>>({}, { keep: "device" }
 const newAccess = state<Access>("full");
 
 /** The new thread's choices: this device's last picks, on the access picked for it. */
-export function newThreadChoices(): Resolved | undefined {
-  return deviceChoices(newAccess());
+export function newThreadChoices(catalog?: readonly AgentEntry[]): Resolved | undefined {
+  return deviceChoices(newAccess(), catalog);
 }
 
 /**
@@ -46,13 +51,19 @@ export function newThreadChoices(): Resolved | undefined {
  * When that agent is gone, the first one that can answer now. Undefined
  * without agents (none installed, or a plain browser).
  */
-export function deviceChoices(access: Access = "full"): Resolved | undefined {
+export function deviceChoices(
+  access: Access = "full",
+  catalog?: readonly AgentEntry[],
+): Resolved | undefined {
   const list = agents();
   const agent =
     list.find((entry) => entry.id === lastAgent()) ??
     list.find((entry) => entry.info.installed && entry.info.signedIn) ??
     list[0];
-  return agent && resolveWith(agent, lastPicks()[agent.id] ?? {}, access);
+  return (
+    agent &&
+    resolveWith(catalog?.find((entry) => entry.id === agent.id) ?? agent, lastPicks()[agent.id] ?? {}, access)
+  );
 }
 
 /**
@@ -60,10 +71,11 @@ export function deviceChoices(access: Access = "full"): Resolved | undefined {
  * agent even when that plugin is gone: the row then says it isn't installed
  * and Send waits, instead of switching to another agent unasked.
  */
-export function storedChoices(choices: Choices): Resolved | undefined {
+export function storedChoices(choices: Choices, catalog?: readonly AgentEntry[]): Resolved | undefined {
   const list = agents();
   if (list.length === 0) return undefined;
-  const agent = list.find((entry) => entry.id === choices.agent.id) ?? { ...choices.agent, info: GONE };
+  const agent = (catalog ?? []).find((entry) => entry.id === choices.agent.id) ??
+    list.find((entry) => entry.id === choices.agent.id) ?? { ...choices.agent, info: GONE };
   return resolveWith(agent, choices, choices.access);
 }
 
@@ -85,10 +97,10 @@ export function toStored(resolved: Resolved): Choices {
 }
 
 /**
- * A picker changed: the thread's choices change at once (the new thread's stay
+ * A choice changed: the thread's choices change at once (the new thread's stay
  * in this window until its first Send), and this device remembers the agent,
  * model, level, speed and mode for the next new thread. Switching agent takes
- * that agent's last picks on this device.
+ * that agent's last picks on this device, with the model picked beside it.
  */
 export async function pick(
   client: TokamakClient,
@@ -98,10 +110,19 @@ export async function pick(
 ): Promise<void> {
   const next =
     "agent" in change
-      ? toStored(resolveWith(change.agent, lastPicks()[change.agent.id] ?? {}, current.access))
+      ? toStored(
+          resolveWith(
+            change.agent,
+            {
+              ...lastPicks()[change.agent.id],
+              ...(change.model !== undefined && { model: change.model }),
+            },
+            current.access,
+          ),
+        )
       : { ...toStored(current), ...change };
   lastAgent.set(next.agent.id);
-  if (!("agent" in change)) {
+  if (!("agent" in change) || change.model !== undefined) {
     const { agent, access: _access, ...rest } = next;
     lastPicks.set((all) => ({ ...all, [agent.id]: rest }));
   }
@@ -119,13 +140,14 @@ export async function threadChoices(
   threadId: string,
   first: boolean,
 ): Promise<Resolved | undefined> {
+  const catalog = cachedCatalog(client, first ? undefined : threadId);
   if (first) {
-    const resolved = newThreadChoices();
+    const resolved = newThreadChoices(catalog);
     newAccess.set("full");
     return resolved;
   }
   const stored = await client.query(api.choices.get, { threadId });
-  return stored ? storedChoices(stored) : deviceChoices();
+  return stored ? storedChoices(stored, catalog) : deviceChoices(undefined, catalog);
 }
 
 /** "high" → "High": levels, speeds and modes as the row shows them. */

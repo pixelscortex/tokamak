@@ -52,21 +52,23 @@ publishes and imports no agent plugin: agents (`claude`, `codex`, the test
   a card, then usage, small ("12.4k in · 1.1k out · $0.04").
 - All drawn from one live `turns:replies({ threadId })` per thread, shared by
   every reply in the window (`lib/replies.ts`), through
-  `replace(chat.Message.header)`, `before(chat.Message.body)` and
-  `after(chat.Message.body)`, each `when` the message is an agent's reply.
+  `layer(chat.find("header"))`, `before(chat.find("body"))` and
+  `after(chat.find("body"))`, each `when` the message is an agent's reply.
   What a folded part opens to (`turns:steps`, `turns:thinking`,
   `turns:helper`) is read only while it is open.
 
 ## The agent contract
 
 ```ts
-import { local, provide } from "@tokamak/sdk";
+import { action, provide } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 
-const info = local({
+const info = action({
+  on: "caller",
   handler: async (ctx): Promise<ai.Info> => ({ installed, signedIn, install, signIn, models, speeds, modes }),
 });
-const start = local({
+const start = action({
+  on: "caller",
   handler: async (ctx, run: ai.Run) => {
     const program = ctx.proc(["codex", "app-server"], { cwd: run.folder });
     // … send run.prompt, then for each message: run.text(delta)
@@ -76,8 +78,8 @@ const start = local({
 export default provide(ai.agent, { id: "codex", name: "Codex", info, start });
 ```
 
-- The contract lives in the local part (`{ place: "local", dataMethods: true }`): `info` and
-  `start` run in the sender's own local part, with `ctx.proc`.
+- The contract uses `{ on: "caller", dataMethods: true }`: `info` and
+  `start` run in the sender's Runner, with `ctx.proc`.
 - `run.prompt` is the message exactly as stored; `run.text(delta)` adds to the
   reply. The agent never writes rows; `ai` does.
 - The other reports: `run.thinking(delta)`; `run.tool({ id, kind, title,
@@ -137,7 +139,7 @@ never sent to windows. A queued row has no reply until it starts.
   plugin process. Steer returns `NoSteerHandler` without storing the draft if the
   provider never registers a handler.
 - `turns:begin`, `turns:write`, `turns:steer`, `turns:requestStop` and
-  `turns:finish` record the turn. The local part calls the server on the window's
+  `turns:finish` record the turn. The caller action calls the server on the window's
   session, so each mutation checks the sender and device (`begin` also checks
   the original message's sender).
 - `turns:enqueue` stages the message and settings; `turns:failQueued` marks a head
@@ -151,7 +153,7 @@ never sent to windows. A queued row has no reply until it starts.
   not per composer.
 - `turns:write` carries what changed since the last write: text and thinking
   as appended deltas, the latest tasks, plan and usage, and the changed
-  steps; the local part keeps each write under 640 KB. Table `steps` holds
+  steps; the caller action keeps each write under 640 KB. Table `steps` holds
   one row per step or helper (`key` is the agent's id, `n` its place); the
   turn keeps the actions count and the step in progress. Limits
   (`src/server/limits.ts`): 256 KB of text, thinking and each helper's
@@ -166,7 +168,7 @@ never sent to windows. A queued row has no reply until it starts.
   `turns:helper`, local `agents:list` (every agent with its `info`).
 - Local `agents:list` returns every agent with its `info`.
 - `turns:ask` puts the turn in `waiting` with its question and a token the
-  asking local part keeps (never on Full access); `turns:answer` clears the
+  asking caller action keeps (never on Full access); `turns:answer` clears the
   question and lets the turn run on. Both check the sender's device inside,
   and `answer` also wants the token, so another window, even on the same
   device, cannot let a turn run on while its agent still waits. The answer
@@ -174,7 +176,7 @@ never sent to windows. A queued row has no reply until it starts.
 - Local `run:answer({ turnId, questionId, answer })` is how the card answers;
   local `run:pending({ turnId, questionId })` tells the card whether this local
   part still holds the question. Waiting questions live in the memory of the
-  local part running the turn, so they expire when the app quits: answering
+  caller action running the turn, so they expire when the app quits: answering
   one then fails with `Expired`.
 - `turns:questions()` lists the questions waiting for the caller on this
   device. Local `agents:list` returns every agent with its `info`.
@@ -184,7 +186,7 @@ never sent to windows. A queued row has no reply until it starts.
 Plugins use `provide(ai.turnHooks, { before, after })` with either or both
 members. On the QuickJS Runner, each receives plain data in the provider's
 process: `threadId`, `turnId`, and `folder`. Use
-`local({ handler: (ctx, turn: ai.TurnInfo) => … })`. The
+`action({ on: "caller", handler: (ctx, turn: ai.TurnInfo) => … })`. The
 SDK supplies `turn.signal` in the provider on QuickJS; Bun passes the live
 signal. Use `turnId` to find anything saved for the turn.
 

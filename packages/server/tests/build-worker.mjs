@@ -15,13 +15,17 @@ try {
   });
   if (await build.exited) throw new Error("Worker fixture build failed");
   const files = {};
+  const manifestText = await readFile(join(temporary, "dist/manifest.json"), "utf8");
+  const manifest = JSON.parse(manifestText);
+  const local = Object.values(manifest.entries.local ?? {});
+  files["manifest.json"] = manifestText;
   for (const name of [
-    "manifest.json",
     "bundle.js",
     "bundle.js.map",
     "api.ts",
     "transactions.js",
     "transactions.js.map",
+    ...local,
   ])
     files[name] = await readFile(join(temporary, "dist", name), "utf8");
   // An installed legacy action bundle must still be inspected by QuickJS.
@@ -35,7 +39,11 @@ try {
   };
   delete legacy["transactions.js"];
   delete legacy["transactions.js.map"];
-  const manifest = JSON.parse(legacy["manifest.json"]);
+  delete manifest.entries.local;
+  for (const name of local) {
+    delete legacy[name];
+    delete manifest.hashes[name];
+  }
   manifest.plugin.runtime = "worker";
   manifest.entries.worker = { entry: "worker-entry.js", code: "worker.js", map: "worker.js.map" };
   delete manifest.hashes["transactions.js"];

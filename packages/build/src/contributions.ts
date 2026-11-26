@@ -1,3 +1,9 @@
+import {
+  flattenAttributes,
+  isSearchAttribute,
+  unnamedTargetWarning,
+  type ScreenSearch,
+} from "../../sdk/screen-search.ts";
 import { parsePluginSpecifier } from "../../sdk/tools/plugin-boundary.mjs";
 import { pluginCompilerOptions } from "../../sdk/tools/plugin-compiler.mjs";
 import { componentParts, problem } from "./component-parts.ts";
@@ -9,7 +15,7 @@ import { clientEntry } from "./descriptor.ts";
 import { resolve } from "node:path";
 import ts from "typescript";
 
-export function uiContributions(root: string, plugin: string) {
+export function uiContributions(root: string, plugin: string, warn: (message: string) => void) {
   const entry = clientEntry(root);
   const configPath = ts.findConfigFile(root, ts.sys.fileExists);
   const configResult = configPath ? ts.readConfigFile(configPath, ts.sys.readFile) : { config: {} };
@@ -18,7 +24,12 @@ export function uiContributions(root: string, plugin: string) {
   const config = configResult.config;
   const parsed = ts.parseJsonConfigFileContent(config, ts.sys, root);
   const program = ts.createProgram([entry], {
-    ...pluginCompilerOptions(root, parsed.options),
+    ...pluginCompilerOptions(root, {
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      jsx: ts.JsxEmit.Preserve,
+      jsxImportSource: "@solidjs/web",
+      ...parsed.options,
+    }),
     noEmit: false,
     noEmitOnError: false,
     declaration: false,
@@ -33,17 +44,17 @@ export function uiContributions(root: string, plugin: string) {
   const runtime = runtimeNames(source);
   const module = checker.getSymbolAtLocation(source);
   const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
-  const replacements = new Map<string, string>();
   const owners = new Map<string, ReturnType<typeof componentParts>>();
-  function lookup(owner: string, exported: string, part: string) {
+  const edits = new Map<string, [number, number, string][]>();
+  function lookup(owner: string, search: ScreenSearch) {
     let parts = owners.get(owner);
     if (!parts) {
       const folder = resolve(root, "..", owner);
       const file = program.getSourceFile(clientEntry(folder));
       if (!file) return;
-      owners.set(owner, (parts = componentParts(file, checker, owner, folder)));
+      owners.set(owner, (parts = componentParts(file, program, owner, folder)));
     }
-    return parts.part(exported, part);
+    return parts.resolve(search);
   }
   const checked = new Map<ts.SourceFile, readonly ts.Diagnostic[]>();
   function checkAction(call: ts.CallExpression) {
@@ -54,6 +65,59 @@ export function uiContributions(root: string, plugin: string) {
       (d) => d.start !== undefined && d.start >= call.getStart(file) && d.start < call.end,
     );
     if (diagnostic) throw problem(call, ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+  }
+  const unnamed = new Set<string>();
+  const searches = new Map<ts.CallExpression, Record<string, string | number>>();
+  for (const file of program.getSourceFiles()) {
+    if (file.isDeclarationFile || !inSource(root, file.fileName)) continue;
+    function visit(node: ts.Node) {
+      if (ts.isImportDeclaration(node) || ts.isTypeNode(node)) return;
+      if (ts.isCallExpression(node)) {
+        const owner = findOwner(node.expression, checker);
+        if (owner) {
+          const search = searchArguments(node);
+          const result = lookup(owner, search);
+          if (!result) throw problem(node, `Cannot read screen elements for plugin "${owner}"`);
+          if (!result.element) throw problem(node, result.reason);
+          const { target, fingerprint } = result.element;
+          searches.set(node, {
+            name: search.name,
+            ...(search.in !== undefined ? { in: search.in } : {}),
+            ...(search.nth !== undefined ? { nth: search.nth } : {}),
+            // Manifest options are scalar, so ARIA entries keep their JSX names.
+            ...Object.fromEntries(flattenAttributes(search)),
+            owner,
+            target,
+            ...(fingerprint ? { fingerprint } : {}),
+          });
+          const cuts = edits.get(file.fileName) ?? [];
+          cuts.push([node.getStart(), node.end, `(${JSON.stringify({ target })})`]);
+          edits.set(file.fileName, cuts);
+          if (result.unnamed && !unnamed.has(target)) {
+            unnamed.add(target);
+            warn(unnamedTargetWarning(plugin, search, target));
+          }
+          // Only a search by position depends on telling the siblings apart.
+          if (result.ambiguous && search.nth !== undefined)
+            warn(
+              `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
+            );
+          return;
+        }
+      }
+      if (
+        (ts.isPropertyAccessExpression(node) ||
+          ts.isElementAccessExpression(node) ||
+          ts.isIdentifier(node)) &&
+        findOwner(node, checker)
+      )
+        throw problem(
+          node,
+          "Call find directly from its public client import so its arguments can be checked",
+        );
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
   }
   for (const exported of module ? checker.getExportsOfModule(module) : []) {
     if (!runtime.has(exported.name)) continue;
@@ -69,18 +133,12 @@ export function uiContributions(root: string, plugin: string) {
     if (action) {
       const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
       if (!kind.isStringLiteral()) throw problem(declaration, "Declare a single component action");
-      const values = componentActionOptions(declaration, kind.value, checker, plugin, lookup, checkAction);
-      if (kind.value === "replace") {
-        const target = String(values.target);
-        const first = replacements.get(target);
-        if (first) throw problem(declaration, `${first} and ${exported.name} both replace ${target}`);
-        replacements.set(target, exported.name);
-      }
+      const values = componentActionOptions(declaration, kind.value, checker, plugin, searches, checkAction);
       (contributes["component-action"] ??= []).push({ id: exported.name, ...values });
       continue;
     }
   }
-  return { contributes };
+  return { contributes, edits };
 }
 
 function emittedExports(program: ts.Program, checker: ts.TypeChecker) {
@@ -227,26 +285,21 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  lookup: (owner: string, exported: string, part: string) => { target: string; locked: boolean } | undefined,
+  searches: ReadonlyMap<ts.CallExpression, Record<string, string | number>>,
   checkAction: (call: ts.CallExpression) => void,
 ): Record<string, string | number> {
   const init = exportedInitializer(declaration);
   if (!init || !ts.isCallExpression(init) || !init.arguments[0])
     throw problem(declaration, "Export a component action declared with an action helper");
-  const path = init.arguments[0];
-  const type = checker.getTypeAtLocation(path);
-  const reference = importedPart(path, checker);
-  const current = reference && lookup(reference.owner, reference.component, reference.part);
-  if (!current || !brand(type, "componentPartBrand"))
-    throw problem(path, `Component element does not exist or is not a typed path: ${path.getText()}`);
-  if (current.locked) throw problem(path, `Cannot change locked element ${current.target}`);
-  const targetSymbol = type.getProperty("target");
-  const target = targetSymbol && checker.getTypeOfSymbolAtLocation(targetSymbol, path);
-  if (!target?.isStringLiteral() || target.value !== current.target)
-    throw problem(path, `Component path has changed; rebuild the owner of ${path.getText()}`);
-  if (reference.owner === plugin) throw problem(path, "Component actions target another plugin's elements");
+  const reference = unwrap(init.arguments[0])!;
+  const call = targetSearch(reference, checker);
+  const found = call && searches.get(call);
+  if (!found || findOwner(call.expression, checker) === plugin)
+    throw problem(reference, "Use find from another plugin's public client import");
+  if (!brand(checker.getTypeAtLocation(reference), "componentPartBrand"))
+    throw problem(reference, "Build the owning plugin first to generate its find types");
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
-  const values: Record<string, string | number> = { action, target: current.target };
+  const values: Record<string, string | number> = { action, ...found };
   if (options) {
     if (!ts.isObjectLiteralExpression(options))
       throw problem(options, "Use literal component action options");
@@ -264,26 +317,86 @@ function componentActionOptions(
   return values;
 }
 
-/** A path must be written against the public plugin import. In particular a
- * type assertion cannot invent an address, and a stale generated file cannot
- * keep publishing a renamed element. */
-function importedPart(path: ts.Expression, checker: ts.TypeChecker) {
-  while (ts.isParenthesizedExpression(path)) path = path.expression;
-  if (!ts.isPropertyAccessExpression(path) || path.questionDotToken) return;
-  const part = path.name.text;
-  const component = path.expression;
-  let binding: ts.Declaration | undefined;
-  let name: string;
-  if (ts.isIdentifier(component)) {
-    const imported = checker.getSymbolAtLocation(component)?.declarations?.find(ts.isImportSpecifier);
-    if (!imported) return;
-    binding = imported;
-    name = (imported.propertyName ?? imported.name).text;
-  } else if (ts.isPropertyAccessExpression(component) && ts.isIdentifier(component.expression)) {
-    binding = checker.getSymbolAtLocation(component.expression)?.declarations?.find(ts.isNamespaceImport);
-    name = component.name.text;
-  } else return;
+function targetSearch(target: ts.Expression, checker: ts.TypeChecker) {
+  if (ts.isCallExpression(target)) return target;
+  const declaration = ts.isIdentifier(target) && checker.getSymbolAtLocation(target)?.valueDeclaration;
+  if (
+    !declaration ||
+    !ts.isVariableDeclaration(declaration) ||
+    !(declaration.parent.flags & ts.NodeFlags.Const)
+  )
+    return;
+  const value = unwrap(declaration.initializer);
+  if (value && ts.isCallExpression(value)) return value;
+}
+
+function findOwner(expression: ts.Expression, checker: ts.TypeChecker) {
+  let path = unwrap(expression)!;
+  let member: string | undefined;
+  if (ts.isPropertyAccessExpression(path)) {
+    member = path.name.text;
+    path = path.expression;
+  } else if (ts.isElementAccessExpression(path) && ts.isStringLiteralLike(path.argumentExpression)) {
+    member = path.argumentExpression.text;
+    path = path.expression;
+  }
+  if (!ts.isIdentifier(path) || (member !== undefined && member !== "find")) return;
+  const binding = checker
+    .getSymbolAtLocation(path)
+    ?.declarations?.find((node) => ts.isImportSpecifier(node) || ts.isNamespaceImport(node));
+  if (!binding) return;
+  if (ts.isImportSpecifier(binding)) {
+    if (member !== undefined || (binding.propertyName ?? binding.name).text !== "find") return;
+  } else if (member !== "find") return;
   const specifier = importModule(binding);
   const reference = specifier && parsePluginSpecifier(specifier);
-  if (reference && reference.side === "client") return { owner: reference.id, component: name, part };
+  if (reference && reference.side === "client") return reference.id;
+}
+
+function searchArguments(call: ts.CallExpression): ScreenSearch {
+  const name = unwrap(call.arguments[0]);
+  const options = unwrap(call.arguments[1]);
+  const fail = (node: ts.Node = call): never => {
+    throw problem(
+      node,
+      "Use a literal screen element name and literal in, type, href, role or aria filters, or a positive integer nth",
+    );
+  };
+  if (!name || !ts.isStringLiteralLike(name) || call.arguments.length > 2) return fail();
+  const search: ScreenSearch = { name: name.text };
+  if (options) {
+    if (!ts.isObjectLiteralExpression(options)) return fail(options);
+    function literalProperty(property: ts.ObjectLiteralElementLike) {
+      if (!ts.isPropertyAssignment(property)) return fail(property);
+      const { name } = property;
+      if (!ts.isIdentifier(name) && !ts.isStringLiteral(name)) return fail(name);
+      return [name.text, unwrap(property.initializer)!] as const;
+    }
+
+    const seen = new Set<string>();
+    for (const property of options.properties) {
+      const [key, initializer] = literalProperty(property);
+      if (seen.has(key)) return fail(property);
+      seen.add(key);
+      if (key === "in" && ts.isStringLiteralLike(initializer)) search.in = initializer.text;
+      else if (
+        key === "nth" &&
+        ts.isNumericLiteral(initializer) &&
+        Number.isSafeInteger(Number(initializer.text)) &&
+        Number(initializer.text) > 0
+      )
+        search.nth = Number(initializer.text);
+      else if (isSearchAttribute(key) && ts.isStringLiteralLike(initializer)) search[key] = initializer.text;
+      else if (key === "aria" && ts.isObjectLiteralExpression(initializer)) {
+        const values = new Map<string, string>();
+        for (const entry of initializer.properties) {
+          const [name, value] = literalProperty(entry);
+          if (!name || values.has(name) || !ts.isStringLiteralLike(value)) return fail(entry);
+          values.set(name, value.text);
+        }
+        search.aria = Object.fromEntries(values);
+      } else return fail(property);
+    }
+  }
+  return search;
 }

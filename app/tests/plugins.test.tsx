@@ -170,20 +170,6 @@ test("web host rewrites literal imports, owns CSS and disposers, and invalidates
 
 test("runtime routes mount, retire query owners, swap revision, contain throws, and remove routes", async () => {
   let current = catalog();
-  const addon = (id: string, installOrder: number) => ({
-    installOrder,
-    plugin: {
-      id,
-      version: "one",
-      contributes: {
-        view: [],
-        "component-action": [{ id: "Replace", action: "replace", target: "fixture.view.body" }],
-      },
-    },
-    entries: { ui: { code: `/plugins/${id}/one/assets/ui.js`, css: "" } },
-    hashes: {},
-  });
-  current = { ...current, plugins: [...current.plugins, addon("first", 0), addon("later", 1)] };
   let notify!: (event: { plugins: string[]; catalog: JsonValue }) => void;
   const stopQuery = vi.fn();
   const client = {
@@ -252,9 +238,6 @@ test("runtime routes mount, retire query owners, swap revision, contain throws, 
     });
     await router.navigate({ href: "/p/fixture" });
     await waitFor(() => expect(target.textContent).toContain("one: query"));
-    expect(target.querySelector('[role="alert"][aria-label="Plugin alerts"]')?.textContent).toMatch(
-      /later.*refused.*first.*installed first/,
-    );
     publish("two");
     await waitFor(() => expect(target.textContent).toContain("two: query"));
     expect(target.querySelector('[aria-label="Plugin alerts"]')).toBeNull();

@@ -1,4 +1,4 @@
-use super::{Adapter, AuthContext, Identities};
+use super::{Adapter, AuthContext};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response, Sse, sse},
@@ -33,7 +33,7 @@ pub(super) fn account_result(result: Result<Value, String>) -> Response {
 pub(super) fn snapshots<T: Serialize + PartialEq + Send + 'static>(
     adapter: Adapter,
     caller: AuthContext,
-    read: fn(&Identities, &AuthContext) -> Option<T>,
+    read: fn(&Adapter, &AuthContext) -> Option<T>,
 ) -> Response {
     let Ok(permit) = adapter.snapshot_streams.clone().try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
@@ -45,7 +45,7 @@ pub(super) fn snapshots<T: Serialize + PartialEq + Send + 'static>(
         move |(adapter, caller, mut changes, previous, permit)| async move {
             loop {
                 changes.borrow_and_update();
-                let snapshot = read(&adapter.identities, &caller)?;
+                let snapshot = read(&adapter, &caller)?;
                 if previous.as_ref() != Some(&snapshot) {
                     let event = sse::Event::default().data(serde_json::to_string(&snapshot).ok()?);
                     return Some((

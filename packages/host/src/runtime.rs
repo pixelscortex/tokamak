@@ -65,7 +65,7 @@ impl Runtime {
         let immediates = timers::Immediates::default();
         let dispatch = {
             let startup = context.async_with(async |ctx| {
-                // Only local functions receive process; action workers must not expose it.
+                // Only caller actions receive process; action workers must not expose it.
                 install_process_env(&ctx)
                     .catch(&ctx)
                     .map_err(|error| anyhow!("{error}"))?;

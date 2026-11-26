@@ -125,6 +125,9 @@ impl<'tx> Query<'tx> {
                 validate_equality(field, value)?;
             }
             if let Some(name) = &self.index {
+                if name.starts_with(super::REF_INDEX_PREFIX) {
+                    return Err(Error::Invalid("the requested index does not exist"));
+                }
                 return self.indexed(name).await;
             }
             if !self.bounds.is_empty() {
@@ -153,6 +156,16 @@ impl<'tx> Query<'tx> {
         .await;
         self.tx.finish(result)
     }
+
+    pub(super) async fn matching_index(
+        self,
+        name: &str,
+        field: &str,
+        value: String,
+    ) -> Result<Vec<Document>> {
+        self.eq(field, value).indexed(name).await
+    }
+
     fn index_prefix(&self, fields: &[&str]) -> Result<Vec<StoredValue>> {
         let mut prefix = Vec::new();
         for (position, (field, value)) in self.conditions.iter().enumerate() {

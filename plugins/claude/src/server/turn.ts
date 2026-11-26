@@ -1,4 +1,4 @@
-import type { LocalContext } from "@tokamak/sdk";
+import type { CallerActionContext } from "@tokamak/sdk";
 import type { Run, TurnResult } from "plugin:ai/contracts";
 import { ReplyEvents } from "./events";
 import { Permissions } from "./permissions";
@@ -11,6 +11,7 @@ function launchArgs(run: Run, resume?: string) {
   const settings = { env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" }, fastMode };
   // oxfmt-ignore
   return [
+    ...(run.launchSettings?.args ?? []),
     ...streamArgs(),
     "--include-partial-messages",
     "--replay-user-messages",
@@ -21,6 +22,7 @@ function launchArgs(run: Run, resume?: string) {
     ...(run.model && run.model !== "default" ? ["--model", run.model] : []),
     ...(run.effort ? ["--effort", run.effort] : []),
     ...(resume ? ["--resume", resume] : []),
+    ...(run.launchSettings ? ["--setting-sources", "project,local"] : []),
   ];
 }
 
@@ -43,8 +45,12 @@ function isInterrupted(message: Frame) {
   return message.terminal_reason === "aborted_streaming" || message.terminal_reason === "aborted_tools";
 }
 
-export async function turn(ctx: LocalContext, run: Run): Promise<TurnResult> {
-  const lifecycle = new Turn(ctx, run);
+export async function turn(
+  ctx: CallerActionContext,
+  run: Run,
+  env?: Readonly<Record<string, string>>,
+): Promise<TurnResult> {
+  const lifecycle = new Turn(ctx, run, env);
   try {
     try {
       return await lifecycle.play(run.sessionId);
@@ -59,8 +65,9 @@ export async function turn(ctx: LocalContext, run: Run): Promise<TurnResult> {
 }
 
 class Turn {
-  readonly #ctx: LocalContext;
+  readonly #ctx: CallerActionContext;
   readonly #run: Run;
+  readonly #env?: Readonly<Record<string, string>>;
   #wire?: ReturnType<typeof open>;
   #permissions?: Permissions;
   #reports?: ReplyEvents;
@@ -72,9 +79,10 @@ class Turn {
   #sessionId?: string;
   stopping = false;
 
-  constructor(ctx: LocalContext, run: Run) {
+  constructor(ctx: CallerActionContext, run: Run, env?: Readonly<Record<string, string>>) {
     this.#ctx = ctx;
     this.#run = run;
+    this.#env = env;
     run.onSteer((text) => {
       if (this.#done || this.stopping) return;
       if (!this.#ready) {
@@ -120,7 +128,7 @@ class Turn {
     this.#pending.clear();
     this.#steerInterrupt = false;
     const run = this.#run;
-    const wire = open(this.#ctx, launchArgs(run, resume), run.folder);
+    const wire = open(this.#ctx, launchArgs(run, resume), run.folder, this.#env);
     this.#wire = wire;
     const permissions = new Permissions(run, wire.send);
     this.#permissions = permissions;

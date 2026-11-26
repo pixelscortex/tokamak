@@ -1,7 +1,7 @@
-//! Bundle schema registry. Field descriptions are metadata, not write validators.
+//! Bundle schema registry. Indexes and typed references are enforced by the data layer.
 use crate::{
     Error,
-    data::{DataSpace, Table, Transaction},
+    data::{DataSpace, REF_INDEX_PREFIX, Reference, Table, Transaction},
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -92,6 +92,11 @@ fn validate_index<'a>(
     Ok(())
 }
 
+pub(crate) struct RefTargets<'a> {
+    pub depends: &'a BTreeMap<String, String>,
+    pub declares: &'a (dyn Fn(&str, &str) -> bool + Sync),
+}
+
 impl Schema {
     pub(crate) fn parse(value: &Value) -> Result<Self, Error> {
         // Legacy bundles without a schema exported null (or {}).
@@ -131,30 +136,101 @@ impl Schema {
         &self,
         tx: &mut Transaction,
         space: &DataSpace,
+        targets: RefTargets<'_>,
         startup: bool,
     ) -> Result<Option<String>, Error> {
-        let Some(reason) = self.apply_indexes(tx, space).await? else {
-            return Ok(None);
-        };
-        if !startup {
+        let references = self.references(space, targets)?;
+        let reset = self.apply_indexes(tx, space, &references).await?;
+        if let Some(reason) = reset.as_ref().filter(|_| !startup) {
             return Err(invalid(reason));
         }
 
+        tx.set_references(space, references).map_err(data_error)?;
+        Ok(reset)
+    }
+
+    pub(crate) async fn reset(
+        &self,
+        tx: &mut Transaction,
+        space: &DataSpace,
+        reason: &str,
+    ) -> Result<(), Error> {
         // Replace this startup-only hard reset with migrations once supported.
         let declared = self.tables.keys().map(String::as_str).collect();
         Box::pin(tx.reset_schema_space(space, &declared))
             .await
-            .map_err(|e| invalid(format!("{reason}; schema reset failed: {e}")))?;
-        if let Some(incompatibility) = self.apply_indexes(tx, space).await? {
-            return Err(invalid(incompatibility));
+            .map_err(|e| invalid(format!("{reason}; schema reset failed: {e}")))
+    }
+
+    fn references(
+        &self,
+        space: &DataSpace,
+        targets: RefTargets<'_>,
+    ) -> Result<Vec<Reference>, Error> {
+        let mut references = Vec::new();
+        for (table, definition) in &self.tables {
+            let Some(fields) = definition.description["fields"].as_object() else {
+                continue;
+            };
+
+            for (field, description) in fields {
+                let optional = description["kind"] == "optional";
+                let description = if optional {
+                    &description["inner"]
+                } else {
+                    description
+                };
+
+                if description["kind"] != "ref" && contains_ref(description) {
+                    return Err(invalid(format!(
+                        "Ref {table}.{field} must be a top-level table field"
+                    )));
+                }
+                if description["kind"] != "ref" {
+                    continue;
+                }
+
+                let (owner, target) = description["table"]
+                    .as_str()
+                    .and_then(|table| table.rsplit_once('.'))
+                    .ok_or_else(|| {
+                        invalid(format!(
+                            "Invalid ref {table}.{field}: expected plugin.table"
+                        ))
+                    })?;
+
+                validate_ref_target(space, owner, target, &targets)?;
+                let target_space = DataSpace::plugin(owner).map_err(data_error)?;
+
+                references.push(Reference {
+                    source: space
+                        .table(&Table::new(table).map_err(data_error)?)
+                        .map_err(data_error)?,
+                    field: field.clone(),
+                    index: definition
+                        .indexes
+                        .iter()
+                        .find(|index| index.fields.first() == Some(field))
+                        .map_or_else(
+                            || format!("{REF_INDEX_PREFIX}{field}"),
+                            |index| index.name.clone(),
+                        ),
+                    target: target_space
+                        .table(&Table::new(target).map_err(data_error)?)
+                        .map_err(data_error)?,
+                    space: target_space,
+                    optional,
+                });
+            }
         }
-        Ok(Some(reason))
+        Ok(references)
     }
 
     async fn apply_indexes(
         &self,
         tx: &mut Transaction,
         space: &DataSpace,
+        references: &[Reference],
     ) -> Result<Option<String>, Error> {
         let mut declared = BTreeMap::new();
         for (name, definition) in &self.tables {
@@ -164,7 +240,7 @@ impl Schema {
             declared.insert(table, (name, definition));
         }
 
-        let names = declared
+        let mut names: BTreeMap<_, BTreeSet<_>> = declared
             .iter()
             .map(|(table, (_, definition))| {
                 (
@@ -177,6 +253,12 @@ impl Schema {
                 )
             })
             .collect();
+        for reference in references {
+            names
+                .entry(reference.source.as_str())
+                .or_default()
+                .insert(&reference.index);
+        }
         Box::pin(tx.drop_undeclared_indexes(space, &names))
             .await
             .map_err(|e| invalid(e.to_string()))?;
@@ -189,9 +271,58 @@ impl Schema {
                     .map_err(|error| index_error(space, name, &index.name, error))?;
             }
         }
+        for reference in references
+            .iter()
+            .filter(|r| r.index.starts_with(REF_INDEX_PREFIX))
+        {
+            Box::pin(tx.define_ref_index(&reference.source, &reference.index, &reference.field))
+                .await
+                .map_err(data_error)?;
+        }
         // Index edits never request a reset. Keep the startup reset path for
         // schema incompatibilities that cannot be applied to the stored data.
         Ok(None)
+    }
+}
+
+fn validate_ref_target(
+    space: &DataSpace,
+    owner: &str,
+    table: &str,
+    targets: &RefTargets<'_>,
+) -> Result<(), Error> {
+    let reason = if owner == "tokamak.host" {
+        "the host is reserved"
+    } else if !targets.depends.contains_key(owner) {
+        "the owner must be in depends"
+    } else if !(targets.declares)(owner, table) {
+        "the owner does not declare that table"
+    } else {
+        return Ok(());
+    };
+
+    let plugin = space.owner().unwrap_or("<legacy>");
+    Err(invalid(format!(
+        "Plugin {plugin} cannot reference {owner}.{table}: {reason}"
+    )))
+}
+
+fn data_error(error: crate::data::Error) -> Error {
+    invalid(error.to_string())
+}
+
+fn contains_ref(description: &Value) -> bool {
+    match description["kind"].as_str() {
+        Some("ref") => true,
+        Some("array") => contains_ref(&description["item"]),
+        Some("optional") => contains_ref(&description["inner"]),
+        Some("object") => description["fields"]
+            .as_object()
+            .is_some_and(|fields| fields.values().any(contains_ref)),
+        Some("union") => description["members"]
+            .as_array()
+            .is_some_and(|members| members.iter().any(contains_ref)),
+        _ => false,
     }
 }
 

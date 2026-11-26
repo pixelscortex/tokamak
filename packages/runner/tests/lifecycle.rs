@@ -215,7 +215,7 @@ async fn plugin_start_failure_includes_the_hosts_stderr() {
     let mut worker = open_worker(address, SECRET).await;
     send(
         &mut worker,
-        json!({"type": "write", "message": {"type": "invoke", "id": 1, "fn": "anything", "args": null}}),
+        json!({"type": "write", "message": {"type": "invoke", "id": 1, "fn": "anything", "action": true, "args": null}}),
     ).await;
     let failed = read(&mut worker).await;
     assert_eq!(failed["message"]["type"], "result");
@@ -236,7 +236,7 @@ async fn plugin_start_failure_includes_the_hosts_stderr() {
 }
 
 async fn invoke(client: &mut Socket, worker: &mut Socket, name: &str, path: &Path) {
-    send(worker, json!({"type":"write","message":{"type":"invoke","id":1,"fn":format!("work:{name}"),"args":{"path":path}}})).await;
+    send(worker, json!({"type":"write","message":{"type":"invoke","id":1,"fn":format!("work:{name}"),"action":true,"args":{"path":path}}})).await;
     let request = read(worker).await;
     assert_eq!(request["message"]["name"], "auth.current", "{request}");
     send(
@@ -602,7 +602,7 @@ async fn a_runner_started_by_hand_leaves_the_server_that_holds_the_store_running
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[tokio::test]
-async fn standalone_runner_serves_a_workspace_and_runs_a_local_function() {
+async fn standalone_runner_serves_a_workspace_and_runs_a_caller_action() {
     use tokio::io::AsyncWriteExt;
 
     let dir = tempfile::tempdir().unwrap();

@@ -6,7 +6,7 @@
 // `src/server/factory.ts`, and the harness copies it in before building.
 // It reaches files only through `ctx.proc` (a helper module may not import
 // `node:` modules: the build places it in the server part too).
-import { local, type LocalContext } from "@tokamak/sdk";
+import { action, type CallerActionContext } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 
 export interface FakeAgent {
@@ -44,7 +44,8 @@ type Message =
  * as a model, so a test picks a script by picking a model.
  */
 export function fakeAgent({ id, name, efforts = [], speeds = [], modes = [] }: FakeAgent) {
-  const info = local({
+  const info = action({
+    on: "caller",
     handler: async (ctx): Promise<ai.Info> => {
       const names = await lines(ctx, [id, "--list"]);
       return {
@@ -65,7 +66,8 @@ export function fakeAgent({ id, name, efforts = [], speeds = [], modes = [] }: F
    * starts a fresh one given the thread's earlier messages. The program gets
    * the worker's own environment (no `env` option: that would replace it).
    */
-  const start = local({
+  const start = action({
+    on: "caller",
     handler: async (ctx, run: ai.Run) => {
       const resumed =
         run.sessionId !== undefined && (await sh(ctx, 'test -e "$HOME/.$1/sessions/$2"', id, run.sessionId));
@@ -162,7 +164,7 @@ function short(text: string): string {
 }
 
 /** Runs a program to its end; its stdout lines, or undefined when it failed or is missing. */
-async function lines(ctx: LocalContext, argv: [string, ...string[]]): Promise<string[] | undefined> {
+async function lines(ctx: CallerActionContext, argv: [string, ...string[]]): Promise<string[] | undefined> {
   try {
     const program = ctx.proc(argv);
     const out: string[] = [];
@@ -174,7 +176,7 @@ async function lines(ctx: LocalContext, argv: [string, ...string[]]): Promise<st
 }
 
 /** Runs a short shell script with `args` as $1, $2, …; true when it exits 0. */
-async function sh(ctx: LocalContext, script: string, ...args: string[]): Promise<boolean> {
+async function sh(ctx: CallerActionContext, script: string, ...args: string[]): Promise<boolean> {
   const program = ctx.proc(["/bin/sh", "-c", script, "sh", ...args]);
   for await (const _line of program.stdout);
   return (await program.exited) === 0;

@@ -1,7 +1,7 @@
-import { fail, type AuthContext } from "@tokamak/sdk";
+import { fail } from "@tokamak/sdk";
 import { TURN_ENDED } from "@tokamak/sdk/agent-turn";
 import type { Run } from "../contracts";
-import { errorText, isSendersDevice } from "../shared/turn-shared";
+import { errorText } from "../shared/turn-shared";
 
 type Steer = Parameters<Run["onSteer"]>[0];
 type Stop = Parameters<Run["onStop"]>[0];
@@ -12,17 +12,15 @@ const STEER_COMMIT_ATTEMPTS = 3;
 
 const running = new Map<string, ReturnType<typeof turnControl>>();
 
-export function controlFor(turnId: string, auth: AuthContext) {
+export function controlFor(turnId: string, owner: string) {
   const control = running.get(turnId);
-  if (!control) return;
-  if (!isSendersDevice(control, auth)) throw new Error("Only the sender's device can control this turn");
-  return control;
+  return control?.owner === owner ? control : undefined;
 }
 
-/** Bridges separate local calls into the provider's running invocation, on its original device. */
+/** Bridges separate caller actions into the invocation owned by the sender's window. */
 export function turnControl(
   turnId: string,
-  auth: AuthContext,
+  owner: string,
   cancelQuestion?: () => Promise<void>,
   cancelBefore?: () => void,
 ) {
@@ -74,7 +72,7 @@ export function turnControl(
   }
 
   const control = {
-    sender: { id: auth.user.id, device: auth.device.id },
+    owner,
     onSteer(handler: Steer) {
       steer = handler;
       releaseSteers();

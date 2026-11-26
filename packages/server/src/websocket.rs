@@ -37,6 +37,7 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 pub use crate::web::HostedWeb;
 
+mod machine;
 mod members;
 mod response;
 mod sign_in;
@@ -46,7 +47,8 @@ use response::{account_result, snapshots};
 
 const CONNECTIONS: u32 = 64;
 const MESSAGE_BYTES: usize = engine::MAX_WIRE_MESSAGE_BYTES;
-const DEVICE_SIGNED_OUT: u16 = 4001;
+pub const DEVICE_SIGNED_OUT: u16 = 4001;
+const PLUGIN_MACHINE_STREAM_PATH: &str = "/devices/machines/live";
 const DEVICE_STREAM_PATH: &str = "/devices/live";
 pub const WS_PROTOCOL: &str = "tokamak";
 const RUNNER_WORKER_PATH: &str = "/local-worker";
@@ -211,28 +213,21 @@ async fn serve_inner(
     let (runner_control, worker) = runner.map_or((None, None), |(control, worker)| {
         (Some(Arc::from(control)), Some(worker))
     });
-    if web.is_some()
-        && access
-            .as_ref()
-            .is_none_or(|access| access.token.chars().count() < 32)
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Hosted mode requires an access token of at least 32 characters",
-        ));
-    }
-    if !listener.local_addr()?.ip().is_loopback() && (web.is_none() || access.is_none()) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "unauthenticated POC must bind loopback",
-        ));
-    }
+    let listen = check_listener_address(&listener, access.as_ref(), web.is_some())?;
     // Revocation is persisted before cleanup. Retry it before serving clients
     // in case the previous process stopped between those steps.
     server
         .clear_revoked_window_state(&identities)
         .await
         .map_err(io::Error::other)?;
+    let public_origin = match &web {
+        Some(web) => web.public_origin.clone(),
+        None => crate::web::configured_public_url()?
+            .or_else(|| cfg!(feature = "local-runtime").then(|| format!("http://{listen}"))),
+    };
+    server
+        .machines()
+        .configure(identities.clone(), public_origin.clone())?;
     let stopping = CancellationToken::new();
     let connections = Arc::new(Semaphore::new(CONNECTIONS as usize));
     let hosted = web.is_some();
@@ -253,8 +248,17 @@ async fn serve_inner(
         access,
         origins: allowed_origins(web.as_ref()),
     };
-    let app = routes(adapter, web, worker);
-    // Axum owns and awaits HTTP connection tasks, but graceful HTTP shutdown
+    let http_actions = crate::http_actions::router(
+        adapter.server.clone(),
+        stopping.clone(),
+        web,
+        public_origin,
+        listen,
+    )?;
+    // Catch-all plugin paths belong in a fallback router so Axum can keep
+    // the core asset and reload paths registered independently.
+    let app = routes(adapter, worker).fallback_service(http_actions);
+    // The listener owns and awaits HTTP connection tasks, but graceful HTTP shutdown
     // alone can wait forever on an incomplete upgrade header. Give EVERY
     // accepted socket cancellable I/O before handing it to Hyper, not just the
     // connections that eventually reach our WebSocket handler.
@@ -263,19 +267,15 @@ async fn serve_inner(
         stopping: stopping.clone(),
     };
     let presence = hosted.then(|| start_last_seen_timer(identities.clone(), stopping.clone()));
-    let trigger = stopping.clone();
-    let result = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<PeerAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        tokio::select! {
-            _ = shutdown => {},
-            _ = trigger.cancelled() => {},
+    let serving = crate::http_listener::serve(listener, app, stopping.clone());
+    tokio::pin!(serving);
+    let result = tokio::select! {
+        result = &mut serving => result,
+        () = shutdown => {
+            stopping.cancel();
+            serving.await
         }
-        trigger.cancel();
-    })
-    .await;
+    };
     stopping.cancel();
     // Axum does not wait for upgraded connections. Permits include the upgrade
     // handshake, so none can escape this barrier and outlive storage shutdown.
@@ -287,6 +287,27 @@ async fn serve_inner(
         flush_last_seen(identities).await;
     }
     result
+}
+
+fn check_listener_address(
+    listener: &TcpListener,
+    access: Option<&LocalAccess>,
+    hosted: bool,
+) -> io::Result<SocketAddr> {
+    if hosted && access.is_none_or(|access| access.token.chars().count() < 32) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Hosted mode requires an access token of at least 32 characters",
+        ));
+    }
+    let listen = listener.local_addr()?;
+    if !listen.ip().is_loopback() && (!hosted || access.is_none()) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "unauthenticated POC must bind loopback",
+        ));
+    }
+    Ok(listen)
 }
 
 fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
@@ -304,14 +325,11 @@ fn trusted_sign_in_proxies() -> io::Result<Vec<std::net::IpAddr>> {
         .map_err(io::Error::other)
 }
 
-fn routes(
-    adapter: Adapter,
-    web: Option<HostedWeb>,
-    worker: Option<axum::routing::MethodRouter>,
-) -> Router {
+fn routes(adapter: Adapter, worker: Option<axum::routing::MethodRouter>) -> Router {
     let mut app = Router::new()
         .route("/account", get(whoami).post(rename))
         .route("/ws", get(upgrade))
+        .route(crate::machine_wire::PATH, get(machine::upgrade))
         .route("/plugins", get(plugins))
         .route("/plugins/{id}/{revision}/assets/{*name}", get(plugin_asset));
     if adapter.hosted {
@@ -320,6 +338,7 @@ fn routes(
             .merge(members::routes())
             .merge(sign_in::routes())
             .route(DEVICE_STREAM_PATH, get(devices_live))
+            .route(PLUGIN_MACHINE_STREAM_PATH, get(plugin_machines_live))
             .route(DEVICE_REVOKE_PATH, post(revoke_device));
     } else if adapter.access.is_some() {
         app = app.route("/health", get(health));
@@ -344,15 +363,7 @@ fn routes(
                 .layer(middleware::from_fn_with_state(adapter, authorize)),
         );
     }
-    if let Some(web) = web {
-        app.fallback_service(
-            Router::new()
-                .fallback(get(crate::web::shell))
-                .with_state(web),
-        )
-    } else {
-        app
-    }
+    app
 }
 
 #[cfg(not(feature = "local-runtime"))]
@@ -397,7 +408,12 @@ fn start_last_seen_timer(
 
 async fn flush_last_seen(identities: Arc<Identities>) {
     // A lost display timestamp must never prevent use of an otherwise valid key.
-    match tokio::task::spawn_blocking(move || identities.flush_last_seen()).await {
+    match tokio::task::spawn_blocking(move || {
+        identities.flush_plugin_machine_presence()?;
+        identities.flush_last_seen()
+    })
+    .await
+    {
         Ok(Ok(())) => {}
         Ok(Err(error)) => eprintln!("Could not save device last seen: {error}"),
         Err(error) => eprintln!("Device last-seen task failed: {error}"),
@@ -443,6 +459,9 @@ async fn authorize(
             authorization_preflight(&headers, methods, allowed_headers),
             origin,
         );
+    }
+    if path == Some(crate::machine_wire::PATH) {
+        return next.run(request).await;
     }
     let public = adapter.hosted
         && (request.uri().path() == "/health"
@@ -499,6 +518,7 @@ fn preflight_route(path: Option<&str>) -> Option<(&'static str, &'static str)> {
         Some(
             sign_in::METHODS
             | DEVICE_STREAM_PATH
+            | PLUGIN_MACHINE_STREAM_PATH
             | "/plugins"
             | "/plugins/{id}/{revision}/assets/{*name}",
         ) => Some(("GET", "authorization")),
@@ -572,7 +592,23 @@ async fn devices_live(
     State(adapter): State<Adapter>,
     Extension(caller): Extension<AuthContext>,
 ) -> Response {
-    snapshots(adapter, caller, Identities::devices)
+    snapshots(adapter, caller, |adapter, caller| {
+        adapter.identities.devices(caller)
+    })
+}
+
+async fn plugin_machines_live(
+    State(adapter): State<Adapter>,
+    Extension(caller): Extension<AuthContext>,
+) -> Response {
+    if !members::can_manage(caller.user.role) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    snapshots(adapter, caller, |adapter, caller| {
+        let (caller, _) = adapter.identities.active_caller(caller)?;
+        members::can_manage(caller.user.role)
+            .then(|| adapter.server.machines().snapshots(&adapter.identities))
+    })
 }
 
 fn authorization_preflight(
@@ -722,7 +758,7 @@ async fn connection(mut socket: WebSocket, adapter: Adapter, caller: AuthContext
         let session = tokio::select! {
             _ = adapter.stopping.cancelled() => return,
             _ = revoked.cancelled() => return,
-            session = adapter.server.connect_authenticated(auth, revoked.clone()) => match session { Ok(session) => session, Err(_) => return },
+            session = adapter.server.connect_authenticated(auth, revoked.clone(), !adapter.hosted && adapter.access.is_some()) => match session { Ok(session) => session, Err(_) => return },
         };
         (session, revoked)
     };
@@ -803,15 +839,7 @@ impl axum::serve::Listener for ShutdownListener {
 }
 
 #[derive(Clone)]
-struct PeerAddr(SocketAddr);
-
-impl axum::extract::connect_info::Connected<axum::serve::IncomingStream<'_, ShutdownListener>>
-    for PeerAddr
-{
-    fn connect_info(stream: axum::serve::IncomingStream<'_, ShutdownListener>) -> Self {
-        Self(*stream.remote_addr())
-    }
-}
+pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 pub(crate) struct ShutdownIo {
     stream: TcpStream,

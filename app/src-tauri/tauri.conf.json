@@ -29,7 +29,7 @@
         {
           "identifier": "main-window-drag",
           "windows": ["main"],
-          "permissions": ["core:window:allow-start-dragging"]
+          "permissions": ["core:window:allow-start-dragging", "allow-runner-and-quit", "allow-sign-in-return"]
         }
       ]
     }

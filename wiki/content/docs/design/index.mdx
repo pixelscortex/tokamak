@@ -54,7 +54,7 @@ Everything else is built by each plugin from the tokens and the rules.
 
    Namespaces: `Dialog`, `Menu`, `Select`, `Tooltip`, `Tabs`, `RowList`,
    `Collapsible`. Single elements: `Button`, `Icon`, `Kbd`, `Chip`, `Avatar`,
-   `StatusIcon`, `Textarea`, `FileName`, `Row`, `CodeBlock`. You may add layout classes to any part
+   `StatusIcon`, `Textarea`, `Input`, `Switch`, `FileName`, `Row`, `CodeBlock`. You may add layout classes to any part
    (margin, width, flex and grid placement); its look is its own.
 
 3. Build everything else from tokens and helpers, the way the primitives
@@ -240,7 +240,8 @@ a row or chip) and `avatar` (18, an initial disc). One radius scale: 4, 8, 12, 1
 - **Primitives that draw a surface** have a fixed radius: Button, Chip, Row,
   Textarea, Tab and menu items are 8. So a container that holds one at its
   edge has radius 8 + its padding: `rounded-md p-1` or `rounded-lg p-2`. Menu
-  and Select lists are 12 with 4 padding; a Dialog is 16 with 24 padding.
+  and Select lists are 12 with 4 padding; a Dialog is 16 with 24 padding. An
+  Input is 12: 40 tall with 12 px sides (`md`), or 48 with 16 (`lg`).
 - **Gaps group things.** The gap inside a group is smaller than the gap between
   groups. In a thread: 8 from a header to its text, 12 between paragraphs, 16
   between blocks in one turn, 48 between turns (32 in a narrow docked thread).
@@ -358,6 +359,10 @@ words.
 - Keyboard focus is a 2 px `brand-text` ring with a 2 px gap in the surface colour.
   It does not appear on hover.
 - One brand or primary action per region.
+- A setting that is on or off is a `Switch` (28 × 16, ink when on), named by
+  `aria-label` or a label. It toggles with a click, Space and Enter.
+- One line of text is an `Input`; `mono` for links and codes, `invalid` for a
+  wrong value, with the reason in words beside it.
 - Outside primitive source, use size, density or parent gap in place of negative margins (`tokamak/no-negative-margin`).
 - Use `Button` or `<Row as="button">` for actions outside primitive source, tests and fixtures (`tokamak/no-raw-button`).
 - Let button labels and leads inherit typography and tone; row buttons style their own title, detail and trail (`tokamak/no-text-style-in-button`).

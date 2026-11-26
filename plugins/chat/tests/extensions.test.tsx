@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { createSignal, flush } from "solid-js";
 import { render } from "@solidjs/web";
 import { expect, test, vi } from "vitest";
@@ -18,6 +19,7 @@ import {
   type MessageDoc,
   type Thread,
 } from "../src/client/api";
+import { api } from "../src/client/lib/api";
 import { loadActions, manifest } from "virtual:chat-probe";
 
 const threadId = "chat/threads:t1" as Id<"threads">;
@@ -104,7 +106,10 @@ test("another plugin adds to chat's composer, message, empty thread, list row an
   );
   try {
     // The empty thread's heading is replaced; its folder choices stay.
-    await waitFor(() => screen.getByRole("heading", { name: "What should Probe work on?" }));
+    const heading = await screen.findByRole("heading", { name: "What should Probe work on?" });
+    expect(heading.tagName).toBe("H2");
+    expect(heading.getAttribute("data-part")).toBe("heading");
+    expect(heading.className).toBe("text-read font-semibold text-ink");
     expect(screen.queryByText("Start a conversation")).toBeNull();
     expect(screen.getByRole("radio", { name: "No folder" })).toBeTruthy();
 
@@ -289,5 +294,73 @@ test("another plugin can hold Send in one thread's composer, for the button and 
     dispose();
     root.remove();
     loader.dispose();
+  }
+});
+
+test("deleting without a Runner uses only the server mutation after the failed action", async () => {
+  const { client } = liveChat([]);
+  const action = vi
+    .spyOn(client, "action")
+    .mockResolvedValue({ failed: true, kind: "noMachine", data: null });
+  const mutation = vi.spyOn(client, "mutation");
+  const root = document.body.appendChild(document.createElement("div"));
+  const dispose = render(
+    () => (
+      <ClientContext value={client}>
+        <ShortcutContext value={{ registerShortcut: () => () => {} }}>
+          <RegionProvider>
+            <RegionOutlet name="sidebar" />
+            <RegionOutlet name="header" />
+            <Chat />
+          </RegionProvider>
+        </ShortcutContext>
+      </ClientContext>
+    ),
+    root,
+  );
+  try {
+    (await screen.findByRole("option", { name: /CSV export/ })).click();
+    (await screen.findByRole("button", { name: "Thread actions" })).click();
+    (await screen.findByRole("menuitem", { name: "Delete thread" })).click();
+    const dialog = await screen.findByRole("dialog");
+    within(dialog)
+      .getByRole("button", { name: /^Delete$/ })
+      .click();
+
+    await screen.findByRole("heading", { name: "Start a conversation" });
+    expect(action).toHaveBeenCalledExactlyOnceWith(api.threads.removeLocal, { threadId });
+    expect(mutation).toHaveBeenCalledExactlyOnceWith(api.threads.remove, { threadId });
+  } finally {
+    dispose();
+    root.remove();
+  }
+});
+
+test("choosing a folder without a Runner keeps the path as typed", async () => {
+  const { client } = liveChat([]);
+  const action = vi
+    .spyOn(client, "action")
+    .mockResolvedValue({ failed: true, kind: "noMachine", data: null });
+  const pick = vi.fn();
+  const root = document.body.appendChild(document.createElement("div"));
+  const dispose = render(
+    () => (
+      <ClientContext value={client}>
+        <Empty folders={[]} folder={{ kind: "own" }} onFolder={pick} />
+      </ClientContext>
+    ),
+    root,
+  );
+  try {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /Choose a folder/ }));
+    await user.type(await screen.findByRole("textbox", { name: "Folder path" }), "~/work");
+    await user.click(screen.getByRole("button", { name: "Use folder" }));
+
+    await waitFor(() => expect(pick).toHaveBeenCalledExactlyOnceWith({ kind: "chosen", path: "~/work" }));
+    expect(action).toHaveBeenCalledExactlyOnceWith(api.folders.check, { path: "~/work" });
+  } finally {
+    dispose();
+    root.remove();
   }
 });

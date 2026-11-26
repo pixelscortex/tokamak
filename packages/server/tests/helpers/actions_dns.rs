@@ -191,6 +191,10 @@ fn plugin_reload_and_transactions_do_not_wait_for_dns() {
             session
                 .sender()
                 .request(server::protocol::Request::Action {
+                    on: None,
+                    window: None,
+                    hook_plans: None,
+                    point_plans: None,
                     id: 1,
                     name: "b/ops:dns".into(),
                     args: json!({"count":1,"host":"held.tkm.test"}),
@@ -322,7 +326,7 @@ async fn assert_transactions_during_dns(session: &mut server::Session, first: u6
     let mut seen = [false; 2];
     tokio::time::timeout(Duration::from_millis(200), async {
         while !seen.iter().all(|seen| *seen) {
-            if let Event::Response { id, result } = session.recv().await.unwrap().unwrap() {
+            if let Event::Response { id, result, .. } = session.recv().await.unwrap().unwrap() {
                 if id == first {
                     assert_eq!(result.unwrap(), json!("public"));
                     seen[0] = true;

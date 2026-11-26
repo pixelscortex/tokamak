@@ -201,6 +201,9 @@ export function createPluginLoader(registry: PluginModuleHost, assets: PluginAss
         if (!disposed && changes === before) throw error;
       }
     },
+    async partOwner(id: string) {
+      if (manifest(id)?.entries.ui) return load(id);
+    },
     contributions(kind: ContributionKind): CatalogContribution[] {
       return metadata().plugins.flatMap((p) =>
         (p.plugin.contributes?.[kind] ?? []).map((options) => ({

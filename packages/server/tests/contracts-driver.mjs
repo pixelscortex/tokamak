@@ -45,19 +45,19 @@ async function build(id, requirements, files) {
 function provider(id, value) {
   return {
     "provider.ts": `
-      import { internalAction, internalQuery, local, query, v } from "@tokamak/sdk";
+      import { internalAction, internalQuery, action, query, v } from "@tokamak/sdk";
       import { provide } from "@tokamak/sdk";
       import * as ai from "plugin:${owner}/contracts";
       import { type TurnCtx } from "plugin:${owner}/contracts";
 
       export const status = query({ handler: () => "${value}" });
-      export const localStatus = local({ handler: () => "${value}" });
+      export const localStatus = action({ on: "caller", handler: () => "${value}" });
       const id = "${id}";
       const name = "${value}";
-      const info = local({ handler: (ctx) => ctx.auth.user.id });
+      const info = action({ on: "caller", handler: (ctx) => ctx.auth.user.id });
       export const localProvider = provide(ai.agent, { id, name, info });
       export const hooks = provide(ai.turnHooks, {
-        before: local({ handler: async (ctx, t: TurnCtx) => {
+        before: action({ on: "caller", handler: async (ctx, t: TurnCtx) => {
           const process = ctx.proc(["git", "--version"], { cwd: t.folder });
           for await (const line of process.stdout) return line.startsWith("git version ");
           return false;
@@ -78,15 +78,15 @@ async function checkReloads() {
     "contracts.ts": `
       import { contract } from "@tokamak/sdk";
       export type TurnCtx = { folder: string };
-      export const agent = contract<{ id: string; name: string; info: () => Promise<string> }>("agent", { place: "local", dataMethods: true });
-      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { place: "local", dataMethods: true });
+      export const agent = contract<{ id: string; name: string; info: () => Promise<string> }>("agent", { on: "caller", dataMethods: true });
+      export const turnHooks = contract<{ before?: (t: TurnCtx) => Promise<boolean> }>("turnHooks", { on: "caller", dataMethods: true });
       export const service = contract<{ id: string; name: string; inspect: () => string; call: (a: { text: string }) => Promise<string> }>("service");
     `,
     "main.ts": `
-      import { action, local, query, v } from "@tokamak/sdk";
+      import { action, query, v } from "@tokamak/sdk";
       import { agent, service, turnHooks } from "./contracts";
       let counter = 0;
-      export const localCall = local({
+      export const localCall = action({ on: "caller",
         args: { id: v.string() },
         handler: async (ctx, { id }) => {
           const all = await agent.list(ctx);
@@ -94,7 +94,7 @@ async function checkReloads() {
           return { ids: all.map((provider) => provider.id), result: (await selected?.info()) ?? null, calls: ++counter };
         },
       });
-      export const hooks = local({
+      export const hooks = action({ on: "caller",
         args: { folder: v.string() },
         handler: async (ctx, t) => Promise.all((await turnHooks.list(ctx)).map((p) => p.before?.(t))),
       });
@@ -178,15 +178,15 @@ async function checkReloads() {
   const api = createApi(owner);
   const first = createApi(providers[0]);
   assert.equal(await client.query(first.provider.status, {}), "alpha");
-  assert.equal(await client.local(first.provider.localStatus, {}), "alpha");
+  assert.equal(await client.action(first.provider.localStatus, {}), "alpha");
 
   await rename(builds.get(owner), join(installs, owner));
   await reload(owner);
-  assert.deepEqual(await client.local(api.main.hooks, { folder: scratch }), [true]);
+  assert.deepEqual(await client.action(api.main.hooks, { folder: scratch }), [true]);
   assert.deepEqual(await client.query(api.main.list, {}), [["alpha", "alpha"]]);
   assert.equal(await client.action(api.main.invoke, { id: "one" }), "alpha:hello:local");
   await assert.rejects(client.action(api.main.withoutContext, {}), /pass ctx/);
-  assert.deepEqual(await client.local(api.main.localCall, { id: "one" }), {
+  assert.deepEqual(await client.action(api.main.localCall, { id: "one" }), {
     ids: ["one"],
     result: "local",
     calls: 1,
@@ -199,7 +199,7 @@ async function checkReloads() {
     ["beta", "beta"],
   ]);
   assert.equal(await client.action(api.main.invoke, { id: "two" }), "beta:hello:local");
-  assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
+  assert.deepEqual(await client.action(api.main.localCall, { id: "two" }), {
     ids: ["one", "two"],
     result: "local",
     calls: 2,
@@ -213,7 +213,7 @@ async function checkReloads() {
   await reload(providers[1]);
   assert.deepEqual(await client.query(api.main.list, {}), [["alpha", "alpha"]]);
   assert.equal(await client.action(api.main.invoke, { id: "two" }), null);
-  assert.deepEqual(await client.local(api.main.localCall, { id: "two" }), {
+  assert.deepEqual(await client.action(api.main.localCall, { id: "two" }), {
     ids: ["one"],
     result: null,
     calls: 3, // Changing the provider leaves the owner process running.

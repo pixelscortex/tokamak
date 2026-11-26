@@ -281,7 +281,7 @@ async fn immediate_runs_after_jobs_and_arrived_io_and_before_zero_timer() {
     let mut host = Host::start();
     host.invoke(1, "immediate", Value::Null).await;
     let op = host.receive().await;
-    assert_eq!(op["name"], "local.runQuery");
+    assert_eq!(op["name"], "plugin.call");
     host.send(json!({ "type": "opResult", "id": op["id"], "value": null }))
         .await;
     assert_eq!(
@@ -302,7 +302,7 @@ async fn watchdog_reset_stops_programs_even_when_javascript_cannot_clean_up() {
     for _ in 0..2 {
         assert_eq!(
             host.receive().await["error"],
-            "Plugin local function did not yield for 5 seconds; QuickJS runtime reset",
+            "Plugin caller action did not yield for 5 seconds; QuickJS runtime reset",
         );
     }
     assert_gone(&tree).await;

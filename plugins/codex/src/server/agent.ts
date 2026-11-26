@@ -3,7 +3,8 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { agentInfoCache } from "@tokamak/sdk/agent-turn";
-import { local, provide } from "@tokamak/sdk";
+import { withAgentLaunch } from "@tokamak/sdk/agent-launch";
+import { action, provide } from "@tokamak/sdk";
 import * as ai from "plugin:ai/contracts";
 import { codexInfo } from "./info";
 import { codexTurn } from "./turn";
@@ -18,16 +19,43 @@ const discovery = agentInfoCache(codexInfo, async () => {
   const stamp = await stat(path).catch(() => undefined);
   return stamp ? `${path}:${stamp.ino}:${stamp.mtimeMs}:${stamp.size}` : path;
 });
-const info = local({
-  handler: (ctx, { setupDeadline }: { setupDeadline?: number }) =>
-    setupDeadline === undefined ? discovery.read(ctx) : codexInfo(ctx, setupDeadline),
+const info = action({
+  on: "caller",
+  handler: (
+    ctx,
+    { setupDeadline, launchSettings }: { setupDeadline?: number; launchSettings?: ai.LaunchSettings },
+  ) =>
+    launchSettings
+      ? withAgentLaunch(launchSettings, "codex", ({ env }) => codexInfo(ctx, undefined, env))
+      : setupDeadline === undefined
+        ? discovery.read(ctx)
+        : codexInfo(ctx, setupDeadline),
 });
-const start = local({
+const start = action({
+  on: "caller",
   handler: async (ctx, run: ai.Run) => {
     try {
-      return await codexTurn(ctx, run);
+      if (!run.launchSettings) return await codexTurn(ctx, run);
+      return await withAgentLaunch(run.launchSettings, "codex", ({ env, args, provider }) => {
+        const config = [
+          // This turn must not fall back to a login in the system keyring.
+          'cli_auth_credentials_store="file"',
+        ];
+        if (provider) {
+          const keyEnv = JSON.stringify(provider.keyEnv);
+          config.push(
+            'model_provider="tokamak_profile"',
+            `model_providers.tokamak_profile={ name="Tokamak Profile", base_url=${JSON.stringify(provider.baseUrl)}, env_key=${keyEnv}, wire_api="responses", requires_openai_auth=false, supports_websockets=false }`,
+            `shell_environment_policy.exclude=[${keyEnv}]`,
+          );
+        }
+        return codexTurn(ctx, run, {
+          env: provider ? { ...env, [provider.keyEnv]: provider.key } : env,
+          args: [...args, ...config.flatMap((entry) => ["-c", entry])],
+        });
+      });
     } catch (error) {
-      discovery.invalidate();
+      if (!run.launchSettings) discovery.invalidate();
       throw error;
     }
   },

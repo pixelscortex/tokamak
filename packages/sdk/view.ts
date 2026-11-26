@@ -9,7 +9,7 @@ export interface ViewOptions {
   readonly icon?: string;
 }
 
-/** Declare a page. Compose it with components to expose extensible elements. */
+/** Declare a page. The compiler publishes its screen parts. */
 export function view<T extends (...args: never[]) => JSX.Element>(
   options: ViewOptions,
   render: T,

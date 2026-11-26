@@ -68,7 +68,7 @@ async function turn(desk, folder, { model = "edit", during, threadId, earlier } 
     }));
   await h.closeGate(folder, "go").catch(() => {});
   const running = within(
-    desk.local(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
+    desk.action(ai.run.turn, { threadId, messageId, folder, agentId: "fake-agent", model }),
     model,
   );
   if (model === "edit") {
@@ -133,7 +133,7 @@ async function countsAndDiffsMatchGit(desk, code) {
     { path: "logo.png", added: "-", removed: "-" },
     { path: "src/table.ts", added: "3", removed: "1" },
   ]);
-  assert.deepEqual(await desk.local(code.changes.forTurn, { threadId, turnId, ranEarlier: [] }), {
+  assert.deepEqual(await desk.action(code.changes.forTurn, { threadId, turnId, ranEarlier: [] }), {
     files: 5,
     added: 5,
     removed: 3,
@@ -141,7 +141,7 @@ async function countsAndDiffsMatchGit(desk, code) {
     tracking: null,
   });
 
-  const diff = await desk.local(code.changes.diff, { threadId, turnId });
+  const diff = await desk.action(code.changes.diff, { threadId, turnId });
   assert.equal(diff.cut, false);
   assert.equal(diff.added, 5);
   assert.equal(diff.removed, 3);
@@ -174,14 +174,14 @@ async function countsAndDiffsMatchGit(desk, code) {
 async function quietTurnChangesNothing(desk, code) {
   const { folder } = await project("quiet");
   const { threadId, turnId } = await turn(desk, folder, { model: "echo" });
-  assert.deepEqual(await desk.local(code.changes.forTurn, { threadId, turnId, ranEarlier: [] }), {
+  assert.deepEqual(await desk.action(code.changes.forTurn, { threadId, turnId, ranEarlier: [] }), {
     files: 0,
     added: 0,
     removed: 0,
     binary: 0,
     tracking: null,
   });
-  assert.deepEqual((await desk.local(code.changes.diff, { threadId, turnId })).files, []);
+  assert.deepEqual((await desk.action(code.changes.diff, { threadId, turnId })).files, []);
 }
 
 async function folderScope(desk, code) {
@@ -196,13 +196,13 @@ async function folderScope(desk, code) {
   assert.deepEqual(numstat(git, threadId, turnId, "--", "app"), [
     { path: "app/agent.txt", added: "1", removed: "1" },
   ]);
-  const diff = await desk.local(code.changes.diff, { threadId, turnId });
+  const diff = await desk.action(code.changes.diff, { threadId, turnId });
   assert.deepEqual(
     diff.files.map((file) => file.path),
     ["agent.txt"],
     "paths are relative to the thread's folder, and nothing outside it is listed",
   );
-  assert.equal((await desk.local(code.changes.forTurn, { threadId, turnId, ranEarlier: [] })).files, 1);
+  assert.equal((await desk.action(code.changes.forTurn, { threadId, turnId, ranEarlier: [] })).files, 1);
 }
 
 async function hugeDiffIsCut(desk, code) {
@@ -217,7 +217,7 @@ async function hugeDiffIsCut(desk, code) {
       await writeFile(join(folder, "zz-late.txt"), "after the budget\n");
     },
   });
-  const diff = await desk.local(code.changes.diff, { threadId, turnId });
+  const diff = await desk.action(code.changes.diff, { threadId, turnId });
   assert.equal(diff.cut, true);
   assert.deepEqual(
     diff.files.map(({ path, added }) => ({ path, added })),
@@ -257,7 +257,7 @@ async function changesWithoutLines(desk, code) {
     { path: "run.sh", added: "0", removed: "0" },
     { path: "wide.txt", added: "1", removed: "0" },
   ]);
-  const diff = await desk.local(code.changes.diff, { threadId, turnId });
+  const diff = await desk.action(code.changes.diff, { threadId, turnId });
   const [, empty, mode, wide] = diff.files;
   assert.deepEqual([empty.note, empty.patch], ["New empty file", []]);
   assert.deepEqual([mode.note, mode.patch], ["Mode changed from 100644 to 100755", []]);
@@ -283,7 +283,7 @@ async function startedTracking(desk, code) {
     const third = await turn(desk, folder, { threadId: first.threadId });
     assert.equal(
       (
-        await desk.local(code.changes.forTurn, {
+        await desk.action(code.changes.forTurn, {
           threadId: first.threadId,
           turnId: second.turnId,
           ranEarlier: [],
@@ -293,7 +293,7 @@ async function startedTracking(desk, code) {
       "without an earlier turn that ran without Git, a first snapshot is a plain card",
     );
     assert.deepEqual(
-      await desk.local(code.changes.forTurn, {
+      await desk.action(code.changes.forTurn, {
         threadId: first.threadId,
         turnId: second.turnId,
         ranEarlier: [first.turnId],
@@ -303,7 +303,7 @@ async function startedTracking(desk, code) {
     );
     assert.equal(
       (
-        await desk.local(code.changes.forTurn, {
+        await desk.action(code.changes.forTurn, {
           threadId: first.threadId,
           turnId: third.turnId,
           ranEarlier: [first.turnId, second.turnId],
@@ -313,7 +313,7 @@ async function startedTracking(desk, code) {
       "only the first tracked turn says so",
     );
     assert.equal(
-      await desk.local(code.changes.forTurn, {
+      await desk.action(code.changes.forTurn, {
         threadId: first.threadId,
         turnId: first.turnId,
         ranEarlier: [],
@@ -329,21 +329,21 @@ async function startedTracking(desk, code) {
 async function branchChip(desk, code) {
   const { folder, git } = await project("branch");
   const { threadId } = await turn(desk, folder, { model: "echo" });
-  assert.equal(await desk.local(code.changes.branch, { threadId }), "main");
+  assert.equal(await desk.action(code.changes.branch, { threadId }), "main");
   git("checkout", "--quiet", "-b", "feat/csv-export");
-  assert.equal(await desk.local(code.changes.branch, { threadId }), "feat/csv-export");
+  assert.equal(await desk.action(code.changes.branch, { threadId }), "feat/csv-export");
   git("checkout", "--quiet", "--detach");
-  assert.equal(await desk.local(code.changes.branch, { threadId }), git("rev-parse", "--short", "HEAD"));
+  assert.equal(await desk.action(code.changes.branch, { threadId }), git("rev-parse", "--short", "HEAD"));
 
   const plain = await mkdtemp(join(tmpdir(), "tokamak-plain-"));
   try {
     const { threadId: plainThread, turnId } = await turn(desk, plain, { model: "echo" });
-    assert.equal(await desk.local(code.changes.branch, { threadId: plainThread }), null);
+    assert.equal(await desk.action(code.changes.branch, { threadId: plainThread }), null);
     assert.equal(
-      await desk.local(code.changes.forTurn, { threadId: plainThread, turnId, ranEarlier: [] }),
+      await desk.action(code.changes.forTurn, { threadId: plainThread, turnId, ranEarlier: [] }),
       null,
     );
-    assert.equal(await desk.local(code.changes.diff, { threadId: plainThread, turnId }), null);
+    assert.equal(await desk.action(code.changes.diff, { threadId: plainThread, turnId }), null);
   } finally {
     await rm(plain, { recursive: true, force: true });
   }

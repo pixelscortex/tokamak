@@ -19,7 +19,7 @@ Server plugins use the portable `@tokamak/sdk` API. Queries read snapshots;
 mutations share a transaction across nested calls. Committed footprints drive
 live query invalidation. Actions perform external effects through host
 capabilities in the QuickJS action process. Queries and mutations run in the
-server's QuickJS transaction engine. The Runner runs local functions in a
+server's QuickJS transaction engine. The Runner runs caller actions in a
 QuickJS plugin process. The client uses the system webview’s JavaScript engine.
 
 The server validates plugin identities, dependencies, hashes, and public

@@ -4,7 +4,7 @@ import { test, expect } from "bun:test";
 import { mkdtemp, mkdir, rm, cp, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { query, mutation, v, TokamakClient, createApi, FALLBACK_LOCAL_DEVICE } from "../src/index.ts";
+import { query, mutation, point, v, TokamakClient, createApi, FALLBACK_LOCAL_DEVICE } from "../src/index.ts";
 
 const callerHost = { op: () => null };
 
@@ -650,3 +650,40 @@ test("SDK checker reports plain source diagnostics in agent environments", async
     expect(result.output, result.output).toMatch(/diagnostic-probe\.ts[(:]1[,:].*TS2322/);
   });
 }, 120000);
+
+test("the registry gates point names and keeps internal hook metadata out of ctx.call", async () => {
+  const { createRegistry, invokeFunction } = await import("../src/functions.ts");
+  let saved;
+  const registry = createRegistry(
+    {
+      demo: {
+        check: query({
+          args: { name: v.string() },
+          async handler(ctx, { name }) {
+            expect(Object.hasOwn(ctx.call, "hookPoints")).toBe(false);
+            expect("point" in ctx).toBe(false);
+            saved = ctx;
+            const original = { note: undefined };
+            expect(await point(ctx, name, original)).toBe(original);
+            return point(ctx, name, original, async () => {});
+          },
+        }),
+      },
+    },
+    {},
+    { "demo:check": ["declared"] },
+  );
+  const host = {
+    op(name) {
+      expect(name).toBe("auth.current");
+      return { user: null, device: null, depth: 0, hookPoints: ["other"] };
+    },
+  };
+
+  expect(await invokeFunction(registry, { name: "demo:check", args: { name: "declared" } }, host)).toBe(null);
+  await expect(point(saved, "declared", 1)).rejects.toThrow("after its call has ended");
+  await expect(point({ call: saved.call }, "declared", 1)).rejects.toThrow("requires the context");
+  await expect(
+    invokeFunction(registry, { name: "demo:check", args: { name: "other" } }, host),
+  ).rejects.toThrow('Point "other" is not declared by function "demo:check"');
+});

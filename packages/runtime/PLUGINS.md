@@ -3,9 +3,10 @@
 Plugins keep `src/server/api.ts` and `src/client/api.ts` as their public contracts.
 The compiler discovers pages declared with `view({ route, title }, render)`
 and component actions from window exports without executing them. The shell
-mounts each page. Use `component` inside a page and give an element a named `part`
-to expose it. Use `before`, `after`, `prepend`, `append`, `wrap`, `replace`, or
-`hide` from a dependent plugin. The first installed replacement wins.
+mounts each page. From a dependent plugin, use the owner's `find` to target a
+screen element with `before`, `after`, `prepend`, `append`, `hide`, or `layer`.
+Layers stack, with the first installed plugin outermost. Each layer can draw
+`Original` to continue through the stack to the owner's element.
 
 The browser UI target in `packages/build` emits native DOM ES modules. Host
 libraries stay bare imports resolved by the app's static import map. For cross-plugin imports,

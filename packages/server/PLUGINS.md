@@ -18,7 +18,7 @@ target/cloud/debug/tokamak-server --plugins path/to/plugins --local-dir path/to/
 ```
 
 The Server runs queries, mutations and actions. Use the [Runner](../runner/README.md)
-for local functions. The Server's `/local-worker` endpoint returns 401 without
+for caller actions. The Server's `/local-worker` endpoint returns 401 without
 credentials. An authenticated plain HTTP request returns 501 with “This server
 has no local runtime”; an authenticated WebSocket caller receives that reason in
 the startup refusal. Keep the matching
@@ -72,7 +72,7 @@ plugin IDs in installation order. Plugins with no history are ordered after
 their dependencies, choosing the lowest plugin ID when more than one can come
 next. Later scans preserve recorded order, remove absent plugins, and append
 new IDs. The catalog exposes each plugin's zero-based position as `installOrder`.
-The window uses it to choose the first installed replacement for an element.
+The window uses it to stack layers on an element, with the first installed plugin outermost.
 
 The catalog reserves `tokamak.host` for core metadata and `auth` for caller
 identity. A plugin manifest cannot use either ID.
@@ -218,6 +218,14 @@ admins can sign out their own and ordinary members' devices, and members can
 sign out their own devices. A forbidden sign-out returns HTTP 403.
 The server closes the device's sockets with code 4001 and rejects the key on
 reconnect. The bootstrap owner key stays available for recovery.
+
+Owners and admins can also read `GET /devices/machines/live` using the same
+authenticated SSE transport. Each event is an array of plugin machine entries
+with `id`, `name`, `owner: { kind: "plugin", plugin, name }`, `online`, and
+`lastSeen`, and optional `member: { id, name }` when bound to a member.
+`owner.name` comes from the installed plugin and `member.name` from the member record. Keep this stream separate from member devices: the owning plugin
+removes its machines through the SDK, and the member device revoke route
+does not accept their ids.
 
 Shared startup keeps device sign-in available if a plugin fails to initialize.
 The server logs every skipped plugin and its error, and `GET /plugins` includes

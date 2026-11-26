@@ -19,7 +19,7 @@ The visible part of the client in which a person works. It calls functions and n
 _Avoid_: Client (for the interface alone), frontend, webview.
 
 **Local part**:
-The part of a plugin that can work with files and programs on the machine where the Runner runs.
+The part of a plugin the Runner loads to run caller actions and their contracts. These actions can work with files and programs on the caller’s machine.
 _Avoid_: Worker, local server.
 
 **Runner**:
@@ -122,7 +122,7 @@ _Avoid_: Provider lookup, service name, interface (when referring to the agreeme
 
 **Plugin process**:
 A process the Runner starts on demand to run one installed build of a plugin's local part.
-_Avoid_: Worker, action process (when referring to local functions).
+_Avoid_: Worker, action process (when referring to caller actions).
 
 **Action process**:
 A process the server starts to run server actions. Each call starts with fresh module state.

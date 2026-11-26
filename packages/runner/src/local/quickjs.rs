@@ -2,7 +2,7 @@
 //! workspace; its lifetime does not determine the lifetime of the process.
 mod session;
 
-pub(super) use session::connection;
+pub(crate) use session::{action, connection};
 
 use super::{Artifact, TIMEOUT, client_env, quickjs_bundle, stderr_tail, write};
 use futures_util::StreamExt;
@@ -41,7 +41,7 @@ fn too_many_turns(limit: usize) -> String {
 type Slots = HashMap<Artifact, Entry>;
 
 #[derive(Clone)]
-pub(super) struct Pool {
+pub(crate) struct Pool {
     plugins: Arc<PathBuf>,
     env: Arc<BTreeMap<String, String>>,
     slots: Arc<Mutex<Slots>>,
@@ -49,6 +49,7 @@ pub(super) struct Pool {
     tasks: TaskTracker,
     processes: Arc<Semaphore>,
     linked: Arc<Semaphore>,
+    actions: Arc<Semaphore>,
 }
 
 struct Entry {
@@ -74,7 +75,7 @@ struct SlotState {
 
 // A socket remembers the builds it routes to. An invocation also holds its
 // lease, so a catalog update or a disconnected window cannot retire it mid-call.
-struct Leases {
+pub(crate) struct Leases {
     pool: Pool,
     workspace: Arc<str>,
     used: Mutex<HashMap<Artifact, Arc<Lease>>>,
@@ -84,6 +85,7 @@ struct Lease {
     slots: Arc<Mutex<Slots>>,
     build: Artifact,
     slot: Arc<Slot>,
+    retiring: CancellationToken,
 }
 
 impl Drop for Lease {
@@ -104,7 +106,7 @@ impl Drop for Lease {
 }
 
 impl Leases {
-    fn new(pool: &Pool, workspace: Arc<str>) -> Self {
+    pub(crate) fn new(pool: &Pool, workspace: Arc<str>) -> Self {
         Self {
             pool: pool.clone(),
             workspace,
@@ -149,6 +151,7 @@ impl Leases {
             slots: self.pool.slots.clone(),
             build: build.clone(),
             slot: entry.slot.clone(),
+            retiring: CancellationToken::new(),
         });
         used.insert(build.clone(), lease.clone());
         Ok(lease)
@@ -159,7 +162,9 @@ impl Leases {
             entry.supersede(&self.workspace, || "local plugin build retired".into());
         }
         // Drop outside the registry lock: this may release the last lease.
-        lock(&self.used).remove(build);
+        if let Some(lease) = lock(&self.used).remove(build) {
+            lease.retiring.cancel();
+        }
     }
 }
 
@@ -212,6 +217,32 @@ impl Entry {
     }
 }
 
+enum StartError {
+    Artifact(String),
+    Process(String),
+}
+
+impl From<String> for StartError {
+    fn from(value: String) -> Self {
+        Self::Process(value)
+    }
+}
+
+impl From<&str> for StartError {
+    fn from(value: &str) -> Self {
+        value.to_owned().into()
+    }
+}
+
+impl StartError {
+    fn message(self, id: &str) -> String {
+        let reason = match self {
+            Self::Artifact(reason) | Self::Process(reason) => reason,
+        };
+        format!("Plugin {id} process: {reason}")
+    }
+}
+
 impl Pool {
     pub(super) fn new(
         plugins: Arc<PathBuf>,
@@ -235,6 +266,7 @@ impl Pool {
             tasks: TaskTracker::new(),
             processes: Arc::new(Semaphore::new(WORKER_CAPACITY)),
             linked: Arc::new(Semaphore::new(TURN_CAPACITY)),
+            actions: Arc::new(Semaphore::new(WORKER_CAPACITY)),
         };
         pool.sweep_idle();
         pool
@@ -249,7 +281,7 @@ impl Pool {
         &self,
         server: &Arc<server::Server>,
         mut session: server::Session,
-        workspace: Arc<str>,
+        leases: Arc<Leases>,
     ) {
         let server = server.clone();
         let pool = self.clone();
@@ -264,7 +296,7 @@ impl Pool {
                     break;
                 };
                 if matches!(event, server::Event::PluginChanged { .. }) {
-                    pool.reconcile(&server, &mut previous, &workspace).await;
+                    pool.reconcile(&server, &mut previous, &leases).await;
                 }
             }
         });
@@ -274,11 +306,12 @@ impl Pool {
         &self,
         server: &server::Server,
         previous: &mut HashSet<Artifact>,
-        workspace: &str,
+        leases: &Leases,
     ) {
         if let Some(next) = local_catalog(server).await {
             for old in previous.difference(&next) {
-                self.retire_private(old, workspace);
+                self.retire_private(old, &leases.workspace);
+                leases.retire(old);
             }
             *previous = next;
         }
@@ -313,7 +346,7 @@ impl Pool {
     ) -> Result<Arc<Host>, String> {
         self.start_or_reuse(build, slot, routed)
             .await
-            .map_err(|reason| format!("Plugin {} process: {reason}", build.id))
+            .map_err(|error| error.message(&build.id))
     }
 
     async fn start_or_reuse(
@@ -321,7 +354,7 @@ impl Pool {
         build: &Artifact,
         slot: &Arc<Slot>,
         routed: bool,
-    ) -> Result<Arc<Host>, String> {
+    ) -> Result<Arc<Host>, StartError> {
         loop {
             let mut state = slot.state.lock().await;
             if self.stopping.is_cancelled() {
@@ -357,7 +390,8 @@ impl Pool {
             let code = tokio::time::timeout(TIMEOUT, verified)
                 .await
                 .map_err(|_| "local artifact verification stalled")?
-                .map_err(|error| error.to_string())??;
+                .map_err(|error| error.to_string())?
+                .map_err(StartError::Artifact)?;
             if self.stopping.is_cancelled() {
                 return Err("Runner stopped".into());
             }
@@ -378,7 +412,7 @@ impl Pool {
                 }
                 Err(error) => {
                     state.restart.failed(Instant::now(), false);
-                    return Err(error);
+                    return Err(error.into());
                 }
             }
         }
@@ -454,6 +488,7 @@ impl Inbox {
 
 struct Host {
     build: Artifact,
+    action_ops: OnceLock<Result<session::WindowActionOps, String>>,
     calls: Mutex<Calls>,
     writes: mpsc::Sender<Vec<u8>>,
     native: AsyncMutex<UnixDatagram>,
@@ -480,6 +515,7 @@ impl Host {
         let (writes, outgoing) = mpsc::channel(WORKER_CAPACITY);
         let host = Arc::new(Self {
             build: build.clone(),
+            action_ops: OnceLock::new(),
             calls: Mutex::default(),
             writes,
             native: AsyncMutex::new(native),
@@ -542,7 +578,7 @@ impl Host {
         Err(self.label(&format!("cannot claim plugin identity {claimed}")))
     }
 
-    async fn begin(self: &Arc<Self>, mut frame: Value) -> Result<Call, String> {
+    async fn begin(self: &Arc<Self>, frame: &mut Value) -> Result<Call, String> {
         // One op and one cancel per pending SDK slot, plus the final result.
         let (frames, receive) = mpsc::channel(2 * WORKER_CAPACITY + 1);
         let overflow = CancellationToken::new();
@@ -565,7 +601,7 @@ impl Host {
         let id = calls.next;
         frame["id"] = json!(id);
         frame["routed"] = json!(true);
-        let bytes = self.encode(&frame)?;
+        let bytes = self.encode(frame)?;
         calls.active.insert(
             id,
             Inbox {

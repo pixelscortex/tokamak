@@ -1,18 +1,35 @@
-// Generated plugin component paths. Commit this file.
+// Generated plugin screen search types. Commit this file.
 export * from "../api";
-declare const _part_Composer: import("@tokamak/sdk/client").ComponentParts<(typeof import("../api"))["Composer"], {
-  readonly "sendButton": { readonly target: "owner.composer.sendButton"; readonly locked: false };
-  readonly "toolbar": { readonly target: "owner.composer.toolbar"; readonly locked: false };
+type Props1 = Extract<NonNullable<import("../api").ExampleProps>, object>;
+type Props2 = Extract<NonNullable<Parameters<typeof import("../api")["Composer"]>[0]>, object>;
+type Props3 = Extract<NonNullable<{ children: import("@solidjs/web").JSX.Element }>, object>;
+type Props4 = Extract<NonNullable<Parameters<typeof import("../api")["Labels"]>[0]>, object>;
+type Props5 = Extract<NonNullable<Props4 & { readonly $row: { readonly item: string; readonly index: () => number } }>, object>;
+type Props6 = Extract<NonNullable<Props4 & { readonly $row: { readonly item: () => string; readonly index: number; readonly parent: { readonly item: string; readonly index: () => number } } }>, object>;
+type Props7 = Extract<NonNullable<Parameters<typeof import("../api")["BenchmarkRow"]>[0]>, object>;
+type Props8 = Extract<NonNullable<{ text: string; unloaded?: () => void }>, object>;
+type Props9 = Extract<NonNullable<Parameters<typeof import("../api")["RealisticRow"]>[0]>, object>;
+export declare const find: import("@tokamak/sdk/client").ScreenFind<{
+  "button": [["SendButton", Props1], ["Labels" | "section", Props4], ["RealisticRow" | "article" | "div", Props9, {"type":"button"}]];
+  "section": [["Composer", Props2, {"aria":{"label":"toolbar"}}], ["Labels", Props4]];
+  "SendButton": Props2;
+  "div": [["Composer" | "section", Props2, {"aria":{"label":"body"}}], ["Composer" | "section", Props2, {"aria":{"label":"detail"}}], ["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
+  "select": [["Composer" | "section", Props2, {"aria":{"label":"Upload"}}]];
+  "main": Props3;
+  "span": [["Labels" | "section", Props5], ["Labels" | "section" | "Region", Props4], ["BenchmarkRow" | "article" | "footer", Props7], ["RealisticRow" | "article" | "div" | "button", Props9]];
+  "groups": Props4;
+  "em": Props6;
+  "input": [["Labels" | "section", Props4, {"aria":{"label":"Search"}}]];
+  "Region": Props4;
+  "article": [["BenchmarkRow", Props7], ["RealisticRow", Props9]];
+  "header": [["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
+  "b": [["BenchmarkRow" | "article" | "header", Props7], ["RealisticRow" | "article" | "header", Props9]];
+  "time": [["BenchmarkRow" | "article" | "header", Props7], ["RealisticRow" | "article" | "header", Props9]];
+  "p": [["BenchmarkRow" | "article" | "div", Props7], ["RealisticRow" | "article" | "div", Props9]];
+  "footer": [["BenchmarkRow" | "article", Props7], ["RealisticRow" | "article", Props9]];
+  "small": [["RowStatus", Props8, {"aria":{"label":"Status"}}]];
+  "RowStatus": Props9;
+  "a": [["RealisticRow" | "article" | "footer", Props9, {"href":"#status"}]];
+  "svg": Props9;
+  "path": Props9;
 }>;
-export { _part_Composer as Composer };
-declare const _part_CustomLayout: import("@tokamak/sdk/client").ComponentParts<(typeof import("../api"))["CustomLayout"], {
-  readonly "ribbon": { readonly target: "owner.customLayout.ribbon"; readonly locked: false };
-}>;
-export { _part_CustomLayout as CustomLayout };
-declare const _part_Labels: import("@tokamak/sdk/client").ComponentParts<(typeof import("../api"))["Labels"], {
-  readonly "body": { readonly target: "owner.labels.body"; readonly locked: false };
-  readonly "for": { readonly target: "owner.labels.for"; readonly locked: false };
-  readonly "region": { readonly target: "owner.labels.region"; readonly locked: false };
-  readonly "search": { readonly target: "owner.labels.search"; readonly locked: false };
-}>;
-export { _part_Labels as Labels };

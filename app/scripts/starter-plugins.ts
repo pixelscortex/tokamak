@@ -4,7 +4,16 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Build the owners first so dependents can read their generated references.
-export const starterPlugins = ["chat", "ai", "code", "claude", "codex", "basic-auth"] as const;
+export const starterPlugins = [
+  "chat",
+  "ai",
+  "code",
+  "claude",
+  "codex",
+  "basic-auth",
+  "agent-proxy",
+  "ai-profiles",
+] as const;
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 export function buildStarterPlugins() {

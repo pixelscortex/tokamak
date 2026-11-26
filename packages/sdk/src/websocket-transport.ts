@@ -1,3 +1,4 @@
+import { isStructuredCallError } from "./call-error";
 import type { MessageConnection } from "./transport";
 import { MAX_WIRE_MESSAGE_BYTES } from "./protocol";
 import type { Event } from "./protocol";
@@ -30,6 +31,8 @@ function decode(data: unknown): Event {
   if (type === "unsubscribed") return event as Event;
   if (type !== "response" && type !== "subscription") throw new Error("invalid event result");
   validateResult(result);
+  if ("error" in event && (!("Err" in result) || !isStructuredCallError(event.error)))
+    throw new Error("invalid event error details");
   return event as Event;
 }
 
@@ -44,7 +47,7 @@ function validatePluginChange(event: Record<string, unknown>): void {
     throw new Error("invalid plugin change");
 }
 
-function validateResult(result: unknown): void {
+function validateResult(result: unknown): asserts result is object {
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("invalid event result");
   if (
     Object.keys(result).length !== 1 ||

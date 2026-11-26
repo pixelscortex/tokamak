@@ -64,7 +64,6 @@ async function desktopThread(context: BrowserContext, folder: string, model: str
 }
 
 async function pickAgentAndFolder(page: Page, folder: string, model: string) {
-  await pickAgentOption(page, "Agent", "Fake agent");
   await pickModel(page, model);
   await page.getByRole("button", { name: "Choose a folder…" }).click();
   await page.getByRole("textbox", { name: "Folder path" }).fill(folder);
@@ -72,7 +71,7 @@ async function pickAgentAndFolder(page: Page, folder: string, model: string) {
 }
 
 async function pickModel(page: Page, model: string) {
-  await pickAgentOption(page, "Model", model);
+  await pickAgentOption(page, "Fake agent", model);
 }
 
 async function send(page: Page, text: string) {
