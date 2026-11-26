@@ -1108,8 +1108,9 @@ A query, mutation, or action can expose a named spot in its handler with
 `point(ctx, name, value)` from `@tokamak/sdk`. Use a unique, nonempty string literal
 without `#`. A helper in the same module can take `ctx` and call a point if the
 compiler can trace it to exactly one exported handler. Pass that handler’s
-context, or the inner context from its `withPrograms` callback. Points are not
-allowed in triggers or hook stages.
+context, or the inner context from its `withPrograms` callback: a point runs
+for the call whose context it is given, and fails once that call has ended.
+Points are not allowed in triggers or hook stages.
 
 ```ts
 import { point } from "@tokamak/sdk";

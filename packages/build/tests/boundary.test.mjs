@@ -510,15 +510,6 @@ test("rejects non-data, dynamic, duplicate and ambiguous points", async () => {
     const owner = await backend(root, "owner");
     for (const [body, diagnostic, setup = ""] of [
       ['return ctx.point("name", 1);', "write point(ctx, ...)"],
-      [
-        'return point(saved, "name", 1);',
-        "must receive the context of its own handler",
-        `let saved: QueryContext<{}>;
-         export const other = query({ handler: (ctx) => {
-           saved = ctx;
-           return point(ctx, "name", 0);
-         } });`,
-      ],
       ['return point(ctx, "name", { fn: () => 1 });', "describe it as data, or use `after`"],
       [
         'return point(ctx, "name", 1, async () => ({ nested: [() => 1] }));',
