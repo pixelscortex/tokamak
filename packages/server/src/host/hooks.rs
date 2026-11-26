@@ -274,27 +274,7 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
         };
         value = execute(hook.clone(), stage, note, input)
             .await
-            .map_err(|error| {
-                if error.kind == Some(engine::CallErrorKind::RunnerArtifactUnavailable) {
-                    make_error("hookRunnerUnavailable", Json::Null)
-                } else if error.details.is_some() {
-                    error
-                } else {
-                    match error.limit {
-                        Some(engine::CallLimit::Depth) => {
-                            make_error("hookDepthLimit", json!("plugin call cycle or depth limit"))
-                        }
-                        Some(engine::CallLimit::Modules) => make_error(
-                            "hookDepthLimit",
-                            json!("delegated module count budget exceeded"),
-                        ),
-                        None => {
-                            let message = error.message.lines().next().unwrap_or_default();
-                            make_error("hookException", json!(message))
-                        }
-                    }
-                }
-            })?;
+            .map_err(|error| hook_stage_error(error, make_error))?;
 
         // Runner capability failures mean the stage could not run, even in an after hook.
         if let Some(kind) = failure_kind(&value)
@@ -322,6 +302,31 @@ async fn run_chain<F: Future<Output = Result<Json, engine::CallError>>>(
     } else {
         value
     })
+}
+
+fn hook_stage_error(
+    error: engine::CallError,
+    make_error: impl FnOnce(&str, Json) -> engine::CallError,
+) -> engine::CallError {
+    if error.kind == Some(engine::CallErrorKind::RunnerArtifactUnavailable) {
+        return make_error("hookRunnerUnavailable", Json::Null);
+    }
+    if error.details.is_some() {
+        return error;
+    }
+    match error.limit {
+        Some(engine::CallLimit::Depth) => {
+            make_error("hookDepthLimit", json!("plugin call cycle or depth limit"))
+        }
+        Some(engine::CallLimit::Modules) => make_error(
+            "hookDepthLimit",
+            json!("delegated module count budget exceeded"),
+        ),
+        None => {
+            let message = error.message.lines().next().unwrap_or_default();
+            make_error("hookException", json!(message))
+        }
+    }
 }
 
 pub(super) struct TransactionHooks {
