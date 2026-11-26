@@ -1,10 +1,20 @@
-import { Show, createEffect, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { TokamakClient } from "@tokamak/sdk";
 import { auth, useClient, useQuery, useShortcuts } from "@tokamak/sdk/client";
 import { holdSend, type ComposerProps } from "plugin:chat/client";
 import { errorText, isSendersDevice } from "../../shared/turn-shared";
-import { api, machineNotice, notice, refreshAgents, unavailable } from "../lib/agents";
+import {
+  agentCatalog,
+  agents,
+  api,
+  machineNotice,
+  notice,
+  refreshAgents,
+  rememberCatalog,
+  unavailable,
+  type AgentEntry,
+} from "../lib/agents";
 import {
   creatorOnlyLine,
   deviceChoices,
@@ -96,9 +106,9 @@ function OpenThreadRow(props: {
     const started = creator.data();
     return started && started.id !== me.id ? started : undefined;
   };
-  const resolved = () => {
+  const resolved = (catalog?: readonly AgentEntry[]) => {
     const choices = stored.data();
-    return choices ? storedChoices(choices) : deviceChoices();
+    return choices ? storedChoices(choices, catalog) : deviceChoices(undefined, catalog);
   };
   return (
     <Show when={!stored.loading() && !creator.loading()}>
@@ -128,23 +138,78 @@ function OpenThreadRow(props: {
 function Row(props: {
   client: TokamakClient;
   threadId: string | undefined;
-  resolved: () => Resolved | undefined;
+  resolved: (catalog?: readonly AgentEntry[]) => Resolved | undefined;
   turnLine: () => string | undefined;
 }): JSX.Element {
   let row: HTMLDivElement | undefined;
-  const missing = () => {
-    const current = props.resolved();
-    return current && unavailable(current.agent);
+  const [catalog, setCatalog] = createSignal<readonly AgentEntry[] | undefined>(undefined);
+  const [checking, setChecking] = createSignal(false);
+  let revision = 0;
+  let catalogJson: string | undefined;
+  let retired = false;
+  onCleanup(() => {
+    revision++;
+    retired = true;
+  });
+  const resetCatalog = () => {
+    if (retired) return;
+    revision++;
+    rememberCatalog(props.client, props.threadId, undefined);
+    setCatalog(undefined);
+    setChecking(false);
+    catalogJson = undefined;
   };
-  // Send waits in this thread's composer while its agent cannot answer.
-  onCleanup(holdSend((composer) => composer.threadId === props.threadId && missing() !== undefined));
-  const refresh = (open: boolean) => open && void refreshAgents(props.client);
+  const refreshCatalog = (check = true) => {
+    if (retired) return;
+    if (check) setChecking(true);
+    const request = ++revision;
+    void agentCatalog(props.client, props.threadId).then(
+      (list) => {
+        if (request !== revision) return;
+        setChecking(false);
+        rememberCatalog(props.client, props.threadId, list);
+        const json = JSON.stringify(list);
+        if (json === catalogJson) return;
+        catalogJson = json;
+        setCatalog(list);
+      },
+      () => {
+        if (request !== revision) return;
+        resetCatalog();
+      },
+    );
+  };
+  const resolved = () => props.resolved(catalog());
+  const notOffered = () => {
+    const current = resolved();
+    const list = catalog();
+    return Boolean(
+      current &&
+      list &&
+      agents().some((entry) => entry.id === current.agent.id) &&
+      !list.some((entry) => entry.id === current.agent.id),
+    );
+  };
+  const missing = () => {
+    const current = resolved();
+    return notOffered()
+      ? "Pick an available agent or change your selection."
+      : current && unavailable(current.agent);
+  };
+  onCleanup(
+    holdSend((composer) => composer.threadId === props.threadId && (checking() || missing() !== undefined)),
+  );
+  const refresh = (open: boolean) => {
+    if (!open) return;
+    void refreshAgents(props.client);
+    refreshCatalog(false);
+  };
   const change = (current: Resolved, next: Change) =>
     void pick(props.client, props.threadId, current, next).catch((cause: unknown) =>
       notice.set(errorText(cause)),
     );
   return (
-    <Show when={props.resolved()}>
+    <Show when={resolved()}>
       {(current) => (
         // No padding at the start: the picker's edge sits on the box's edge above it, and
         // 4 px from the tray on the left and below alike.
@@ -156,12 +221,18 @@ function Row(props: {
         >
           <AgentPicker
             current={current()}
+            threadId={props.threadId}
+            agents={catalog() ?? agents()}
+            notOffered={notOffered()}
+            refreshCatalog={refreshCatalog}
+            resetCatalog={resetCatalog}
             missing={missing()}
             anchor={() => row?.parentElement ?? undefined}
             onOpen={refresh}
             change={(next) => change(current(), next)}
           />
           <span class="flex-1" />
+          <span data-part="statusExtras" class="contents" />
           <Show when={machineNotice() ?? notice() ?? props.turnLine() ?? missing()}>
             {(line) => (
               <span role="status" class="text-label text-ink-3">

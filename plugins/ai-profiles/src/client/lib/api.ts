@@ -10,7 +10,7 @@ export type Company = Subscription["company"];
 /**
  * ai's own list of agents on this computer, for their marks: a company's logo
  * is the mark of its agent plugin (Claude for Anthropic, Codex for OpenAI).
- * AI publishes no server API module, so the caller action is referenced by name.
+ * This unscoped caller action keeps company marks separate from picker choices.
  */
 export const ai = createApi<{
   agents: {

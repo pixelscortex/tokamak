@@ -4,7 +4,7 @@ export default definePlugin({
   id: "ai-profiles",
   version: "0.1.0",
   name: "AI Profiles",
-  description: "The Profiles screen: a person's subscriptions, and later the profiles built from them.",
-  depends: ["ai", "agent-proxy"],
+  description: "A person's subscriptions and profiles, used to run agents in chat threads.",
+  depends: ["ai", "agent-proxy", "chat"],
   permissions: [],
 });

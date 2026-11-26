@@ -1,4 +1,4 @@
-import { isFailure, type MachineFailure, type TokamakClient } from "@tokamak/sdk";
+import { isFailure, type Id, type MachineFailure, type TokamakClient } from "@tokamak/sdk";
 import { state } from "@tokamak/sdk/client";
 import type { Info } from "../../contracts";
 import { setupReason } from "../../shared/turn-shared";
@@ -81,6 +81,45 @@ export function refreshAgents(client: TokamakClient): Promise<void> {
       asking = undefined;
     });
   return asking;
+}
+
+interface WindowCatalog {
+  draft?: readonly AgentEntry[];
+  open?: { threadId: string; entries: readonly AgentEntry[] };
+}
+const catalogs = new WeakMap<TokamakClient, WindowCatalog>();
+
+export function rememberCatalog(
+  client: TokamakClient,
+  threadId: string | undefined,
+  entries: readonly AgentEntry[] | undefined,
+) {
+  const previous = catalogs.get(client) ?? {};
+  catalogs.set(
+    client,
+    threadId === undefined
+      ? { ...previous, draft: entries }
+      : { ...previous, open: entries && { threadId, entries } },
+  );
+}
+
+export function cachedCatalog(client: TokamakClient, threadId: string | undefined) {
+  const current = catalogs.get(client);
+  return threadId === undefined
+    ? current?.draft
+    : current?.open?.threadId === threadId
+      ? current.open.entries
+      : undefined;
+}
+
+/** Choices for one composer. Keep this answer separate from discovery and marks. */
+export async function agentCatalog(client: TokamakClient, threadId: string | undefined) {
+  const list = await windowAction(
+    client,
+    api.agents.list,
+    threadId === undefined ? { draft: true } : { threadId: threadId as Id<"threads"> },
+  );
+  return isFailure(list) ? undefined : list;
 }
 
 /** Why a turn cannot run or begin, as `run:turn` fails or the row sees it. */

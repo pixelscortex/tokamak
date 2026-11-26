@@ -22,7 +22,7 @@ const UNKNOWN: Info = {
  */
 export const list = action({
   on: "caller",
-  args: { windowId: v.string() },
+  args: { windowId: v.string(), threadId: v.optional(v.id("threads")), draft: v.optional(v.boolean()) },
   handler: async (ctx) => {
     const { providers, incompatible } = await localProviders(agent, ctx);
     const available = await Promise.all(

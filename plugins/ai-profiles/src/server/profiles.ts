@@ -1,6 +1,7 @@
 import {
   createFunctions,
   fail,
+  isFailure,
   type AuthContext,
   type Doc,
   type Id,
@@ -89,19 +90,19 @@ export async function checkCode(ctx: Reader, owner: string, raw: string, except?
 }
 
 /** The caller's profile with this id, or null when it is not theirs or not a profile. */
-async function own(ctx: Reader, id: string): Promise<Row | null> {
+export async function own(ctx: Reader, id: string): Promise<Row | null> {
   const ref = profileId(id);
   const row = ref && (await ctx.db.get(ref));
   return row && row.owner === ownerOf(ctx.auth) ? row : null;
 }
 
 /** The caller's subscriptions as `agent-proxy` lists them now, by `subscriptionKey`. */
-async function subscriptionsOf(ctx: Reader): Promise<Map<string, SubscriptionView>> {
+export async function subscriptionsOf(ctx: Reader): Promise<Map<string, SubscriptionView>> {
   const { subscriptions } = await ctx.use(proxy).listSubscriptions({});
   return new Map(subscriptions.map((subscription) => [subscriptionKey(subscription.id), subscription]));
 }
 
-const rowsOf = (ctx: Reader, owner: string) =>
+export const rowsOf = (ctx: Reader, owner: string) =>
   ctx.db
     .query("profiles")
     .withIndex("by_owner", (q) => q.eq("owner", owner))
@@ -152,7 +153,8 @@ async function save(
   live: ReadonlyMap<string, SubscriptionView>,
 ) {
   const entries = keys.map((subscription) => ({ subscription }));
-  await ctx.db.patch(row._id, { entries });
+  const set = await syncSet(ctx, { ...row, entries }, live);
+  await ctx.db.patch(row._id, { entries, set });
   return viewOf({ ...row, entries }, live);
 }
 
@@ -182,7 +184,9 @@ export const create = mutation({
     if ((await rowsOf(ctx, owner)).length >= MAX_PROFILES)
       return fail("TooMany", { message: `You can have at most ${MAX_PROFILES} profiles.` });
     const row = { owner, name, code: checked.code, entries: [] as Row["entries"], createdAt: Date.now() };
-    const id = await ctx.db.insert("profiles", row);
+    const registered = await ctx.use(proxy).registerSet({ subscriptions: [] });
+    if (isFailure(registered)) return registered;
+    const id = await ctx.db.insert("profiles", { ...row, set: registered.set });
     return viewOf({ ...row, _id: id }, new Map());
   },
 });
@@ -259,7 +263,12 @@ export const forgetSubscription = internalMutation({
       const entries = row.entries.filter((entry) => subscriptionKey(entry.subscription) !== key);
       if (entries.length === row.entries.length) continue;
       held++;
-      await ctx.db.patch(row._id, { entries });
+      await save(
+        ctx,
+        row,
+        entries.map((entry) => entry.subscription),
+        await subscriptionsOf(ctx),
+      );
     }
     return held;
   },
@@ -269,17 +278,23 @@ export const forgetSubscription = internalMutation({
  * The caller's profiles that hold `subscription` (an agent-proxy id, in either
  * spelling; compared by `subscriptionKey`), for the subscription details'
  * "Used by" and the remove confirmation. Hidden entries count: the profile
- * still holds it. Threads are not counted yet (TKM-266 records which thread
- * uses which profile), so `threads` is 0.
+ * still holds it. The thread count is the number of threads using that profile.
  */
 export const using = internalQuery({
   args: { subscription: v.string() },
   handler: async (ctx, args) => {
     const key = subscriptionKey(args.subscription);
-    return (await rowsOf(ctx, ownerOf(ctx.auth)))
+    const profiles = (await rowsOf(ctx, ownerOf(ctx.auth)))
       .filter((row) => keysOf(row).includes(key))
-      .sort((a, b) => a._creationTime - b._creationTime)
-      .map((row) => ({ id: row._id as string, code: row.code, name: row.name, threads: 0 }));
+      .sort((a, b) => a._creationTime - b._creationTime);
+    return Promise.all(
+      profiles.map(async (row) => ({
+        id: row._id as string,
+        code: row.code,
+        name: row.name,
+        threads: (await threadProfiles(ctx, row._id)).length,
+      })),
+    );
   },
 });
 
@@ -294,10 +309,72 @@ export const inUseOrder = internalQuery({
   handler: async (ctx, args) => {
     const row = await own(ctx, args.profile);
     if (!row) return gone("profile");
-    const live = await subscriptionsOf(ctx);
-    const subscriptions = keysOf(row)
-      .map((key) => live.get(key))
-      .filter((subscription): subscription is SubscriptionView => !!subscription?.enabled);
+    const subscriptions = enabledOf(row, await subscriptionsOf(ctx));
     return { id: row._id as string, name: row.name, code: row.code, subscriptions };
+  },
+});
+
+export function enabledOf(row: Row, live: ReadonlyMap<string, SubscriptionView>) {
+  return keysOf(row)
+    .map((key) => live.get(key))
+    .filter((subscription): subscription is SubscriptionView => !!subscription?.enabled);
+}
+
+async function syncSet(ctx: MutationContext<Model>, row: Row, live: ReadonlyMap<string, SubscriptionView>) {
+  const result = await ctx.use(proxy).registerSet({
+    ...(row.set !== undefined && { set: row.set }),
+    subscriptions: enabledOf(row, live).map((subscription) => subscription.id),
+  });
+  if (isFailure(result)) throw new Error(result.data.message);
+  return result.set;
+}
+
+// Backfill profiles created before sets were stored.
+export const ensureSet = internalMutation({
+  args: { profile: v.string() },
+  handler: async (ctx, { profile }) => {
+    const row = await own(ctx, profile);
+    if (!row) return null;
+    if (row.set !== undefined) return row.set;
+    const set = await syncSet(ctx, row, await subscriptionsOf(ctx));
+    await ctx.db.patch(row._id, { set });
+    return set;
+  },
+});
+
+export async function syncSubscription(ctx: MutationContext<Model>, subscription: string) {
+  const key = subscriptionKey(subscription);
+  const rows = (await rowsOf(ctx, ownerOf(ctx.auth))).filter((row) => keysOf(row).includes(key));
+  if (rows.length === 0) return;
+  const live = await subscriptionsOf(ctx);
+  for (const row of rows) {
+    const set = await syncSet(ctx, row, live);
+    if (row.set !== set) await ctx.db.patch(row._id, { set });
+  }
+}
+
+const threadProfiles = (ctx: Reader, profile: Id<"profiles">) =>
+  ctx.db
+    .query("threadProfiles")
+    .withIndex("by_profile", (q) => q.eq("profile", profile))
+    .collect();
+
+export const discard = mutation({
+  args: { profile: v.string() },
+  handler: async (ctx, { profile }) => {
+    const row = await own(ctx, profile);
+    if (!row) return gone("profile");
+    if (row.set !== undefined) {
+      const removed = await ctx.use(proxy).removeSet({ set: row.set });
+      if (isFailure(removed)) return removed;
+    }
+    for (const entry of await threadProfiles(ctx, row._id)) await ctx.db.delete(entry._id);
+    const last = await ctx.db
+      .query("lastProfiles")
+      .withIndex("by_owner", (q) => q.eq("owner", row.owner))
+      .first();
+    if (last?.profile === row._id) await ctx.db.delete(last._id);
+    await ctx.db.delete(row._id);
+    return null;
   },
 });

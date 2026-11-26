@@ -34,7 +34,7 @@ pending steer, queued messages, the expired question line, "Force stop".
 ### The agent picker
 
 The agent row holds one picker, drawn by the owner in the Paper file "Tokamak — Directions"
-(artboard "6 · Thread · picker open"; its first column is not built here).
+(artboard "6 · Thread · picker open"; the extra column is supplied by [AI Profiles](ai-profiles.md)).
 
 - **Closed chip** (`PickerChip`): the agent's mark, then the model and its effort,
   "work" or "Opus 5.5 · High", then ⇅. It is the standard ghost `Menu.Trigger` (32 tall,
@@ -56,23 +56,16 @@ The agent row holds one picker, drawn by the owner in the Paper file "Tokamak �
   pick is stored at once (`choices:set`, or the new thread's window state) as before.
 - A long model list scrolls inside the columns; the bar stays in view.
 
-What the picker offers comes from one public function, `agents:list` (the agents and their
-models, levels, speeds and modes as the caller action answers). Nothing else adds
-choices. What that means for a plugin that changes its answer:
+The caller action `agents:list` takes an optional `threadId` for an open
+thread, or `draft: true` for the new-thread composer. The picker refreshes its
+scoped options when it opens or an addition calls `refreshCatalog`. Calls
+without either scope still feed discovery, reply marks, and the thread list.
+A scoped exclusion leaves the current agent selected, labels it "Not
+available", and holds Send. A plugin that is gone still says it isn't installed.
 
-- It changes the picker's agents and models, the agent a new thread starts with, the chip's
-  fallback model and effort, and the settings a new turn starts with.
-- The answer is fetched once for the window (`lib/agents.ts`) and takes no thread, so it is
-  the same for every thread and is not asked again when something else changes.
-- The same answer feeds the agent marks on reply headers and thread rows and the "isn't
-  installed" line. An agent removed from it loses its mark, and its threads say it isn't
-  installed.
-- The turn checks the agent's own `info`, not this list.
-
-A stored model, level, speed or mode
-that is no longer offered reads as the first offered one, in the chip and in the turn alike
-(`shared/offered.ts`); the next change stores that fallback. A thread whose agent is gone
-keeps it and says it isn't installed, as before.
+An out-of-date model, level, speed or mode falls back to the first offered one
+(`shared/offered.ts`). With launch settings the CLI validates the choices;
+AI does not use the ordinary personal catalog for the launch probe.
 
 A launch hook can supply environment variables and CLI arguments. If two
 plugins set the same variable, the existing error reply names both plugins
@@ -81,7 +74,10 @@ names the plugin and the flag. Both checks run before the agent CLI starts.
 
 Launched turns use the project's settings and a private CLI home on the
 Runner. A thread resumes its previous agent session only when the same
-plugins contributed launch settings; changing a key does not change the home.
+plugins contributed launch settings with the same stable identities; changing a
+per-turn key does not change the home. The launch request supplies an agent id
+and a fresh launch id. An `ended` point in a finalizer gives additions the same
+launch id on completion, setup failure, or stop without exposing credentials.
 Deleting the thread from the Runner removes its local homes. The same setup
 messages cover missing or outdated CLIs, and turn errors hide launch values.
 These states use the existing error reply and are not drawn on the Paper page.
@@ -93,9 +89,11 @@ including the picker and the agent row. See
 `plugins/ai/src/client/_generated/components.d.ts` for the generated paths.
 Agent plugins supply data through `plugin:ai/contracts`.
 
-The agent picker keeps the places another plugin would add to as one named element each:
-the closed chip (`PickerChip` in `ui/agent-picker.tsx`) and the column area
-(`PickerColumns`). Its list of agents and models is one call, `agents:list`.
+The picker publishes `PickerChip.Menu$2e$Trigger.chipExtras` for closed-chip
+content and `PickerColumns.div.extraColumns` for extra radio columns. The
+composer exposes `Row.div.statusExtras` for extra notices; the working thread
+detail exposes `ThreadDetail.detailExtras` beside its model. AI Profiles
+fills these parts when installed.
 
 ## What it adds to others
 
@@ -135,6 +133,9 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   padding and text; changing Button's ghost look changes the chip.
 - The popover's anchor is the agent row's parent, chat's composer tray: if chat
   moves `parts.Composer.div.box`'s siblings out of the tray, the popover moves with them.
+- Picker extras, catalog scope, Send warnings and thread detail: check the
+  [AI Profiles](ai-profiles.md) additions. Reply and thread marks still use
+  unscoped discovery; Chat's `detail` part holds the working and idle details.
 - The picker's items are `Menu.RadioItem`s and its card is `Menu.Content`: their
   look (32 rows, the check, padding 4, radius 12) is `@tokamak/ui`'s menu.
 - The column widths (`--container-models` 344, `--container-effort` 152 in
@@ -172,9 +173,8 @@ missing or signed out, and listens to `onSent` / `onDraftSubmit`.
   it with its check only.
 - The popover is wider than drawn (about 686 against 512) because the bar's radio items
   are wider than the drawn dropdowns, and a long model list can reach the top of the window.
-- A thread whose agent is no longer in the `agents:list` answer says it "isn't installed"
-  and holds Send. Whether it should switch to the first offered agent, or say it is not
-  offered, is not decided.
+- The per-thread scope argument on `agents:list` is pending owner confirmation.
+  Picker choices on launched turns are still validated by the CLI.
 - The closed chip shows the model and effort only; speed, mode and the access level are
   read in the popover.
 - The agent rows on every `AI ·` artboard and the whole `AI · picker open` artboard were

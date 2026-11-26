@@ -1,4 +1,5 @@
 import { defineSchema, defineTable, v } from "@tokamak/sdk";
+import { tables } from "plugin:chat/tables";
 
 /**
  * ai-profiles' own data: a person's profiles. Subscriptions are
@@ -8,6 +9,17 @@ import { defineSchema, defineTable, v } from "@tokamak/sdk";
  * person's, and every function reads and writes only the caller's rows.
  */
 export default defineSchema({
+  threadProfiles: defineTable({
+    thread: v.ref(tables.threads),
+    profile: v.id("profiles"),
+    owner: v.string(),
+  })
+    .unique("by_thread", ["thread"])
+    .index("by_profile", ["profile"]),
+  lastProfiles: defineTable({
+    owner: v.string(),
+    profile: v.id("profiles"),
+  }).unique("by_owner", ["owner"]),
   /** A named set of the person's subscriptions, in the order they are used (fill first). */
   profiles: defineTable({
     owner: v.string(),
@@ -25,6 +37,7 @@ export default defineSchema({
      */
     entries: v.array(v.object({ subscription: v.string() })),
     createdAt: v.number(),
+    set: v.optional(v.string()),
   })
     .index("by_owner", ["owner"])
     .unique("by_owner_code", ["owner", "code"]),

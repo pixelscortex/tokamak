@@ -12,6 +12,7 @@ type References = {
   readonly "profiles": {
     readonly "add": ReferenceFromDefinition<typeof import("../profiles")["add"]>;
     readonly "create": ReferenceFromDefinition<typeof import("../profiles")["create"]>;
+    readonly "discard": ReferenceFromDefinition<typeof import("../profiles")["discard"]>;
     readonly "list": ReferenceFromDefinition<typeof import("../profiles")["list"]>;
     readonly "move": ReferenceFromDefinition<typeof import("../profiles")["move"]>;
     readonly "remove": ReferenceFromDefinition<typeof import("../profiles")["remove"]>;
@@ -25,6 +26,10 @@ type References = {
     readonly "setLabel": ReferenceFromDefinition<typeof import("../subscriptions")["setLabel"]>;
     readonly "startSignIn": ReferenceFromDefinition<typeof import("../subscriptions")["startSignIn"]>;
   };
+  readonly "thread-profiles": {
+    readonly "pick": ReferenceFromDefinition<typeof import("../thread-profiles")["pick"]>;
+    readonly "selection": ReferenceFromDefinition<typeof import("../thread-profiles")["selection"]>;
+  };
 };
 export const api: References = createApi("ai-profiles", [
   "manage:addAccount",
@@ -35,6 +40,7 @@ export const api: References = createApi("ai-profiles", [
   "manage:usedBy",
   "profiles:add",
   "profiles:create",
+  "profiles:discard",
   "profiles:list",
   "profiles:move",
   "profiles:remove",
@@ -45,4 +51,6 @@ export const api: References = createApi("ai-profiles", [
   "subscriptions:setEnabled",
   "subscriptions:setLabel",
   "subscriptions:startSignIn",
+  "thread-profiles:pick",
+  "thread-profiles:selection",
 ]);

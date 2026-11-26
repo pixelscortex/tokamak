@@ -4,7 +4,8 @@ The Profiles screen: a page of its own in the rail. It draws the
 Subscriptions section with the add-subscription dialog (Claude and ChatGPT,
 TKM-261 and TKM-262), the Profiles section with its "New profile" dialog and
 dragging (TKM-264), and the subscription details and the remove confirmation
-(TKM-265). The profile details and the picker column come with later tickets.
+(TKM-265). The profile details come with TKM-269. In Chat, TKM-266 adds the Profile column and the
+profile code beside the agent and model.
 Subscriptions are `agent-proxy`'s data (`design/agent-proxy.md`); company logos
 are the marks of the `claude` and `codex` agent plugins, read from ai's agent
 list on this computer. On the desktop app the page also listens for the
@@ -114,7 +115,7 @@ out" in warn), and a ghost `sm` "Sign out" or "Sign in". The right column's
 sections are 32 apart and 12 inside; model chips are `Chip` `sm` with the
 company mark, 8 apart; a "Used by" row is 24 tall, the profile mark 12 and code
 in data mono ink-3, the name `text-row` medium, the thread count in data mono
-ink-3 (0 until threads record a profile, TKM-266).
+ink-3 (the number of threads that have picked that profile).
 
 ### Decided here, not drawn (or not on the scale)
 
@@ -189,15 +190,41 @@ ink-3 (0 until threads record a profile, TKM-266).
   account in, or the failure's own words. "That sign-in was cancelled in
   another window." is only for one that left the list with neither.
 
+### Profile in a thread
+
+- New and open thread composers: a Profile column after the agent, model and effort.
+  Each radio item has a grey mark and the profile code. The closed picker shows
+  the code in a small chip.
+- With profiles and no pick, the chip says "Profile" in the warning tone, the
+  composer says "Pick a profile to send.", and Send is held. If the thread's
+  agent isn't offered, the picker labels it "Not available" and keeps the choice
+  until an offered agent or another profile is picked. With no profiles these
+  additions are absent.
+- The thread list shows the saved profile code next to the agent and model,
+  including when the thread is idle. The subscription details count threads
+  that still reference each profile.
+
+For the App 1:1 pages: new thread and open thread with picker open, picker closed
+(selected and unpicked), open picker with an unavailable current agent, and
+Chat's thread list with idle and working profile threads. The subscription
+details also show the live thread count.
+
 ## Parts it offers
 
-None. It publishes no `component`.
+None for its thread UI. It fills named parts published by AI and Chat.
 
 ## What it adds to others
 
 | Target (shell)     | What                                                                   | File                                 | Paper artboard                                                 |
 | ------------------ | ---------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
 | Rail, tabs, search | The Profiles page (`/p/ai-profiles`), marked with a person (user-line) | `pages/profiles.tsx`, `lib/icons.ts` | every `Profiles ·` artboard (its tab); the rail is not on them |
+
+| Target                                                                   | What                                  | Source                  |
+| ------------------------------------------------------------------------ | ------------------------------------- | ----------------------- |
+| AI `PickerColumns.div.extraColumns`                                      | Profile radio column                  | `ui/thread-profile.tsx` |
+| AI `PickerChip.Menu$2e$Trigger.chipExtras`                               | Code or warning chip                  | `ui/thread-profile.tsx` |
+| AI `Row.div.statusExtras`                                                | Missing pick line and Send hold       | `ui/thread-profile.tsx` |
+| AI `ThreadDetail.detailExtras`, Chat `ThreadRow.ListboxItem.span.detail` | Profile code in working and idle rows | `ui/thread-profile.tsx` |
 
 It uses the shell's sign-in return commands (`sign_in_return_listen`,
 `sign_in_return_cancel`, `sign_in_open_browser`, `design/shell.md`) through
@@ -232,12 +259,20 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
   calls it through `profile-uses.ts` in the same transaction, and it throws
   rather than return a failure. Every other change to a profile's list goes
   through `save()` in `src/server/profiles.ts`.
-- "Used by" and the remove dialog read `internal.profiles.using` through
-  `profile-uses.ts` (the caller's profiles only); its `threads` is 0 until
-  TKM-266 records which thread uses which profile.
-- The picker column (TKM-266) lists profiles with `profiles.list`. Starting a
-  turn reads the chosen profile's enabled subscriptions in use order with
-  `internal.profiles.inUseOrder`; the order shown here is that order.
+- "Used by" counts the saved picks in `threadProfiles`; the remove dialog
+  uses the same list of profiles.
+  Chat's thread reference cascades on delete. Deleting a profile removes its picks,
+  the saved last pick if it matched, and its proxy set in the same transaction.
+- Chat's `threads:start` hook copies the caller's saved last choice into a
+  new thread's row before the first Send is announced. Explicit picks update the
+  last choice; other existing threads don't follow it.
+- The named picker parts and `agents:list` scope are in [AI](ai.md); changes
+  must keep scoped options separate from the global marks and preserve an unavailable
+  current agent. The warning and row layout also depend on [Chat](chat.md).
+- Set creation and subscription order or enable changes update the profile's
+  [proxy set](agent-proxy.md). A launch reads the thread pick from the call note,
+  then gets a Claude-only key. AI's `ended` point revokes that key, even if
+  starting the CLI failed.
 - A person has at most 32 profiles (`MAX_PROFILES`); the code rules are
   `checkCode`, for making a profile and for renaming one later (TKM-269).
 - `CompanyMark` keeps only path outlines, like ai's `AgentMark`: the marks
@@ -272,6 +307,8 @@ It uses the shell's sign-in return commands (`sign_in_return_listen`,
 
 ## Primitives used
 
+The thread picker uses `Menu.RadioGroup`, `Menu.RadioItem`, `Icon` and `Chip sm`.
+
 `Avatar`, `Button` (`sm` ghost "Sign in", "Sign out", "Add account",
 "Continue", "Cancel"; `md` ghost "Add subscription", "Copy link", "Back", "New
 profile"; `bare` "Profiles" in the header; brand "Open sign-in page" (a link in
@@ -299,6 +336,13 @@ converter keeps no rotation, so the drag ghost is not tilted on the copy. The
 Switch's transparent 2 px border is left out (Paper measures from inside it).
 
 ## Open questions
+
+- Per-thread scope on `agents:list` (with a separate draft scope) is pending owner
+  confirmation. Codex profile routing and provider-side model/effort validation
+  are deferred.
+- A profile turn needs an attached or connected Runner. The standalone desktop
+  window fallback can read the picker catalog but cannot call the plugin-only
+  key functions. It asks to connect a machine instead of using the personal login.
 
 - **The details are not a page of their own.** They are window state on the
   Profiles page (`openSubscription`) until plugins get route parameters: the

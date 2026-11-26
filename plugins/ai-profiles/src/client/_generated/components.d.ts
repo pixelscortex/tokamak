@@ -4,6 +4,7 @@ type Local1 = { subscriptions: readonly import("../lib/api").Subscription[]; sig
 type Local2 = import("../lib/api").Subscription["accounts"][number];
 type Local3 = { label: () => string; icon: string; tip: () => string; run: () => unknown };
 type Local4 = { failed: true; kind: string; data: { message: string; field?: string } };
+type Local5 = { threadId: string | undefined };
 type Props1 = Extract<NonNullable<{} & { readonly $row: { readonly item: () => import("plugin:agent-proxy/server").SubscriptionView; readonly index: () => number } }>, object>;
 type Props2 = Extract<NonNullable<{} & { readonly $row: { readonly item: () => import("plugin:agent-proxy/server").SignInView; readonly index: () => number } }>, object>;
 type Props3 = Extract<NonNullable<{ data: Local1 | undefined; returns: import("../pages/subscription").Returns }>, object>;
@@ -111,6 +112,14 @@ type Props39 = Extract<NonNullable<{
   /** Faded while a profile is pointed at: a sign-in is in no profile. */
   dimmed?: boolean;
 }>, object>;
+type Props40 = Extract<NonNullable<{ code?: string }>, object>;
+type Props41 = Extract<NonNullable<Local5 & {
+    refreshCatalog: () => void;
+    resetCatalog: () => void;
+  }>, object>;
+type Props42 = Extract<NonNullable<Local5>, object>;
+type Props43 = Extract<NonNullable<Props42 & { readonly $row: { readonly item: () => import("../../server/profiles").ProfileView; readonly index: () => number } }>, object>;
+type Props44 = Extract<NonNullable<import("plugin:chat/client").ThreadRowProps>, object>;
 export declare const parts: {
   readonly "Profiles": {
     readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.Profiles.div", {}> & {
@@ -581,5 +590,34 @@ export declare const parts: {
         };
       };
     };
+  };
+  readonly "ProfileCode": {
+    readonly "Chip": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.ProfileCode.Chip", Props40>;
+  };
+  readonly "PickerProfileChip": {
+    readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileChip.span", Props41> & {
+      readonly "ProfileCode": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileChip.span.ProfileCode", Props41>;
+    };
+  };
+  readonly "PickerProfileStatus": {
+    readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileStatus.span", Props42>;
+  };
+  readonly "PickerProfileColumn": {
+    readonly "Menu$2e$RadioGroup": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup", Props42> & {
+      readonly "div": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.div", Props42>;
+      readonly "Menu$2e$RadioItem": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.Menu$2e$RadioItem", Props43> & {
+        readonly "Icon": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.Menu$2e$RadioItem.Icon", Props43>;
+        readonly "CompanyMark": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.Menu$2e$RadioItem.CompanyMark", Props43>;
+        readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.Menu$2e$RadioItem.span", Props43>;
+      };
+      readonly "span": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.PickerProfileColumn.Menu$2e$RadioGroup.span", Props42>;
+    };
+  };
+  readonly "ThreadProfile": {
+    readonly "ProfileCode": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.ThreadProfile.ProfileCode", Props44>;
+  };
+  readonly "IdleThreadProfile": {
+    readonly "SavedAgentDetail": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.IdleThreadProfile.SavedAgentDetail", Props44>;
+    readonly "ProfileCode": import("@tokamak/sdk/client").ComponentPart<"ai-profiles.IdleThreadProfile.ProfileCode", Props44>;
   };
 };

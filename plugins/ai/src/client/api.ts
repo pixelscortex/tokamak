@@ -59,3 +59,5 @@ export const ThreadWork = append(chat.parts.ThreadRow.ListboxItem.span.detail, T
 export const Helpers = after(chat.parts.ThreadRow.ListboxItem.span.detail, ThreadHelpers, {
   when: (row) => isWorking(statusOf(row.thread._id)) && (statusOf(row.thread._id)?.helpers.length ?? 0) > 0,
 });
+
+export { hasLiveThreadDetail, SavedAgentDetail } from "./ui/thread-status";

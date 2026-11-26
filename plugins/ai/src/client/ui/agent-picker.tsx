@@ -2,7 +2,7 @@ import { For, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import { auth } from "@tokamak/sdk/client";
 import { Icon, Menu } from "@tokamak/ui";
-import { agents, modelLabel, type AgentEntry } from "../lib/agents";
+import { modelLabel, type AgentEntry } from "../lib/agents";
 import { ACCESS_LABEL, label, type Access, type Change, type Resolved } from "../lib/choices";
 import { computerIcon, expandIcon } from "../lib/icons";
 import { AgentMark } from "./agent-mark";
@@ -16,14 +16,17 @@ import { AgentMark } from "./agent-mark";
  *
  * The chip (`PickerChip`) and the column area (`PickerColumns`) are one element each, so
  * another plugin can add a column or a piece of the chip by naming them. What the picker
- * offers comes from `agents:list` alone (through `lib/agents.ts`). That answer is fetched
- * once for the window and is the same for every thread; it also feeds the agent marks and
- * the "isn't installed" line, so narrowing it narrows those too. A stored choice the agent
+ * offers comes from the catalog for this composer. A stored choice the agent
  * no longer offers already reads as its first offered one (`offered` in
  * `shared/offered.ts`), here and in the turn alike.
  */
 export function AgentPicker(props: {
   current: Resolved;
+  threadId: string | undefined;
+  agents: readonly AgentEntry[];
+  notOffered: boolean;
+  refreshCatalog: () => void;
+  resetCatalog: () => void;
   /** What the popover sits above: the whole composer, as drawn, rather than the chip alone. */
   anchor: () => HTMLElement | undefined;
   /** Why the agent cannot answer now: only the agent and model column shows then. */
@@ -34,12 +37,25 @@ export function AgentPicker(props: {
 }): JSX.Element {
   return (
     <Menu.Root onOpenChange={props.onOpen}>
-      <PickerChip current={props.current} missing={props.missing} />
+      <PickerChip
+        current={props.current}
+        missing={props.missing}
+        threadId={props.threadId}
+        refreshCatalog={props.refreshCatalog}
+        resetCatalog={props.resetCatalog}
+      />
       <Menu.Content side="top" align="start" sideOffset={8} anchor={props.anchor() ?? null}>
         {/* Held to the popover's height, so a long model list scrolls inside the columns and
             the settings bar under them stays in view. */}
         <div class="flex min-h-0 flex-col gap-1">
-          <PickerColumns current={props.current} missing={props.missing} change={props.change} />
+          <PickerColumns
+            current={props.current}
+            missing={props.missing}
+            change={props.change}
+            agents={props.agents}
+            notOffered={props.notOffered}
+            threadId={props.threadId}
+          />
           <Show when={props.missing === undefined}>
             <PickerSettings current={props.current} change={props.change} />
           </Show>
@@ -54,7 +70,13 @@ export function AgentPicker(props: {
  * Without a model to show (a missing agent, or one that offers none) it names the agent.
  * Screen readers (and tests) read "Agent: <name> · <model> · <effort>".
  */
-function PickerChip(props: { current: Resolved; missing: string | undefined }): JSX.Element {
+function PickerChip(props: {
+  current: Resolved;
+  missing: string | undefined;
+  threadId: string | undefined;
+  refreshCatalog: () => void;
+  resetCatalog: () => void;
+}): JSX.Element {
   const model = () =>
     props.missing === undefined ? modelLabel(props.current.agent.name, props.current.model?.name) : undefined;
   const parts = () => {
@@ -83,6 +105,7 @@ function PickerChip(props: { current: Resolved; missing: string | undefined }): 
           </For>
         </Show>
       </span>
+      <span data-part="chipExtras" class="contents" />
       {/* Inside the text line, as an inline box, so it centres on the trimmed text. */}
       <Icon path={expandIcon} size={12} class="ms-2 inline-block align-middle" />
     </Menu.Trigger>
@@ -99,13 +122,16 @@ const modelKey = (agentId: string, modelId?: string) => JSON.stringify([agentId,
  */
 function PickerColumns(props: {
   current: Resolved;
+  threadId: string | undefined;
+  agents: readonly AgentEntry[];
+  notOffered: boolean;
   missing: string | undefined;
   change: (next: Change) => void;
 }): JSX.Element {
   const efforts = () => (props.missing === undefined ? (props.current.model?.efforts ?? []) : []);
   const pickModel = (key: string) => {
     const [agentId, modelId] = JSON.parse(key) as [string, string | null];
-    const agent = agents().find((entry) => entry.id === agentId);
+    const agent = props.agents.find((entry) => entry.id === agentId);
     if (!agent) return;
     // The same agent keeps the thread's other choices; another agent brings this device's
     // last picks for it, with the model just picked.
@@ -123,7 +149,13 @@ function PickerColumns(props: {
         class="flex min-w-models flex-1 flex-col"
       >
         <ColumnTitle>Agent and model</ColumnTitle>
-        <For each={agents()}>{(agent) => <AgentModels agent={agent} />}</For>
+        <Show when={props.notOffered}>
+          <ColumnTitle>
+            <AgentMark agentId={props.current.agent.id} />
+            <span>{props.current.agent.name} · Not available</span>
+          </ColumnTitle>
+        </Show>
+        <For each={props.agents}>{(agent) => <AgentModels agent={agent} />}</For>
       </Menu.RadioGroup>
       <Show when={efforts().length > 0}>
         <Menu.RadioGroup
@@ -139,6 +171,7 @@ function PickerColumns(props: {
           </For>
         </Menu.RadioGroup>
       </Show>
+      <div data-part="extraColumns" class="contents" />
     </div>
   );
 }

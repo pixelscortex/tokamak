@@ -19,7 +19,7 @@ export interface ProfileUse {
   /** The 4-character code, such as "ACME". */
   readonly code: string;
   readonly name: string;
-  /** How many threads use the profile: 0 until threads record a profile (TKM-266). */
+  /** How many threads use the profile: counted from saved thread picks. */
   readonly threads: number;
 }
 
