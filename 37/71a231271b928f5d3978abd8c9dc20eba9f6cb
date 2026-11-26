@@ -1,0 +1,40 @@
+e2e/fake-agent/profile-turns.mjs
+  s_fe419e09314433::t_8f6b72a1a1d409 51
+  s_fe419e09314433::t_1e729362e1ded8 1-50,52-216
+plugins/ai-profiles/tests/profiles-server.test.ts
+  s_fe419e09314433::t_1e729362e1ded8 45-49,341-344,348-351
+  s_fe419e09314433::t_fb1c35fa642e4c 2,43-44,50-53,331-340,345-347,352-360
+  s_fe419e09314433::t_1c3b58daa110d7 361
+plugins/ai/tests/agent-row.test.tsx
+  s_fe419e09314433::t_fb1c35fa642e4c 31-32,57,67,136-137,360-374
+  s_fe419e09314433::t_1e729362e1ded8 68-70
+  s_fe419e09314433::t_ca99d97e282cbd 375
+plugins/ai-profiles/tests/vitest.config.ts
+  s_fe419e09314433::t_fb1c35fa642e4c 5-9
+plugins/ai-profiles/tests/thread-profile.test.tsx
+  s_fe419e09314433::t_1e729362e1ded8 12-18,47-54,56-77,86-88
+  s_fe419e09314433::t_7d6ae56ba2798e 55
+  s_fe419e09314433::t_fb1c35fa642e4c 1-11,19-46,78-85,89-119
+e2e/fake-agent/harness.mjs
+  s_fe419e09314433::t_bb7f33b8eca0b4 403,411,426
+e2e/fake-agent/launch-settings.mjs
+  s_fe419e09314433::t_0d10c77014c05a 33,62,87
+packages/server/tests/ai-turns-driver.mjs
+  s_fe419e09314433::t_25486c8e5d309f 14,36-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3771a231271b928f5d3978abd8c9dc20eba9f6cb",
+  "prompts": {},
+  "sessions": {
+    "s_fe419e09314433": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a21795-a478-75c2-942e-3280c380a539",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "JustKira <shighgamerhg@gmail.com>"
+    }
+  }
+}
