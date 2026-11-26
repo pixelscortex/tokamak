@@ -1,8 +1,17 @@
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { createSignal, flush } from "solid-js";
-import { render } from "@solidjs/web";
+import { render, type JSX } from "@solidjs/web";
 import { waitFor } from "@testing-library/dom";
-import { after, append, before, ExtensionProvider, hide, prepend, layer } from "../../client";
+import {
+  after,
+  append,
+  before,
+  ExtensionProvider,
+  hide,
+  prepend,
+  layer,
+  type ComponentPart,
+} from "../../client";
 import { BenchmarkRow, Composer, Labels, RealisticRow } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
@@ -823,24 +832,20 @@ test("a native text binding stays out of an override and resumes with the latest
   expect(node?.textContent).toBe("live again");
 });
 
-test.each([
-  {
-    parent: find("header", { in: "RealisticRow" }),
-    child: find("b", { in: "RealisticRow" }),
-    selector: "header",
-    sibling: "b + i",
-    screen: () => <RealisticRow text="test" />,
-  },
-  {
-    parent: find("section", { in: "Composer" }),
-    child: find("div", { in: "Composer", nth: 1 }),
-    selector: "section",
-    sibling: '[aria-label="body"] + i',
-    screen: () => <Composer label="Send" lifecycle={vi.fn()} />,
-  },
-])(
-  "restores descendant placements after overriding $selector",
-  async ({ parent, child, selector, sibling, screen }) => {
+function restoresPlacement<Props extends object>({
+  parent,
+  child,
+  selector,
+  sibling,
+  screen,
+}: {
+  parent: ComponentPart<string, Props>;
+  child: ComponentPart<string, Props>;
+  selector: string;
+  sibling: string;
+  screen: () => JSX.Element;
+}) {
+  test(`restores descendant placements after overriding ${selector}`, async () => {
     const [on, setOn] = createSignal(false);
     const root = document.createElement("div");
     onTestFinished(
@@ -879,92 +884,121 @@ test.each([
     flush();
     expect(root.querySelector(selector)).toBe(element);
     expect(root.querySelector(sibling)?.textContent).toBe("Added");
-  },
-);
-
-describe.each([
-  {
-    path: "native",
-    target: find("header", { in: "RealisticRow" }),
-    render: () => <RealisticRow text="test" />,
-    selector: "header",
-    owner: "Person10:00Ready",
-  },
-  {
-    path: "component",
-    target: find("Region"),
-    render: () => <Labels labels={[]} />,
-    selector: "main",
-    owner: "Body",
-  },
-])("Original.Children on a $path element", ({ target, render: screen, selector, owner }) => {
-  function mount(actions: Layer[]) {
-    const root = document.createElement("div");
-    onTestFinished(
-      render(() => <ExtensionProvider host={host(actions)}>{screen()}</ExtensionProvider>, root),
-    );
-    return root;
-  }
-
-  test("projects the children passed by the previous layer", async () => {
-    const Outer = layer(target, (_, Original) => <Original>X</Original>);
-    const Inner = layer(target, (_, Original) => (
-      <Original>
-        Y<Original.Children />
-      </Original>
-    ));
-    const root = mount([
-      contribution("Outer", Outer, "layer", target, 0, "outer", 1),
-      contribution("Inner", Inner, "layer", target, 0, "inner", 2),
-    ]);
-    await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe("YX"));
   });
+}
 
-  test("draws nothing outside Original", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    onTestFinished(() => warn.mockRestore());
-    const Outside = layer(target, (_, Original) => (
-      <aside>
-        <Original.Children />
-        <Original />
-      </aside>
-    ));
-    const root = mount([contribution("Outside", Outside, "layer", target)]);
-    await waitFor(() => expect(root.querySelector("aside")?.textContent).toBe(owner));
-    expect(warn.mock.calls.filter(([message]) => String(message).includes("Original.Children"))).toHaveLength(
-      1,
-    );
-  });
+restoresPlacement({
+  parent: find("header", { in: "RealisticRow" }),
+  child: find("b", { in: "RealisticRow" }),
+  selector: "header",
+  sibling: "b + i",
+  screen: () => <RealisticRow text="test" />,
+});
+restoresPlacement({
+  parent: find("section", { in: "Composer" }),
+  child: find("div", { in: "Composer", nth: 1 }),
+  selector: "section",
+  sibling: '[aria-label="body"] + i',
+  screen: () => <Composer label="Send" lifecycle={vi.fn()} />,
+});
 
-  test("draws the contents only once, with both inside placements", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    onTestFinished(() => warn.mockRestore());
-    const Twice = layer(target, (_, Original) => (
-      <Original>
-        <Original.Children />
-        <Original.Children />
-      </Original>
-    ));
-    const root = mount([
-      contribution(
-        "Lead",
-        prepend(target, () => "lead/"),
-        "prepend",
-        target,
-      ),
-      contribution(
-        "Tail",
-        append(target, () => "/tail"),
-        "append",
-        target,
-      ),
-      contribution("Twice", Twice, "layer", target),
-    ]);
-    await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe(`lead/${owner}/tail`));
-    expect(warn.mock.calls.filter(([message]) => String(message).includes("Original.Children"))).toHaveLength(
-      1,
-    );
+function testsForOriginalChildren<Props extends object>({
+  path,
+  target,
+  screen,
+  selector,
+  owner,
+}: {
+  path: string;
+  target: ComponentPart<string, Props>;
+  screen: () => JSX.Element;
+  selector: string;
+  owner: string;
+}) {
+  describe(`Original.Children on a ${path} element`, () => {
+    function mount(actions: Layer[]) {
+      const root = document.createElement("div");
+      onTestFinished(
+        render(() => <ExtensionProvider host={host(actions)}>{screen()}</ExtensionProvider>, root),
+      );
+      return root;
+    }
+
+    test("projects the children passed by the previous layer", async () => {
+      const Outer = layer(target, (_, Original) => <Original>X</Original>);
+      const Inner = layer(target, (_, Original) => (
+        <Original>
+          Y<Original.Children />
+        </Original>
+      ));
+      const root = mount([
+        contribution("Outer", Outer, "layer", target, 0, "outer", 1),
+        contribution("Inner", Inner, "layer", target, 0, "inner", 2),
+      ]);
+      await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe("YX"));
+    });
+
+    test("draws nothing outside Original", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const Outside = layer(target, (_, Original) => (
+        <aside>
+          <Original.Children />
+          <Original />
+        </aside>
+      ));
+      const root = mount([contribution("Outside", Outside, "layer", target)]);
+      await waitFor(() => expect(root.querySelector("aside")?.textContent).toBe(owner));
+      expect(
+        warn.mock.calls.filter(([message]) => String(message).includes("Original.Children")),
+      ).toHaveLength(1);
+    });
+
+    test("draws the contents only once, with both inside placements", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const Twice = layer(target, (_, Original) => (
+        <Original>
+          <Original.Children />
+          <Original.Children />
+        </Original>
+      ));
+      const root = mount([
+        contribution(
+          "Lead",
+          prepend(target, () => "lead/"),
+          "prepend",
+          target,
+        ),
+        contribution(
+          "Tail",
+          append(target, () => "/tail"),
+          "append",
+          target,
+        ),
+        contribution("Twice", Twice, "layer", target),
+      ]);
+      await waitFor(() => expect(root.querySelector(selector)?.textContent).toBe(`lead/${owner}/tail`));
+      expect(
+        warn.mock.calls.filter(([message]) => String(message).includes("Original.Children")),
+      ).toHaveLength(1);
+    });
   });
+}
+
+testsForOriginalChildren({
+  path: "native",
+  target: find("header", { in: "RealisticRow" }),
+  screen: () => <RealisticRow text="test" />,
+  selector: "header",
+  owner: "Person10:00Ready",
+});
+testsForOriginalChildren({
+  path: "component",
+  target: find("Region"),
+  screen: () => <Labels labels={[]} />,
+  selector: "main",
+  owner: "Body",
 });
 
 test("reloading a plugin allows its layer warnings to be reported again", async () => {
