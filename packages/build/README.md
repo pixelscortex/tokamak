@@ -201,7 +201,10 @@ at the bottom. Pass children to change the contents without changing the
 element or its attributes. Put `<Original.Children />` inside `<Original>` to
 draw the contents that would appear without this layer: the children supplied
 by an outer layer, or the owner's contents with other plugins' `prepend` and
-`append`. Draw `Original` and `Original.Children` at most once per layer.
+`append`. Draw `Original` and `Original.Children` once at a time. A layer may have two
+uses of `Original` in two branches and switch between them: the element is
+handed over and stays mounted. If both are drawn at once, only the last one
+shows, with a warning.
 If no layer draws `Original`, the owner's element is unloaded. While a layer
 supplies the contents, the owner's plain tags inside keep their DOM nodes,
 but components inside mount again each time the contents change hands, so
