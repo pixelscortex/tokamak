@@ -3,7 +3,7 @@
 Build a plugin artifact by passing its folder to the builder:
 
 ```sh
-proto run bun -- packages/build/src/build.ts plugins/chat
+proto run bun -- packages/build/src/build.ts /path/to/plugin-source
 ```
 
 ## Building outside the checkout

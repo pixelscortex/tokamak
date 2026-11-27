@@ -988,12 +988,6 @@ fn plain_contracts_route_between_persistent_plugin_processes() {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-#[test]
-fn production_agent_turns_use_dedicated_hosts_and_survive_other_agent_changes() {
-    routing_test("agent-routing.mjs");
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn routing_test(name: &str) {
     let script = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

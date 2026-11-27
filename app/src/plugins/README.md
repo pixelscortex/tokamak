@@ -107,15 +107,14 @@ Other server origins require host CSP configuration.
 
 Final command results on `tauri/1e-plugin-loader`:
 
-| Command                                                          | Exit | Result                                                                                                                                                                                         |
-| ---------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `proto run bun -- run check`                                     | 0    | Workspace format, TypeScript lint and Rust lint pass.                                                                                                                                          |
-| `proto run bun -- run typecheck`                                 | 1    | Chat server's absent `src/server/_generated/api` produces 20 errors in `runs/chat.ts` and `threads/threads.ts`; moon cancels remaining work after that failure. The separate app check passes. |
-| `proto run bun -- run --cwd app check`                           | 0    | App TypeScript check passes.                                                                                                                                                                   |
-| `proto run bun -- run --cwd app test`                            | 0    | 10 tests across two files pass. Node reports a nonfatal asm.js optimization warning for the pure JS lexer.                                                                                     |
-| `proto run bun -- run --cwd app build`                           | 0    | Production Vite build passes; fixture harness excluded.                                                                                                                                        |
-| `TOKAMAK_PLUGIN_FIXTURES=1 proto run bun -- run --cwd app build` | 0    | Production fixture build passes.                                                                                                                                                               |
-| `xcrun swift app/tests/fixtures/check-webkit.swift`              | 0    | All 18 assertions pass against the fixture preview build, using port 4174 for cross-origin plugin assets.                                                                                      |
+| Command                                                          | Exit | Result                                                                                                     |
+| ---------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
+| `proto run bun -- run check`                                     | 0    | Workspace format, TypeScript lint and Rust lint pass.                                                      |
+| `proto run bun -- run --cwd app check`                           | 0    | App TypeScript check passes.                                                                               |
+| `proto run bun -- run --cwd app test`                            | 0    | 10 tests across two files pass. Node reports a nonfatal asm.js optimization warning for the pure JS lexer. |
+| `proto run bun -- run --cwd app build`                           | 0    | Production Vite build passes; fixture harness excluded.                                                    |
+| `TOKAMAK_PLUGIN_FIXTURES=1 proto run bun -- run --cwd app build` | 0    | Production fixture build passes.                                                                           |
+| `xcrun swift app/tests/fixtures/check-webkit.swift`              | 0    | All 18 assertions pass against the fixture preview build, using port 4174 for cross-origin plugin assets.  |
 
 T3 preview navigation/evaluation of the fixture page at port 4173 returned
 `data-status="passed"` and all 18 assertions in Chromium 152. Preview tool calls

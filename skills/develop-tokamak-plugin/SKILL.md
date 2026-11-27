@@ -3,7 +3,7 @@ name: develop-tokamak-plugin
 description: Build, install and reload a Tokamak plugin in the tokamak-plugins repository, and write its server part, caller actions, window part and contracts. Use when creating or changing a Tokamak plugin.
 ---
 
-Plugins live in `tokamak-plugins`, one folder per plugin at `plugins/<id>/`,
+Plugins live in the separate `tokamak-plugins` repository, one folder per plugin at `plugins/<id>/`,
 named by its id. They build against a Tokamak checkout on disk; nothing is
 published yet. The app ships with no plugins: it loads the builds in its
 **plugins folder**. To **install** a plugin is to place its build there.
@@ -55,7 +55,8 @@ A plugin that uses another plugin builds when both sit side by side in
 - Test against a throwaway folder (`TOKAMAK_PLUGIN_DIR`, `TOKAMAK_SERVER_DIR`)
   unless told to install into the owner's app.
 - A plugin that fails to load is skipped with a reason; the others still
-  load. The catalog (`GET /plugins`, or `tokamak-server plugin list` with
+  load. Settings → Plugins shows loaded and failed plugins. The catalog
+  (`GET /plugins`, or `tokamak-server plugin list` with
   `TOKAMAK_SERVER_DIR` set to the app's data folder) lists each reason under
   `skipped`, such as "not built" or "needs chat, which is not installed".
 

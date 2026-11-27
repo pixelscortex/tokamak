@@ -6,8 +6,12 @@ import { resolve } from "node:path";
 
 export type Identity = { pid: number; url: string; bundleHash: string; pluginRoot?: string };
 
-export function localDirectory(binary: string, cwd = process.cwd()): string {
-  const result = spawnSync(binary, ["--local-path"], {
+export function localDirectory(
+  binary: string,
+  cwd = process.cwd(),
+  flag: "--local-path" | "--dev-local-path" = "--local-path",
+): string {
+  const result = spawnSync(binary, [flag], {
     cwd,
     encoding: "utf8",
     windowsHide: process.platform === "win32",

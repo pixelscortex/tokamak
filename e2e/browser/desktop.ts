@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { BrowserContext, Page } from "@playwright/test";
-import { installFakeAgent, startRunner } from "../fake-agent/local.mjs";
+import { startRunner } from "../fake-agent/start-runner";
 
 /** What the test desktop adds to the page. */
 interface DesktopWindow {
@@ -14,15 +14,12 @@ interface DesktopWindow {
 /**
  * Makes the app in `context` run as the desktop app does: the window's Tauri
  * calls are answered by this test process, which starts a private Runner with
- * a disposable workspace and every fake agent's command on its PATH. Returns the person's home folder
- * and the PATH folder holding those commands (unlink one to "uninstall" it).
+ * a disposable workspace and home folder.
  */
 export async function asDesktop(
   context: BrowserContext,
   options: { plugins?: string; beforeConfirm?: (page: Page) => Promise<void> } = {},
 ): Promise<{
-  home: string;
-  bin: string;
   readonly endpoint: { ws: string; token: string };
   /** Reopens the same workspace after the simulated app quit. */
   restart(): Promise<void>;
@@ -39,9 +36,7 @@ export async function asDesktop(
   const plugins = options.plugins ?? process.env.TOKAMAK_PLUGIN_DIR!;
   const scratch = await mkdtemp(join(dirname(process.env.TOKAMAK_PLUGIN_DIR!), "desktop-"));
   const home = join(scratch, "home");
-  const bin = join(scratch, "bin");
   await mkdir(home);
-  await installFakeAgent(bin);
   const binary = resolve(
     import.meta.dirname,
     `../../target/debug/tokamak-runner${process.platform === "win32" ? ".exe" : ""}`,
@@ -51,7 +46,7 @@ export async function asDesktop(
       binary,
       plugins,
       directory: join(scratch, "app-data"),
-      env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` },
+      env: { HOME: home, PATH: "/usr/bin:/bin" },
     });
   let runner = await boot();
   context.once("close", () => void runner.stop());
@@ -142,8 +137,6 @@ export async function asDesktop(
     };
   });
   return {
-    home,
-    bin,
     get endpoint() {
       return runner.endpoint;
     },

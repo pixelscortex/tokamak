@@ -20,9 +20,7 @@ tasks:
       cache: false
       mutex: "cargo"
   server-build:
-    script: >-
-      proto run bun -- scripts/starter-plugins.ts &&
-      cargo build --locked -p server -p tokamak-plugin-host
+    command: "cargo build --locked -p server -p tokamak-plugin-host"
     options:
       cache: false
       mutex: "cargo"

@@ -21,14 +21,15 @@ ignored. To **install** a plugin is to place its build at
 A bad plugin never stops the others. A folder with source but no build, an
 invalid manifest, a duplicate id, a missing required plugin or a start-up
 failure skips that plugin and records a reason, such as `not built` or
-`needs chat, which is not installed`. `GET /plugins` (and
-`tokamak-server plugin list`) lists every reason under `skipped`. Fix the
+`needs chat, which is not installed`. Settings → Plugins shows loaded and failed plugins. `GET /plugins` and
+`tokamak-server plugin list` show the same catalog, with failure reasons under
+`skipped`. Fix the
 plugin and reload its id to try again. The rules are under
 [Loading and reload contract](#loading-and-reload-contract).
 
 ### Installing from `tokamak-plugins`
 
-The plugins live in the `tokamak-plugins` repository and build against a
+The starter plugins live in the separate `tokamak-plugins` repository and build against a
 Tokamak checkout. In that repository, `./setup.sh` links Tokamak's packages
 from `../tokamak` or `TOKAMAK_DIR`, and `./install.sh [--dev] [id…]` builds the
 named plugins (all of them with no id, owners first), places each build in the
@@ -340,8 +341,7 @@ An installed plugin action can call `await ctx.env("NAME")` only with the exact
 `env:NAME` permission in its manifest. An undeclared read is refused; a declared
 but unset value returns `null`. Queries and mutations have no environment API.
 The host resolves its process environment first, then `.env.local` beside the
-installation directory (for the workspace `plugins/`, this is the workspace
-root). Local values are read without changing the process environment or adding
+installation directory (for a local app, this is its data folder by default). Local values are read without changing the process environment or adding
 secrets to catalog metadata. Malformed dotenv errors never include file contents.
 Changing permissions on an installed plugin requires a version bump as usual.
 

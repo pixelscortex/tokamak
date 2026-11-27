@@ -5,19 +5,11 @@ import { createInterface } from "node:readline";
 
 const root = resolve(import.meta.dirname, "..");
 
-export async function startHostedFixture({
-  port,
-  ownerKey,
-  extraPlugins = [],
-}: {
-  port: number;
-  ownerKey: string;
-  extraPlugins?: readonly string[];
-}) {
+export async function startHostedFixture({ port, ownerKey }: { port: number; ownerKey: string }) {
   const directory = await mkdtemp(`${root}/app/.dev/serve-hosted-`);
   try {
     await mkdir(`${directory}/plugins`);
-    for (const id of ["fixture", "fixture-sign-in", ...extraPlugins]) {
+    for (const id of ["fixture", "fixture-sign-in"]) {
       await cp(`${process.env.TOKAMAK_PLUGIN_DIR}/${id}`, `${directory}/plugins/${id}`, { recursive: true });
     }
     const child = spawn(

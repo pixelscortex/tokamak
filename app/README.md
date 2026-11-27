@@ -18,10 +18,10 @@ The app ships with no plugins. It creates and loads `plugins` in its data folder
 on macOS, `~/Library/Application Support/com.pixelscortex.Tokamak/plugins` for
 release and `~/Library/Application Support/com.pixelscortex.Tokamak.dev/plugins`
 for debug. `TOKAMAK_SERVER_DIR` overrides the data folder, and
-`TOKAMAK_PLUGIN_DIR` overrides the plugins folder. Until the plugins move to
-`tokamak-plugins`, `app:dev` (also `app`) builds the repo's plugins, reinstalls
-them in `app/.dev/plugins` and passes that path via `TOKAMAK_PLUGIN_DIR`. If that
-variable is already set, the launcher uses it as is and skips the install.
+`TOKAMAK_PLUGIN_DIR` overrides the plugins folder. `app:dev` (also `app`)
+starts Tauri in dev mode and lets the Runner create and load that folder.
+A fresh dev installation shows “No plugins installed”. To add plugins, run
+`./install.sh --dev` from [tokamak-plugins](https://github.com/pixelscortex/tokamak-plugins).
 Runner startup errors go to `runner.log` beside the store.
 On start the app's Runner stops any Tokamak server that holds this store,
 after verifying it: one left by a previous desktop version, or one started with
@@ -41,9 +41,16 @@ proto run bun -- run server:start
 proto run bun -- run --cwd app dev
 ```
 
-Open `http://127.0.0.1:1420`. The helper builds Chat and serves a disposable store
-on port 43123, removed on exit. `VITE_TOKAMAK_HTTP` changes the browser endpoint; `VITE_TOKAMAK_TOKEN` supplies
+Open `http://127.0.0.1:1420`. The helper serves a disposable store
+on port 43123, removed on exit. It starts with an empty plugins folder
+unless you pass `TOKAMAK_PLUGIN_DIR`. `VITE_TOKAMAK_HTTP` changes the browser endpoint; `VITE_TOKAMAK_TOKEN` supplies
 a capability for a private local server (development only).
+
+`proto run bun -- packages/runtime/tools/run-app.ts start` runs a persistent
+standalone development server. It uses the dev plugins folder unless
+`TOKAMAK_PLUGIN_DIR` overrides it. `TOKAMAK_SERVER_DIR` selects a custom data
+folder and its default plugins folder. Use `server:status` and `server:stop`
+with the same data directory to manage that server.
 No external agent runs. Desktop `tokamak_endpoint` returns `{ http, ws, token }`;
 the adapter adds the token to server module, stylesheet and catalog requests,
 and the app sends it as a WebSocket subprotocol. The server allows the Tauri origins
