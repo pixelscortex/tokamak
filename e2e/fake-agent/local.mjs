@@ -1,45 +1,17 @@
-// The local part as the desktop client starts it, and the `fake-agent` command,
-// for any test runtime (Bun or Node): the server harness and the browser suite.
+// Local plugin launch helpers for the server fixtures.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
-
-const program = fileURLToPath(new URL("./program.mjs", import.meta.url));
-export const agentsFolder = fileURLToPath(new URL("./agents/", import.meta.url));
-
-/** The fake agents: one plugin folder each under ./agents, named after the command it starts. */
-export async function fakeAgents() {
-  return (await readdir(agentsFolder, { withFileTypes: true }))
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name);
-}
 
 /** The pinned Bun: this process under Bun, else what the runner passed in TOKAMAK_E2E_BUN. */
 export function bunPath() {
   const bun = process.versions.bun ? process.execPath : process.env.TOKAMAK_E2E_BUN;
   if (!bun) throw new Error("Run under Bun or set TOKAMAK_E2E_BUN");
   return bun;
-}
-
-/**
- * Puts each of `commands` (by default every fake agent's) in `bin`: a shell script
- * running the replay program with the pinned Bun, as `claude` or `codex`
- * would sit on PATH.
- */
-export async function installFakeAgent(bin, commands) {
-  await mkdir(bin, { recursive: true });
-  for (const command of commands ?? (await fakeAgents())) {
-    await writeFile(
-      join(bin, command),
-      `#!/bin/sh\nexec ${JSON.stringify(bunPath())} ${JSON.stringify(program)} "$@"\n`,
-    );
-    await chmod(join(bin, command), 0o755);
-  }
 }
 
 /**

@@ -6,7 +6,7 @@ const SKILL: &str = include_str!("../../../skills/develop-tokamak-plugin/SKILL.m
 
 /// Create source only. The normal builder generates the installable artifact.
 ///
-/// The plugin matches `plugins/hello` in `tokamak-plugins`: no `@tokamak/*`
+/// The plugin uses the public package names: no `@tokamak/*`
 /// dependency (that repository's `setup.sh` links them) and configs that
 /// extend Tokamak's packages by name, so it builds there without edits.
 pub(crate) fn create(folder: &Path) -> Result<(), Box<dyn std::error::Error>> {

@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { installStarterPlugins } from "./starter-plugins";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const parent = fileURLToPath(new URL("../.dev/", import.meta.url));
 await mkdir(parent, { recursive: true });
 const directory = await mkdtemp(`${parent}server-`);
 try {
-  if (!process.env.TOKAMAK_PLUGIN_DIR) await installStarterPlugins(`${directory}/plugins`);
+  const plugins = process.env.TOKAMAK_PLUGIN_DIR ?? `${directory}/plugins`;
+  if (process.env.TOKAMAK_PLUGIN_DIR === undefined) await mkdir(plugins);
   const child = spawn(
     `${root}target/debug/tokamak-server`,
     [
@@ -18,7 +18,7 @@ try {
       "--listen",
       "127.0.0.1:43123",
       "--plugins",
-      process.env.TOKAMAK_PLUGIN_DIR ?? `${directory}/plugins`,
+      plugins,
     ],
     { stdio: "inherit", windowsHide: process.platform === "win32" },
   );

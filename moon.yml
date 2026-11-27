@@ -41,27 +41,6 @@ tasks:
     options:
       cache: true
       outputStyle: stream
-  plugins-check:
-    script: >-
-      proto run bun -- app/scripts/starter-plugins.ts &&
-      proto run bun -- check --no-script --project plugins/chat/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/chat/src/client/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/chat/tests/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai/src/client/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/code/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/code/src/client/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/code/tests/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai/tests/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/claude/src/server/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/codex/src/server/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/basic-auth/src/server/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/agent-proxy/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai-profiles/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai-profiles/src/client/tsconfig.json &&
-      proto run bun -- check --no-script --project plugins/ai-profiles/tests/tsconfig.json
-    options:
-      cache: false
   e2e-check:
     command: "proto run bun -- check --no-script --project e2e/tsconfig.json"
     options:
@@ -145,11 +124,11 @@ tasks:
       cache: false
       mutex: "cargo"
   lint-ts:
-    command: "proto run bun -- run oxlint packages app plugins"
+    command: "proto run bun -- run oxlint packages app"
     options:
       cache: false
   duplicates:
-    command: 'bun run jscpd packages app plugins --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
+    command: 'bun run jscpd packages app --format rust,typescript,tsx,javascript --ignore "**/tests/**,**/vendor/**,**/dist/**,**/target/**,**/node_modules/**,**/protocol.ts" --min-lines 6 --min-tokens 50'
     options:
       cache: false
       allowFailure: true

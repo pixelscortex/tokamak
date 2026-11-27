@@ -3,13 +3,12 @@
 ## Independent desktop service
 
 For multi-plugin loading, typed cross-plugin calls and reload, see
-[the M1.2 plugin contract](PLUGINS.md). The desktop builds and loads the Chat
-plugin installation with `--plugins`; `--bundle` remains available
+[the M1.2 plugin contract](PLUGINS.md). The desktop Runner starts the Server
+and loads builds from the app’s plugins folder. `--bundle` remains available
 for legacy applications and test fixtures.
 
-The desktop now uses this standalone server over authenticated loopback
-WebSocket, not an embedded Backend. `bun run app` starts/reuses it.
-`bun run server:status` and `bun run server:stop` do not build anything.
+`bun run server:status` and `bun run server:stop` operate on the standalone
+local server without building anything.
 
 `tokamak-server --local-dir <directory> --bundle <path>` opens `<directory>/store`,
 reads a private 64-hex-character `server.token`, binds an ephemeral loopback

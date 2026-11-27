@@ -1,4 +1,0 @@
-{"read":"prompt"}
-{"out":{"type":"text","delta":"Ready without steering."}}
-{"read":"stop"}
-{"out":{"type":"done","sessionId":"replay-no-steer-session"}}

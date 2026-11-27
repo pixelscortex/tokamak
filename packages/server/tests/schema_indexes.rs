@@ -7,7 +7,7 @@
 //! runs the public builder, so changed generations are real artifacts rather
 //! than hand-edited metadata. Expected query results are computed in Rust from
 //! the rows the test inserted, never from another index read.
-use engine::{Bundle, Pool, PoolConfig};
+use engine::{Pool, PoolConfig};
 use serde_json::{Value, json};
 use server::{
     Event, Server, Session,
@@ -1548,85 +1548,6 @@ async fn local_startup_log(installation: &Installation) -> String {
             .success()
     );
     log
-}
-
-#[test]
-fn chat_starts_with_current_schema_and_keeps_legacy_messages() {
-    let output = std::process::Command::new("proto")
-        .args([
-            "run",
-            "bun",
-            "--",
-            "-e",
-            r#"
-            import { schemaMetadata } from './packages/sdk/src/index';
-            import previous from './plugins/chat/tests/fixtures/schema-before-local-turns';
-            import current from './plugins/chat/src/server/schema';
-            console.log(JSON.stringify([schemaMetadata(previous), schemaMetadata(current)]));
-        "#,
-        ])
-        .current_dir(workspace())
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let [previous, current]: [Value; 2] = serde_json::from_slice(&output.stdout).unwrap();
-
-    run(async {
-        let installation = Installation::new(true);
-        let space = DataSpace::plugin("chat").unwrap();
-        let messages = space.table(&Table::new("messages").unwrap()).unwrap();
-        start_chat_schema(&installation, &space, previous).await;
-
-        let mut database = Database::open(installation.storage()).await.unwrap();
-        let mut tx = database.begin().await.unwrap();
-        tx.insert(
-            &messages,
-            json_object(&json!({
-                "threadId": "chat/threads:legacy", "role":"assistant", "createdAt":1,
-                "status":"complete","parts":[{"type":"text","text":"Earlier reply"}],
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
-        database.close().await.unwrap();
-
-        start_chat_schema(&installation, &space, current).await;
-        let mut database = Database::open(installation.storage()).await.unwrap();
-        let mut tx = database.read_only().await.unwrap();
-        let rows = tx.query(&messages).collect().await.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(
-            rows[0].fields.get("role"),
-            Some(&server::data::Value::String("assistant".into()))
-        );
-        assert_eq!(
-            rows[0].fields.get("parts"),
-            json_object(&json!({ "parts": [{"type":"text","text":"Earlier reply"}] }))
-                .unwrap()
-                .get("parts")
-        );
-        tx.commit().await.unwrap();
-        database.close().await.unwrap();
-    });
-}
-
-async fn start_chat_schema(installation: &Installation, space: &DataSpace, schema: Value) {
-    let source =
-        format!("export function describe() {{ return {{ schema: {schema}, functions: [] }}; }}");
-    let bundle = || Bundle::new(source.clone(), None).unwrap();
-    let bundle = Arc::new(bundle().with_transactions(bundle()));
-    let database = Database::open(installation.storage()).await.unwrap();
-    let pool = Arc::new(Pool::new(PoolConfig::default()).unwrap());
-    let server = Server::load_in_space(database, pool, bundle, space.clone())
-        .await
-        .unwrap();
-    server.close().await.unwrap();
 }
 
 // ---------------------------------------------------------------------------

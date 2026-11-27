@@ -1,5 +1,0 @@
-{
-  "extends": "@tokamak/sdk/tsconfig.server.json",
-  "compilerOptions": { "types": [], "skipLibCheck": true },
-  "include": ["**/*.ts"]
-}

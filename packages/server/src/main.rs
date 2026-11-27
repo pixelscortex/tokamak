@@ -45,10 +45,14 @@ fn local_ownership(directory: &Path) -> Result<File, Box<dyn std::error::Error>>
 }
 
 fn local_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    application_directory("Tokamak")
+}
+
+fn application_directory(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(std::env::var_os("TOKAMAK_SERVER_DIR")
         .map(PathBuf::from)
         .or_else(|| {
-            directories::ProjectDirs::from("com", "pixelscortex", "Tokamak")
+            directories::ProjectDirs::from("com", "pixelscortex", name)
                 .map(|p| p.data_local_dir().to_owned())
         })
         .ok_or("Cannot locate application data directory")?)
@@ -154,13 +158,18 @@ async fn configuration() -> Result<Option<Configuration>, Box<dyn std::error::Er
             println!("{}", build_id()?);
             return Ok(None);
         }
-        if flag == "--local-path" {
-            println!("{}", local_directory()?.display());
+        if flag == "--local-path" || flag == "--dev-local-path" {
+            let path = if flag == "--dev-local-path" {
+                application_directory("Tokamak.dev")?
+            } else {
+                local_directory()?
+            };
+            println!("{}", path.display());
             return Ok(None);
         }
         if flag == "--help" {
             println!(
-                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak-server members | revoke <id> --server <https://address> [--token <owner key>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
+                "tokamak-server (--plugins <directory> | --bundle <legacy feature.mjs>) [--local-dir <private directory>] [--local-path | --dev-local-path] [--build-id] [--data <path>] [--listen <127.0.0.1:3000>] [--web <directory>] [--workers <n>] [--queue <n>] [--heap-bytes <n>] [--call-ms <n>] [--load-ms <n>]\nMembers: tokamak-server members | revoke <id> --server <https://address> [--token <owner key>] (or TOKAMAK_TOKEN)\nControl: tokamak-server plugin create <folder> | tokamak-server plugin list | tokamak-server plugin reload <id> (TOKAMAK_SERVER_DIR selects local server)"
             );
             return Ok(None);
         }

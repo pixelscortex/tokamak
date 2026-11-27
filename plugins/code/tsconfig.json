@@ -1,5 +1,0 @@
-{
-  "extends": "./src/client/tsconfig.json",
-  "include": ["plugin.ts", "src/server/**/*.ts"],
-  "exclude": ["src/client"]
-}

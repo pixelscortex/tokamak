@@ -10,8 +10,8 @@ The notes do.
 
 ## Where the notes are
 
-- **A plugin's note** is the `DESIGN.md` in its own folder in `tokamak-plugins`
-  (`plugins/<id>/DESIGN.md`).
+- **A plugin's note** is the `DESIGN.md` in its own folder in the separate
+  `tokamak-plugins` repository (`plugins/<id>/DESIGN.md`).
 - **The shell's note** (the app frame, `app/src/shell`) is `design/shell.md` in
   Tokamak.
 
@@ -43,7 +43,9 @@ the moodboard and the rest) belong to the owner: never edit those nodes. The
 `App 1:1` pages are kept by whoever changes the UI. An `App 1:1` artboard is a
 plain copy of one screen of the running app at 1728 × 1117 in the dark theme:
 nothing drawn on top, no outlines, no labels. Tokamak's `design/README.md`
-describes how those copies are made from the app.
+describes how those copies are made from the app. For plugin screens, check
+which builds loaded in Settings → Plugins. It shows both loaded and failed
+plugins, as do `GET /plugins` and `tokamak-server plugin list`.
 
 ## The design rules
 

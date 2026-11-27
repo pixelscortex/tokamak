@@ -185,7 +185,7 @@ button with a tooltip and keys) and `Notice`.
   app centres it.
 - The Members page's tab reads "New thread" (with the person icon) instead of
   "Members"; `Shell · members` copies that too.
-- With `ai-profiles` installed (it is in the starter set) the rail has a
+- With the external `ai-profiles` plugin installed the rail has a
   second mark, Profiles, under chat's. `Shell · frame` was copied before it
   existed and shows the rail without it; `App 1:1 · AI profiles plugin` shows
   it.

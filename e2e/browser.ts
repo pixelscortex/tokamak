@@ -1,22 +1,18 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
-import { build as buildPlugin, buildAgentPlugins } from "./fake-agent/harness.mjs";
 
 process.chdir(resolve(import.meta.dirname, ".."));
 const args = process.argv.slice(2);
-const fixturesOnly = args.includes("--fixtures-only");
 await mkdir("app/.dev", { recursive: true });
 const directory = await mkdtemp(resolve("app/.dev/browser-"));
 const env = {
   ...process.env,
-  TOKAMAK_E2E_FIXTURES_ONLY: fixturesOnly ? "1" : undefined,
   TOKAMAK_PLUGIN_DIR: `${directory}/plugins`,
   TOKAMAK_FIXTURE_SOURCE: `${directory}/fixture`,
   TOKAMAK_OTHER_DRAFT_SOURCE: `${directory}/other-draft`,
   TOKAMAK_E2E_WEB_ROOT: `${directory}/web`,
-  TOKAMAK_E2E_EXTRA_PLUGINS: `${directory}/extra-plugins`,
   // The preview serves this build throughout the suite, even if app/dist is rebuilt.
   TOKAMAK_E2E_PREVIEW_DIR: `${directory}/preview`,
   TOKAMAK_SERVER_DIR: `${directory}/local`,
@@ -55,25 +51,6 @@ try {
     "2",
   ]);
   run("proto", ["run", "bun", "--", "app/scripts/integration-fixture.ts", "--with-fixture-sign-in"]);
-  if (!fixturesOnly) {
-    // Desktop plugin specs run Chat, AI and the fake agents through the Runner.
-    await buildAgentPlugins(directory, (id) => `${env.TOKAMAK_PLUGIN_DIR}/${id}/dist`);
-    for (const id of ["code", "basic-auth"]) {
-      buildPlugin(resolve("plugins", id));
-      await cp(`plugins/${id}/dist`, `${env.TOKAMAK_PLUGIN_DIR}/${id}/dist`, { recursive: true });
-    }
-    // The Profiles captures add these plugins to a private installation. Only this copy of
-    // agent-proxy may reach the fake companies on 127.0.0.1.
-    for (const id of ["agent-proxy", "ai-profiles", "claude", "codex"]) {
-      buildPlugin(resolve("plugins", id));
-      await cp(`plugins/${id}/dist`, `${env.TOKAMAK_E2E_EXTRA_PLUGINS}/${id}/dist`, { recursive: true });
-    }
-    const proxyManifest = `${env.TOKAMAK_E2E_EXTRA_PLUGINS}/agent-proxy/dist/manifest.json`;
-    const manifest = JSON.parse(await readFile(proxyManifest, "utf8"));
-    manifest.plugin.permissions.push("net:127.0.0.1");
-    await writeFile(proxyManifest, JSON.stringify(manifest));
-  }
-  Object.assign(env, { TOKAMAK_E2E_BUN: process.execPath });
   const build = ["run", "bun", "--", "run", "--cwd", "app", "build"];
   run("proto", [...build, "--outDir", env.TOKAMAK_E2E_WEB_ROOT], {
     ...env,
@@ -90,7 +67,7 @@ try {
     "test",
     "--config",
     "e2e/playwright.config.ts",
-    ...args.filter((arg) => arg !== "--fixtures-only"),
+    ...args,
   ]);
 } finally {
   await rm(directory, { recursive: true, force: true });
