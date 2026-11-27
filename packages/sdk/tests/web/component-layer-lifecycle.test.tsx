@@ -1,10 +1,10 @@
-import { within } from "@testing-library/dom";
+import { waitFor, within } from "@testing-library/dom";
 import { render } from "@solidjs/web";
-import { createSignal, flush, onCleanup } from "solid-js";
+import { createSignal, flush, onCleanup, Show } from "solid-js";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { ExtensionProvider, layer } from "../../client";
+import { ExtensionProvider, layer, type ComponentPart } from "../../client";
 import { host, layer as contribution, type Layer } from "./fixtures/parts/extension-host";
-import { Composer } from "./fixtures/parts/owner/src/client/api";
+import { Composer, RealisticRow } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 
 const button = find("SendButton");
@@ -188,3 +188,51 @@ test("a reactive branch can unload and remount the original", async () => {
   expect(scope.queryByRole("button", { name: "Send" })).toBeNull();
   expect(lifecycle.mock.calls).toEqual([["send mounted"], ["send unloaded"]]);
 });
+
+// A layer often has two uses of Original: one branch draws the element as it
+// is, the other gives it new contents (a heading that names the picked agent).
+test.each([
+  { name: "a plain element", target: find("header", { in: "RealisticRow" }), selector: "header" },
+  { name: "a component", target: find("RowStatus"), selector: "small" },
+])(
+  "a layer switches between two uses of Original on $name without remounting it",
+  async ({ target, selector }) => {
+    const [agent, setAgent] = createSignal<string>();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const unloaded = vi.fn();
+    const Heading = layer(target as ComponentPart<string, object>, (_, Original) => (
+      <Show when={agent()} fallback={<Original />}>
+        {(name) => <Original>For {name()}</Original>}
+      </Show>
+    ));
+    const root = document.createElement("div");
+    onTestFinished(
+      render(
+        () => (
+          <ExtensionProvider host={host([contribution("Heading", Heading, "layer", target)])}>
+            <RealisticRow text="Hello" unloaded={unloaded} />
+          </ExtensionProvider>
+        ),
+        root,
+      ),
+    );
+    const text = () => root.querySelector(selector)?.textContent;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const plain = text();
+    const element = root.querySelector(selector);
+    for (const name of ["Claude", undefined, "Codex", undefined]) {
+      setAgent(name);
+      flush();
+      // A component decides what to do with children; a plain element shows them.
+      const expected = name && selector === "header" ? `For ${name}` : plain;
+      await waitFor(() => expect(text()).toBe(expected));
+      expect(root.querySelector(selector)).toBe(element);
+    }
+    expect(warn.mock.calls.filter(([message]) => /twice/.test(String(message)))).toEqual([]);
+    // New contents on the header unload the status component inside it. A
+    // component that is itself the target is rebuilt once, when the layer first
+    // hands it children, and then stays mounted through every later switch.
+    if (selector === "small") expect(unloaded.mock.calls.length).toBeLessThanOrEqual(1);
+  },
+);

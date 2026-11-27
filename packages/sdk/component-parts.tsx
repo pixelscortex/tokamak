@@ -1062,74 +1062,90 @@ function renderLayer(
   }
 
   function activeLayer() {
-    let claimed = false;
-    const [claim, setClaim] = createSignal(false, { ownedWrite: true });
-    let childrenClaimed = false;
-    const Outlet = createContext(false);
+    // Counts, not flags: when a layer switches between two uses of Original
+    // (one branch of a Show to the other), the new use is created before the
+    // old one is disposed, so for a moment both exist.
+    let uses = 0;
+    const count = () => createSignal(0, { ownedWrite: true });
+    const [claims, setClaims] = count();
+    const [supplied, setSupplied] = count();
+    const [restored, setRestored] = count();
+    const held = (set: (change: (n: number) => number) => void) => {
+      set((n) => n + 1);
+      onCleanup(() => set((n) => n - 1));
+    };
+    // The default stands for "not inside Original": a context needs one to be read there.
+    const outside = { drawn: true };
+    const Outlet = createContext(outside);
     const [failed, setFailed] = createSignal(false, { ownedWrite: true });
     const owner = getOwner();
-    const [supplied, setSupplied] = createSignal(false, { ownedWrite: true });
-    const [restored, setRestored] = createSignal(false, { ownedWrite: true });
     trackInterference(() => {
       if (failed()) return;
-      if (!claim()) return covered();
+      if (!claims()) return covered();
       if (supplied() && !restored()) return covered(true);
     });
+
+    function drawOriginal(passed: { readonly children?: JSX.Element }) {
+      held(setClaims);
+      const hasAttributes = Object.keys(passed).some((key) => key !== "children");
+      if (hasAttributes && !supportsAttributes) warnLegacyAttributes(registry, item);
+      const forwarded: AttributeLayers =
+        hasAttributes && supportsAttributes ? () => [...attributes(), { item, values: passed }] : attributes;
+      if (!("children" in passed)) return next(read, forwarded);
+      held(setSupplied);
+      const use = { drawn: false };
+      const children: LayerContents = {
+        draw: () => <Outlet value={use}>{passed.children}</Outlet>,
+        fail(cause) {
+          // Children render at the bottom of the stack. Report their
+          // failure back to the layer that supplied them.
+          warn(cause);
+          runWithOwner(owner, () =>
+            onSettled(() => {
+              setFailed(true);
+            }),
+          );
+        },
+      };
+      return next(() => children, forwarded);
+    }
+
     const Original: OriginalElement<any> = Object.assign(
       (passed: { readonly children?: JSX.Element }) => {
-        if (claimed) {
-          registry.warn(
-            ["duplicate", item.plugin, target],
-            `Component layer ${item.plugin}/${item.id} drew Original twice for ${target}`,
-          );
-          return undefined;
-        }
-        claimed = true;
-        setClaim(true);
+        uses++;
+        let mounted = true;
         onCleanup(() => {
-          claimed = false;
-          setClaim(false);
+          mounted = false;
+          uses--;
         });
-        const hasAttributes = Object.keys(passed).some((key) => key !== "children");
-        if (hasAttributes && !supportsAttributes) warnLegacyAttributes(registry, item);
-        const forwarded: AttributeLayers =
-          hasAttributes && supportsAttributes
-            ? () => [...attributes(), { item, values: passed }]
-            : attributes;
-        if (!("children" in passed)) return next(read, forwarded);
-        setSupplied(true);
-        onCleanup(() => setSupplied(false));
-        const children: LayerContents = {
-          draw: () => <Outlet value={true}>{passed.children}</Outlet>,
-          fail(cause) {
-            // Children render at the bottom of the stack. Report their
-            // failure back to the layer that supplied them.
-            warn(cause);
-            runWithOwner(owner, () =>
-              onSettled(() => {
-                setFailed(true);
-              }),
+        // The element is one node, so the newest use holds it: a switch from
+        // one branch to the other hands it over without remounting. If an
+        // earlier use is still mounted once the update settles, the layer
+        // really drew Original twice, and only the last one shows.
+        onSettled(() => {
+          if (mounted && uses > 1)
+            registry.warn(
+              ["duplicate", item.plugin, target],
+              `Component layer ${item.plugin}/${item.id} drew Original twice for ${target}`,
             );
-          },
-        };
-        return next(() => children, forwarded);
+        });
+        return drawOriginal(passed);
       },
       {
         Children() {
-          const inside = useContext(Outlet);
-          if (!inside || childrenClaimed) {
+          const use = useContext(Outlet);
+          if (use.drawn) {
             registry.warn(
               ["children", item.plugin, target],
               `Component layer ${item.plugin}/${item.id} must draw Original.Children once inside Original for ${target}`,
             );
             return undefined;
           }
-          childrenClaimed = true;
-          setRestored(true);
+          use.drawn = true;
           onCleanup(() => {
-            childrenClaimed = false;
-            setRestored(false);
+            use.drawn = false;
           });
+          held(setRestored);
           const previous = () => {
             const inherited = read();
             return inherited ? drawContents(inherited) : authored();
@@ -1144,8 +1160,7 @@ function renderLayer(
           fallback={(cause) => {
             warn(cause());
             // The fallback draws the lower stage even though the layer did not.
-            setClaim(true);
-            onCleanup(() => setClaim(false));
+            held(setClaims);
             return next(read, attributes);
           }}
         >
