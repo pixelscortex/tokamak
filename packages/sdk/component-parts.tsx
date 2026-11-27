@@ -820,8 +820,11 @@ function renderActions(
   }
 
   function hiddenBy(hide: LoadedPartAction) {
-    const same = actions.filter((item) => item.plugin !== hide.plugin && enabled(item));
-    const inside = registry.inside(hide.action.target).filter((item) => item.plugin !== hide.plugin);
+    // Another plugin's hide loses nothing: it wanted the element gone too.
+    const loses = (item: LoadedPartAction) =>
+      item.plugin !== hide.plugin && componentActionKind(item.action) !== "hide";
+    const same = actions.filter((item) => loses(item) && enabled(item));
+    const inside = registry.inside(hide.action.target).filter(loses);
     if (!same.length && !inside.length) return;
     return () => {
       for (const item of [...same, ...inside])
@@ -834,12 +837,15 @@ function renderActions(
     };
   }
 
-  function covered(cover: LoadedPartAction, below: readonly LoadedPartAction[]) {
+  // `contentsOnly`: the layer drew Original with its own children and did not
+  // put the owner's back. The element and the layers below survive; what other
+  // plugins added inside it does not.
+  function covered(cover: LoadedPartAction, below: readonly LoadedPartAction[], contentsOnly = false) {
     const other = (item: LoadedPartAction) => item.plugin !== cover.plugin;
-    const lower = below.filter((item) => other(item) && enabled(item));
+    const lower = contentsOnly ? [] : below.filter((item) => other(item) && enabled(item));
     const children = [...leading, ...trailing].filter((item) => other(item) && enabled(item));
     const inside = registry.inside(cover.action.target).filter(other);
-    const blocked = attributes.filter((item) => other(item) && enabled(item));
+    const blocked = contentsOnly ? [] : attributes.filter((item) => other(item) && enabled(item));
     if (!lower.length && !children.length && !inside.length && !blocked.length) return;
     return () => {
       const element = screenElementName(cover.action.target);
@@ -947,7 +953,11 @@ function renderLayers(
   authored: () => JSX.Element,
   component: boolean | undefined,
   hasAttributes: boolean,
-  covered: (item: LoadedPartAction, below: readonly LoadedPartAction[]) => (() => void) | undefined,
+  covered: (
+    item: LoadedPartAction,
+    below: readonly LoadedPartAction[],
+    contentsOnly?: boolean,
+  ) => (() => void) | undefined,
 ) {
   const owner = getOwner();
   const pending = new Set<() => void>();
@@ -1016,8 +1026,16 @@ function renderLayers(
     (next, item, index) => {
       const below = layers.slice(index + 1);
       return stage((read, attributes) =>
-        renderLayer(registry, item, props, authored, next, read, attributes, component !== undefined, () =>
-          covered(item, below),
+        renderLayer(
+          registry,
+          item,
+          props,
+          authored,
+          next,
+          read,
+          attributes,
+          component !== undefined,
+          (contentsOnly) => covered(item, below, contentsOnly),
         ),
       );
     },
@@ -1035,7 +1053,7 @@ function renderLayer(
   read: ReadOverride,
   attributes: AttributeLayers,
   supportsAttributes: boolean,
-  covered: () => (() => void) | undefined,
+  covered: (contentsOnly?: boolean) => (() => void) | undefined,
 ) {
   const target = item.action.target;
   const draw = (item.action as ComponentAction<"layer">).layer!;
@@ -1050,7 +1068,13 @@ function renderLayer(
     const Outlet = createContext(false);
     const [failed, setFailed] = createSignal(false, { ownedWrite: true });
     const owner = getOwner();
-    trackInterference(() => (!claim() && !failed() ? covered() : undefined));
+    const [supplied, setSupplied] = createSignal(false, { ownedWrite: true });
+    const [restored, setRestored] = createSignal(false, { ownedWrite: true });
+    trackInterference(() => {
+      if (failed()) return;
+      if (!claim()) return covered();
+      if (supplied() && !restored()) return covered(true);
+    });
     const Original: OriginalElement<any> = Object.assign(
       (passed: { readonly children?: JSX.Element }) => {
         if (claimed) {
@@ -1073,6 +1097,8 @@ function renderLayer(
             ? () => [...attributes(), { item, values: passed }]
             : attributes;
         if (!("children" in passed)) return next(read, forwarded);
+        setSupplied(true);
+        onCleanup(() => setSupplied(false));
         const children: LayerContents = {
           draw: () => <Outlet value={true}>{passed.children}</Outlet>,
           fail(cause) {
@@ -1099,8 +1125,10 @@ function renderLayer(
             return undefined;
           }
           childrenClaimed = true;
+          setRestored(true);
           onCleanup(() => {
             childrenClaimed = false;
+            setRestored(false);
           });
           const previous = () => {
             const inherited = read();

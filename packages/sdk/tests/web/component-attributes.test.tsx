@@ -396,17 +396,17 @@ test("an overwrite, invalid computed key and throwing action do not break the ow
   });
   expect(consoleWarn).toHaveBeenCalledWith(expect.stringMatching(/winner.*title.*earlier.*nested/));
   const invalidAlert = expect.stringMatching(/invalid.*cannot change attribute "data-part".*attr-nested/);
-  const failure = expect.stringMatching(/throws\/Throws.*owner title/);
+  const failure = expect.stringMatching(/throws \(Throws\) failed on .*owner title/);
   await waitFor(() =>
     expect(alerts).toHaveBeenLastCalledWith([
-      failure,
       invalidAlert,
       expect.stringMatching(/winner.*overwrote "title".*earlier/),
+      failure,
     ]),
   );
   setEnabled(false);
   flush();
-  await waitFor(() => expect(alerts).toHaveBeenLastCalledWith([failure, invalidAlert]));
+  await waitFor(() => expect(alerts).toHaveBeenLastCalledWith([invalidAlert, failure]));
 });
 
 test("Original forwards a live prop to the owner's component", async () => {

@@ -112,7 +112,8 @@ export function attributeValues(
       warnAttribute(
         registry,
         { kind: "attr-error", plugin: item.plugin, target: item.action.target },
-        `Attribute action ${item.plugin}/${item.id} failed on ${item.action.target}: ${String(cause)}`,
+        // The same wording as every other failing action, so the alert list reads as one.
+        `${item.plugin} (${item.id}) failed on ${item.action.target}: ${cause instanceof Error ? cause.message : String(cause)}`,
         item.id,
       );
     }

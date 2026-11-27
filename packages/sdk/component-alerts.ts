@@ -86,7 +86,7 @@ export function componentAlerts(
         const release = record(
           id,
           plugins,
-          message.replace(detail.target, screenElementName(detail.target)),
+          message.replace(detail.target, () => screenElementName(detail.target)),
           sticky,
         );
         if (release) onCleanup(release);

@@ -340,7 +340,7 @@ test("throwing actions raise one alert per export and leave the owner drawn", as
   const messages = [
     `voice (Note) failed on ${target}: addition broke`,
     `voice (Wrap) failed on ${target}: layer broke`,
-    `Attribute action voice/Color failed on ${target}: Error: attrs broke`,
+    `voice (Color) failed on ${target}: attrs broke`,
     "voice (Track) failed on owner Composer: attachment broke",
     `voice (Hide) failed on ${target}: condition broke`,
   ];
@@ -357,4 +357,54 @@ test("throwing actions raise one alert per export and leave the owner drawn", as
   expect(warn.mock.calls.filter(([message]) => String(message).includes("broke"))).toHaveLength(5);
   reload("voice");
   await expectAlerts();
+});
+
+test("a layer that replaces the contents reports what other plugins added inside, and nothing else", async () => {
+  const [keep, setKeep] = createSignal(false);
+  const replace = layer(section, (_, Original) => (
+    <Original>
+      new
+      {keep() && <Original.Children />}
+    </Original>
+  ));
+  const { root, expectAlerts } = mount([
+    contribution("Replace", replace, "layer", section, 0, "focus"),
+    contribution(
+      "Tail",
+      append(section, () => "tail"),
+      "append",
+      section,
+      0,
+      "voice",
+    ),
+    contribution(
+      "Beside",
+      after(button, () => "beside"),
+      "after",
+      button,
+      0,
+      "voice",
+    ),
+    // The element and a layer below it are still drawn: nothing to report for them.
+    contribution("Below", wrap, "layer", section, 0, "voice", 1),
+  ]);
+  await expectAlerts(
+    `focus's layer hides voice's inside addition on ${sectionName}`,
+    `focus's layer on ${sectionName} hides voice's addition on ${sectionName} › SendButton`,
+  );
+  expect(root.querySelector("section")?.textContent).toBe("new");
+  setKeep(true);
+  flush();
+  await expectAlerts();
+  expect(root.querySelector("section")?.textContent).toContain("tail");
+});
+
+test("two plugins hiding one element lose nothing to each other", async () => {
+  const { root, onAlerts } = mount([
+    contribution("Hide", hide(section), "hide", section, 0, "focus"),
+    contribution("Hide", hide(section), "hide", section, 0, "voice"),
+  ]);
+  await waitFor(() => expect(root.querySelector("section")).toBeNull());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(onAlerts.mock.calls.flat(2)).toEqual([]);
 });
