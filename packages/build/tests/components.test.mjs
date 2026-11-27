@@ -12,7 +12,7 @@ async function scratch(run) {
 }
 
 const screen = `
-  interface PriceProps { amount: number; currency?: string }
+  interface PriceProps { amount: number; currency?: string; once?: boolean }
   const Price = (props: PriceProps) => <strong>{props.amount}</strong>;
   export const Picker = (props: { amount: number }) =>
     <section><Price amount={props.amount} /><Price amount={0} /><aside><span /></aside></section>;
@@ -23,7 +23,7 @@ const screen = `
 `;
 const manifest = async (path) => JSON.parse(await readFile(resolve(path, "dist/manifest.json"), "utf8"));
 const imports = `
-  import { after, append, attach, before, hide, prepend, layer } from "@tokamak/sdk/client";
+  import { after, append, attach, attrs, before, hide, prepend, layer } from "@tokamak/sdk/client";
   import * as owner from "plugin:owner/client";
 `;
 
@@ -414,19 +414,104 @@ test("two layers of the same resolved element are published", async () => {
   });
 }, 30_000);
 
-test("a layer can supply children to Original but cannot set attributes", async () => {
+test("attrs and Original use the attributes of the found element", async () => {
   await scratch(async (root) => {
     built(await source(root, "owner", screen));
     const addon = await source(
       root,
       "addon",
       imports +
-        `export const Bad = layer(owner.find("strong"), (_, Original) =>
-        <Original class="custom">new</Original>);`,
+        `
+        export const Cost = attrs(owner.find("Price", { nth: 1 }), (props, current) => ({
+          amount: (current.amount ?? 0) + props.amount,
+          once: true,
+        }), { order: 2 });
+        export const Frame = layer(owner.find("strong"), (_, Original) =>
+          <Original class="custom" aria-busy>new</Original>);
+      `,
     );
-    const failure = build(addon);
-    expect(failure.status, failure.stderr).not.toBe(0);
-    expect(failure.stderr).toMatch(/Type 'string' is not assignable to type 'never'/);
+    built(addon);
+    expect((await manifest(addon)).plugin.contributes["component-action"]).toContainEqual({
+      action: "attrs",
+      id: "Cost",
+      name: "Price",
+      nth: 1,
+      order: 2,
+      owner: "owner",
+      target: "owner.Picker.section.Price",
+      fingerprint: expect.any(String),
+    });
+  });
+}, 30_000);
+
+test("the builder rejects reserved attributes, function props and props from the wrong element", async () => {
+  await scratch(async (root) => {
+    built(
+      await source(
+        root,
+        "owner",
+        screen.replace("currency?: string", "currency?: string; changed?: () => void"),
+      ),
+    );
+    const addon = await source(root, "addon", "");
+    for (const [statement, message] of [
+      [
+        'attrs(owner.find("strong"), () => ({ "data-part": "bad" } as any))',
+        /Cannot change attribute "data-part" with attrs/,
+      ],
+      [
+        'attrs(owner.find("Price", { nth: 1 }), () => ({ changed: undefined }))',
+        /Cannot change attribute "changed" with attrs/,
+      ],
+      [
+        'attrs(owner.find("strong"), () => ({ onclick: "bad" } as any))',
+        /Cannot change attribute "onclick" with attrs/,
+      ],
+      [
+        'attrs(owner.find("strong"), () => ({ "oncapture:custom": "bad" } as any))',
+        /Cannot change attribute "oncapture:custom" with attrs/,
+      ],
+      [
+        'layer(owner.find("strong"), (_, Original) => <Original onClick={() => {}} />)',
+        /Cannot change attribute "onClick" with Original/,
+      ],
+      [
+        'layer(owner.find("Price", { nth: 1 }), (_, Original) => <Original changed={undefined} />)',
+        /Cannot change attribute "changed" with Original/,
+      ],
+      ['attrs(owner.find("Price", { nth: 1 }), () => ({ amount: 3, title: "bad" }))', /title|never/],
+      [
+        'layer(owner.find("strong"), (_, Original) => <Original data-part="bad" />)',
+        /Cannot change attribute "data-part" with Original/,
+      ],
+    ]) {
+      await writeFile(resolve(addon, "src/main.tsx"), imports + `export const Bad = ${statement};`);
+      const failure = build(addon);
+      expect(failure.status, failure.stderr).not.toBe(0);
+      expect(failure.stderr).toMatch(message);
+    }
+
+    const entry = resolve(addon, "src/main.tsx");
+    await writeFile(
+      entry,
+      imports +
+        `
+      export const Bad = attrs(owner.find("strong"), () => ({ "data-part": "bad" }));
+      export const BadOriginal = layer(owner.find("strong"), (_, Original) => <Original data-part="bad" />);
+      export const BadFunction = attrs(owner.find("Price", { nth: 1 }), () => ({ changed: undefined }));
+      export const BadHandler = attrs(owner.find("strong"), () => ({ onclick: "bad" }));
+    `,
+    );
+    const program = ts.createProgram(
+      [entry],
+      pluginCompilerOptions(addon, {
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        jsx: ts.JsxEmit.Preserve,
+        jsxImportSource: "@solidjs/web",
+      }),
+    );
+    expect(program.getSemanticDiagnostics(program.getSourceFile(entry))).toHaveLength(4);
   });
 }, 30_000);
 

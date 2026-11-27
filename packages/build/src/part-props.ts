@@ -115,7 +115,38 @@ export function partProps(
 
   function propsType(parameter: ts.ParameterDeclaration) {
     if (parameter.type) return annotation(parameter.type);
-    const type = checker.getTypeAtLocation(parameter);
+    return typeShape(checker.getTypeAtLocation(parameter));
+  }
+
+  function componentValue(tag: ts.JsxTagNameExpression): string | undefined {
+    if (ts.isJsxNamespacedName(tag)) return;
+    let base = tag;
+    while (ts.isPropertyAccessExpression(base)) {
+      if (!ts.isIdentifier(base.expression) && !ts.isPropertyAccessExpression(base.expression)) return;
+      base = base.expression;
+    }
+    if (!ts.isIdentifier(base)) return;
+    const binding = checker.getSymbolAtLocation(base);
+    if (!binding) return;
+    const declaration = binding.declarations?.[0];
+    const module = importModule(declaration);
+    if (module && !module.startsWith(".") && !isAbsolute(module)) {
+      const from = `import(${JSON.stringify(module)})`;
+      const name =
+        declaration && ts.isImportSpecifier(declaration)
+          ? (declaration.propertyName ?? declaration.name).text
+          : declaration && ts.isImportClause(declaration)
+            ? "default"
+            : undefined;
+      return (name ? `${from}.${name}` : from) + tag.getText().slice(base.getText().length);
+    }
+    const original = unalias(checker, binding);
+    const value = original.valueDeclaration;
+    const reference = value && exportedType(original, value);
+    return reference && reference + tag.getText().slice(base.getText().length);
+  }
+
+  function typeShape(type: ts.Type) {
     const flags =
       ts.TypeFormatFlags.NoTruncation |
       ts.TypeFormatFlags.InTypeAlias |
@@ -131,5 +162,11 @@ export function partProps(
       });
   }
 
-  return { propsType, privateDeclarations: () => [...privateShapes.values()].join("") };
+  return {
+    propsType,
+    typeShape,
+    componentValue,
+    annotation,
+    privateDeclarations: () => [...privateShapes.values()].join(""),
+  };
 }

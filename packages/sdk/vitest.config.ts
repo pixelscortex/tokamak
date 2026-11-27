@@ -87,6 +87,10 @@ export default defineConfig({
       () => resolve(import.meta.dirname, "tests/web/fixtures/parts/owner"),
       () => "owner",
     ),
+    clientSurface(
+      () => resolve(fixtures, "attrs-owner"),
+      () => "attrs-owner",
+    ),
     solid({ refresh: false }),
   ],
   resolve: {
@@ -96,6 +100,10 @@ export default defineConfig({
       {
         find: "./fixtures/parts/owner/src/client/_generated/components",
         replacement: resolve(import.meta.dirname, "tests/web/fixtures/parts/owner/src/client/api.tsx"),
+      },
+      {
+        find: "./fixtures/parts/attrs-owner/src/client/_generated/components",
+        replacement: resolve(fixtures, "attrs-owner/src/client/api.tsx"),
       },
       {
         find: /^solid-js$/,

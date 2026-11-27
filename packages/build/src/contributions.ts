@@ -1,3 +1,4 @@
+import { eventNamespace, reservedAttribute } from "../../sdk/component-actions.ts";
 import {
   flattenAttributes,
   isSearchAttribute,
@@ -341,8 +342,110 @@ function componentActionOptions(
       } else throw problem(prop, "Use a literal order or a live when accessor");
     }
   }
+  if (action === "attrs" || action === "layer") {
+    const { callable, nativeEvents } = callableAttributes(reference, checker);
+    checkAttributeLiterals(init.arguments[1], action, checker, callable, nativeEvents);
+    if (callable.size) values.callableAttributes = JSON.stringify([...callable]);
+  }
   checkAction(init);
   return values;
+}
+
+function callableAttributes(reference: ts.Expression, checker: ts.TypeChecker) {
+  const property = brand(checker.getTypeAtLocation(reference), "elementAttributesBrand");
+  const callable = new Set<string>();
+  let nativeEvents: Set<string> | undefined;
+  if (property) {
+    const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, reference));
+    for (const member of type.isUnion() ? type.types : [type]) {
+      const native = !!brand(member, "nativeAttributesBrand");
+      if (native) nativeEvents ??= new Set();
+      for (const prop of member.getProperties()) {
+        const value = checker.getTypeOfSymbolAtLocation(prop, reference);
+        if (!(value.isUnion() ? value.types : [value]).some((part) => part.getCallSignatures().length))
+          continue;
+        if (native) nativeEvents!.add(prop.name.toLowerCase());
+        else if (!reservedAttribute(prop.name)) callable.add(prop.name);
+      }
+    }
+  }
+  return { callable, nativeEvents };
+}
+
+function checkAttributeLiterals(
+  expression: ts.Expression | undefined,
+  action: "attrs" | "layer",
+  checker: ts.TypeChecker,
+  callable: ReadonlySet<string>,
+  nativeEvents?: ReadonlySet<string>,
+) {
+  let read: ts.Node | undefined = unwrap(expression);
+  if (read && ts.isIdentifier(read)) {
+    const declaration = checker.getSymbolAtLocation(read)?.valueDeclaration;
+    if (declaration && ts.isVariableDeclaration(declaration)) read = unwrap(declaration.initializer);
+    else if (declaration && ts.isFunctionDeclaration(declaration)) read = declaration;
+  }
+  if (!read) return;
+  function check(name: ts.Node, original = false) {
+    if (ts.isComputedPropertyName(name)) {
+      const literal = unwrap(name.expression);
+      if (!literal || !ts.isStringLiteralLike(literal)) return;
+      name = literal;
+    }
+    const key = ts.isStringLiteralLike(name) || ts.isIdentifier(name) ? name.text : name.getText();
+    if (original && key === "children") return;
+    if (
+      reservedAttribute(key) ||
+      callable.has(key) ||
+      (nativeEvents && (eventNamespace(key) || nativeEvents.has(key.toLowerCase())))
+    )
+      throw problem(name, `Cannot change attribute "${key}" with ${original ? "Original" : "attrs"}`);
+  }
+  function returned(expression: ts.Expression | undefined) {
+    const value = unwrap(expression);
+    if (!value) return;
+    if (ts.isObjectLiteralExpression(value)) {
+      for (const prop of value.properties) {
+        if (ts.isSpreadAssignment(prop)) returned(prop.expression);
+        else if (prop.name) check(prop.name);
+      }
+    } else if (ts.isConditionalExpression(value)) {
+      returned(value.whenTrue);
+      returned(value.whenFalse);
+    } else if (
+      ts.isBinaryExpression(value) &&
+      (value.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+        value.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        value.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+    ) {
+      returned(value.left);
+      returned(value.right);
+    }
+  }
+  if (action === "attrs") {
+    if (!(ts.isArrowFunction(read) || ts.isFunctionExpression(read) || ts.isFunctionDeclaration(read)))
+      return;
+    const body = read.body;
+    if (!body) return;
+    const visit = (node: ts.Node) => {
+      if (ts.isReturnStatement(node)) returned(node.expression);
+      else if (!ts.isFunctionLike(node)) ts.forEachChild(node, visit);
+    };
+    if (ts.isBlock(body)) visit(body);
+    else returned(body);
+  } else {
+    const visit = (node: ts.Node) => {
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        !/^[a-z][\w-]*$/.test(node.tagName.getText()) &&
+        brand(checker.getTypeAtLocation(node.tagName), "originalElementBrand")
+      ) {
+        for (const prop of node.attributes.properties) if (ts.isJsxAttribute(prop)) check(prop.name, true);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(read);
+  }
 }
 
 function targetSearch(target: ts.Expression, checker: ts.TypeChecker) {

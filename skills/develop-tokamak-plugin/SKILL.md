@@ -103,13 +103,19 @@ A plugin that uses another plugin builds when both sit side by side in
   `find("button", { aria: { label: "Stop" } })`. They match only static string
   attributes; `nth` counts the remaining matches. Both builds warn and ask
   for `data-part` when a search reaches a plain tag with no static name.
-  The actions are `before`, `after`, `prepend`, `append`, `layer`, and `hide`.
+  The actions are `before`, `after`, `prepend`, `append`, `layer`, `attrs`, and `hide`.
   Use `layer(target, (props, Original) => <Original>New text</Original>)` to change
   contents while keeping the owner's markup. `<Original />` draws the next layer
   (or the owner); draw it at most once. Use `<Original.Children />` once inside
   `<Original>` to keep the children supplied by an outer layer or the owner's
   children with inside additions. If no layer draws the original element, it
   unloads. Layers stack by install order; `before` and `after` stay outside the stack.
+  Use `attrs(target, (props, current) => ({ title: props.label }))` to set typed
+  HTML attributes or component props. Classes merge; other defined values
+  override in install order, then `order`, plugin ID, and export name. Read
+  `current` to combine with earlier values. `<Original class="dim" />` applies
+  after `attrs` if the owner is drawn. Identifiers, refs, contents, event handlers,
+  and function props cannot be changed as attributes.
   Use `{ when: (props) => … }` on an action to apply it only to matching
   component instances.
   Use `attach(owner.find("Editor"), TrackEditor)` to run a component for each

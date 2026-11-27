@@ -155,6 +155,7 @@ test.each([
   );
   try {
     await waitFor(() => expect(root.querySelector("section + p")?.textContent).toBe("Notes for Send"));
+    expect(root.querySelector("section")?.title).toBe("Send");
     expect(root.querySelector("button + small")?.textContent).toBe(matches ? "Built for Send" : undefined);
     expect(root.querySelector('[aria-label="replacement"]') !== null).toBe(matches);
     expect(root.querySelector('[aria-label="body"]') !== null).toBe(!matches);

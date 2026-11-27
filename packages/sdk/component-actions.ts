@@ -4,9 +4,12 @@ import type { AttributeFilters } from "./screen-search";
 const componentPartBrand: unique symbol = Symbol("tokamak.component.part");
 declare const renderFunctionBrand: unique symbol;
 declare const originalElementBrand: unique symbol;
+declare const elementAttributesBrand: unique symbol;
+declare const nativeAttributesBrand: unique symbol;
 const componentActionBrand: unique symbol = Symbol("tokamak.component.action");
 
-export interface ComponentPart<Target extends string, Props extends object> {
+export interface ComponentPart<Target extends string, Props extends object, Attributes extends object = {}> {
+  readonly [elementAttributesBrand]?: Attributes;
   readonly [componentPartBrand]: (props: Props) => void;
   readonly target: Target;
 }
@@ -17,7 +20,15 @@ export interface RenderFunction<Props extends object> {
   readonly renderTarget?: string;
 }
 
-export type ComponentActionKind = "before" | "after" | "prepend" | "append" | "layer" | "hide" | "attach";
+export type ComponentActionKind =
+  | "before"
+  | "after"
+  | "prepend"
+  | "append"
+  | "layer"
+  | "hide"
+  | "attach"
+  | "attrs";
 
 export interface ComponentActionOptions<P extends object = any> {
   order?: number;
@@ -31,22 +42,82 @@ export interface ComponentActionOptions<P extends object = any> {
 type Part<P extends object> = ComponentPart<string, P>;
 type Addition<P extends object> = (props: P) => JSX.Element;
 
-type OriginalProps = {
-  readonly children?: JSX.Element;
-  readonly [attribute: `${string}-${string}`]: never;
+type ReservedAttribute =
+  | "data-part"
+  | "data-part-ignore"
+  | "id"
+  | "ref"
+  | "children"
+  | "innerHTML"
+  | "textContent"
+  | "outerHTML"
+  | "innerText";
+type ForbiddenAttribute = ReservedAttribute | `prop:${string}` | `attr:${string}`;
+type EventNamespace = `on:${string}` | `oncapture:${string}`;
+
+export function eventNamespace(key: string) {
+  return /^(?:on|oncapture):/i.test(key);
+}
+
+export function reservedAttribute(key: string) {
+  return (
+    /^(?:prop:|attr:)/i.test(key) ||
+    /^(?:data-part|data-part-ignore|id|ref|children|innerhtml|textcontent|outerhtml|innertext)$/i.test(key)
+  );
+}
+
+type IntrinsicAttributes<Tag extends string> = Tag extends keyof JSX.IntrinsicElements
+  ? JSX.IntrinsicElements[Tag]
+  : JSX.IntrinsicElements["div"];
+
+export type ElementAttributes<Tag extends string> = { readonly [nativeAttributesBrand]: true } & {
+  [K in keyof IntrinsicAttributes<Tag>]: K extends `aria-${string}`
+    ? string extends IntrinsicAttributes<Tag>[K]
+      ? IntrinsicAttributes<Tag>[K]
+      : JSX.EnumeratedPseudoBoolean extends IntrinsicAttributes<Tag>[K]
+        ? IntrinsicAttributes<Tag>[K] | boolean
+        : IntrinsicAttributes<Tag>[K]
+    : IntrinsicAttributes<Tag>[K];
 };
 
-export interface OriginalElement {
+type CallableKeys<A> = {
+  [K in keyof A]-?: Extract<A[K], (...args: never[]) => unknown> extends never ? never : K;
+}[keyof A];
+type NativeEvents<A> = typeof nativeAttributesBrand extends keyof A
+  ? EventNamespace | Lowercase<Extract<CallableKeys<A>, string>>
+  : never;
+type MutableAttributes<A extends object> = {
+  [
+    K in keyof A as K extends string
+      ? Lowercase<K> extends Lowercase<ForbiddenAttribute | NativeEvents<A>>
+        ? never
+        : Extract<A[K], (...args: never[]) => unknown> extends never
+          ? K
+          : never
+      : never
+  ]?: K extends "class" ? string : A[K];
+};
+type Forbidden<F extends string = ForbiddenAttribute> = { [K in F]?: never };
+type OriginalProps<A extends object> = MutableAttributes<A> &
+  Forbidden<Exclude<ForbiddenAttribute, "children"> | NativeEvents<A>> & { readonly children?: JSX.Element };
+
+export interface OriginalElement<A extends object = {}> {
   readonly [originalElementBrand]?: true;
-  <P extends OriginalProps>(props: P & Record<Exclude<keyof P, "children">, never>): JSX.Element;
+  (props: OriginalProps<A>): JSX.Element;
   Children(): JSX.Element;
 }
 
-type Layer<P extends object> = (props: P, Original: OriginalElement) => JSX.Element;
+type Layer<P extends object, A extends object = {}> = (props: P, Original: OriginalElement<A>) => JSX.Element;
+type Attributes<P extends object, A extends object = {}> = (
+  props: P,
+  current: Readonly<MutableAttributes<A>>,
+) => MutableAttributes<A>;
+
 export type ComponentAction<K extends ComponentActionKind = ComponentActionKind> = Readonly<{
   [componentActionBrand]: K;
   target: string;
-  layer?: K extends "layer" ? Layer<any> : Addition<any>;
+  layer?: K extends "layer" ? Layer<any, any> : Addition<any>;
+  attributes?: Attributes<any, any>;
   when?: (props: any) => boolean;
 }>;
 export function isComponentAction(value: unknown): value is ComponentAction {
@@ -58,11 +129,13 @@ export function defineComponentAction<K extends ComponentActionKind, P extends o
   target: { readonly target: string },
   layer: ComponentAction<K>["layer"],
   options?: ComponentActionOptions<P>,
+  attributes?: Attributes<any, any>,
 ): ComponentAction<K> {
   return Object.freeze({
     [componentActionBrand]: kind,
     target: target.target,
     layer,
+    attributes,
     when: options?.when,
   });
 }
@@ -97,12 +170,28 @@ export function hide<P extends object>(target: Part<P>, options?: ComponentActio
   return defineComponentAction("hide", target, undefined, options);
 }
 
-export function layer<P extends object>(
-  target: Part<P>,
-  draw: Layer<NoInfer<P>>,
+export function layer<P extends object, A extends object>(
+  target: ComponentPart<string, P, A>,
+  draw: Layer<NoInfer<P>, NoInfer<A>>,
   options?: ComponentActionOptions<NoInfer<P>>,
 ) {
-  return defineComponentAction("layer", target, draw, options);
+  return defineComponentAction("layer", target, draw as Layer<any, any>, options);
+}
+
+export function attrs<P extends object, A extends object, Values extends object>(
+  target: ComponentPart<string, P, A>,
+  read: (
+    props: NoInfer<P>,
+    current: Readonly<MutableAttributes<NoInfer<A>>>,
+  ) => Values &
+    MutableAttributes<NoInfer<A>> &
+    (string extends keyof NoInfer<Values>
+      ? unknown
+      : Forbidden<ForbiddenAttribute | NativeEvents<A>> &
+          UnknownKeys<NoInfer<Values>, MutableAttributes<NoInfer<A>>>),
+  options?: ComponentActionOptions<NoInfer<P>>,
+) {
+  return defineComponentAction("attrs", target, undefined, options, read as Attributes<any, any>);
 }
 
 export function componentActionKind<K extends ComponentActionKind>(action: ComponentAction<K>): K {
@@ -110,7 +199,13 @@ export function componentActionKind<K extends ComponentActionKind>(action: Compo
 }
 
 type SearchOptions = AttributeFilters & { in?: string; nth?: number };
-type ScreenMatch = readonly [ancestors: string, props: object, attributes?: AttributeFilters];
+type ElementType = object | string;
+type ScreenMatch = readonly [
+  ancestors: string,
+  props: object,
+  filters?: AttributeFilters,
+  attributes?: ElementType,
+];
 type Keys<T> = T extends unknown ? keyof T : never;
 type Values<T, K extends PropertyKey> = T extends Record<K, unknown> ? T[K] : never;
 type Available<T> = { [K in Keys<T>]?: Values<T, K> };
@@ -152,33 +247,64 @@ type Narrow<
 type AtPosition<
   Matches extends readonly ScreenMatch[],
   Nth extends number,
+  Field extends 1 | 3,
   Before extends unknown[] = [unknown],
 > = Matches extends readonly [infer First extends ScreenMatch, ...infer Rest extends ScreenMatch[]]
   ? Before["length"] extends Nth
-    ? First[1]
-    : AtPosition<Rest, Nth, [...Before, unknown]>
+    ? First[Field]
+    : AtPosition<Rest, Nth, Field, [...Before, unknown]>
   : never;
-type MatchProps<Matches extends readonly ScreenMatch[], Filters> = Filters extends {
+type MatchField<Matches extends readonly ScreenMatch[], Filters, Field extends 1 | 3> = Filters extends {
   nth: infer N extends number;
 }
   ? number extends N
-    ? Matches[number][1]
-    : AtPosition<Matches, N>
-  : Matches[number][1];
-type SearchProps<Value extends object, Filters> = Value extends readonly ScreenMatch[]
-  ? MatchProps<
+    ? Matches[number][Field]
+    : AtPosition<Matches, N, Field>
+  : Matches[number][Field];
+type SearchField<Value extends object, Filters, Field extends 1 | 3> = Value extends readonly ScreenMatch[]
+  ? MatchField<
       Extract<keyof Filters, "in" | keyof AttributeFilters> extends never ? Value : Narrow<Value, Filters>,
-      Filters
+      Filters,
+      Field
     >
-  : Value;
+  : Field extends 1
+    ? Value
+    : undefined;
 
-type ElementTarget<Names, Name, Filters> = Name extends keyof Names
-  ? ComponentPart<string, SearchProps<Extract<Names[Name], object>, Filters>>
+type ComponentAt<Module, Name extends string> = Name extends keyof Module
+  ? Module[Name]
+  : Name extends `${infer Key extends keyof Module & string}.${infer Rest}`
+    ? ComponentAt<Module[Key], Rest>
+    : never;
+
+/** Generated declarations share a module reference for imported component props. */
+export type ComponentAttributes<Module, Names extends string> = {
+  [Name in Names]: ComponentAt<Module, Name> extends (props: infer Props, ...rest: any) => unknown
+    ? Extract<NonNullable<Props>, object>
+    : {};
+};
+
+type SearchAttributes<Name extends string, Type, Defaults> = Type extends string
+  ? ElementAttributes<Type>
+  : Type extends object
+    ? Type
+    : [Defaults] extends [never]
+      ? {}
+      : Name extends keyof Defaults
+        ? SearchAttributes<Name, Defaults[Name], never>
+        : ElementAttributes<Name>;
+
+type ElementTarget<Names, Name extends string, Filters, Defaults> = Name extends keyof Names
+  ? ComponentPart<
+      string,
+      SearchField<Extract<Names[Name], object>, Filters, 1>,
+      SearchAttributes<Name, SearchField<Extract<Names[Name], object>, Filters, 3>, Defaults>
+    >
   : unknown;
 type FunctionTarget<Functions, Name, Filters> =
   Extract<keyof Filters, keyof AttributeFilters> extends never
     ? Name extends keyof Functions
-      ? SearchProps<Extract<Functions[Name], object>, Filters> extends infer P extends object
+      ? SearchField<Extract<Functions[Name], object>, Filters, 1> extends infer P extends object
         ? [P] extends [never]
           ? unknown
           : RenderFunction<P>
@@ -191,10 +317,11 @@ type FindFilters<Names, Name> = AllowedFilters<Name extends keyof Names ? Names[
 export type ScreenFind<
   Names extends Record<string, object>,
   Functions extends Record<string, object> = {},
+  Defaults extends object = never,
 > = <Name extends (keyof Names | keyof Functions) & string, const Filters extends SearchOptions = {}>(
   name: Name,
   filters?: Filters &
     FindFilters<Names, NoInfer<Name>> &
     CheckFilters<Filters, FindFilters<Names, NoInfer<Name>>>,
-) => { readonly target: string } & ElementTarget<Names, Name, Filters> &
+) => { readonly target: string } & ElementTarget<Names, Name, Filters, Defaults> &
   FunctionTarget<Functions, Name, Filters>;

@@ -700,6 +700,33 @@ Layers run outermost first by plugin install order, then `order` (default
 0), plugin ID, and export name. `before` and `after` stay outside all layers;
 `hide` also removes those sibling additions.
 
+Use `attrs(target, (props, current) => values, options?)` to change HTML
+attributes on a plain element or props on a component. The callback and
+`when` are live and receive the owning render function's props. `current`
+contains the owner's values plus earlier actions, sorted by install order,
+then `order`, plugin ID, and export name. Class strings are added to existing
+classes, including the owner's Solid class objects and arrays. For other
+keys, a defined value overrides `current`; omit the key or return `undefined`
+to leave it alone. If another add-on already set a key, read `current` for
+that key to combine the values and avoid an overwrite warning.
+
+```tsx
+import { attrs } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Busy = attrs(chat.find("article", { in: "Message" }), (props) => ({
+  "aria-busy": props.message.status === "streaming",
+}));
+```
+
+Give `Original` attributes with the same rules: `<Original class="dim" />`
+adds a class after `attrs` has run. These attributes only apply if the layers
+below draw the owner's element. You can't change identifiers (`id`,
+`data-part`, `data-part-ignore`), refs, content as an attribute, event
+handlers, or function props. Pass JSX children to `Original` to replace
+its contents. Rebuild the owner to publish the attribute types for its
+elements.
+
 A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
 `$row.index` in a Solid list row. Nested rows expose the enclosing row

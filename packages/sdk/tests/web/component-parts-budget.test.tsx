@@ -92,6 +92,11 @@ test.each([
   { name: "realistic", plainRow: PlainRealisticRow, row: RealisticRow, count: 13 },
 ])(
   "$name unextended screen parts stay close to plain JSX mount cost",
+  // A timing ratio: on a shared CI runner one sample in a few lands over the
+  // limit with no change in the code (unrelated branches measured 1.24 to
+  // 1.49). A real regression is over the limit every time, so it still fails
+  // all three attempts.
+  { timeout: 20_000, retry: 2 },
   ({ name, plainRow, row, count }) => {
     measure(plainRow, count);
     measure(row, count);
@@ -115,7 +120,6 @@ test.each([
     });
     expect(ratio).toBeLessThan(1.5);
   },
-  20_000,
 );
 
 test("loading an addition for another path leaves 7500 mounted elements alone", async () => {

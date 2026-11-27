@@ -1,8 +1,9 @@
-import { after, attach, layer } from "@tokamak/sdk/client";
+import { after, attach, attrs, layer } from "@tokamak/sdk/client";
 import { find } from "plugin:owner/client";
 import { onCleanup } from "solid-js";
 
 export const Badge = after(find("SendButton"), ({ label }) => <small>Built for {label}</small>);
+export const ToolbarTitle = attrs(find("section", { in: "Composer" }), ({ label }) => ({ title: label }));
 export const Note = after(find("section", { in: "Composer" }), ({ label }) => <p>Notes for {label}</p>);
 
 export const Profile = after(find("span", { in: "Labels", nth: 1 }), ({ labels, $row }) => (

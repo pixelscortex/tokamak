@@ -21,6 +21,7 @@ type Part = {
   target: string;
   props: string;
   type: string;
+  elementType?: () => string;
   fingerprint?: string;
   ambiguous?: boolean;
   row?: string;
@@ -186,7 +187,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     .getSourceFiles()
     .filter((file) => !file.isDeclarationFile && inSource(root, file.fileName))
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
-  const { propsType, privateDeclarations } = partProps(entry, checker, root, sources);
+  const { propsType, typeShape, componentValue, annotation, privateDeclarations } = partProps(
+    entry,
+    checker,
+    root,
+    sources,
+  );
   const aliases = new Map<string, string>();
   let captures = 0;
   const solidBuiltins = new Set([
@@ -217,7 +223,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
 
   function alias(shape: string) {
     if (shape === "{}") return shape;
-    const name = aliases.get(shape) ?? `Props${aliases.size + 1}`;
+    const name = aliases.get(shape) ?? `P${aliases.size + 1}`;
     aliases.set(shape, name);
     return name;
   }
@@ -359,6 +365,27 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           target: "",
           unnamed: named === undefined && /^[a-z][\w-]*$/.test(tagName),
           props: scope.props,
+          elementType: () => {
+            if (/^[a-z][\w-]*$/.test(tagName)) return JSON.stringify(tagName);
+            const signature = checker.getResolvedSignature(opening);
+            const parameter = signature?.parameters[0];
+            if (!parameter) return "{}";
+            const declaration = parameter.valueDeclaration;
+            const type = checker.getTypeOfSymbolAtLocation(parameter, opening);
+            if (
+              declaration &&
+              ts.isParameter(declaration) &&
+              inSource(root, declaration.getSourceFile().fileName) &&
+              checker.getTypeAtLocation(declaration) === type
+            )
+              return propsType(declaration);
+            const value = componentValue(tag);
+            if (value) {
+              const args = opening.typeArguments?.map(annotation).join(", ");
+              return `C<typeof ${value}${args ? `<${args}>` : ""}>`;
+            }
+            return typeShape(type);
+          },
           type: scope.row ? alias(`${type} & { readonly $row: ${scope.row.type()} }`) : type,
           row: scope.row?.value(),
         };
@@ -613,7 +640,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
         }
         output.prepend(
-          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths, __attachRenderFunction as __tokamakAttach } from "@tokamak/sdk/client";\n',
+          'import { __renderComponentPart as __tokamakRenderComponentPart, __renderPlainPart as __tokamakRenderPlainPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths, __attachRenderFunction as __tokamakAttach } from "@tokamak/sdk/client";\n',
         );
       }
       if (source === entry)
@@ -624,6 +651,10 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     },
     publish(warn: (message: string) => void, catalog?: string) {
       const path = join(dirname(entry.fileName), "_generated/components.d.ts");
+      const attributeTypes = new Map<string, string>();
+      const modules = new Map<string, string[]>();
+      const compactType = (type: string) =>
+        type.startsWith('"') || type === "{}" || type.startsWith("C<") ? type : alias(type);
       function shape(candidates: typeof elements, scoped = false) {
         const names = new Map<string, typeof elements>();
         for (const element of candidates) {
@@ -633,25 +664,61 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
         }
         return [...names]
           .map(([name, matches]) => {
-            const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
-            const entries = matches.map((element) => {
-              const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
-              const filters =
-                element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
-              return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
-            });
+            const types = scoped ? [] : matches.map((element) => paths.get(element.target)!.elementType!());
+            const type = types[0]!;
+            const shared = types.every((entry) => entry === type);
+            if (!scoped && shared && type !== JSON.stringify(name)) {
+              const imported = /^C<typeof (import\("[^"]+"\))\.([\w$.]+)>$/.exec(type);
+              if (imported && imported[2] === name) {
+                const module = imported[1]!;
+                const names = modules.get(module);
+                if (names) names.push(name);
+                else modules.set(module, [name]);
+              } else attributeTypes.set(name, compactType(type));
+            }
             const only = matches[0]!;
-            return `  ${JSON.stringify(name)}: ${!scoped && matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
+            if (!scoped && matches.length === 1 && !only.attributes)
+              return `  ${JSON.stringify(name)}: ${paths.get(only.target)!.type};\n`;
+            const entries = matches.map((element, index) => {
+              const part = paths.get(element.target)!;
+              const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
+              const filters = element.attributes && JSON.stringify(attributeFilters(element.attributes));
+              const attrs =
+                !shared && types[index] !== JSON.stringify(name) ? compactType(types[index]!) : "";
+              return `[${scopes.join(" | ") || "never"}, ${part.type}${attrs ? `, ${filters ?? "undefined"}, ${attrs}` : filters ? `, ${filters}` : ""}]`;
+            });
+            return `  ${JSON.stringify(name)}: [${entries.join(", ")}];\n`;
           })
           .join("");
       }
+      const elementShape = shape(elements);
+      const functionShape = renderFunctions.length ? `{\n${shape(renderFunctions, true)}}` : "{}";
+      const attributes =
+        [
+          ...(attributeTypes.size
+            ? [
+                `{ ${[...attributeTypes].map(([name, type]) => `${JSON.stringify(name)}:${type}`).join("; ")} }`,
+              ]
+            : []),
+          ...[...modules].map(
+            ([module, names]) =>
+              `A<typeof ${module}, ${names.map((name) => JSON.stringify(name)).join("|")}>`,
+          ),
+        ].join(" & ") || "{}";
+      const types =
+        elementShape.includes("C<typeof ") || attributes.includes("C<typeof ")
+          ? 'import type { ComponentProps as C } from "@solidjs/web";\n'
+          : "";
+      const helpers = modules.size
+        ? 'import type { ComponentAttributes as A } from "@tokamak/sdk/client";\n'
+        : "";
       const previous = readOptional(path);
       const declarations =
         privateDeclarations() +
         [...aliases]
           .map(([shape, name]) => `type ${name} = Extract<NonNullable<${shape}>, object>;\n`)
           .join("");
-      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${shape(elements)}}${renderFunctions.length ? `, {\n${shape(renderFunctions, true)}}` : ""}>;\n`;
+      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${types}${helpers}${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${elementShape}}, ${functionShape}, ${attributes}>;\n`;
       const reported = new Set<string>();
       const catalogs = new Set([
         dirname(root),
@@ -769,10 +836,16 @@ function transformElement(
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}__tokamakRenderPart(${partArguments(part, target)}, (__tokamakContents) => `;
+  const opening = ts.isJsxElement(node) ? node.openingElement : node;
+  const component = !/^[a-z][\w-]*$/.test(opening.tagName.getText(source));
+  const entry = component ? "__tokamakRenderComponentPart" : "__tokamakRenderPlainPart";
+  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}${entry}(${partArguments(part, target)}, (__tokamakContents) => `;
   const suffix = `)${hole === undefined ? "" : ")"}${child ? "}" : ""}`;
-  output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
-  const endMount = mount?.suffix ?? "";
+  output.appendLeft(
+    node.getStart(source),
+    prefix + (mount?.prefix ?? "") + (component ? "__tokamakComponent(" : ""),
+  );
+  const endMount = (component ? ")" : "") + (mount?.suffix ?? "");
 
   if (ts.isJsxSelfClosingElement(node)) {
     const tag = node.tagName.getText(source);
@@ -810,7 +883,6 @@ function transformElement(
     return;
   }
 
-  const opening = node.openingElement;
   const close = node.closingElement;
   const tag = opening.tagName.getText(source);
   const callback = childCallback(node);
