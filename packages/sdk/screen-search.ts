@@ -62,6 +62,11 @@ function segmentName(segment: string) {
   );
 }
 
+export function screenElementName(target: string) {
+  const [owner, ...path] = target.split(".");
+  return path.length ? `${owner} ${path.map(segmentName).join(" › ")}` : target;
+}
+
 export function screenElements(plugin: string, tree: ScreenTree, kind: ScreenKind = "element") {
   const elements: Candidate[] = [];
   const functions = kind === "render function";

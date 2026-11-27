@@ -19,6 +19,7 @@ import {
   useContext,
 } from "solid-js";
 import { insert, type JSX } from "@solidjs/web";
+import { screenElementName } from "./screen-search";
 import {
   componentActionKind,
   type ComponentAction,
@@ -86,6 +87,14 @@ export interface PartRegistry {
     message: string,
     detail?: AttributeWarning,
   ): void;
+  failure(item: LoadedPartAction, cause: unknown, consoleMessage: string): void;
+  interference(
+    kind: string,
+    cause: LoadedPartAction,
+    affected: LoadedPartAction,
+    message: string,
+  ): () => void;
+  inside(target: string): readonly LoadedPartAction[];
   read(target: string): () => readonly LoadedPartAction[];
   observe(target: string, observer: PartObserver): void;
   unobserve(target: string, observer: PartObserver): void;
@@ -155,8 +164,9 @@ function attached(item: LoadedPartAction, props: object, registry: PartRegistry)
     <Show when={!failed()}>
       <Errored
         fallback={(cause) => {
-          registry.warn(
-            ["error", item.plugin, item.id],
+          registry.failure(
+            item,
+            cause(),
             `Component attachment ${item.plugin}/${item.id} failed: ${String(cause())}`,
           );
           // Solid's error boundary retains the failed scope for a possible
@@ -615,10 +625,11 @@ export function renderPart(
     return untrack(() => {
       disposeActions?.();
       disposeActions = undefined;
+      let legacy: LoadedPartAction[] | undefined;
       const actions = installed.filter((item) => {
         if (!matches(registry!, target, fingerprint, item)) return false;
         if (component !== undefined || !isAttributes(item)) return true;
-        warnLegacyAttributes(registry!, item);
+        (legacy ??= []).push(item);
         return false;
       });
       const outside = actions.every(({ action }) => {
@@ -635,11 +646,21 @@ export function renderPart(
         disposeOriginal = undefined;
       }
       originalAttributes = attributes;
-      if (!actions.length) return (decorated = renderOriginal());
+      if (!actions.length && !legacy) return (decorated = renderOriginal());
+      const legacyActions = legacy;
       const placementProps = row ? merge(props, { $row: row() }) : props;
       return (decorated = runWithOwner(owner, () =>
         createRoot((dispose) => {
           disposeActions = dispose;
+          if (legacyActions)
+            createEffect(
+              () => {
+                for (const item of legacyActions)
+                  if (item.enabled(placementProps)) warnLegacyAttributes(registry!, item);
+              },
+              () => {},
+            );
+          if (!actions.length) return renderOriginal();
           return renderActions(
             registry!,
             actions,
@@ -708,7 +729,16 @@ function renderActions(
       <For each={items}>
         {(item) => (
           <Show when={enabled(item)}>
-            <Errored fallback={() => null}>
+            <Errored
+              fallback={(cause) => {
+                registry.failure(
+                  item,
+                  cause(),
+                  `Component addition ${item.plugin}/${item.id} failed: ${String(cause())}`,
+                );
+                return null;
+              }}
+            >
               {untrack(() => createComponent((item.action as ComponentAction<"before">).layer!, props))}
             </Errored>
           </Show>
@@ -785,9 +815,61 @@ function renderActions(
     return written;
   }
 
-  function covered(cover: LoadedPartAction) {
-    const blocked = attributes.filter((item) => item.plugin !== cover.plugin && enabled(item));
+  function report(kind: string, cause: LoadedPartAction, affected: LoadedPartAction, message: string) {
+    onCleanup(registry.interference(kind, cause, affected, message));
+  }
+
+  function hiddenBy(hide: LoadedPartAction) {
+    // Another plugin's hide loses nothing: it wanted the element gone too.
+    const loses = (item: LoadedPartAction) =>
+      item.plugin !== hide.plugin && componentActionKind(item.action) !== "hide";
+    const same = actions.filter((item) => loses(item) && enabled(item));
+    const inside = registry.inside(hide.action.target).filter(loses);
+    if (!same.length && !inside.length) return;
     return () => {
+      for (const item of [...same, ...inside])
+        report(
+          "hide",
+          hide,
+          item,
+          `${hide.plugin} hides ${item.plugin}'s addition on ${screenElementName(item.action.target)}`,
+        );
+    };
+  }
+
+  // `contentsOnly`: the layer drew Original with its own children and did not
+  // put the owner's back. The element and the layers below survive; what other
+  // plugins added inside it does not.
+  function covered(cover: LoadedPartAction, below: readonly LoadedPartAction[], contentsOnly = false) {
+    const other = (item: LoadedPartAction) => item.plugin !== cover.plugin;
+    const lower = contentsOnly ? [] : below.filter((item) => other(item) && enabled(item));
+    const children = [...leading, ...trailing].filter((item) => other(item) && enabled(item));
+    const inside = registry.inside(cover.action.target).filter(other);
+    const blocked = contentsOnly ? [] : attributes.filter((item) => other(item) && enabled(item));
+    if (!lower.length && !children.length && !inside.length && !blocked.length) return;
+    return () => {
+      const element = screenElementName(cover.action.target);
+      for (const item of lower)
+        report(
+          "cover-layer",
+          cover,
+          item,
+          `${cover.plugin}'s layer covers ${item.plugin}'s layer on ${element}`,
+        );
+      for (const item of children)
+        report(
+          "cover-inside",
+          cover,
+          item,
+          `${cover.plugin}'s layer hides ${item.plugin}'s inside addition on ${element}`,
+        );
+      for (const item of inside)
+        report(
+          "cover-inside",
+          cover,
+          item,
+          `${cover.plugin}'s layer on ${element} hides ${item.plugin}'s addition on ${screenElementName(item.action.target)}`,
+        );
       for (const item of blocked)
         warnAttribute(
           registry,
@@ -815,14 +897,50 @@ function renderActions(
               () => (useContext(ForwardedChildren!) ?? authored)(),
               component,
               attributes.length > 0,
-              attributes.length ? covered : undefined,
+              covered,
             )
           : renderElement()}
         {additions(at("after"))}
       </>
     );
   }
-  return <Show when={!hides.some(enabled)}>{shown()}</Show>;
+  if (!hides.length) return shown();
+  const hider = createMemo(() => hides.find(enabled));
+  trackInterference(() => {
+    const hide = hider();
+    return hide && hiddenBy(hide);
+  });
+  return <Show when={!hider()}>{shown()}</Show>;
+}
+
+// A branch can relinquish and reclaim Original in one render. Report only
+// the settled result, and let the tracking scope retire its alerts on change.
+function trackInterference(read: () => (() => void) | undefined) {
+  const owner = getOwner();
+  createEffect(
+    () => {
+      const report = read();
+      if (!report) return;
+      let active = true;
+      let release: (() => void) | undefined;
+      onCleanup(() => {
+        active = false;
+        release?.();
+      });
+      return () => {
+        if (!active) return;
+        release = runWithOwner(owner, () =>
+          createRoot((dispose) => {
+            report();
+            return dispose;
+          }),
+        );
+      };
+    },
+    (report) => {
+      if (report) onSettled(report);
+    },
+  );
 }
 
 const noOverride: ReadOverride = () => undefined;
@@ -835,7 +953,11 @@ function renderLayers(
   authored: () => JSX.Element,
   component: boolean | undefined,
   hasAttributes: boolean,
-  covered?: (item: LoadedPartAction) => () => void,
+  covered: (
+    item: LoadedPartAction,
+    below: readonly LoadedPartAction[],
+    contentsOnly?: boolean,
+  ) => (() => void) | undefined,
 ) {
   const owner = getOwner();
   const pending = new Set<() => void>();
@@ -901,8 +1023,9 @@ function renderLayers(
   }
 
   const top = layers.reduceRight(
-    (next, item) =>
-      stage((read, attributes) =>
+    (next, item, index) => {
+      const below = layers.slice(index + 1);
+      return stage((read, attributes) =>
         renderLayer(
           registry,
           item,
@@ -912,9 +1035,10 @@ function renderLayers(
           read,
           attributes,
           component !== undefined,
-          covered,
+          (contentsOnly) => covered(item, below, contentsOnly),
         ),
-      ),
+      );
+    },
     stage(render, component === true && !hasAttributes),
   );
   return top(noOverride, noAttributeLayers);
@@ -929,34 +1053,28 @@ function renderLayer(
   read: ReadOverride,
   attributes: AttributeLayers,
   supportsAttributes: boolean,
-  covered?: (item: LoadedPartAction) => () => void,
+  covered: (contentsOnly?: boolean) => (() => void) | undefined,
 ) {
   const target = item.action.target;
   const draw = (item.action as ComponentAction<"layer">).layer!;
   function warn(cause: unknown) {
-    registry.warn(
-      ["error", item.plugin, item.id],
-      `Component layer ${item.plugin}/${item.id} failed: ${String(cause)}`,
-    );
+    registry.failure(item, cause, `Component layer ${item.plugin}/${item.id} failed: ${String(cause)}`);
   }
 
   function activeLayer() {
     let claimed = false;
-    const claim = covered && createSignal(false, { ownedWrite: true });
+    const [claim, setClaim] = createSignal(false, { ownedWrite: true });
     let childrenClaimed = false;
     const Outlet = createContext(false);
     const [failed, setFailed] = createSignal(false, { ownedWrite: true });
     const owner = getOwner();
-    if (claim)
-      createEffect(
-        () => !claim[0]() && !failed() && covered?.(item),
-        (notify) => {
-          if (notify)
-            onSettled(() => {
-              if (!untrack(claim[0]) && !untrack(failed)) notify();
-            });
-        },
-      );
+    const [supplied, setSupplied] = createSignal(false, { ownedWrite: true });
+    const [restored, setRestored] = createSignal(false, { ownedWrite: true });
+    trackInterference(() => {
+      if (failed()) return;
+      if (!claim()) return covered();
+      if (supplied() && !restored()) return covered(true);
+    });
     const Original: OriginalElement<any> = Object.assign(
       (passed: { readonly children?: JSX.Element }) => {
         if (claimed) {
@@ -967,10 +1085,10 @@ function renderLayer(
           return undefined;
         }
         claimed = true;
-        claim?.[1](true);
+        setClaim(true);
         onCleanup(() => {
           claimed = false;
-          claim?.[1](false);
+          setClaim(false);
         });
         const hasAttributes = Object.keys(passed).some((key) => key !== "children");
         if (hasAttributes && !supportsAttributes) warnLegacyAttributes(registry, item);
@@ -979,6 +1097,8 @@ function renderLayer(
             ? () => [...attributes(), { item, values: passed }]
             : attributes;
         if (!("children" in passed)) return next(read, forwarded);
+        setSupplied(true);
+        onCleanup(() => setSupplied(false));
         const children: LayerContents = {
           draw: () => <Outlet value={true}>{passed.children}</Outlet>,
           fail(cause) {
@@ -1005,8 +1125,10 @@ function renderLayer(
             return undefined;
           }
           childrenClaimed = true;
+          setRestored(true);
           onCleanup(() => {
             childrenClaimed = false;
+            setRestored(false);
           });
           const previous = () => {
             const inherited = read();
@@ -1022,10 +1144,8 @@ function renderLayer(
           fallback={(cause) => {
             warn(cause());
             // The fallback draws the lower stage even though the layer did not.
-            if (claim) {
-              claim[1](true);
-              onCleanup(() => claim[1](false));
-            }
+            setClaim(true);
+            onCleanup(() => setClaim(false));
             return next(read, attributes);
           }}
         >

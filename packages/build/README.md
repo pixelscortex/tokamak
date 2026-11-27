@@ -286,6 +286,33 @@ position; attribute filters apply to elements. Attachments start in plugin
 install order, then `order`, plugin ID, and export name. Owner updates
 recheck the match and warn when an attachment can no longer resolve.
 
+### Plugin alerts
+
+The active view's **Plugin alerts** list reports:
+
+- A search that no longer matches its intended element or render function.
+- A layer that omits `Original` and covers another plugin's lower layer,
+  inside placement, attributes, or action on a descendant.
+- A layer that draws `Original` with its own children and leaves out
+  `Original.Children`: other plugins' inside placements and their actions on
+  descendants are gone, though the element and the layers below are not.
+- A `hide` that removes another plugin's action on the element or a descendant.
+  Two plugins hiding the same element lose nothing to each other.
+- An addition, layer, attribute callback, attachment, or `when` that throws.
+  The alert names the plugin and export; the owner can still render.
+- Attribute problems: overwriting another plugin's value without reading
+  `current`, setting a forbidden attribute, or targeting an old owner that
+  must be rebuilt.
+
+Cover and hide alerts name both plugins and clear when the action no longer
+causes the loss. Multiple mounted instances share a single alert. Failures
+stay in the list until the failing plugin is removed or reloaded.
+
+A descendant here is an element written inside the covered or hidden element
+in the same render function. An action on an element of a component that is
+only used inside it (the `button` inside a `<SendButton />`) is lost in the
+same way but is not listed.
+
 ### Contract registrations
 
 `src/contracts.ts` declares named public contract keys. A

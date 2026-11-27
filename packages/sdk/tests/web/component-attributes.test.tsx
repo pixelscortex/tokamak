@@ -28,6 +28,7 @@ function mount(initial: Layer[]) {
   const [disabled, setDisabled] = createSignal(false);
   const [labels, setLabels] = createSignal(["row one"]);
   const warnings = vi.fn<(warning: AttributeWarning) => void>();
+  const alerts = vi.fn<(messages: readonly string[]) => void>();
   const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const root = document.createElement("div");
   const mounts = vi.fn();
@@ -40,6 +41,7 @@ function mount(initial: Layer[]) {
           load: (id) => host(untrack(loaded)).load(id),
         }}
         onAttributeWarning={warnings}
+        onAlerts={alerts}
       >
         <AttributeScreen
           label={label()}
@@ -66,6 +68,7 @@ function mount(initial: Layer[]) {
     setDisabled,
     setLabels,
     warnings,
+    alerts,
     consoleWarn,
     mounts,
   };
@@ -258,6 +261,7 @@ test("an old compiled component skips attrs and Original props but still draws l
   const change = attrs(button, () => ({ label: "plugin", disabled: true }));
   const wrap = layer(button, (_, Original) => <Original disabled>wrapped</Original>);
   const warnings = vi.fn<(warning: AttributeWarning) => void>();
+  const alerts = vi.fn<(messages: readonly string[]) => void>();
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const container = document.createElement("div");
   const dispose = render(
@@ -268,6 +272,7 @@ test("an old compiled component skips attrs and Original props but still draws l
           contribution("Wrap", wrap, "layer", button, 0, "wrapper"),
         ])}
         onAttributeWarning={warnings}
+        onAlerts={alerts}
       >
         {__renderPart(button.target, null, {}, undefined, () => (
           <button>owner</button>
@@ -289,6 +294,10 @@ test("an old compiled component skips attrs and Original props but still draws l
   });
   await waitFor(() => expect(container.textContent).toBe("ownerwrapped"));
   expect(container.querySelector("[disabled], [label]")).toBeNull();
+  expect(alerts).toHaveBeenLastCalledWith([
+    expect.stringMatching(/changer.*owner plugin "attrs-owner".*must be rebuilt/),
+    expect.stringMatching(/wrapper.*owner plugin "attrs-owner".*must be rebuilt/),
+  ]);
   expect(warnings.mock.calls.map(([warning]) => [warning.kind, warning.plugin])).toEqual([
     ["attr-legacy", "changer"],
     ["attr-legacy", "wrapper"],
@@ -335,7 +344,7 @@ test("an overwrite, invalid computed key and throwing action do not break the ow
   function values() {
     return { [invalid]: "different", title: undefined };
   }
-  const { root, setLabel, warnings, consoleWarn } = mount([
+  const { root, setLabel, setEnabled, warnings, alerts, consoleWarn } = mount([
     contribution(
       "Wins",
       attrs(nested, () => ({ title: "winner" })),
@@ -347,7 +356,7 @@ test("an overwrite, invalid computed key and throwing action do not break the ow
     ),
     contribution(
       "Earlier",
-      attrs(nested, () => ({ title: "earlier" })),
+      attrs(nested, () => ({ title: "earlier" }), { when: (props) => props.enabled }),
       "attrs",
       nested,
       10,
@@ -386,6 +395,18 @@ test("an overwrite, invalid computed key and throwing action do not break the ow
     attribute: "title",
   });
   expect(consoleWarn).toHaveBeenCalledWith(expect.stringMatching(/winner.*title.*earlier.*nested/));
+  const invalidAlert = expect.stringMatching(/invalid.*cannot change attribute "data-part".*attr-nested/);
+  const failure = expect.stringMatching(/throws \(Throws\) failed on .*owner title/);
+  await waitFor(() =>
+    expect(alerts).toHaveBeenLastCalledWith([
+      invalidAlert,
+      expect.stringMatching(/winner.*overwrote "title".*earlier/),
+      failure,
+    ]),
+  );
+  setEnabled(false);
+  flush();
+  await waitFor(() => expect(alerts).toHaveBeenLastCalledWith([invalidAlert, failure]));
 });
 
 test("Original forwards a live prop to the owner's component", async () => {

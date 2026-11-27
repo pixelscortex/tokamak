@@ -28,6 +28,7 @@ import {
   type ScreenSearch,
   type ScreenTree,
 } from "./screen-search";
+import { componentAlerts } from "./component-alerts";
 import type { AttributeWarning } from "./component-attributes";
 export type { AttributeWarning } from "./component-attributes";
 import {
@@ -93,34 +94,38 @@ export function ExtensionProvider(props: {
     return signal;
   }
 
-  let reported = new Set<string>();
-  const stale = new Map<string, string>();
-  function alerts() {
-    props.onAlerts?.([...reported, ...stale.values()]);
+  const alerts = componentAlerts(
+    (messages) => props.onAlerts?.(messages),
+    (warning) => props.onAttributeWarning?.(warning),
+    (message) => console.warn(message),
+  );
+  const ownerTrees = new Map<string, () => ReadonlySet<string>>();
+  const insideSlots = new Map<string, ReturnType<typeof createSignal<readonly LoadedPartAction[]>>>();
+  function inOwnerTree(target: string) {
+    return ownerTrees.get(target.split(".")[0]!)?.().has(target) ?? true;
+  }
+  function inside(target: string) {
+    let signal = insideSlots.get(target);
+    if (!signal) {
+      // Packed addresses encode ancestry. Intersect the owner's tree with the
+      // installed targets once per watched address, not once per mounted row.
+      const actions = [...current].flatMap(([key, items]) =>
+        key.startsWith(`${target}.`) && inOwnerTree(key) ? items : [],
+      );
+      insideSlots.set(
+        target,
+        (signal = createSignal<readonly LoadedPartAction[]>(actions, { ownedWrite: true })),
+      );
+    }
+    return signal[0]();
   }
 
-  function warnStale(plugin: string, target: string, reason: string) {
-    const key = JSON.stringify([plugin, target]);
-    if (stale.has(key)) return;
-    const message = `Plugin "${plugin}": ${reason} ${target}; skipping this addition`;
-    stale.set(key, message);
-    console.warn(message);
-    alerts();
-  }
-
-  const layerWarnings = new Map<string, Set<string>>();
   const registry: PartRegistry = {
-    warn(key, message, detail) {
-      const [kind, plugin, target] = key;
-      let warnings = layerWarnings.get(plugin);
-      if (!warnings) layerWarnings.set(plugin, (warnings = new Set()));
-      const id = JSON.stringify([kind, target]);
-      if (warnings.has(id)) return;
-      warnings.add(id);
-      console.warn(message);
-      if (detail) props.onAttributeWarning?.(detail);
-    },
-    mismatch: (plugin, target) => warnStale(plugin, target, "targets a different element at"),
+    warn: alerts.warn,
+    mismatch: alerts.mismatch,
+    failure: alerts.failure,
+    interference: alerts.interference,
+    inside,
     read: (target) => slot(target)[0],
     observe(target, observer) {
       let listeners = observers.get(target);
@@ -144,6 +149,14 @@ export function ExtensionProvider(props: {
     const next = change(current.get(target) ?? []);
     if (next.length) current.set(target, next);
     else current.delete(target);
+    if (insideSlots.size && inOwnerTree(target)) {
+      for (let end = target.lastIndexOf("."); end !== -1; end = target.lastIndexOf(".", end - 1)) {
+        insideSlots.get(target.slice(0, end))?.[1]((items) => [
+          ...items.filter((item) => item.action.target !== target),
+          ...next,
+        ]);
+      }
+    }
     slots.get(target)?.[1](next);
     for (const observer of observers.get(target) ?? []) observer.update(next);
   }
@@ -151,15 +164,10 @@ export function ExtensionProvider(props: {
   const plugins = new Map<string, MountedAddon>();
   const targets = new Map<string, Set<string>>();
   function clear(id: string) {
+    alerts.clear(id);
     for (const target of targets.get(id) ?? [])
       update(target, (items) => items.filter((c) => c.plugin !== id));
     targets.delete(id);
-    layerWarnings.delete(id);
-
-    // A reloaded add-on reports its stale targets again; a removed one has none.
-    let forgotten = false;
-    for (const key of stale.keys()) if (JSON.parse(key)[0] === id) forgotten = stale.delete(key) || forgotten;
-    if (forgotten) alerts();
   }
 
   function publish(id: string, parts: LoadedPartAction[]) {
@@ -189,6 +197,7 @@ export function ExtensionProvider(props: {
   });
   // Resolve historical addresses against the current owner before loading additions.
   let generation = 0;
+  let versions = new Map<string, number>();
   onCleanup(() => generation++);
   createEffect(
     () =>
@@ -199,6 +208,11 @@ export function ExtensionProvider(props: {
       })),
     (contributions) => {
       const revision = ++generation;
+      // Resolving against a new owner retires bindings, but the failing
+      // add-on is still installed at the same generation.
+      const nextVersions = new Map(contributions.map(({ plugin, version }) => [plugin, version]));
+      for (const [id, version] of versions) if (nextVersions.get(id) !== version) alerts.clear(id, true);
+      versions = nextVersions;
       const previous = new Map<string, string>();
       for (const c of contributions)
         previous.set(c.plugin, (previous.get(c.plugin) ?? "") + JSON.stringify(c));
@@ -233,6 +247,18 @@ export function ExtensionProvider(props: {
             },
           ]),
         );
+        ownerTrees.clear();
+        for (const [id, { parts }] of owners) {
+          if (!parts) continue;
+          let addresses: Set<string> | undefined;
+          ownerTrees.set(
+            id,
+            () =>
+              (addresses ??= new Set(
+                [...parts("element"), ...parts("render function")].map((p) => p.target),
+              )),
+          );
+        }
         const rejected: string[] = [];
         const valid = contributions.flatMap((c): CatalogExtension[] => {
           const target = screenTarget(c.options);
@@ -256,11 +282,7 @@ export function ExtensionProvider(props: {
   );
 
   function apply(contributions: CatalogExtension[], catalog: Map<string, string>, rejected: string[]) {
-    const skipped = new Set(rejected);
-    for (const message of skipped) if (!reported.has(message)) console.warn(message);
-    const changed = skipped.size !== reported.size || [...skipped].some((message) => !reported.has(message));
-    reported = skipped;
-    if (changed) alerts();
+    alerts.skipped(rejected);
 
     const groups = new Map<string, CatalogExtension[]>();
     for (const c of contributions) {
@@ -302,7 +324,7 @@ export function ExtensionProvider(props: {
               value.target === c.options.target &&
               componentActionKind(value) === c.options.action
             ) {
-              (c.options.action === "attach" ? attachments : parts).push(loadedPart(c, value));
+              (c.options.action === "attach" ? attachments : parts).push(loadedPart(c, value, registry));
             } else {
               console.warn(
                 `Component action ${id}/${c.id} does not match its manifest: expected ${c.options.action} for ${c.options.target}`,
@@ -359,9 +381,8 @@ function callableAttributes(value: unknown): ReadonlySet<string> | undefined {
   }
 }
 
-function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAction {
-  let warned = false;
-  return {
+function loadedPart(c: CatalogExtension, action: ComponentAction, registry: PartRegistry): LoadedPartAction {
+  const item: LoadedPartAction = {
     id: c.id,
     plugin: c.plugin,
     order: Number(c.options.order ?? 0),
@@ -373,13 +394,12 @@ function loadedPart(c: CatalogExtension, action: ComponentAction): LoadedPartAct
       try {
         return action.when?.(props) ?? true;
       } catch (cause) {
-        if (!warned) console.warn(`Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
-        const kind = componentActionKind(action);
-        warned = kind === "layer" || kind === "attrs";
+        registry.failure(item, cause, `Component action ${c.plugin}/${c.id} failed: ${String(cause)}`);
         return false;
       }
     },
   };
+  return item;
 }
 
 /** Registrations belong to the calling plugin owner, even when its view leaves. */

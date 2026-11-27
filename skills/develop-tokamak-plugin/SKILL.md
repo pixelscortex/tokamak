@@ -123,6 +123,13 @@ A plugin that uses another plugin builds when both sit side by side in
   matches render functions. The attachment gets live props and can use effects,
   cleanup, context and regions; its JSX is not drawn in place. Hiding or
   layering an element inside the render function leaves it running.
+  The view's **Plugin alerts** list reports skipped searches, layers that omit
+  `Original` and cover another plugin's actions, hides that remove another
+  plugin's actions, and failures in additions, layers, attribute callbacks,
+  attachments, or `when`. Attribute alerts also report covered attributes,
+  overwrites without reading `current`, forbidden attributes, and owners
+  that need a rebuild. Cover and hide alerts clear when the action stops
+  causing the loss. Failure alerts clear when the plugin is removed or reloaded.
   Use `state` for window values, `derived` for computed values, and
   `keep: "device"` or `keep: "me"` when a value needs to survive a restart.
 - **Contracts**: export a typed `contract<T>("name")` from `src/contracts.ts`.

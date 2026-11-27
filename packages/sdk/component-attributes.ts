@@ -19,12 +19,18 @@ export type AttributeWarning = {
   attribute?: string;
 };
 
-export function warnAttribute(registry: PartRegistry, warning: AttributeWarning, message: string) {
+export function warnAttribute(
+  registry: PartRegistry,
+  warning: AttributeWarning,
+  message: string,
+  exportId?: string,
+) {
   const { kind, plugin, target, attribute, otherPlugin } = warning;
   // Once per attribute where one is named, so fixing the first bad key does
   // not hide the next one.
-  const key = attribute === undefined ? target : JSON.stringify([target, attribute, otherPlugin]);
-  registry.warn([kind, plugin, key], message, warning);
+  const key =
+    exportId ?? (otherPlugin || attribute ? JSON.stringify([target, attribute, otherPlugin]) : target);
+  registry.warn([kind === "attr-error" ? "error" : kind, plugin, key], message, warning);
 }
 
 export function installationOrder(a: LoadedPartAction, b: LoadedPartAction) {
@@ -106,7 +112,9 @@ export function attributeValues(
       warnAttribute(
         registry,
         { kind: "attr-error", plugin: item.plugin, target: item.action.target },
-        `Attribute action ${item.plugin}/${item.id} failed on ${item.action.target}: ${String(cause)}`,
+        // The same wording as every other failing action, so the alert list reads as one.
+        `${item.plugin} (${item.id}) failed on ${item.action.target}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        item.id,
       );
     }
   }
