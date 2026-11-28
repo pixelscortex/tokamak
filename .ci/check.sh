@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Fast checks plus offline agent and plugin integration suites.
+# Fast checks plus offline host and runtime integration suites.
 check_cloud_graph() {
   local graph
   graph=$(cargo tree --locked --no-default-features -p server -p tokamak-plugin-host \
@@ -73,23 +73,13 @@ check_channel_bundle() {
 
 case "$1" in
   lint)
-    shopt -s nullglob
-    for copy in plugins/*/contracts/*.ts; do
-      id=$(basename "$copy" .ts)
-      owner="plugins/$id/src/contracts.ts"
-      if ! cmp -s "$owner" "$copy"; then
-        echo "Contract copy $copy differs from $owner" >&2
-        exit 1
-      fi
-    done
-    # Replays and every tracked text file: no login, home folder or TOKAMAK_PRIVATE_WORDS.
-    proto run bun -- e2e/fake-agent/replay-privacy.mjs
+    # Every tracked text file: no login, home folder or TOKAMAK_PRIVATE_WORDS.
+    proto run bun -- .ci/privacy-scan.mjs
     moon run workspace:format-check workspace:lint-ts workspace:lint-rust workspace:lint-cloud-rust
     ;;
   ts)
     proto run bun -- run typecheck
-    moon run sdk:test build:test runtime:test ui:test chat:test ai:test agent-proxy:test ai-profiles:test app:test app:web-build
-    proto run bun -- run --cwd plugins/code test
+    moon run sdk:test build:test runtime:test ui:test app:test app:web-build
     proto run bun -- test ./.ci/*.test.ts
     ;;
   rust)
@@ -106,17 +96,6 @@ case "$1" in
     test "$("$TOKAMAK_PLUGIN_HOST" --capabilities)" = "actions local"
     check_channel_bundle runner "$TOKAMAK_PLUGIN_HOST"
 
-    # Keep fixture sources under the checkout even when the Cargo target is a symlink.
-    mkdir -p "$PWD/packages/server/target"
-    fixture_dir=$(mktemp -d "$PWD/packages/server/target/agent-fixtures.XXXXXX")
-    cleanup_rust() {
-      find "$fixture_dir" ! -type d -exec unlink {} \;
-      find "$fixture_dir" -depth -type d -exec rmdir {} \;
-    }
-    trap cleanup_rust EXIT
-    proto run bun -- e2e/fake-agent/build-fixtures.mjs "$fixture_dir"
-    export TOKAMAK_AGENT_FIXTURES="$fixture_dir/artifacts"
-
     # Server and host suites are split below; no Tauri bundle is built here.
     cargo test --locked --workspace --lib --exclude tokamak-worker --exclude server
     cargo test --locked -p tokamak-worker -p tokamak-runner
@@ -128,15 +107,8 @@ case "$1" in
     cargo test --locked -p server --lib runner_assets_follow_the_build
     echo "Timing Rust integration: Runner"
     time CI=1 cargo test --locked -p server \
-      --test ai_threads --test ai_turns --test chat_threads --test claude_turns \
-      --test codex_turns --test caller_actions --test runner_routing --test action_placement \
+      --test caller_actions --test runner_routing --test action_placement \
       --test connected_runner --test plugin_machines --test http_actions
-    # These suites use real deadlines and Git/hook timing. Run them only
-    # after the other test binaries finish compiling and running.
-    for suite in ai_liveness code_changes code_snapshots; do
-      echo "Timing Rust integration: $suite"
-      time CI=1 cargo test --locked -p server --test "$suite"
-    done
 
     # The lifecycle executable exercises launch_runner; the Runner itself
     # launches plugins, not other Runners.

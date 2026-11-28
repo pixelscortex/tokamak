@@ -5,7 +5,7 @@ use std::{
     sync::OnceLock,
     time::Duration,
 };
-use tokamak_worker::runner::Runner;
+use tokamak_worker::runner::{Folders, Runner};
 use tokio::{io::AsyncBufReadExt, net::TcpStream, process::Command, time::timeout};
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
@@ -274,6 +274,75 @@ async fn desktop_runner_starts_one_workspace_and_closes_it_on_shutdown() {
     timeout(DEADLINE, runner.shutdown()).await.unwrap();
     assert!(socket(&endpoint.ws, Some(&endpoint.token)).await.is_err());
     assert!(runner.endpoint().await.is_err());
+}
+
+#[tokio::test]
+async fn desktop_release_folders_load_only_installed_plugins() {
+    let temp = tempfile::tempdir().unwrap();
+    let Folders { data, plugins } =
+        Folders::resolve(false, None, None, |name| Some(temp.path().join(name))).unwrap();
+    assert_eq!(data, temp.path().join("Tokamak"));
+    assert_eq!(plugins, data.join("plugins"));
+    assert!(plugins.is_dir());
+
+    // Verify the supervisor secures even a data directory that already exists.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    for installed in [false, true] {
+        if installed {
+            let plugin = plugins.join("runner-fixture");
+            std::fs::create_dir(&plugin).unwrap();
+            copy_fixture(&plugin);
+        }
+
+        let runner = Runner::start(BINARY.into(), data.clone(), plugins.clone());
+        let endpoint = timeout(DEADLINE, runner.endpoint()).await.unwrap().unwrap();
+        let response = request(&endpoint, "GET", "/plugins", Some(&endpoint.token)).await;
+        assert_eq!(response.status(), 200);
+        let catalog = response.json::<Value>().await.unwrap();
+        let entries = catalog["plugins"].as_array().unwrap();
+        assert_eq!(entries.len(), usize::from(installed));
+        if installed {
+            assert_eq!(entries[0]["plugin"]["id"], "runner-fixture");
+        }
+        timeout(DEADLINE, runner.shutdown()).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(data.metadata().unwrap().permissions().mode() & 0o777, 0o700);
+    }
+}
+
+#[test]
+fn desktop_debug_folders_respect_data_and_plugin_overrides() {
+    let temp = tempfile::tempdir().unwrap();
+    let debug = Folders::resolve(true, None, None, |name| Some(temp.path().join(name))).unwrap();
+    assert_eq!(debug.data, temp.path().join("Tokamak.dev"));
+    assert_eq!(debug.plugins, debug.data.join("plugins"));
+
+    let server = temp.path().join("custom-data");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::create_dir(&server).unwrap();
+        std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o500)).unwrap();
+    }
+    let folders = Folders::resolve(true, Some(server.clone()), None, |_| None).unwrap();
+    assert_eq!(folders.data, server);
+    assert_eq!(folders.plugins, server.join("plugins"));
+    assert!(folders.plugins.is_dir());
+
+    let plugins = temp.path().join("custom-plugins");
+    let folders =
+        Folders::resolve(true, Some(server.clone()), Some(plugins.clone()), |_| None).unwrap();
+    assert_eq!(folders.data, server);
+    assert_eq!(folders.plugins, plugins);
+    assert!(plugins.is_dir());
 }
 
 #[tokio::test]
@@ -916,12 +985,6 @@ fn alive(pid: u32) -> bool {
 #[test]
 fn plain_contracts_route_between_persistent_plugin_processes() {
     routing_test("local-routing.mjs");
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-#[test]
-fn production_agent_turns_use_dedicated_hosts_and_survive_other_agent_changes() {
-    routing_test("agent-routing.mjs");
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

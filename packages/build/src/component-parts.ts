@@ -21,6 +21,7 @@ type Part = {
   target: string;
   props: string;
   type: string;
+  elementType?: () => string;
   fingerprint?: string;
   ambiguous?: boolean;
   row?: string;
@@ -30,12 +31,13 @@ type Part = {
 };
 type Tree = {
   part?: Part;
+  renderFunction?: Part;
   opening?: ts.JsxOpeningLikeElement;
   children: Map<string, Tree>;
   entries: { name: string; node: ts.Node; fixed: boolean; tree: Tree }[];
 };
 type Row = { item: string; index: string; type: () => string; value: () => string };
-type Scope = { tree: Tree; props: string; type: () => string; row?: Row };
+type Scope = { tree: Tree; props: string; type: () => string; row?: Row; renderFunction?: () => void };
 type Binding = { node: ts.ConciseBody; parameter: ts.ParameterDeclaration };
 
 const branch = (): Tree => ({ children: new Map(), entries: [] });
@@ -85,6 +87,15 @@ function assignParts(
   const counts = new Map<string, number>();
   const identities = new Map<Tree, string>();
   const times = new Map<string, number>();
+  // A render function with no elements of its own (a fragment, a provider) is
+  // only something to attach to. Two with one name cannot be told apart, so
+  // they leave the tree instead of failing a build that worked before.
+  const groups = new Map<string, number>();
+  for (const { name, tree: child } of tree.entries)
+    if (!child.part) groups.set(name, (groups.get(name) ?? 0) + 1);
+  tree.entries = tree.entries.filter(
+    ({ name, tree: child }) => child.part || child.entries.length || groups.get(name) === 1,
+  );
   for (const { name, node, fixed: named, tree: child } of tree.entries) {
     if (named) {
       if (!fixed.has(name)) fixed.set(name, node);
@@ -134,6 +145,10 @@ function assignParts(
       Object.assign(child.part, { target, fingerprint, ambiguous: uncertain });
       paths.set(target, child.part);
     }
+    if (child.renderFunction) {
+      child.renderFunction.target = target;
+      paths.set(target, child.renderFunction);
+    }
     assignParts(child, target, paths, fingerprint, uncertain);
   }
 }
@@ -147,6 +162,7 @@ function segment(name: string) {
 export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin: string, root: string) {
   const files = new Map<ts.SourceFile, Map<Element, Part>>();
   const bindings = new Map<ts.SourceFile, (Binding & { name: string })[]>();
+  const functions = new Map<ts.SourceFile, Map<ts.ConciseBody, Part>>();
   const rows = new Map<
     ts.SourceFile,
     { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[]
@@ -171,7 +187,12 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     .getSourceFiles()
     .filter((file) => !file.isDeclarationFile && inSource(root, file.fileName))
     .sort((a, b) => a.fileName.localeCompare(b.fileName));
-  const { propsType, privateDeclarations } = partProps(entry, checker, root, sources);
+  const { propsType, typeShape, componentValue, annotation, privateDeclarations } = partProps(
+    entry,
+    checker,
+    root,
+    sources,
+  );
   const aliases = new Map<string, string>();
   let captures = 0;
   const solidBuiltins = new Set([
@@ -202,7 +223,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
 
   function alias(shape: string) {
     if (shape === "{}") return shape;
-    const name = aliases.get(shape) ?? `Props${aliases.size + 1}`;
+    const name = aliases.get(shape) ?? `P${aliases.size + 1}`;
     aliases.set(shape, name);
     return name;
   }
@@ -210,6 +231,7 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
   for (const source of sources) {
     const elements = new Map<Element, Part>();
     const pending: (Binding & { name: string })[] = [];
+    const renderFunctions = new Map<ts.ConciseBody, Part>();
     const rowBindings: { node: ts.ArrowFunction | ts.FunctionExpression; item: string; index: string }[] = [];
     const base: Scope = { tree, props: "{}", type: () => "{}" };
 
@@ -255,12 +277,24 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                   : propsType(parameter);
               return (type = alias(shape));
             },
+            renderFunction: () => {
+              const body = node.body!;
+              // A component is named like one. A lowercase helper that returns
+              // JSX is called, not mounted, so it has no instance to attach to.
+              if (!isDefault && !/^[A-Z]/.test(name!.getText(source))) return;
+              if (renderFunctions.has(body)) return;
+              const part = { target: "", props, type: scope.type() };
+              identity().renderFunction = part;
+              renderFunctions.set(body, part);
+            },
           };
           visit(node.body, scope);
           return;
         }
       }
 
+      if (ts.isJsxFragment(node) || ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node))
+        scope.renderFunction?.();
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
         const opening = ts.isJsxElement(node) ? node.openingElement : node;
         if (
@@ -331,6 +365,27 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           target: "",
           unnamed: named === undefined && /^[a-z][\w-]*$/.test(tagName),
           props: scope.props,
+          elementType: () => {
+            if (/^[a-z][\w-]*$/.test(tagName)) return JSON.stringify(tagName);
+            const signature = checker.getResolvedSignature(opening);
+            const parameter = signature?.parameters[0];
+            if (!parameter) return "{}";
+            const declaration = parameter.valueDeclaration;
+            const type = checker.getTypeOfSymbolAtLocation(parameter, opening);
+            if (
+              declaration &&
+              ts.isParameter(declaration) &&
+              inSource(root, declaration.getSourceFile().fileName) &&
+              checker.getTypeAtLocation(declaration) === type
+            )
+              return propsType(declaration);
+            const value = componentValue(tag);
+            if (value) {
+              const args = opening.typeArguments?.map(annotation).join(", ");
+              return `C<typeof ${value}${args ? `<${args}>` : ""}>`;
+            }
+            return typeShape(type);
+          },
           type: scope.row ? alias(`${type} & { readonly $row: ${scope.row.type()} }`) : type,
           row: scope.row?.value(),
         };
@@ -343,16 +398,21 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
     }
     visit(source, base);
     if (elements.size) files.set(source, elements);
+    if (renderFunctions.size) functions.set(source, renderFunctions);
     if (pending.length) bindings.set(source, pending);
     if (rowBindings.length) rows.set(source, rowBindings);
   }
 
   assignParts(tree, plugin, paths);
 
-  function compactParts(node: Tree): ScreenTree {
+  function compactParts(node: Tree, root = false): ScreenTree {
     const fingerprint = node.part?.fingerprint ?? null;
     return [
-      ...(node.part ? ["", node.part.attributes ? [fingerprint, ...node.part.attributes] : fingerprint] : []),
+      ...(node.part
+        ? ["", node.part.attributes ? [fingerprint, ...node.part.attributes] : fingerprint]
+        : root || !node.renderFunction
+          ? [":", null]
+          : []),
       ...[...node.children].flatMap(([key, child]) => [
         key,
         child.part && !child.children.size && !child.part.attributes
@@ -361,18 +421,34 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       ]),
     ];
   }
-  const compact = compactParts(tree);
+  const compact = compactParts(tree, true);
   const elements = screenElements(plugin, compact).map((element) => {
     const computed = paths.get(element.target)?.computed;
     return computed ? { ...element, computed } : element;
   });
+  const renderFunctions = screenElements(plugin, compact, "render function");
   // Pack the shape into a string so the bundle keeps its compact layout.
   const packed = JSON.stringify(compact);
 
   return {
     has: (node: Element) => files.get(node.getSourceFile())?.has(node) ?? false,
-    resolve(search: ScreenSearch) {
-      const result = resolveScreenSearch(elements, search);
+    resolve(search: ScreenSearch, action: string) {
+      const attach = action === "attach";
+      const result = resolveScreenSearch(
+        attach ? renderFunctions : elements,
+        search,
+        undefined,
+        attach ? "render function" : "element",
+      );
+      if (
+        result.reason &&
+        !(attach ? renderFunctions : elements).some(({ name }) => name === search.name) &&
+        (attach ? elements : renderFunctions).some(({ name }) => name === search.name)
+      )
+        return {
+          ...result,
+          reason: `${action} requires ${attach ? "a render function" : "an element"}; ${result.reason}`,
+        };
       const part = result.element && paths.get(result.element.target);
       return { ...result, ambiguous: part?.ambiguous, unnamed: part?.unnamed };
     },
@@ -382,17 +458,10 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
       mounts: ReadonlyMap<Element, ElementMount> | undefined,
       erased: (node: ts.Node) => boolean,
     ) {
-      const elements = files.get(source);
-      if (elements) {
-        for (const { node, parameter, name } of bindings.get(source) ?? []) {
-          if (erased(node)) continue;
-          const binding = parameter.name.getText(source);
-          const destructured = !ts.isIdentifier(parameter.name);
-          if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
-          const capture = destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`;
-          if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, capture);
-          else output.prependLeft(node.getStart(source), `{ ${capture} return (`);
-        }
+      const elements = files.get(source) ?? new Map<Element, Part>();
+      const renderFunctions = functions.get(source);
+      const setup = new Map<ts.ConciseBody, string>();
+      if (elements.size || renderFunctions?.size) {
         for (const { node, item, index } of rows.get(source) ?? []) {
           if (erased(node)) continue;
           output.prependLeft(node.getStart(source), `(${item}, ${index}) => (`);
@@ -418,6 +487,23 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
           }
           const index = group.suffixes.push(segments.slice(2).join(".")) - 1;
           return `${group.variable}[${index}]`;
+        }
+        for (const { node, parameter, name } of bindings.get(source) ?? []) {
+          if (erased(node)) continue;
+          const binding = parameter.name.getText(source);
+          const destructured = !ts.isIdentifier(parameter.name);
+          if (destructured) output.overwrite(parameter.name.getStart(source), parameter.name.end, name);
+          setup.set(node, destructured ? `const ${binding} = ${name};` : `const ${name} = ${binding};`);
+        }
+        for (const [node, part] of renderFunctions ?? []) {
+          if (!part.target) continue; // Left out of the tree: nothing can attach to it.
+          if (erased(node)) continue;
+          const props = part.props === "{}" ? "" : `, ${part.props}`;
+          setup.set(node, `${setup.get(node) ?? ""}__tokamakAttach(${address(part)}${props});`);
+        }
+        for (const [node, code] of setup) {
+          if (ts.isBlock(node)) output.appendLeft(node.getStart(source) + 1, code);
+          else output.prependLeft(node.getStart(source), `{ ${code} return (`);
         }
         const tables: string[] = [];
         function collect(node: Element): Site | undefined {
@@ -549,49 +635,90 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
             )
             .join(""),
         );
-        for (const { node } of bindings.get(source) ?? []) {
-          if (!erased(node) && !ts.isBlock(node)) output.appendLeft(node.end, "); }");
-        }
+        for (const node of setup.keys()) if (!ts.isBlock(node)) output.appendLeft(node.end, "); }");
         for (const { node, item, index } of rows.get(source) ?? []) {
           if (!erased(node)) output.appendLeft(node.end, `)(${item}, ${index})`);
         }
         output.prepend(
-          'import { __renderPart as __tokamakRenderPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths } from "@tokamak/sdk/client";\n',
+          'import { __renderComponentPart as __tokamakRenderComponentPart, __renderPlainPart as __tokamakRenderPlainPart, __renderNativePart as __tokamakRenderNativePart, __partPaths as __tokamakPartPaths, __attachRenderFunction as __tokamakAttach } from "@tokamak/sdk/client";\n',
         );
       }
       if (source === entry)
         output.append(
           `\nimport { __defineScreenFind } from "@tokamak/sdk/client";\nconst __tokamakFind = __defineScreenFind(${JSON.stringify(plugin)}, ${JSON.stringify(packed)});\nexport { __tokamakFind as find };\n`,
         );
-      return !!elements || source === entry;
+      return !!(elements.size || renderFunctions?.size) || source === entry;
     },
     publish(warn: (message: string) => void, catalog?: string) {
       const path = join(dirname(entry.fileName), "_generated/components.d.ts");
-      const names = new Map<string, typeof elements>();
-      for (const element of elements) {
-        const matches = names.get(element.name);
-        if (matches) matches.push(element);
-        else names.set(element.name, [element]);
+      const attributeTypes = new Map<string, string>();
+      const modules = new Map<string, string[]>();
+      const compactType = (type: string) =>
+        type.startsWith('"') || type === "{}" || type.startsWith("C<") ? type : alias(type);
+      function shape(candidates: typeof elements, scoped = false) {
+        const names = new Map<string, typeof elements>();
+        for (const element of candidates) {
+          const matches = names.get(element.name);
+          if (matches) matches.push(element);
+          else names.set(element.name, [element]);
+        }
+        return [...names]
+          .map(([name, matches]) => {
+            const types = scoped ? [] : matches.map((element) => paths.get(element.target)!.elementType!());
+            const type = types[0]!;
+            const shared = types.every((entry) => entry === type);
+            if (!scoped && shared && type !== JSON.stringify(name)) {
+              const imported = /^C<typeof (import\("[^"]+"\))\.([\w$.]+)>$/.exec(type);
+              if (imported && imported[2] === name) {
+                const module = imported[1]!;
+                const names = modules.get(module);
+                if (names) names.push(name);
+                else modules.set(module, [name]);
+              } else attributeTypes.set(name, compactType(type));
+            }
+            const only = matches[0]!;
+            if (!scoped && matches.length === 1 && !only.attributes)
+              return `  ${JSON.stringify(name)}: ${paths.get(only.target)!.type};\n`;
+            const entries = matches.map((element, index) => {
+              const part = paths.get(element.target)!;
+              const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
+              const filters = element.attributes && JSON.stringify(attributeFilters(element.attributes));
+              const attrs =
+                !shared && types[index] !== JSON.stringify(name) ? compactType(types[index]!) : "";
+              return `[${scopes.join(" | ") || "never"}, ${part.type}${attrs ? `, ${filters ?? "undefined"}, ${attrs}` : filters ? `, ${filters}` : ""}]`;
+            });
+            return `  ${JSON.stringify(name)}: [${entries.join(", ")}];\n`;
+          })
+          .join("");
       }
-      const shape = [...names]
-        .map(([name, matches]) => {
-          const props = (element: (typeof elements)[number]) => paths.get(element.target)!.type;
-          const entries = matches.map((element) => {
-            const scopes = [...new Set(element.ancestors)].map((name) => JSON.stringify(name));
-            const filters = element.attributes && `, ${JSON.stringify(attributeFilters(element.attributes))}`;
-            return `[${scopes.join(" | ") || "never"}, ${props(element)}${filters ?? ""}]`;
-          });
-          const only = matches[0]!;
-          return `  ${JSON.stringify(name)}: ${matches.length === 1 && !only.attributes ? props(only) : `[${entries.join(", ")}]`};\n`;
-        })
-        .join("");
+      const elementShape = shape(elements);
+      const functionShape = renderFunctions.length ? `{\n${shape(renderFunctions, true)}}` : "{}";
+      const attributes =
+        [
+          ...(attributeTypes.size
+            ? [
+                `{ ${[...attributeTypes].map(([name, type]) => `${JSON.stringify(name)}:${type}`).join("; ")} }`,
+              ]
+            : []),
+          ...[...modules].map(
+            ([module, names]) =>
+              `A<typeof ${module}, ${names.map((name) => JSON.stringify(name)).join("|")}>`,
+          ),
+        ].join(" & ") || "{}";
+      const types =
+        elementShape.includes("C<typeof ") || attributes.includes("C<typeof ")
+          ? 'import type { ComponentProps as C } from "@solidjs/web";\n'
+          : "";
+      const helpers = modules.size
+        ? 'import type { ComponentAttributes as A } from "@tokamak/sdk/client";\n'
+        : "";
       const previous = readOptional(path);
       const declarations =
         privateDeclarations() +
         [...aliases]
           .map(([shape, name]) => `type ${name} = Extract<NonNullable<${shape}>, object>;\n`)
           .join("");
-      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${shape}}>;\n`;
+      const next = `// Generated plugin screen search types. Commit this file.\nexport * from ${entryImport};\n${types}${helpers}${declarations}export declare const find: import("@tokamak/sdk/client").ScreenFind<{\n${elementShape}}, ${functionShape}, ${attributes}>;\n`;
       const reported = new Set<string>();
       const catalogs = new Set([
         dirname(root),
@@ -622,7 +749,13 @@ export function componentParts(entry: ts.SourceFile, program: ts.Program, plugin
                 : !previous.target.startsWith(plugin + ".")
             )
               continue;
-            const { reason, element } = resolveScreenSearch(elements, previous.search, previous);
+            const attach = options.action === "attach";
+            const { reason, element } = resolveScreenSearch(
+              attach ? renderFunctions : elements,
+              previous.search,
+              previous,
+              attach ? "render function" : "element",
+            );
             if (reason) {
               const message = `Plugin "${installed.id}": ${reason}; skipping this addition`;
               if (reported.has(message)) continue;
@@ -703,10 +836,16 @@ function transformElement(
   // <div><Send /></div> → <div>{renderPart(…, () => <Send />)}</div>;
   // () => <Send /> → () => renderPart(…, () => <Send />).
   const child = ts.isJsxElement(parent) || ts.isJsxFragment(parent);
-  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}__tokamakRenderPart(${partArguments(part, target)}, (__tokamakContents) => `;
+  const opening = ts.isJsxElement(node) ? node.openingElement : node;
+  const component = !/^[a-z][\w-]*$/.test(opening.tagName.getText(source));
+  const entry = component ? "__tokamakRenderComponentPart" : "__tokamakRenderPlainPart";
+  const prefix = `${child ? "{" : ""}${hole === undefined ? "" : `__tokamakHole(${hole}, () => `}${entry}(${partArguments(part, target)}, (__tokamakContents) => `;
   const suffix = `)${hole === undefined ? "" : ")"}${child ? "}" : ""}`;
-  output.appendLeft(node.getStart(source), prefix + (mount?.prefix ?? ""));
-  const endMount = mount?.suffix ?? "";
+  output.appendLeft(
+    node.getStart(source),
+    prefix + (mount?.prefix ?? "") + (component ? "__tokamakComponent(" : ""),
+  );
+  const endMount = (component ? ")" : "") + (mount?.suffix ?? "");
 
   if (ts.isJsxSelfClosingElement(node)) {
     const tag = node.tagName.getText(source);
@@ -744,7 +883,6 @@ function transformElement(
     return;
   }
 
-  const opening = node.openingElement;
   const close = node.closingElement;
   const tag = opening.tagName.getText(source);
   const callback = childCallback(node);

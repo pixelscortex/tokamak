@@ -33,23 +33,15 @@ There are no added dependencies or enlarged native stacks.
 ## QuickJS test matrix
 
 `bash .ci/check.sh rust` runs the Runner's lifecycle and local plugin suites
-with the full plugin host. Agent replays exercise the real Runner, workspace
-server and database. Standalone Server fixtures that need local calls use a
-separate Runner for those calls.
+with the full plugin host. The suites build test fixtures; standalone Server
+fixtures that need local calls use a separate Runner for those calls. Tests for
+the individual plugins live in the
+[tokamak-plugins repository](https://github.com/pixelscortex/tokamak-plugins).
 
 The cloud build runs the server and action suites once with the actions-only
 host. Shared-server routing tests confirm the cloud Server can serve a window
 whose local calls are run by a separate Runner. The symbol check uses the
 Runner, its full host and the lifecycle test binary as positive controls.
-
-## Codex replay
-
-`CARGO_BUILD_JOBS=2 cargo test --locked -p server --test codex_turns` builds
-and installs the Codex provider in a real server and drives it through the
-client's plugin process against sanitized app-server replays. It runs in CI and
-does not require a Codex executable or login. See the
-[Codex test instructions](../../../plugins/codex/README.md) for the separate
-opt-in real program check and the replay privacy scan.
 
 ## TKM7 transport and ownership acceptance
 
@@ -276,11 +268,6 @@ binary passed all 27 tests, including these 17 new regressions. The invalid-UTF-
 The same command with `CLAUDECODE=1 AI_AGENT=1` completed all 28 tasks in
 3m 23s; all 27 action tests passed again. `cargo fmt --all -- --check`,
 `git diff --check`, and a zero product-source diff also passed.
-
-## Chat and agent turns
-
-Use `.ci/check.sh rust` for the offline suites, including Chat threads, agent
-turns, liveness, code snapshots, and the Claude and Codex replays.
 
 ## Table trigger timing
 

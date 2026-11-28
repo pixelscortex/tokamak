@@ -85,37 +85,5 @@ workspace = true
 
 
 [[test]]
-name = "ai_liveness"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "ai_threads"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "ai_turns"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "chat_threads"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "claude_turns"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "code_changes"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "code_snapshots"
-required-features = ["local-runtime"]
-
-[[test]]
-name = "codex_turns"
-required-features = ["local-runtime"]
-
-[[test]]
 name = "caller_actions"
 required-features = ["local-runtime"]

@@ -1,20 +1,64 @@
 import { waitFor } from "@testing-library/dom";
 import { render } from "@solidjs/web";
+import { createSignal, flush } from "solid-js";
 import { expect, test, vi } from "vitest";
 import { createPluginLoader, type PluginAssets, type PluginModuleHost } from "../../../runtime/js/plugins";
 import { ExtensionProvider } from "../../client";
 import { Composer, Labels } from "./fixtures/parts/owner/src/client/api";
 import { find } from "./fixtures/parts/owner/src/client/_generated/components";
 import {
+  attachmentWarnings,
   changed,
   duplicate,
   filteredWarnings,
   loadActions,
   manifest,
   moved,
+  noComposer,
   noUploadLabel,
   warnings,
 } from "virtual:built-component-addon";
+
+test("an owner rename skips an installed attachment and raises one alert", async () => {
+  const track = manifest.plugin.contributes["component-action"].find(({ id }) => id === "Track")!;
+  expect(track).toMatchObject({ action: "attach", name: "Composer", target: "owner.Composer" });
+  const lifecycle = vi.fn();
+  const alerts = vi.fn();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const [generation, setGeneration] = createSignal(0);
+  const root = document.createElement("div");
+  const dispose = render(
+    () => (
+      <ExtensionProvider
+        host={{
+          contributions: () => [{ id: track.id, plugin: "addon", kind: "component-action", options: track }],
+          version: (id) => (id === "owner" ? generation() : 0),
+          partOwner: async () => ({ find: generation() ? noComposer.find : find }),
+          load: loadActions,
+          onError: () => () => {},
+        }}
+        onAlerts={alerts}
+      >
+        <Composer label="Send" lifecycle={lifecycle} />
+      </ExtensionProvider>
+    ),
+    root,
+  );
+  try {
+    await waitFor(() => expect(lifecycle).toHaveBeenCalledWith("attached"));
+    setGeneration(1);
+    flush();
+    const missing = /Plugin "addon": find\("Composer"\) matches no render functions/;
+    await waitFor(() => expect(alerts).toHaveBeenCalledExactlyOnceWith([expect.stringMatching(missing)]));
+    expect(warn.mock.calls.filter(([message]) => missing.test(message))).toHaveLength(1);
+    expect(attachmentWarnings).toMatch(missing);
+    expect(lifecycle).toHaveBeenCalledWith("detached");
+    expect(lifecycle.mock.calls.filter(([event]) => event === "attached")).toHaveLength(1);
+  } finally {
+    dispose();
+    warn.mockRestore();
+  }
+});
 
 test.each([
   {
@@ -111,6 +155,7 @@ test.each([
   );
   try {
     await waitFor(() => expect(root.querySelector("section + p")?.textContent).toBe("Notes for Send"));
+    expect(root.querySelector("section")?.title).toBe("Send");
     expect(root.querySelector("button + small")?.textContent).toBe(matches ? "Built for Send" : undefined);
     expect(root.querySelector('[aria-label="replacement"]') !== null).toBe(matches);
     expect(root.querySelector('[aria-label="body"]') !== null).toBe(!matches);

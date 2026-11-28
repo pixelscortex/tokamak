@@ -1,5 +1,0 @@
-{"read": "prompt"}
-{"write": "agent.txt", "text": "partial change\n"}
-{"out": {"type": "text", "delta": "I started editing agent.txt."}}
-{"out": {"type": "error", "message": "rate limited"}}
-{"exit": 1}

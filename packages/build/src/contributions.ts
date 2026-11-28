@@ -1,3 +1,4 @@
+import { eventNamespace, reservedAttribute } from "../../sdk/component-actions.ts";
 import {
   flattenAttributes,
   isSearchAttribute,
@@ -46,7 +47,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
   const contributes: Record<string, { id: string; [key: string]: string | number }[]> = {};
   const owners = new Map<string, ReturnType<typeof componentParts>>();
   const edits = new Map<string, [number, number, string][]>();
-  function lookup(owner: string, search: ScreenSearch) {
+  function lookup(owner: string, search: ScreenSearch, action: string) {
     let parts = owners.get(owner);
     if (!parts) {
       const folder = resolve(root, "..", owner);
@@ -54,7 +55,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
       if (!file) return;
       owners.set(owner, (parts = componentParts(file, program, owner, folder)));
     }
-    return parts.resolve(search);
+    return parts.resolve(search, action);
   }
   const checked = new Map<ts.SourceFile, readonly ts.Diagnostic[]>();
   function checkAction(call: ts.CallExpression) {
@@ -67,7 +68,27 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
     if (diagnostic) throw problem(call, ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
   }
   const unnamed = new Set<string>();
-  const searches = new Map<ts.CallExpression, Record<string, string | number>>();
+  const exports = (module ? checker.getExportsOfModule(module) : []).flatMap((exported) => {
+    if (!runtime.has(exported.name)) return [];
+    const symbol = unalias(checker, exported);
+    const declaration = symbol.valueDeclaration;
+    if (!declaration || !inSource(root, declaration.getSourceFile().fileName)) return [];
+    return [{ exported, declaration, type: checker.getTypeOfSymbolAtLocation(symbol, declaration) }];
+  });
+  const requested = new Map<ts.CallExpression, Map<boolean, string>>();
+  for (const { declaration, type } of exports) {
+    const action = brand(type, "componentActionBrand");
+    if (!action) continue;
+    const kind = checker.getTypeOfSymbolAtLocation(action, declaration);
+    const init = exportedInitializer(declaration);
+    const reference = init && ts.isCallExpression(init) && unwrap(init.arguments[0]);
+    const call = reference && targetSearch(reference, checker);
+    if (!call || !kind.isStringLiteral()) continue;
+    const actions = requested.get(call) ?? new Map<boolean, string>();
+    actions.set(kind.value === "attach", kind.value);
+    requested.set(call, actions);
+  }
+  const searches = new Map<ts.CallExpression, Map<boolean, Record<string, string | number>>>();
   for (const file of program.getSourceFiles()) {
     if (file.isDeclarationFile || !inSource(root, file.fileName)) continue;
     function visit(node: ts.Node) {
@@ -76,32 +97,40 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
         const owner = findOwner(node.expression, checker);
         if (owner) {
           const search = searchArguments(node);
-          const result = lookup(owner, search);
-          if (!result) throw problem(node, `Cannot read screen elements for plugin "${owner}"`);
-          if (!result.element) throw problem(node, result.reason);
-          const { target, fingerprint } = result.element;
-          searches.set(node, {
-            name: search.name,
-            ...(search.in !== undefined ? { in: search.in } : {}),
-            ...(search.nth !== undefined ? { nth: search.nth } : {}),
-            // Manifest options are scalar, so ARIA entries keep their JSX names.
-            ...Object.fromEntries(flattenAttributes(search)),
-            owner,
-            target,
-            ...(fingerprint ? { fingerprint } : {}),
-          });
-          const cuts = edits.get(file.fileName) ?? [];
-          cuts.push([node.getStart(), node.end, `(${JSON.stringify({ target })})`]);
-          edits.set(file.fileName, cuts);
-          if (result.unnamed && !unnamed.has(target)) {
-            unnamed.add(target);
-            warn(unnamedTargetWarning(plugin, search, target));
+          const targets = new Map<boolean, Record<string, string | number>>();
+          for (const [attach, action] of requested.get(node) ?? ([[false, "placement"]] as const)) {
+            const result = lookup(owner, search, action);
+            if (!result) throw problem(node, `Cannot read screen parts for plugin "${owner}"`);
+            if (!result.element) throw problem(node, result.reason);
+            const { target, fingerprint } = result.element;
+            targets.set(attach, {
+              name: search.name,
+              ...(search.in !== undefined ? { in: search.in } : {}),
+              ...(search.nth !== undefined ? { nth: search.nth } : {}),
+              // Manifest options are scalar, so ARIA entries keep their JSX names.
+              ...Object.fromEntries(flattenAttributes(search)),
+              owner,
+              target,
+              ...(fingerprint ? { fingerprint } : {}),
+            });
+            if (result.unnamed && !unnamed.has(target)) {
+              unnamed.add(target);
+              warn(unnamedTargetWarning(plugin, search, target));
+            }
+            // Only a search by position depends on telling the siblings apart.
+            if (result.ambiguous && search.nth !== undefined)
+              warn(
+                `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
+              );
           }
-          // Only a search by position depends on telling the siblings apart.
-          if (result.ambiguous && search.nth !== undefined)
-            warn(
-              `Plugin "${plugin}" targets ${target}: ambiguous positional target; ask the owner for a data-part or id`,
-            );
+          searches.set(node, targets);
+          const element = targets.get(false);
+          const render = targets.get(true);
+          const target = element?.target ?? render?.target;
+          const addresses = { target, ...(element && render ? { renderTarget: render.target } : {}) };
+          const cuts = edits.get(file.fileName) ?? [];
+          cuts.push([node.getStart(), node.end, `(${JSON.stringify(addresses)})`]);
+          edits.set(file.fileName, cuts);
           return;
         }
       }
@@ -119,12 +148,7 @@ export function uiContributions(root: string, plugin: string, warn: (message: st
     }
     visit(file);
   }
-  for (const exported of module ? checker.getExportsOfModule(module) : []) {
-    if (!runtime.has(exported.name)) continue;
-    const symbol = unalias(checker, exported);
-    const declaration = symbol.valueDeclaration;
-    if (!declaration || !inSource(root, declaration.getSourceFile().fileName)) continue;
-    const type = checker.getTypeOfSymbolAtLocation(symbol, declaration);
+  for (const { exported, declaration, type } of exports) {
     if (brand(type, "viewBrand")) {
       (contributes.view ??= []).push({ id: exported.name, ...pageOptions(declaration, checker) });
       continue;
@@ -285,7 +309,7 @@ function componentActionOptions(
   action: string,
   checker: ts.TypeChecker,
   plugin: string,
-  searches: ReadonlyMap<ts.CallExpression, Record<string, string | number>>,
+  searches: ReadonlyMap<ts.CallExpression, ReadonlyMap<boolean, Record<string, string | number>>>,
   checkAction: (call: ts.CallExpression) => void,
 ): Record<string, string | number> {
   const init = exportedInitializer(declaration);
@@ -293,10 +317,15 @@ function componentActionOptions(
     throw problem(declaration, "Export a component action declared with an action helper");
   const reference = unwrap(init.arguments[0])!;
   const call = targetSearch(reference, checker);
-  const found = call && searches.get(call);
+  const found = call && searches.get(call)?.get(action === "attach");
   if (!found || findOwner(call.expression, checker) === plugin)
     throw problem(reference, "Use find from another plugin's public client import");
-  if (!brand(checker.getTypeAtLocation(reference), "componentPartBrand"))
+  if (
+    !brand(
+      checker.getTypeAtLocation(reference),
+      action === "attach" ? "renderFunctionBrand" : "componentPartBrand",
+    )
+  )
     throw problem(reference, "Build the owning plugin first to generate its find types");
   const options = unwrap(init.arguments[action === "hide" ? 1 : 2]);
   const values: Record<string, string | number> = { action, ...found };
@@ -313,8 +342,110 @@ function componentActionOptions(
       } else throw problem(prop, "Use a literal order or a live when accessor");
     }
   }
+  if (action === "attrs" || action === "layer") {
+    const { callable, nativeEvents } = callableAttributes(reference, checker);
+    checkAttributeLiterals(init.arguments[1], action, checker, callable, nativeEvents);
+    if (callable.size) values.callableAttributes = JSON.stringify([...callable]);
+  }
   checkAction(init);
   return values;
+}
+
+function callableAttributes(reference: ts.Expression, checker: ts.TypeChecker) {
+  const property = brand(checker.getTypeAtLocation(reference), "elementAttributesBrand");
+  const callable = new Set<string>();
+  let nativeEvents: Set<string> | undefined;
+  if (property) {
+    const type = checker.getNonNullableType(checker.getTypeOfSymbolAtLocation(property, reference));
+    for (const member of type.isUnion() ? type.types : [type]) {
+      const native = !!brand(member, "nativeAttributesBrand");
+      if (native) nativeEvents ??= new Set();
+      for (const prop of member.getProperties()) {
+        const value = checker.getTypeOfSymbolAtLocation(prop, reference);
+        if (!(value.isUnion() ? value.types : [value]).some((part) => part.getCallSignatures().length))
+          continue;
+        if (native) nativeEvents!.add(prop.name.toLowerCase());
+        else if (!reservedAttribute(prop.name)) callable.add(prop.name);
+      }
+    }
+  }
+  return { callable, nativeEvents };
+}
+
+function checkAttributeLiterals(
+  expression: ts.Expression | undefined,
+  action: "attrs" | "layer",
+  checker: ts.TypeChecker,
+  callable: ReadonlySet<string>,
+  nativeEvents?: ReadonlySet<string>,
+) {
+  let read: ts.Node | undefined = unwrap(expression);
+  if (read && ts.isIdentifier(read)) {
+    const declaration = checker.getSymbolAtLocation(read)?.valueDeclaration;
+    if (declaration && ts.isVariableDeclaration(declaration)) read = unwrap(declaration.initializer);
+    else if (declaration && ts.isFunctionDeclaration(declaration)) read = declaration;
+  }
+  if (!read) return;
+  function check(name: ts.Node, original = false) {
+    if (ts.isComputedPropertyName(name)) {
+      const literal = unwrap(name.expression);
+      if (!literal || !ts.isStringLiteralLike(literal)) return;
+      name = literal;
+    }
+    const key = ts.isStringLiteralLike(name) || ts.isIdentifier(name) ? name.text : name.getText();
+    if (original && key === "children") return;
+    if (
+      reservedAttribute(key) ||
+      callable.has(key) ||
+      (nativeEvents && (eventNamespace(key) || nativeEvents.has(key.toLowerCase())))
+    )
+      throw problem(name, `Cannot change attribute "${key}" with ${original ? "Original" : "attrs"}`);
+  }
+  function returned(expression: ts.Expression | undefined) {
+    const value = unwrap(expression);
+    if (!value) return;
+    if (ts.isObjectLiteralExpression(value)) {
+      for (const prop of value.properties) {
+        if (ts.isSpreadAssignment(prop)) returned(prop.expression);
+        else if (prop.name) check(prop.name);
+      }
+    } else if (ts.isConditionalExpression(value)) {
+      returned(value.whenTrue);
+      returned(value.whenFalse);
+    } else if (
+      ts.isBinaryExpression(value) &&
+      (value.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+        value.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        value.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+    ) {
+      returned(value.left);
+      returned(value.right);
+    }
+  }
+  if (action === "attrs") {
+    if (!(ts.isArrowFunction(read) || ts.isFunctionExpression(read) || ts.isFunctionDeclaration(read)))
+      return;
+    const body = read.body;
+    if (!body) return;
+    const visit = (node: ts.Node) => {
+      if (ts.isReturnStatement(node)) returned(node.expression);
+      else if (!ts.isFunctionLike(node)) ts.forEachChild(node, visit);
+    };
+    if (ts.isBlock(body)) visit(body);
+    else returned(body);
+  } else {
+    const visit = (node: ts.Node) => {
+      if (
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        !/^[a-z][\w-]*$/.test(node.tagName.getText()) &&
+        brand(checker.getTypeAtLocation(node.tagName), "originalElementBrand")
+      ) {
+        for (const prop of node.attributes.properties) if (ts.isJsxAttribute(prop)) check(prop.name, true);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(read);
+  }
 }
 
 function targetSearch(target: ts.Expression, checker: ts.TypeChecker) {

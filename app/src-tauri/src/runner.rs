@@ -1,38 +1,36 @@
 use std::path::{Path, PathBuf};
 use tauri::Manager;
-use tokamak_worker::runner::{Endpoint, Runner};
+use tokamak_worker::runner::{Endpoint, Folders, Runner};
 
-pub struct Host(Result<Runner, String>);
+/// The Runner, and the plugins folder it scans (for "Reveal in Finder").
+pub struct Host(Result<(Runner, PathBuf), String>);
 
 pub fn start(app: &tauri::AppHandle) {
-    let runner = configuration(app).map(|(binary, directory, plugins)| {
+    let runner = configuration().map(|(binary, folders)| {
         // The supervisor uses the Tauri runtime, not the window's lifetime.
         let runtime = tauri::async_runtime::handle();
         let _entered = runtime.inner().enter();
-        Runner::start(binary, directory, plugins)
+        let plugins = folders.plugins.clone();
+        (
+            Runner::start(binary, folders.data, folders.plugins),
+            plugins,
+        )
     });
     app.manage(Host(runner));
 }
 
-fn configuration(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
-    let directory = std::env::var_os("TOKAMAK_SERVER_DIR")
-        .map(PathBuf::from)
-        .or_else(|| {
-            directories::ProjectDirs::from("com", "pixelscortex", "Tokamak")
+fn configuration() -> Result<(PathBuf, Folders), String> {
+    let binary = binary()?;
+    let folders = Folders::resolve(
+        cfg!(debug_assertions),
+        std::env::var_os("TOKAMAK_SERVER_DIR").map(PathBuf::from),
+        std::env::var_os("TOKAMAK_PLUGIN_DIR").map(PathBuf::from),
+        |name| {
+            directories::ProjectDirs::from("com", "pixelscortex", name)
                 .map(|paths| paths.data_local_dir().to_owned())
-        })
-        .ok_or("Cannot locate application data directory")?;
-    let plugins = if let Some(directory) = std::env::var_os("TOKAMAK_PLUGIN_DIR") {
-        PathBuf::from(directory)
-    } else if cfg!(debug_assertions) {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins")
-    } else {
-        app.path()
-            .resource_dir()
-            .map_err(|e| e.to_string())?
-            .join("plugins")
-    };
-    Ok((binary()?, directory, plugins))
+        },
+    )?;
+    Ok((binary, folders))
 }
 
 fn binary() -> Result<PathBuf, String> {
@@ -57,11 +55,44 @@ fn binary() -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub async fn tokamak_endpoint(host: tauri::State<'_, Host>) -> Result<Endpoint, String> {
-    host.0.as_ref().map_err(Clone::clone)?.endpoint().await
+    host.0.as_ref().map_err(Clone::clone)?.0.endpoint().await
+}
+
+/// Opens the Runner's plugins folder in the system file manager (Settings → Plugins).
+/// It takes no path: the window can reveal this one folder and nothing else.
+#[tauri::command]
+pub async fn reveal_plugins_folder(host: tauri::State<'_, Host>) -> Result<(), String> {
+    let folder = host.0.as_ref().map_err(Clone::clone)?.1.clone();
+    tauri::async_runtime::spawn_blocking(move || reveal(&folder))
+        .await
+        .map_err(|_| "Could not open the plugins folder".to_owned())?
+}
+
+fn reveal(folder: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(target_os = "linux")]
+    let program = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let program = "explorer.exe";
+
+    let status = std::process::Command::new(program)
+        .arg(folder)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|_| "Could not open the plugins folder".to_owned())?;
+    // Explorer can delegate to an existing process and exit with code 1.
+    if status.success() || (cfg!(target_os = "windows") && status.code() == Some(1)) {
+        Ok(())
+    } else {
+        Err("Could not open the plugins folder".to_owned())
+    }
 }
 
 pub async fn shutdown(app: &tauri::AppHandle) {
-    if let Ok(runner) = &app.state::<Host>().0 {
+    if let Ok((runner, _)) = &app.state::<Host>().0 {
         runner.shutdown().await;
     }
 }

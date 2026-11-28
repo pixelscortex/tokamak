@@ -89,10 +89,9 @@ Plugins receive the authenticated member and device as `ctx.auth.user` and
 `auth:caller` query returns that identity. A local server supplies the
 owner `local` (named `You`, or `TOKAMAK_OWNER_NAME`).
 
-The image includes only the chat plugin. Threads can be created and saved; the
-agent picker is empty until agents on users' machines are connected. No agent
-processes run in this image. JavaScript runs in the server's embedded QuickJS;
-chat needs no external Bun, Node, or agent runtime in the final image.
+The image ships with an empty plugins folder. Mount built server plugins at
+`/opt/tokamak/plugins` to add them. Plugin JavaScript runs in the Server’s
+embedded QuickJS.
 
 | Setting                                 | Purpose                                                                                                                                                                                                                                                    |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -103,7 +102,7 @@ chat needs no external Bun, Node, or agent runtime in the final image.
 | `PORT`                                  | Without `--listen`, binds `0.0.0.0:$PORT`. Image default: `3000`.                                                                                                                                                                                          |
 | `--listen <address:port>`               | Overrides `PORT`. Outside hosted mode, only loopback is allowed.                                                                                                                                                                                           |
 | `--data <directory>`                    | Persistent store directory; image uses `/data/store`. Created on first start and reused on restart.                                                                                                                                                        |
-| `--plugins <directory>`                 | Plugin artifact root; image contains only `/opt/tokamak/plugins/chat`.                                                                                                                                                                                     |
+| `--plugins <directory>`                 | Plugin artifact root; image uses `/opt/tokamak/plugins`.                                                                                                                                                                                                   |
 
 Mount a volume at `/data` and keep it across container replacements. The container
 runs as UID 10001; bind mounts must be writable by that user. The healthcheck uses

@@ -14,6 +14,8 @@ declare module "virtual:built-component-addon" {
   export const duplicate: Owner;
   export const changed: Owner;
   export const noUploadLabel: Owner;
+  export const noComposer: Owner;
+  export const attachmentWarnings: string;
   export const filteredWarnings: string;
   export const warnings: string;
   export function loadActions(): Promise<Record<string, unknown>>;

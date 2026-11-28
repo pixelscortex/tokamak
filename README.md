@@ -1,8 +1,8 @@
 # Tokamak
 
 Tokamak is a Rust server with TypeScript plugins and a Solid 2 web client in
-Tauri 2. The client skeleton lists and creates Chat threads. `/kit` holds
-ui-sdk controls. Compiler-built plugin views load through the server; the product shell is next.
+Tauri 2. Tokamak draws the shell and loads installed plugin views through the
+server. `/kit` holds the UI controls.
 
 On a shared server, caller actions use the matching plugin builds already installed on
 each member's computer. Milestone 1 does not download those builds from the server.
@@ -27,8 +27,26 @@ Launch the desktop app:
 proto run bun -- run app
 ```
 
-The app builds the starter set, starts the Runner, and connects automatically.
-New thread creates a Chat thread. No external agent is started. See [app/README.md](app/README.md) for browser development and checks.
+The app starts the Runner and connects automatically. It loads the builds in its
+dev plugins folder. To install plugins, run `./install.sh --dev` from the separate
+[tokamak-plugins repository](https://github.com/pixelscortex/tokamak-plugins).
+See [app/README.md](app/README.md) for browser development and checks.
+
+## Install and update the app
+
+On macOS, run this from the repository to install the app the first time and
+to update it after that:
+
+```sh
+./install.sh
+```
+
+It builds the release app first and stops if the build fails, leaving the
+installed app as it was. If Tokamak is running, it quits it and waits for it
+to stop. Then it replaces `/Applications/Tokamak.app`, moves the old copy to
+the Trash, and prints the commit it installed. It only replaces the app: the
+data folder (`~/Library/Application Support/com.pixelscortex.Tokamak`) is never
+touched, so threads, settings and installed plugins stay the same.
 
 ## Packages
 
@@ -39,11 +57,8 @@ server process tooling, and reusable TypeScript catalog/reload logic.
 `packages/build` builds server plugin artifacts. `packages/ui` is a placeholder
 for web primitives and tokens. `wiki` contains the docs and design rules.
 
-Chat's `plugins/chat/src/client` stays untouched as rewrite reference. Its root
-tsconfig includes only `plugin.ts` and `src/server`; lint ignores the client.
 The compiler emits DOM ESM plugin UI and the web host loads it through
-revision-pinned server URLs. Chat's client remains excluded until ported.
-No Solid 1 runtime remains in workspace dependencies.
+revision-pinned server URLs.
 
 ## Checks
 
@@ -63,8 +78,8 @@ Server/engine tests and SDK/build/app tests cover the runtime. Run
 `proto run bun -- run e2e:browser` for production browser tests against a real
 disposable server. See [e2e/README.md](e2e/README.md) for adding tests.
 
-Ready pull requests run the Linux TypeScript, Rust, and lint checks. The Rust
-check runs the local suites on the Runner and the server suites against the
+Ready pull requests run the Linux TypeScript and lint checks. The manual Rust
+job runs the local suites on the Runner and the server suites against the
 actions-only cloud build. Both use QuickJS.
 Desktop builds are manual. `bash .ci/release-macos.sh` on macOS arm64 creates the unsigned `.app`, zip
 and standalone server archive under `.ci-results/macos-arm64`. The release

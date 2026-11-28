@@ -10,6 +10,7 @@ import {
   definitionTypeInfo,
   pluginCompilerOptions,
   runtimeExportNames,
+  serverConfigPath,
 } from "./plugin-compiler.mjs";
 
 import { suppliedNodeModules, nodeModule } from "./server-builtins.mjs";
@@ -77,11 +78,15 @@ export function functionPlacement(root, selected, namespace) {
     }
   }
   if (!files.length) return;
-  const config = ts.findConfigFile(selected?.configRoot ?? root, ts.sys.fileExists);
-  const options = config
-    ? ts.getParsedCommandLineOfConfigFile(config, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic() {} })
-        ?.options
-    : { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.Preserve };
+  const config = serverConfigPath(selected?.configRoot ?? root, root);
+  const options = ts.getParsedCommandLineOfConfigFile(
+    config,
+    {},
+    {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic() {},
+    },
+  )?.options;
   const program = ts.createProgram(files.sort(), pluginCompilerOptions(root, options ?? {}));
   const checker = program.getTypeChecker();
   const modules = new Map();

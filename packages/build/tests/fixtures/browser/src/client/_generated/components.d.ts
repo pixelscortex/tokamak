@@ -1,9 +1,13 @@
 // Generated plugin screen search types. Commit this file.
 export * from "../api";
-type Props1 = Extract<NonNullable<Parameters<typeof import("../api")["FixtureBody"]>[0]>, object>;
+type P1 = Extract<NonNullable<Parameters<typeof import("../api")["FixtureBody"]>[0]>, object>;
+type P2 = Extract<NonNullable<{ label: string; text?: string }>, object>;
 export declare const find: import("@tokamak/sdk/client").ScreenFind<{
-  "section": Props1;
-  "h1": Props1;
-  "p": Props1;
+  "section": P1;
+  "h1": P1;
+  "p": P1;
   "FixtureBody": {};
-}>;
+}, {
+  "FixtureBody": [[never, P1]];
+  "FixtureView": [[never, {}]];
+}, { "FixtureBody":P2 }>;

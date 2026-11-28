@@ -6,6 +6,7 @@ import { useShell } from "./shell/context";
 import { Connect } from "./shell/connect/flow";
 import { Devices } from "./shell/devices";
 import { Members } from "./shell/members";
+import { Plugins } from "./shell/plugins";
 import { Shell } from "./shell/shell";
 import { NoPlugins, NotFound } from "./shell/states";
 import { hrefOf } from "./shell/views";
@@ -23,7 +24,8 @@ const welcome = createRoute({ getParentRoute: () => root, path: "/welcome", comp
 const join = createRoute({ getParentRoute: () => root, path: "/join", component: Join });
 const devices = createRoute({ getParentRoute: () => root, path: "/settings/devices", component: Devices });
 const members = createRoute({ getParentRoute: () => root, path: "/settings/members", component: Members });
-const base = [home, kit, connect, welcome, join, devices, members];
+const plugins = createRoute({ getParentRoute: () => root, path: "/settings/plugins", component: Plugins });
+const base = [home, kit, connect, welcome, join, devices, members, plugins];
 export const router = createRouter({
   routeTree: root.addChildren(base),
   defaultNotFoundComponent: NotFound,

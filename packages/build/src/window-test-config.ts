@@ -2,8 +2,8 @@ import solid from "@solidjs/vite-plugin";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import type { AliasOptions, PluginOption } from "vite";
-import { clientSurface } from "./client-surface";
-import { windowStateModule } from "../../sdk/src/window-state-protocol";
+import { clientSurface } from "./client-surface.ts";
+import { windowStateModule } from "../../sdk/src/window-state-protocol.ts";
 
 export function windowTestConfig(
   root: string,
@@ -39,7 +39,7 @@ export function windowTestConfig(
     optimizeDeps: { exclude: ["@ui-sdk/core"] },
     test: {
       environment: "jsdom",
-      setupFiles: [resolve(root, "../../packages/ui/tests/setup.ts")],
+      setupFiles: [require.resolve("@tokamak/ui/test-setup")],
       css: false,
       testTimeout: 60000,
       include: ["tests/**/*.test.{ts,tsx}"],

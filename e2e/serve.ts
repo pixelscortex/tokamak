@@ -1,4 +1,4 @@
-// The browser suite installs only fake agent providers.
+// The browser suite serves a disposable installation of fixture plugins.
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";

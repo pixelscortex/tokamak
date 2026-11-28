@@ -10,7 +10,7 @@ plugin's ID and its two local bundle hashes. Windows that use the same build
 share a process. The window reports its workspace address without credentials
 so the Runner can tell which installation superseded a build.
 
-The agent, turn hook, and thread deletion contracts in the bundled plugins
+The agent, turn hook, and thread deletion contracts in the Tokamak plugins
 use plain-data calls. Reloading an agent or Code does not restart ai or
 clear its session grants. Turn controls look up the active turn in ai's
 regular process. Hook calls have no agent channel; their caller can cancel a
@@ -120,18 +120,8 @@ store as in use and names the holder.
 ### Linux memory measurement
 
 The original measurement ran on Linux arm64 in the local Docker image
-`tokamak:tkm-243-checks`. Reproduce it from a committed checkout by overlaying
-the source onto `/src` in that image and building in release mode:
-
-```sh
-git archive HEAD | docker run -i tokamak:tkm-243-checks bash -c '
-  set -e
-  tar xf - -C /src
-  cd /src
-  CARGO_BUILD_JOBS=4 cargo build --locked --release -p tokamak-runner -p tokamak-plugin-host
-  proto run bun -- packages/runner/tests/measure-linux-memory.mjs target/release/tokamak-runner
-'
-```
+`tokamak:tkm-243-checks`. The measurement script is maintained with the plugin
+suites in [tokamak-plugins](https://github.com/pixelscortex/tokamak-plugins).
 
 The script uses an empty workspace and 100 synthetic plugins with identical
 trivial local code. A host is warmed once: its first invocation completes

@@ -375,13 +375,10 @@ impl Loaded {
     }
 
     pub(super) fn skipped_dependency(&self, id: &str) -> Option<String> {
-        self.catalog.plugins[id]
-            .manifest
-            .plugin
-            .depends
-            .keys()
-            .find(|dependency| self.skipped.contains_key(*dependency))
-            .map(|dependency| format!("requires {dependency}, which did not load"))
+        let definition = &self.catalog.plugins[id].manifest.plugin;
+        super::dependencies::required(definition)
+            .find(|(dep, _)| self.skipped.contains_key(*dep))
+            .map(|(dep, _)| format!("needs {dep}, which was skipped"))
     }
 
     pub(super) fn skip(&mut self, id: String, reason: String) {
@@ -589,12 +586,23 @@ impl Loaded {
             .map(|table| (&table.name, table.list()))
             .collect();
         self.descriptor = json!({"schema":schemas,"functions":functions,"triggers":triggers});
+        self.catalog_text =
+            serde_json::to_string(&self.metadata()).map_err(|e| invalid(e.to_string()))?;
+        Ok(())
+    }
+
+    pub(crate) fn metadata(&self) -> Value {
         let mut metadata = self.catalog.metadata();
         metadata["functions"] = self.descriptor["functions"].clone();
         metadata["schema"] = self.descriptor["schema"].clone();
         metadata["triggers"] = self.descriptor["triggers"].clone();
-        self.catalog_text = serde_json::to_string(&metadata).map_err(|e| invalid(e.to_string()))?;
-        Ok(())
+        for (id, reason) in &self.skipped {
+            metadata["skipped"][id] = json!(reason);
+            if let Some(folder) = self.catalog.folders.get(id) {
+                metadata["skippedFolders"][id] = json!(folder.to_string_lossy());
+            }
+        }
+        metadata
     }
 
     pub(crate) fn same_action_source(&self, previous: &Self, plugin: &str) -> bool {

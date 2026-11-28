@@ -7,13 +7,7 @@ impl Coordinator {
             Error::Invalid("Server uses a legacy bundle, not a plugin installation".into())
         })?;
 
-        let mut metadata = plugins.catalog.metadata();
-        metadata["functions"] = plugins.descriptor["functions"].clone();
-        metadata["schema"] = plugins.descriptor["schema"].clone();
-        metadata["triggers"] = plugins.descriptor["triggers"].clone();
-        metadata["skipped"] = serde_json::json!(plugins.skipped);
-
-        Ok(metadata)
+        Ok(plugins.metadata())
     }
 
     pub(super) fn catalog_page(&self, revision: Option<&str>, offset: u64) -> Result<Json, String> {
@@ -189,13 +183,19 @@ impl Coordinator {
             .as_ref()
             .ok_or_else(|| Error::Invalid("No plugin installation to reload".into()))?;
 
-        let catalog =
-            crate::plugins::Catalog::read_reusing(root, self.plugins.as_ref().map(|p| &p.catalog))?;
-
+        let catalog = match &self.plugins {
+            Some(previous) => {
+                crate::plugins::Catalog::read_for_reload(root, &previous.catalog, id)?
+            }
+            None => crate::plugins::Catalog::read(root)?,
+        };
         if !catalog.plugins.contains_key(id)
             && !catalog.removed_plugins.iter().any(|removed| removed == id)
         {
-            return Err(Error::Invalid(format!("Plugin is not installed: {id}")));
+            let reason = catalog
+                .scan_skip_reason(id)
+                .map_or_else(|| format!("Plugin is not installed: {id}"), str::to_owned);
+            return Err(Error::Invalid(reason));
         }
 
         let mut candidate =

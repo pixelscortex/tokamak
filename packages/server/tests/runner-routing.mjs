@@ -1,72 +1,97 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { cp, readdir, readFile, writeFile } from "node:fs/promises";
-import { delimiter, join } from "node:path";
-import { starterPlugins } from "../../../app/scripts/starter-plugins.ts";
-import { stageServerPlugin } from "../../build/src/stage-server-plugin.ts";
-import { agentTurns } from "../../../e2e/fake-agent/agent-turn.mjs";
-import { agentHarness, build, connect, workspace } from "../../../e2e/fake-agent/harness.mjs";
-import { authCaller } from "../../sdk/src/index.ts";
+import { cp, mkdir, mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  build,
+  connect,
+  copySource,
+  startServer,
+  within,
+  workspace,
+} from "../../../e2e/fake-agent/harness.mjs";
 import { startRunner } from "../../../e2e/fake-agent/local.mjs";
+import { stageServerPlugin } from "../../build/src/stage-server-plugin.ts";
 import { runnerLauncher } from "../../runtime/js/runner.ts";
+import { authCaller, createApi } from "../../sdk/src/index.ts";
+import { installSignInFixture, signInMember, signInMethod } from "./sign-in-fixture.mjs";
 
 const [server, binary, mode] = process.argv.slice(2);
 const serverBuild = mode === "--server-build";
-const h = await agentHarness({ binary: server, name: "runner-routing" });
+const ownerToken = "runner-routing-owner-token-for-tests";
+const id = "fixture-runner-routing";
+const api = createApi(id).probe;
+const target = join(workspace, "packages/server/target");
+await mkdir(target, { recursive: true });
+const scratch = await mkdtemp(join(target, "runner-routing-"));
+const plugins = join(scratch, "plugins");
+const source = join(scratch, "source");
 const cleanup = [];
+const servers = [];
+
 try {
-  // Have the fixture's routed info handler report the identity it actually
-  // received. The existing turn below still uses the unmodified live method.
-  const fixture = join(h.plugins, "fake-agent");
-  const file = join(fixture, "local.js");
-  const original = await readFile(file, "utf8");
-  const code = original.replace(/signIn: `unlink [^`]+`/, "signIn: JSON.stringify(ctx.auth)");
-  assert.notEqual(code, original, "fixture info must record auth");
-  const manifestFile = join(fixture, "manifest.json");
-  const manifest = await Bun.file(manifestFile).json();
-  manifest.hashes["local.js"] = createHash("sha256").update(code).digest("hex");
-  await writeFile(file, code);
-  await writeFile(manifestFile, JSON.stringify(manifest));
-  let pluginsDir = h.plugins;
+  await copySource(
+    join(import.meta.dir, "fixtures/runner-routing"),
+    source,
+    join(workspace, "app/node_modules"),
+  );
+  build(source);
+  await cp(join(source, "dist"), join(plugins, id), { recursive: true });
+  await installSignInFixture(plugins);
+
+  let pluginsDir = plugins;
   if (serverBuild) {
-    // The harness installs Chat, AI, and the sign-in provider.
-    for (const id of starterPlugins.filter((id) => !["chat", "ai", "basic-auth"].includes(id))) {
-      const source = join(workspace, "plugins", id);
-      build(source);
-      await cp(join(source, "dist"), join(h.plugins, id, "dist"), { recursive: true });
-    }
-    pluginsDir = join(h.scratch, "cloud-plugins");
-    for (const id of await readdir(h.plugins)) {
-      const plugin = join(h.plugins, id);
-      const source = (await Bun.file(join(plugin, "manifest.json")).exists()) ? plugin : join(plugin, "dist");
-      await stageServerPlugin(source, join(pluginsDir, id));
+    pluginsDir = join(scratch, "cloud-plugins");
+    for (const plugin of [id, signInMethod]) {
+      await stageServerPlugin(join(plugins, plugin), join(pluginsDir, plugin));
     }
   }
-  const shared = await h.serve("shared", { shared: true, pluginsDir });
-  const token = await h.ownerDevice(shared, "Test window");
+  const shared = await startServer({
+    binary: server,
+    dir: join(scratch, "shared"),
+    pluginsDir,
+    shared: true,
+    ownerToken,
+    servers,
+    cleanup,
+  });
+  const http = shared.replace(/^ws:/, "http:");
+  const owner = await fetch(new URL("/auth/owner", http), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ownerToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ deviceName: "Test window" }),
+  });
+  assert.equal(owner.status, 200, await owner.clone().text());
+  const { key: token } = await owner.json();
+
   if (serverBuild) {
-    const http = shared.replace(/^ws:/, "http:");
-    const headers = { Authorization: `Bearer ${token}`, Origin: "http://tauri.localhost" };
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Origin: "http://tauri.localhost",
+    };
     const installed = await fetch(new URL("/plugins", http), { headers });
     assert.equal(installed.status, 200);
     const catalog = await installed.json();
-    const ids = catalog.plugins.map(({ plugin }) => plugin.id);
-    assert.deepEqual(
-      starterPlugins.filter((id) => !ids.includes(id)),
-      [],
-      JSON.stringify(catalog.skipped),
-    );
+    assert.deepEqual(catalog.skipped, {});
+    assert.deepEqual(catalog.plugins.map(({ plugin }) => plugin.id).sort(), [id, signInMethod]);
 
-    const cloudChat = join(pluginsDir, "chat");
-    const manifest = await Bun.file(join(cloudChat, "manifest.json")).json();
+    const staged = join(pluginsDir, id);
+    const manifest = await Bun.file(join(staged, "manifest.json")).json();
+    assert.ok(manifest.entries.local, "the staging probe has local entries");
     for (const localFile of Object.values(manifest.entries.local)) {
-      assert.equal(await Bun.file(join(cloudChat, localFile)).exists(), false, localFile);
+      assert.equal(await Bun.file(join(plugins, id, localFile)).exists(), true, localFile);
+      assert.equal(await Bun.file(join(staged, localFile)).exists(), false, localFile);
     }
 
     const workerUrl = new URL("/local-worker", http);
     assert.equal((await fetch(workerUrl)).status, 401);
     const refused = await fetch(workerUrl, {
-      headers: { Origin: headers.Origin, "Sec-WebSocket-Protocol": `tokamak, tokamak.bearer.${token}` },
+      headers: {
+        Origin: headers.Origin,
+        "Sec-WebSocket-Protocol": `tokamak, tokamak.bearer.${token}`,
+      },
     });
     assert.equal(refused.status, 501);
     assert.match(await refused.text(), /this server has no local runtime/i);
@@ -74,7 +99,7 @@ try {
     await assert.rejects(
       misdirected(
         {
-          id: "chat",
+          id,
           entryHash: manifest.hashes[manifest.entries.local.entry],
           codeHash: manifest.hashes[manifest.entries.local.code],
         },
@@ -84,20 +109,22 @@ try {
       /this server has no local runtime/i,
     );
 
-    // Create an account and use the starter sign-in actions on the cloud server.
-    const member = await h.signInMember(shared, "runner-routing");
+    const member = await signInMember(shared, ownerToken, "CloudMember");
     assert.ok(member.key);
     console.log(
-      "Cloud server: starter sign-in actions issued a device key; plugin process requests returned 501.",
+      "Cloud server: fixture sign-in actions issued a device key; plugin process requests returned 501.",
     );
   }
+
+  const home = join(scratch, "home");
+  await mkdir(home);
   const local = await startRunner({
     binary,
-    plugins: h.plugins,
-    directory: join(h.scratch, "runner"),
+    plugins,
+    directory: join(scratch, "runner"),
     env: {
-      HOME: h.home,
-      PATH: [h.bin, "/usr/bin", "/bin", process.env.PATH].join(delimiter),
+      HOME: home,
+      TOKAMAK_APP_DATA_DIR: join(scratch, "app-data"),
       ...(serverBuild && {
         TOKAMAK_PLUGIN_HOST: process.env.TOKAMAK_TEST_RUNNER_HOST,
       }),
@@ -119,45 +146,48 @@ try {
         workspace,
       ),
   });
-  {
-    const member = await h.signInMember(shared, "SecondMember");
-    const second = await connect(shared, { token: member.key, launch: local.launch, cleanup });
-    const identity = (client) => client.query(authCaller, {});
-    const inProvider = async (client) =>
-      JSON.parse(
-        (await client.action(h.api.ai.agents.list, {})).find(({ id }) => id === "fake-agent").info.signIn,
-      );
-    const [ownerAuth, memberAuth, ownerFromProvider, memberFromProvider] = await Promise.all([
-      identity(window),
-      identity(second),
-      inProvider(window),
-      inProvider(second),
-    ]);
-    assert.notEqual(ownerAuth.user.id, memberAuth.user.id);
-    assert.notEqual(ownerAuth.device.id, memberAuth.device.id);
-    assert.deepEqual(ownerFromProvider, ownerAuth);
-    assert.deepEqual(memberFromProvider, memberAuth);
-    console.log(
-      "Two windows on one Runner passed different signed-in members and devices to the same provider.",
-    );
-  }
-  const agent = { id: "fake-agent", name: "Fake agent" };
-  const turns = agentTurns({ h, client: window, agent, model: "echo", effort: "low" });
-  const folder = await h.folder("machine");
-  await h.gate(folder, "go");
-  const result = await turns.run(folder, "Read this shared thread and reply through the local Runner.");
-  const otherWindow = await connect(shared, { token, cleanup });
-  const runnerWindow = await connect(local.endpoint.ws, { token: local.endpoint.token, cleanup });
-  const args = { threadId: result.threadId };
-  assert.equal((await otherWindow.query(h.api.ai.turns.list, args))[0]._id, result.row._id);
-  assert.deepEqual(await runnerWindow.query(h.api.ai.turns.list, args), []);
-  assert.match(result.text, /Read this shared thread and reply through the local Runner/);
-  assert.ok(requests.includes("query"), JSON.stringify(requests));
-  assert.ok(requests.includes("mutation"), JSON.stringify(requests));
+  const member = await signInMember(shared, ownerToken, "SecondMember");
+  const second = await connect(shared, {
+    token: member.key,
+    launch: local.launch,
+    cleanup,
+  });
+  const [ownerAuth, memberAuth, ownerFromProvider, memberFromProvider] = await Promise.all([
+    window.query(authCaller, {}),
+    second.query(authCaller, {}),
+    window.action(api.identify, {}),
+    second.action(api.identify, {}),
+  ]);
+  assert.notEqual(ownerAuth.user.id, memberAuth.user.id);
+  assert.notEqual(ownerAuth.device.id, memberAuth.device.id);
+  assert.deepEqual(ownerFromProvider, ownerAuth);
+  assert.deepEqual(memberFromProvider, memberAuth);
   console.log(
-    "Shared server: a local Runner query read its thread and its mutations stored the turn only on that server.",
+    "Two windows on one Runner passed different signed-in members and devices to the same provider.",
+  );
+
+  // Seed only the shared store. The local action can return this line only if
+  // its query goes back through the window instead of to the Runner's store.
+  const otherWindow = await connect(shared, { token, cleanup });
+  const runnerWindow = await connect(local.endpoint.ws, {
+    token: local.endpoint.token,
+    cleanup,
+  });
+  const line = "Only on the shared server";
+  await otherWindow.mutation(api.append, { text: line });
+  assert.deepEqual(await runnerWindow.query(api.rows, {}), []);
+  requests.length = 0;
+  assert.deepEqual(await window.action(api.copyLine, {}), [line]);
+  assert.deepEqual((await otherWindow.query(api.rows, {})).sort(), [`Copy of: ${line}`, line]);
+  assert.deepEqual(await runnerWindow.query(api.rows, {}), []);
+  assert.deepEqual(requests, ["query", "mutation"]);
+  console.log(
+    "Shared server: a local Runner query read its row and its mutation wrote a copy only on that server.",
   );
 } finally {
   for (const stop of cleanup.reverse()) await stop();
-  await h.close();
+  for (const child of servers) {
+    child.kill("SIGTERM");
+    await within(child.exited, "shared server shutdown");
+  }
 }

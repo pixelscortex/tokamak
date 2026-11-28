@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import type { BrowserContext } from "@playwright/test";
-import { installFakeAgent, startRunner } from "../fake-agent/local.mjs";
+import type { BrowserContext, Page } from "@playwright/test";
+import { startRunner } from "../fake-agent/start-runner";
 
 /** What the test desktop adds to the page. */
 interface DesktopWindow {
@@ -14,12 +14,12 @@ interface DesktopWindow {
 /**
  * Makes the app in `context` run as the desktop app does: the window's Tauri
  * calls are answered by this test process, which starts a private Runner with
- * a disposable workspace and every fake agent's command on its PATH. Returns the person's home folder
- * and the PATH folder holding those commands (unlink one to "uninstall" it).
+ * a disposable workspace and home folder.
  */
-export async function asDesktop(context: BrowserContext): Promise<{
-  home: string;
-  bin: string;
+export async function asDesktop(
+  context: BrowserContext,
+  options: { plugins?: string; beforeConfirm?: (page: Page) => Promise<void> } = {},
+): Promise<{
   readonly endpoint: { ws: string; token: string };
   /** Reopens the same workspace after the simulated app quit. */
   restart(): Promise<void>;
@@ -29,14 +29,14 @@ export async function asDesktop(context: BrowserContext): Promise<{
   readonly quitAnswers: readonly string[];
   /** The pages "Open sign-in page" asked the system browser to open, oldest first. */
   readonly opened: readonly string[];
+  /** How many times Settings → Plugins asked to reveal the plugins folder. */
+  readonly revealed: number;
 }> {
   // Inside the run's folder, which the runner removes at the end.
-  const plugins = process.env.TOKAMAK_PLUGIN_DIR!;
-  const scratch = await mkdtemp(join(dirname(plugins), "desktop-"));
+  const plugins = options.plugins ?? process.env.TOKAMAK_PLUGIN_DIR!;
+  const scratch = await mkdtemp(join(dirname(process.env.TOKAMAK_PLUGIN_DIR!), "desktop-"));
   const home = join(scratch, "home");
-  const bin = join(scratch, "bin");
   await mkdir(home);
-  await installFakeAgent(bin);
   const binary = resolve(
     import.meta.dirname,
     `../../target/debug/tokamak-runner${process.platform === "win32" ? ".exe" : ""}`,
@@ -46,13 +46,14 @@ export async function asDesktop(context: BrowserContext): Promise<{
       binary,
       plugins,
       directory: join(scratch, "app-data"),
-      env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` },
+      env: { HOME: home, PATH: "/usr/bin:/bin" },
     });
   let runner = await boot();
   context.once("close", () => void runner.stop());
   let quitChannel: ((message: unknown) => Promise<void>) | undefined;
   const quitAnswers: string[] = [];
   const opened: string[] = [];
+  let revealed = 0;
   /** Return listeners the window opened, each ended by its cancel. */
   const listening = new Map<string, () => void>();
 
@@ -76,12 +77,16 @@ export async function asDesktop(context: BrowserContext): Promise<{
           quitAnswers.push(command.slice("quit_".length));
           return null;
         case "quit_confirm":
+          await options.beforeConfirm?.(page);
           await runner.stop();
           quitAnswers.push("confirm");
           return null;
         // The sign-in return (app/src-tauri/src/sign_in_return.rs): the test desktop opens no
         // browser, and its listener waits until cancelled without a return ever coming, so the
         // dialog shows the desktop's wording and the test finishes each sign-in by pasting.
+        case "reveal_plugins_folder":
+          revealed++;
+          return null;
         case "sign_in_open_browser":
           opened.push(args.url!);
           return "opened";
@@ -106,7 +111,7 @@ export async function asDesktop(context: BrowserContext): Promise<{
     let id = 0;
     const scope = window as unknown as DesktopWindow;
     scope.isTauri = true;
-    // The desktop opens a welcome page on its first start with the local server; these tests start on chat.
+    // Desktop tests open their target view directly instead of going through the welcome page.
     localStorage.setItem("tokamak.welcomed", "1");
     scope.__tokamakDesktopEvent = (channel: number, payload: unknown) => callbacks.get(channel)?.(payload);
     scope.__TAURI_INTERNALS__ = {
@@ -132,8 +137,6 @@ export async function asDesktop(context: BrowserContext): Promise<{
     };
   });
   return {
-    home,
-    bin,
     get endpoint() {
       return runner.endpoint;
     },
@@ -147,5 +150,8 @@ export async function asDesktop(context: BrowserContext): Promise<{
     },
     quitAnswers,
     opened,
+    get revealed() {
+      return revealed;
+    },
   };
 }

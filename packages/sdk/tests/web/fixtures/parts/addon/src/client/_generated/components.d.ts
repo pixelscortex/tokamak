@@ -4,4 +4,4 @@ export declare const find: import("@tokamak/sdk/client").ScreenFind<{
   "small": [[never, {}], [never, {}], [never, {}], [never, {}]];
   "p": {};
   "div": [[never, {}, {"aria":{"label":"replacement"}}]];
-}>;
+}, {}, {}>;

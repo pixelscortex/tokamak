@@ -4,6 +4,44 @@ The server can load a directory of built plugin projects, or directories
 containing their artifacts. This is a trusted personal-plugin system, not a
 malicious-code sandbox.
 
+## The plugins folder
+
+The app ships with no plugins. At startup it loads every build in its
+**plugins folder**, `plugins` inside its data folder, and creates the folder
+when it is missing. On macOS that is
+`~/Library/Application Support/com.pixelscortex.Tokamak/plugins`; a debug build
+uses `com.pixelscortex.Tokamak.dev`, so its data and plugins stay separate.
+`TOKAMAK_PLUGIN_DIR` overrides the folder.
+
+The folder holds one child folder per plugin, named by its id, with the build
+directly in it or under `dist`. Folders whose names start with a dot are
+ignored. To **install** a plugin is to place its build at
+`<plugins folder>/<id>`; a reload of that id, or the next start, loads it.
+
+A bad plugin never stops the others. A folder with source but no build, an
+invalid manifest, a duplicate id, a missing required plugin or a start-up
+failure skips that plugin and records a reason, such as `not built` or
+`needs chat, which is not installed`. Settings → Plugins shows loaded and failed plugins. `GET /plugins` and
+`tokamak-server plugin list` show the same catalog, with failure reasons under
+`skipped`. Fix the
+plugin and reload its id to try again. The rules are under
+[Loading and reload contract](#loading-and-reload-contract).
+
+### Installing from `tokamak-plugins`
+
+The starter plugins live in the separate `tokamak-plugins` repository and build against a
+Tokamak checkout. In that repository, `./setup.sh` links Tokamak's packages
+from `../tokamak` or `TOKAMAK_DIR`, and `./install.sh [--dev] [id…]` builds the
+named plugins (all of them with no id, owners first), places each build in the
+plugins folder in one step and asks a running app to reload it. `--dev`
+installs into the debug build's plugins folder. A failed build copies nothing.
+See that repository's README. The app itself knows nothing about the script:
+the plugins folder is the only thing they share.
+
+To install or update the app itself, run `./install.sh` at the Tokamak root.
+It replaces the app and never touches the data folder, so installed plugins
+stay.
+
 ## Build and run
 
 Declare static metadata through `definePlugin` (or pass its descriptor to
@@ -30,8 +68,8 @@ Staging omits those files but keeps the manifest and hashes so the Runner can
 match its own installed copy.
 
 Legacy `--local-dir` mode requires a private `server.token`. Never pass a token
-in arguments. The app ships Chat, AI, Code,
-Claude, Codex and Password sign-in as its starter set.
+in arguments. The app ships with no plugins; see the [app README](../../app/README.md)
+for its plugin folder.
 `--plugins` and legacy `--bundle` are mutually exclusive.
 
 ```sh
@@ -40,8 +78,11 @@ TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plug
 TOKAMAK_SERVER_DIR=path/to/private-server target/cloud/debug/tokamak-server plugin reload acme.notes
 ```
 
-Create writes a descriptor, a sample query and a skill file in a new folder.
-Run `proto run bun -- install` in the checkout to link the SDK before building it.
+Create writes a new plugin that builds in `tokamak-plugins` without edits: a
+descriptor, a sample query and page, configs that extend Tokamak's packages by
+name, a `DESIGN.md` and the skill file (`skills/develop-tokamak-plugin/SKILL.md`).
+Run it from `tokamak-plugins` as `plugin create plugins/<id>`, then
+`./install.sh <id>`.
 
 To target a running desktop Runner, point `TOKAMAK_SERVER_DIR` at its private
 data directory. The CLI finds the address in `runner.json` and reads
@@ -61,11 +102,30 @@ proxies and redirects, and does not replay requests. The server exposes:
 
 ## Loading and reload contract
 
-Static validation resolves one version per ID, host API compatibility, required
-and present optional dependencies, conflicts and cycles **before evaluating any
-module**. Rust's maintained `semver` implements range semantics. A `depends`
-target must exist; an absent `optional` target is fine, but a present incompatible
-version is an error.
+Static validation checks the host API, dependencies, conflicts and cycles before
+evaluating modules. Rust's maintained `semver` implements range semantics.
+One bad child folder does not stop the scan or prevent other plugins from loading:
+
+- A project with `package.json` and no built manifest is reported by folder name
+  as not built. Invalid manifests and artifacts report the validation or read
+  error, using the plugin ID if it can be read, or the folder name otherwise.
+- The first valid build in sorted folder order wins a duplicate ID. Later copies
+  are reported by folder name, with ` (duplicate)` appended if the name is already
+  in use.
+- A missing required dependency reports `needs <dep>, which is not installed`.
+  If the dependency was skipped, the dependent reports
+  `needs <dep>, which was skipped`, including through chains of dependencies.
+  The built-in `auth` contract satisfies `auth: "*"`. Optional dependencies do
+  not cause a skip.
+- Incompatible required versions, dependencies on sign-in plugins instead of
+  `auth`, declared conflicts and dependency cycles report the resolver's error.
+  A plugin that fails to start reports its startup error.
+
+`GET /plugins` lists those reasons in `skipped` and their absolute paths in
+`skippedFolders`, using the same keys. `pluginsFolder` identifies the scanned
+directory, and each entry in `plugins` includes its absolute `folder` (the child
+folder, even when the build is in `dist`, or the root for a single build).
+An unreadable installation directory still fails the scan.
 
 The private server directory stores `plugin-install-order.json` as a list of
 plugin IDs in installation order. Plugins with no history are ordered after
@@ -106,7 +166,10 @@ fixed heap quota; the former 64 MiB window ceiling does not limit UI bundles.
 
 Reload is serialized with admitted calls: old calls finish their commit/rollback
 first. The full candidate installation resolves and is inspected before one
-generation swap. Failed reload leaves old code, subscriptions and data usable.
+generation swap. Fix a skipped plugin's folder and reload its ID to retry it without restarting.
+A failed reload of a loaded plugin reports the error and keeps old code,
+subscriptions and data usable. During another plugin's reload, an unreadable
+build for an already loaded plugin keeps its last good snapshot.
 Successful reload dirties all subscriptions; removed or changed-kind queries
 produce explicit subscription errors. The named ID must be present in the old or
 new installation; dependent callers reload together. This is not stateful HMR.
@@ -278,8 +341,7 @@ An installed plugin action can call `await ctx.env("NAME")` only with the exact
 `env:NAME` permission in its manifest. An undeclared read is refused; a declared
 but unset value returns `null`. Queries and mutations have no environment API.
 The host resolves its process environment first, then `.env.local` beside the
-installation directory (for the workspace `plugins/`, this is the workspace
-root). Local values are read without changing the process environment or adding
+installation directory (for a local app, this is its data folder by default). Local values are read without changing the process environment or adding
 secrets to catalog metadata. Malformed dotenv errors never include file contents.
 Changing permissions on an installed plugin requires a version bump as usual.
 

@@ -690,7 +690,10 @@ at the bottom. Pass children to change the contents without changing the
 element or its attributes. Put `<Original.Children />` inside `<Original>` to
 draw the contents that would appear without this layer: the children supplied
 by an outer layer, or the owner's contents with other plugins' `prepend` and
-`append`. Draw `Original` and `Original.Children` at most once per layer.
+`append`. Draw `Original` and `Original.Children` once at a time. A layer may have two
+uses of `Original` in two branches and switch between them: the element is
+handed over and stays mounted. If both are drawn at once, only the last one
+shows, with a warning.
 If no layer draws `Original`, the owner's element is unloaded. While a layer
 supplies the contents, the owner's plain tags inside keep their DOM nodes,
 but components inside mount again each time the contents change hands, so
@@ -699,6 +702,33 @@ false `when` passes through.
 Layers run outermost first by plugin install order, then `order` (default
 0), plugin ID, and export name. `before` and `after` stay outside all layers;
 `hide` also removes those sibling additions.
+
+Use `attrs(target, (props, current) => values, options?)` to change HTML
+attributes on a plain element or props on a component. The callback and
+`when` are live and receive the owning render function's props. `current`
+contains the owner's values plus earlier actions, sorted by install order,
+then `order`, plugin ID, and export name. Class strings are added to existing
+classes, including the owner's Solid class objects and arrays. For other
+keys, a defined value overrides `current`; omit the key or return `undefined`
+to leave it alone. If another add-on already set a key, read `current` for
+that key to combine the values and avoid an overwrite warning.
+
+```tsx
+import { attrs } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Busy = attrs(chat.find("article", { in: "Message" }), (props) => ({
+  "aria-busy": props.message.status === "streaming",
+}));
+```
+
+Give `Original` attributes with the same rules: `<Original class="dim" />`
+adds a class after `attrs` has run. These attributes only apply if the layers
+below draw the owner's element. You can't change identifiers (`id`,
+`data-part`, `data-part-ignore`), refs, content as an attribute, event
+handlers, or function props. Pass JSX children to `Original` to replace
+its contents. Rebuild the owner to publish the attribute types for its
+elements.
 
 A placement and its optional live `when` function
 receive the owning render function's props, plus `$row.item` and
@@ -713,6 +743,38 @@ owner to add `data-part`. The window keeps the original match on owner updates w
 match that has moved. It skips missing or ambiguous targets, and an `nth`
 target whose position another element took. See the [builder guide](../build/README.md#extending-a-screen)
 for the naming rules.
+
+Use `attach(owner.find("Composer"), TrackComposer, { when })` to run a
+component for each mounted instance of the owner's named render function.
+It receives live props and can use effects, cleanup, context, and shell
+regions such as `Region.Panel`. Returned JSX is evaluated without drawing in
+place. Hiding or layering an element inside the function leaves the attachment
+running. An attachment stops and cleans up when its instance leaves, `when`
+becomes false, or it throws. Failures are warned once per plugin and export.
+
+For `attach`, `find` searches only render functions; placements search only
+elements. Use `in` for an enclosing render function and `nth` to pick a
+position; attribute filters apply to elements. Attachments start in plugin
+install order, then `order`, plugin ID, and export name. Owner updates
+recheck the match and warn when an attachment can no longer resolve.
+
+### Plugin alerts
+
+The active view's **Plugin alerts** list reports:
+
+- A search that no longer matches its intended element or render function.
+- A layer that omits `Original` and covers another plugin's lower layer,
+  inside placement, attributes, or action on a descendant.
+- A `hide` that removes another plugin's action on the element or a descendant.
+- An addition, layer, attribute callback, attachment, or `when` that throws.
+  The alert names the plugin and export; the owner can still render.
+- Attribute problems: overwriting another plugin's value without reading
+  `current`, setting a forbidden attribute, or targeting an old owner that
+  must be rebuilt.
+
+Cover and hide alerts name both plugins and clear when the action no longer
+causes the loss. Multiple mounted instances share a single alert. Failures
+stay in the list until the failing plugin is removed or reloaded.
 
 ## Caller identity
 

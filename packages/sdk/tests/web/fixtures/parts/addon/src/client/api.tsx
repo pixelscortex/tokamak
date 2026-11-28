@@ -1,7 +1,9 @@
-import { after, layer } from "@tokamak/sdk/client";
+import { after, attach, attrs, layer } from "@tokamak/sdk/client";
 import { find } from "plugin:owner/client";
+import { onCleanup } from "solid-js";
 
 export const Badge = after(find("SendButton"), ({ label }) => <small>Built for {label}</small>);
+export const ToolbarTitle = attrs(find("section", { in: "Composer" }), ({ label }) => ({ title: label }));
 export const Note = after(find("section", { in: "Composer" }), ({ label }) => <p>Notes for {label}</p>);
 
 export const Profile = after(find("span", { in: "Labels", nth: 1 }), ({ labels, $row }) => (
@@ -21,3 +23,9 @@ export const Nested = after(find("em"), ({ $row }) => (
 export const UploadNote = after(find("select", { aria: { label: "Upload" } }), ({ label }) => (
   <small>Upload for {label}</small>
 ));
+
+export const Track = attach(find("Composer"), (props) => {
+  props.lifecycle("attached");
+  onCleanup(() => props.lifecycle("detached"));
+  return null;
+});

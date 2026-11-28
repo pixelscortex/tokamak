@@ -1,4 +1,4 @@
-import { installBasicAuth, signInMember } from "../../../e2e/fake-agent/harness.mjs";
+import { copySignInFixture, installSignInFixture, signInMember, signInMethod } from "./sign-in-fixture.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -286,13 +286,12 @@ try {
 async function verifyMembers(probe) {
   const plugins = join(root, "member-plugins");
   await mkdir(plugins);
-  const basicAuth = join(plugins, "basic-auth");
-  await copyAndBuildAuth(basicAuth);
+  await installSignInFixture(plugins);
   await cp(probe, join(plugins, "auth-test"), {
     recursive: true,
     filter: (path) => !path.split("/").includes("node_modules"),
   });
-  const method = "basic-auth";
+  const method = signInMethod;
   const alice = { username: "Alice", email: "alice@example.com", password: "first temporary password" };
   const bob = { username: "Bob", email: "bob@example.com", password: "Bob's temporary password" };
   const alicePermanent = "Alice's own password";
@@ -368,7 +367,7 @@ async function verifyMembers(probe) {
         assert.deepEqual(await window.query(readDraft, state), { value: "Alice's draft" });
         assert.equal((await add(address, bob, aliceKey)).status, 403);
         await assert.rejects(
-          first.action(createApi("basic-auth").accounts.createAccount, { memberId: user.id, fields: bob }),
+          first.action(createApi(signInMethod).accounts.createAccount, { memberId: user.id, fields: bob }),
           /unknown (?:action|function)/i,
         );
         assert.equal((await admin(address, `${target}/role`, { role: "admin" }, aliceKey)).status, 403);
@@ -516,10 +515,10 @@ async function verifySignIn(probe) {
     assert.deepEqual(await response.json(), expected);
   };
   const fields = { username: "Sam", email: "sam@example.com", password: "first password (acceptance)" };
-  const setup = { method: "basic-auth", fields };
+  const setup = { method: signInMethod, fields };
   const owner = { deviceName: "First client" };
   const provider = {
-    id: "basic-auth",
+    id: signInMethod,
     name: "Password",
     form: { usernameOrEmail: "text", password: "password" },
     setupOwnerForm: { username: "text", email: "email", password: "password" },
@@ -541,20 +540,20 @@ async function verifySignIn(probe) {
     await assertRefused(address, key);
   });
   const plugins = join(root, "sign-in-plugins");
-  const basicAuth = join(plugins, "basic-auth");
+  const signInSource = join(plugins, signInMethod);
   await mkdir(plugins);
   const legacy = Bun.password.hashSync(fields.password, {
     algorithm: "argon2id",
     memoryCost: 8192,
     timeCost: 1,
   });
-  const modernizeFixture = await copyAndBuildAuth(basicAuth, legacy);
+  const modernizeFixture = await buildWithHistoricalHash(signInSource, legacy);
   const signIn = (address, usernameOrEmail, password = fields.password, from) =>
     request(
       address,
       "/auth/sign-in",
       {
-        method: "basic-auth",
+        method: signInMethod,
         fields: { usernameOrEmail, password },
         deviceName: "Second client",
       },
@@ -597,7 +596,7 @@ async function verifySignIn(probe) {
           device: firstDevice,
         });
         await assert.rejects(
-          first.action(createApi("basic-auth").accounts.createOwner, fields),
+          first.action(createApi(signInMethod).accounts.createOwner, fields),
           /unknown (?:action|function)/i,
         );
       });
@@ -792,11 +791,11 @@ async function verifySignIn(probe) {
   });
   assert.match(malformedLogs, /Skipping plugin alternate-auth: .*requires a form/);
   for (const module of ["method", "accounts"]) {
-    const file = join(basicAuth, `src/server/${module}.ts`);
+    const file = join(signInSource, `src/server/${module}.ts`);
     const original = await readFile(file, "utf8");
-    const sentinel = `Broken basic-auth ${module}`;
+    const sentinel = `Broken ${signInMethod} ${module}`;
     await writeFile(file, original + `\nthrow new Error("${sentinel}");`);
-    buildDirectory(basicAuth);
+    buildDirectory(signInSource);
     const brokenLogs = await serve(binary, root, plugins, true, async (address) => {
       await discovery(address, { methods: [], ownerSetup: false });
       assert.equal((await signIn(address, "sam")).status, 503);
@@ -807,32 +806,15 @@ async function verifySignIn(probe) {
         assert.equal((await client.query(authCaller, {})).user.role, "owner");
       });
     });
-    assert.match(brokenLogs, new RegExp(`Skipping plugin basic-auth: .*${sentinel}`));
+    assert.match(brokenLogs, new RegExp(`Skipping plugin ${signInMethod}: .*${sentinel}`));
     await writeFile(file, original);
   }
 }
 
-async function copyAndBuildAuth(plugin, legacy) {
-  const source = join(workspace, "plugins/basic-auth");
-  await cp(source, plugin, {
-    recursive: true,
-    filter: (path) =>
-      !path
-        .slice(source.length)
-        .split("/")
-        .some((segment) => ["dist", ".tokamak", "node_modules"].includes(segment)),
-  });
-  await symlink(join(workspace, "app/node_modules"), join(plugin, "node_modules"), "dir");
-  await writeFile(
-    join(plugin, "src/server/tsconfig.json"),
-    JSON.stringify({ extends: join(workspace, "tsconfig.json") }),
-  );
+async function buildWithHistoricalHash(plugin, legacy) {
+  await copySignInFixture(plugin);
   const file = join(plugin, "src/server/accounts.ts");
   const original = await readFile(file, "utf8");
-  if (!legacy) {
-    buildDirectory(plugin);
-    return;
-  }
   const historical = original.replace(
     "await ctx.crypto.hashPassword(input.password)",
     JSON.stringify(legacy),
@@ -858,7 +840,7 @@ async function verifyIdentity(plugin) {
   const installed = join(root, "identity-plugins");
   await mkdir(installed);
   await cp(join(plugin, "dist"), join(installed, "auth-test"), { recursive: true });
-  await installBasicAuth(installed);
+  await installSignInFixture(installed);
   await serve(binary, root, installed, true, async (address) => {
     assert.equal((await admin(address, "/members", { name: "Alice", role: "owner" })).status, 400);
     const { key: token } = await signInMember(address, ownerToken, "Alice");
@@ -926,7 +908,7 @@ async function verifyIdentity(plugin) {
   const broken = join(brokenRoot, "plugins");
   await mkdir(broken);
   await cp(join(brokenSource, "dist"), join(broken, "auth-test"), { recursive: true });
-  await installBasicAuth(broken);
+  await installSignInFixture(broken);
   const legacyKey = "existing-invite-credential-before-device-keys";
   const laptop = { id: "known-laptop", name: "Laptop" };
   const ownerDevice = { id: "known-owner-laptop", name: "Owner laptop" };
@@ -966,7 +948,7 @@ async function verifyIdentity(plugin) {
       const metadata = await catalog.json();
       assert.deepEqual(
         metadata.plugins.map((plugin) => plugin.plugin.id),
-        ["basic-auth"],
+        [signInMethod],
       );
       assert.match(metadata.skipped?.["auth-test"] ?? "", /Broken plugin/);
       const key = laptopKey;

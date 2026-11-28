@@ -10,13 +10,19 @@ proto run bun -- install --frozen-lockfile
 proto run bun -- run app
 ```
 
-The Tauri hooks build the starter set and the [Runner](../packages/runner/README.md),
-plus the plugin host on macOS and Linux. The app starts one Runner and the window
+The Tauri hooks build the [Runner](../packages/runner/README.md), plus the plugin
+host on macOS and Linux. The app starts one Runner and the window
 connects to it automatically. The app restarts the Runner if it exits; the
 window shows its existing disconnected state and Retry connects to the new port.
-`TOKAMAK_SERVER_DIR` still selects the store directory. Development uses the
-workspace plugins; release uses Resources/plugins. `TOKAMAK_PLUGIN_DIR` overrides
-the installation. Runner startup errors go to `runner.log` beside the store.
+The app ships with no plugins. It creates and loads `plugins` in its data folder:
+on macOS, `~/Library/Application Support/com.pixelscortex.Tokamak/plugins` for
+release and `~/Library/Application Support/com.pixelscortex.Tokamak.dev/plugins`
+for debug. `TOKAMAK_SERVER_DIR` overrides the data folder, and
+`TOKAMAK_PLUGIN_DIR` overrides the plugins folder. `app:dev` (also `app`)
+starts Tauri in dev mode and lets the Runner create and load that folder.
+A fresh dev installation shows “No plugins installed”. To add plugins, run
+`./install.sh --dev` from [tokamak-plugins](https://github.com/pixelscortex/tokamak-plugins).
+Runner startup errors go to `runner.log` beside the store.
 On start the app's Runner stops any Tokamak server that holds this store,
 after verifying it: one left by a previous desktop version, or one started with
 `server:start` on the same `TOKAMAK_SERVER_DIR`. If another Runner owns the store, the app reports the conflict; close
@@ -35,9 +41,16 @@ proto run bun -- run server:start
 proto run bun -- run --cwd app dev
 ```
 
-Open `http://127.0.0.1:1420`. The helper builds Chat and serves a disposable store
-on port 43123, removed on exit. `VITE_TOKAMAK_HTTP` changes the browser endpoint; `VITE_TOKAMAK_TOKEN` supplies
+Open `http://127.0.0.1:1420`. The helper serves a disposable store
+on port 43123, removed on exit. It starts with an empty plugins folder
+unless you pass `TOKAMAK_PLUGIN_DIR`. `VITE_TOKAMAK_HTTP` changes the browser endpoint; `VITE_TOKAMAK_TOKEN` supplies
 a capability for a private local server (development only).
+
+`proto run bun -- packages/runtime/tools/run-app.ts start` runs a persistent
+standalone development server. It uses the dev plugins folder unless
+`TOKAMAK_PLUGIN_DIR` overrides it. `TOKAMAK_SERVER_DIR` selects a custom data
+folder and its default plugins folder. Use `server:status` and `server:stop`
+with the same data directory to manage that server.
 No external agent runs. Desktop `tokamak_endpoint` returns `{ http, ws, token }`;
 the adapter adds the token to server module, stylesheet and catalog requests,
 and the app sends it as a WebSocket subprotocol. The server allows the Tauri origins
@@ -101,9 +114,9 @@ proto run bun -- run --cwd app tauri build --no-sign
 ```
 
 Plugin typechecking first generates Chat's server API with the SDK bundler.
-Direct Cargo checks do not require bundled sidecars or plugin resources: the
-Tauri build script omits absent packaging inputs. Tauri dev/build hooks prepare
-the actual Runner binary and plugin resources before launching or bundling.
+Direct Cargo checks do not require bundled sidecars: the Tauri build script
+omits absent packaging inputs. Tauri dev/build hooks prepare the sidecars before
+launching or bundling.
 Release builds package the Runner as an external binary. No signing is required
 for this local build. The CSP permits loopback HTTP/styles and WebSockets, blob
 modules and a hashed import map, with no eval. Keep the Vite Solid runtime alias:
@@ -111,16 +124,19 @@ mixing development and production runtimes can produce a blank window.
 
 ## Disposable end-to-end fixture
 
-Build/install Chat and the UI fixture, then launch the desktop app:
+Build and install the integration fixture, then launch the desktop app:
 
 ```sh
 proto run bun -- app/scripts/integration-fixture.ts
 TOKAMAK_SERVER_DIR="$PWD/app/.dev/integration/desktop" TOKAMAK_PLUGIN_DIR="$PWD/app/.dev/integration/plugins" proto run bun -- run app
 ```
 
-In the window, check the live thread count and select `FixtureView` in Plugin
-views. Its `useQuery` uses the same Chat thread API. Create a thread and confirm
-both counts update. Change `Fixture revision one` in
+In the window, select `FixtureView` in Plugin views. Fill in a title and use
+`New fixture thread` to see the fixture's own query update the thread list and
+count. For hosted sign-in testing, pass `--with-fixture-sign-in` to the installer
+to add the fixture Password provider.
+
+Change `Fixture revision one` in
 `app/tests/fixtures/integration/src/client/api.tsx`, then in a second terminal:
 
 ```sh

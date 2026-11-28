@@ -1,10 +1,43 @@
 # Tokamak artifact build
 
-Build a plugin's server artifact from the repository root:
+Build a plugin artifact by passing its folder to the builder:
 
 ```sh
-proto run bun -- packages/build/src/build.ts plugins/chat
+proto run bun -- packages/build/src/build.ts /path/to/plugin-source
 ```
+
+## Building outside the checkout
+
+Install the Tokamak checkout's workspace dependencies with
+`proto run bun -- install --frozen-lockfile`. In the plugin or its parent
+workspace's `node_modules/@tokamak/`, link `sdk`, `build`, `ui` and `runtime`
+to the checkout's corresponding `packages/` directories. Keep the links pointing
+to the real checkout so the builder and SDK can resolve their installed tools
+(Vite, TypeScript, the Solid compiler and Tailwind's compiler and scanner).
+
+Install the third-party packages that plugin source imports in the plugin
+workspace. For a Solid window, use `solid-js@2.0.0` and `@solidjs/web@2.0.0`;
+for window type checking, also install `vite@8.3.6` and `@types/node@26.6.6`.
+Stylesheets that import Tailwind need `tailwindcss` there too (the bundled
+plugins use `4.3.5`). A setup using the checkout's existing installs can
+symlink these individual dependency directories instead.
+
+```sh
+bun node_modules/@tokamak/build/src/build.ts <plugin-folder>
+```
+
+Use Bun 1.4.4, as pinned by the checkout. The plugin folder can be absolute or
+relative to the current directory.
+Extend `@tokamak/sdk/tsconfig.server.json` for server code and
+`@tokamak/sdk/tsconfig.window.json` for window code. If the plugin has no server
+config, the builder uses the SDK's server base. Window tests can import
+`@tokamak/build/window-test-config` and `@tokamak/build/client-surface`.
+
+Keep source for plugins imported as `plugin:<id>/server` or `plugin:<id>/client`
+in sibling folders named by ID. The builder looks for dependency manifests
+beside the plugin, in the configured plugin catalog, or in `TOKAMAK_PLUGIN_DIR`.
+
+## Artifacts
 
 The builder reads literal `plugin.ts` metadata, bundles `src/server/` through the
 SDK compiler, derives public function references and provider contracts, and
@@ -168,7 +201,10 @@ at the bottom. Pass children to change the contents without changing the
 element or its attributes. Put `<Original.Children />` inside `<Original>` to
 draw the contents that would appear without this layer: the children supplied
 by an outer layer, or the owner's contents with other plugins' `prepend` and
-`append`. Draw `Original` and `Original.Children` at most once per layer.
+`append`. Draw `Original` and `Original.Children` once at a time. A layer may have two
+uses of `Original` in two branches and switch between them: the element is
+handed over and stays mounted. If both are drawn at once, only the last one
+shows, with a warning.
 If no layer draws `Original`, the owner's element is unloaded. While a layer
 supplies the contents, the owner's plain tags inside keep their DOM nodes,
 but components inside mount again each time the contents change hands, so
@@ -177,6 +213,41 @@ false `when` passes through.
 Layers run outermost first by plugin install order, then `order` (default
 0), plugin ID, and export name. `before` and `after` stay outside all layers;
 `hide` also removes those sibling additions.
+
+Use `attrs(target, (props, current) => values, options?)` to change HTML
+attributes on a plain element or props on a component. The callback and
+`when` are live and receive the owning render function's props. `current`
+contains the owner's values plus earlier actions, sorted by install order,
+then `order`, plugin ID, and export name. Class strings are added to existing
+classes, including the owner's Solid class objects and arrays. For other
+keys, a defined value overrides `current`; omit the key or return `undefined`
+to leave it alone. If another add-on already set a key, read `current` for
+that key to combine the values and avoid an overwrite warning. For plain
+HTML attributes, `current` reads booleans as true when present and false when
+absent, and other attributes as strings or `undefined` when absent.
+
+```tsx
+import { attrs } from "@tokamak/sdk/client";
+import * as chat from "plugin:chat/client";
+
+export const Busy = attrs(chat.find("article", { in: "Message" }), (props) => ({
+  "aria-busy": props.message.status === "streaming",
+}));
+```
+
+Give `Original` attributes with the same rules: `<Original class="dim" />`
+adds a class after `attrs` has run. These attributes only apply if the layers
+below draw the owner's element. You can't change identifiers (`id`,
+`data-part`, `data-part-ignore`), refs, content as an attribute, event
+handlers, or function props. Pass JSX children to `Original` to replace
+its contents. Rebuild the owner to publish the attribute types for its
+elements.
+
+The overlay tracks writes through `setAttribute`, `removeAttribute`,
+`toggleAttribute`, `classList`, `className`, `style`, and form-state properties.
+Writes through other DOM properties (such as `el.title`, JSX `prop:title`,
+`dataset`, and ARIA reflection) bypass it, so the owner's write shows during
+the override and ending the override may restore a stale value.
 
 Actions and their live `when` option receive the
 props of the render function that owns the tag. Parts inside an inline list
@@ -203,6 +274,47 @@ expressions. If two positional siblings
 still have the same identity, a swap of the two cannot be seen; an add-on
 build that picks one of them with `nth` warns that the target is ambiguous
 and asks the owner for a `data-part` or `id`.
+
+Use `attach(owner.find("Composer"), TrackComposer, { when })` to run a
+component for each mounted instance of the owner's named render function.
+It receives live props and can use effects, cleanup, context, and shell
+regions such as `Region.Panel`. Returned JSX is evaluated without drawing in
+place. Hiding or layering an element inside the function leaves the attachment
+running. An attachment stops and cleans up when its instance leaves, `when`
+becomes false, or it throws. Failures are warned once per plugin and export.
+
+For `attach`, `find` searches only render functions; placements search only
+elements. Use `in` for an enclosing render function and `nth` to pick a
+position; attribute filters apply to elements. Attachments start in plugin
+install order, then `order`, plugin ID, and export name. Owner updates
+recheck the match and warn when an attachment can no longer resolve.
+
+### Plugin alerts
+
+The active view's **Plugin alerts** list reports:
+
+- A search that no longer matches its intended element or render function.
+- A layer that omits `Original` and covers another plugin's lower layer,
+  inside placement, attributes, or action on a descendant.
+- A layer that draws `Original` with its own children and leaves out
+  `Original.Children`: other plugins' inside placements and their actions on
+  descendants are gone, though the element and the layers below are not.
+- A `hide` that removes another plugin's action on the element or a descendant.
+  Two plugins hiding the same element lose nothing to each other.
+- An addition, layer, attribute callback, attachment, or `when` that throws.
+  The alert names the plugin and export; the owner can still render.
+- Attribute problems: overwriting another plugin's value without reading
+  `current`, setting a forbidden attribute, or targeting an old owner that
+  must be rebuilt.
+
+Cover and hide alerts name both plugins and clear when the action no longer
+causes the loss. Multiple mounted instances share a single alert. Failures
+stay in the list until the failing plugin is removed or reloaded.
+
+A descendant here is an element written inside the covered or hidden element
+in the same render function. An action on an element of a component that is
+only used inside it (the `button` inside a `<SendButton />`) is lost in the
+same way but is not listed.
 
 ### Contract registrations
 

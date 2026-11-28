@@ -137,16 +137,6 @@ test("a server provider must declare its contract owner as a dependency", async 
   });
 }, 30_000);
 
-test("the plugin build points dependencies on basic-auth to auth", async () => {
-  await fixture(async (_owner, provider, implementation) => {
-    await writeFile(join(provider, "plugin.ts"), descriptor("line-provider", 'depends: ["basic-auth"],'));
-    await writeFile(implementation, "export {};");
-    const result = build(provider);
-    assert.notEqual(result.status, 0);
-    assert.match(result.stdout + result.stderr, /basic-auth.*depend on auth instead/i);
-  });
-}, 30_000);
-
 test("the plugin build recognizes an unbuilt sign-in plugin", async () => {
   await fixture(async (owner, consumer, implementation) => {
     await writeSignInProvider(owner, "line-owner");

@@ -1,25 +1,24 @@
 # CI and unsigned release
 
 All CI runs in GitHub Actions, on Depot's runners. `.github/workflows/ci.yml` runs
-three fast jobs on every PR, and `.ci/check.sh` holds their commands:
+two fast jobs on every PR, `lint` and `typescript`. The `rust` job is started by hand only for now
+(Actions → CI → Run workflow). `.ci/check.sh` holds their commands:
 
 - `lint`: formatting and lint for TypeScript and both Rust builds (Clippy, warnings denied),
-  plus a byte-for-byte comparison of copied contract declarations against their owners.
-- `typescript`: type checks, plugin build tests, window component tests, and the web build.
+  plus a privacy scan of repository text files.
+- `typescript`: type checks, compiler and fixture tests, window component tests, and the web build.
 - `rust`: Builds the Runner in `target` and the cloud Server in `target/cloud`.
   They share only Cargo's intermediate cache. CI checks that each forbidden
   symbol pattern finds a match in the Runner build and none in the cloud
   build, then runs the [test matrix](../packages/server/tests/README.md).
-  The turn replays run fake agents against the Runner and check the stored turns.
 
 Playwright runs locally. To run the full Rust workspace, headless end-to-end tests,
 or the browser suite:
 `cargo test --workspace`, `proto run bun -- e2e/run.ts`, and
-`proto run bun -- run e2e:browser` (see `e2e/README.md`). Real agent turns
-are local only.
+`proto run bun -- run e2e:browser` (see `e2e/README.md`).
 
-Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint,
-TypeScript and Rust. Draft pull requests are skipped; the jobs start when a pull
+Pull requests and pushes to `main` or `dev` run only the cheap Linux jobs: lint
+and TypeScript. Run the Rust stage locally with `moon run workspace:ci-rust` before changing Rust code. Draft pull requests are skipped; the jobs start when a pull
 request is marked ready for review. `dev` is the integration branch: feature pull requests target
 it, and `main` is updated from it. The `desktop-mac` and `desktop-windows` jobs build the
 unsigned apps only when the workflow is started by hand (Actions → CI → Run
@@ -30,7 +29,7 @@ tools, Bun and Cargo; sccache covers Rust compilation on Linux and macOS.
 
 Run `bash .ci/release-macos.sh` on macOS arm64 for a manual local release, or
 manually dispatch the **Unsigned macOS release** workflow. The Tauri hook builds
-the Runner and starter resources before bundling. The script then builds the
+the Runner and plugin host before bundling. The script then builds the
 cloud Server and actions-only host for the standalone archive. Outputs are
 `.ci-results/macos-arm64/Tokamak.app`, `Tokamak-macos-arm64.zip`, the standalone
 `server-macos-arm64.tar.gz`, and `SHA256SUMS.txt`. The zip preserves macOS bundle
